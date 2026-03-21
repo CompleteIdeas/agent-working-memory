@@ -1,0 +1,27 @@
+AgentWorkingMemory (AWM)
+Copyright 2026 Robert Winter / Complete Ideas
+
+This product includes software developed by Complete Ideas.
+
+Third-Party Components
+----------------------
+
+This software uses the following third-party libraries:
+
+- @huggingface/transformers (Apache 2.0) — local ML inference runtime
+- @modelcontextprotocol/sdk (MIT) — MCP server framework
+- better-sqlite3 (MIT) — SQLite bindings for Node.js
+- Fastify (MIT) — HTTP server framework
+- Zod (MIT) — schema validation
+
+Machine Learning Models
+-----------------------
+
+The following models are downloaded at runtime and are distributed
+under their own licenses (typically Apache 2.0):
+
+- Xenova/all-MiniLM-L6-v2 (Apache 2.0) — sentence embeddings
+- Xenova/ms-marco-MiniLM-L-6-v2 (Apache 2.0) — cross-encoder reranker
+- Xenova/flan-t5-small (Apache 2.0) — query expansion
+
+See the HuggingFace model pages for full license details.

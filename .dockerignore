@@ -1,0 +1,12 @@
+node_modules
+dist
+*.db
+*.db-journal
+*.db-wal
+tests
+docs
+.git
+.mcp.json
+TESTING_PLAN.md
+CLAUDE.md
+memory.db

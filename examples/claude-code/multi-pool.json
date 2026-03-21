@@ -1,0 +1,29 @@
+{
+  "_comment": "Place different .mcp.json files in parent folders to isolate memory pools. Claude Code uses the closest .mcp.json ancestor.",
+
+  "_work_folder_mcp_json": {
+    "mcpServers": {
+      "agent-working-memory": {
+        "command": "npx",
+        "args": ["-y", "agent-working-memory@latest", "mcp"],
+        "env": {
+          "AWM_AGENT_ID": "work",
+          "AWM_HOOK_PORT": "8401"
+        }
+      }
+    }
+  },
+
+  "_personal_folder_mcp_json": {
+    "mcpServers": {
+      "agent-working-memory": {
+        "command": "npx",
+        "args": ["-y", "agent-working-memory@latest", "mcp"],
+        "env": {
+          "AWM_AGENT_ID": "personal",
+          "AWM_HOOK_PORT": "8402"
+        }
+      }
+    }
+  }
+}

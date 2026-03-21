@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "agent-working-memory": {
+      "command": "npx",
+      "args": ["-y", "agent-working-memory@latest", "mcp"],
+      "env": {
+        "AWM_AGENT_ID": "my-project",
+        "AWM_DB_PATH": "./data/memory.db",
+        "AWM_HOOK_PORT": "8402"
+      }
+    }
+  }
+}

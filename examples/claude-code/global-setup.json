@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "agent-working-memory": {
+      "command": "npx",
+      "args": ["-y", "agent-working-memory@latest", "mcp"],
+      "env": {
+        "AWM_AGENT_ID": "claude-code",
+        "AWM_HOOK_PORT": "8401"
+      }
+    }
+  }
+}

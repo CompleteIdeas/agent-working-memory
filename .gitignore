@@ -1,0 +1,16 @@
+node_modules/
+dist/
+data/
+models/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+.env
+.env.*
+!.env.example
+.mcp.json
+.claude/
+tests/*/results.md
+tests/pilot-metrics/trend.jsonl
+tests/pilot-metrics/latest.md

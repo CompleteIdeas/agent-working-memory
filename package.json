@@ -1,0 +1,55 @@
+{
+  "name": "agent-working-memory",
+  "version": "0.5.2",
+  "description": "Cognitive memory layer for AI agents — activation-based retrieval, salience filtering, associative connections",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "awm": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "mcp": "tsx src/mcp.ts",
+    "test:mcp": "tsx tests/mcp-smoke.ts",
+    "test:self": "tsx tests/self-test/runner.ts",
+    "test:workday": "tsx tests/workday-eval/runner.ts",
+    "test:locomo": "tsx tests/locomo-eval/runner.ts",
+    "test:tokens": "tsx tests/token-savings/runner.ts",
+    "test:realworld": "tsx tests/realworld-eval/runner.ts",
+    "test:ab": "tsx tests/ab-test/runner.ts",
+    "test:sleep": "tsx tests/sleep-cycle/runner.ts",
+    "test:stress": "tsx tests/stress-test/runner.ts",
+    "test:edge": "tsx tests/edge-cases/runner.ts",
+    "test:pilot": "tsx tests/pilot-metrics/runner.ts",
+    "test:all": "vitest run && tsx tests/mcp-smoke.ts"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "Apache-2.0",
+  "files": [
+    "dist/",
+    "src/",
+    "package.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "better-sqlite3": "^12.6.2",
+    "fastify": "^5.8.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.3.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
