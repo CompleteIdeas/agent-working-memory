@@ -70,6 +70,12 @@ const REDUNDANCY_THRESHOLD = 0.85;
 /** Max redundant memories to prune per cycle (gradual, not sudden) */
 const MAX_REDUNDANCY_PRUNE_PER_CYCLE = 10;
 
+/** Max confidence drift per consolidation cycle (prevents runaway) */
+const CONFIDENCE_DRIFT_CAP = 0.03;
+
+/** Days without recall before confidence starts drifting down */
+const CONFIDENCE_NEGLECT_DAYS = 30;
+
 export interface ConsolidationResult {
   clustersFound: number;
   edgesStrengthened: number;
@@ -81,6 +87,7 @@ export interface ConsolidationResult {
   memoriesForgotten: number;
   memoriesArchived: number;
   redundancyPruned: number;
+  confidenceAdjusted: number;
   stagingPromoted: number;
   stagingDiscarded: number;
   engramsProcessed: number;
@@ -102,6 +109,7 @@ export class ConsolidationEngine {
    * Phase 4: Decay — weaken unused edges, prune dead ones
    * Phase 5: Homeostasis — normalize outgoing edge weights per node
    * Phase 6: Forget — archive/delete memories never retrieved (age-gated)
+   * Phase 6.7: Confidence drift — adjust confidence based on structural signals
    * Phase 7: Sweep — check staging buffer for resonance
    */
   consolidate(agentId: string): ConsolidationResult {
@@ -116,6 +124,7 @@ export class ConsolidationEngine {
       memoriesForgotten: 0,
       memoriesArchived: 0,
       redundancyPruned: 0,
+      confidenceAdjusted: 0,
       stagingPromoted: 0,
       stagingDiscarded: 0,
       engramsProcessed: 0,
@@ -378,6 +387,57 @@ export class ConsolidationEngine {
     }
     result.redundancyPruned = redundancyCount;
 
+    // --- Phase 6.7: Confidence drift ---
+    // Adjust confidence based on structural signals that emerge from the graph.
+    // This makes confidence evolve over time without explicit feedback calls.
+    //
+    // Three signals:
+    //   1. Well-clustered memories (appeared in 1+ clusters) get a small boost
+    //      — they're integrated into the knowledge graph, likely valuable.
+    //   2. Isolated memories (0 edges after consolidation) get a small penalty
+    //      — nothing connects to them, possibly noise.
+    //   3. Neglected memories (not recalled in 30+ days) drift toward 0.3
+    //      — if the system never needs them, they're probably not important.
+    //
+    // All adjustments are capped at ±0.03 per cycle to prevent runaway.
+    // Confidence is floored at 0.15 (never reaches 0 — retraction handles that).
+    // Confidence is capped at 0.85 (only explicit feedback can push above).
+    const clusteredIds = new Set<string>();
+    for (const cluster of clusters) {
+      for (const e of cluster) clusteredIds.add(e.id);
+    }
+
+    for (const engram of engrams) {
+      let drift = 0;
+      const edgeCount = this.store.countAssociationsFor(engram.id);
+      const daysSinceAccess = (Date.now() - engram.lastAccessed.getTime()) / (1000 * 60 * 60 * 24);
+
+      // Signal 1: Cluster membership → small boost
+      if (clusteredIds.has(engram.id)) {
+        drift += 0.01;
+      }
+
+      // Signal 2: Zero edges → small penalty
+      if (edgeCount === 0) {
+        drift -= 0.02;
+      }
+
+      // Signal 3: Long neglect → drift toward 0.3
+      if (daysSinceAccess > CONFIDENCE_NEGLECT_DAYS && engram.confidence > 0.3) {
+        drift -= 0.01;
+      }
+
+      // Apply with cap
+      if (Math.abs(drift) > 0.001) {
+        drift = Math.max(-CONFIDENCE_DRIFT_CAP, Math.min(CONFIDENCE_DRIFT_CAP, drift));
+        const newConf = Math.max(0.15, Math.min(0.85, engram.confidence + drift));
+        if (Math.abs(newConf - engram.confidence) > 0.001) {
+          this.store.updateConfidence(engram.id, newConf);
+          result.confidenceAdjusted++;
+        }
+      }
+    }
+
     // --- Phase 7: Sweep staging ---
     const staging = this.store.getEngramsByAgent(agentId, 'staging')
       .filter(e => e.embedding && e.embedding.length > 0);
@@ -394,8 +454,9 @@ export class ConsolidationEngine {
       }
 
       if (maxSim >= 0.6) {
-        // Resonates — promote to active
+        // Resonates — promote to active with low confidence (barely made it)
         this.store.updateStage(staged.id, 'active');
+        this.store.updateConfidence(staged.id, 0.40);
         result.stagingPromoted++;
       } else if (ageMs > 24 * 60 * 60 * 1000) {
         // Over 24h and no resonance — discard

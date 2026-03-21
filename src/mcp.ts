@@ -167,12 +167,28 @@ The concept should be a short label (3-8 words). The content should be the full 
       };
     }
 
+    // Confidence prior based on event type — decisions and root causes
+    // start higher than observations. This seeds variance so existing
+    // confidence-gated machinery (decay modulation, edge protection,
+    // feedback bonus, consolidation) starts doing useful work immediately.
+    const CONFIDENCE_PRIORS: Record<string, number> = {
+      decision: 0.65,
+      friction: 0.60,
+      causal:   0.60,
+      surprise: 0.55,
+      observation: 0.45,
+    };
+    const confidencePrior = salience.disposition === 'staging'
+      ? 0.40  // Staging promotions barely made it in
+      : CONFIDENCE_PRIORS[params.event_type ?? 'observation'] ?? 0.45;
+
     const engram = store.createEngram({
       agentId: AGENT_ID,
       concept: params.concept,
       content: params.content,
       tags: params.tags,
       salience: salience.score,
+      confidence: confidencePrior,
       salienceFeatures: salience.features,
       reasonCodes: salience.reasonCodes,
       ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
@@ -881,6 +897,7 @@ This captures what was accomplished so future sessions can recall it.`,
       content: params.summary,
       tags: [...params.tags, 'task-summary'],
       salience: isNamedTask ? Math.max(salience.score, 0.7) : salience.score, // Only floor salience for named tasks
+      confidence: 0.65, // Task summaries are decision-grade (completed work)
       salienceFeatures: salience.features,
       reasonCodes: [...salience.reasonCodes, 'task-end'],
     });
