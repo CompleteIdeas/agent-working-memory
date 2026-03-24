@@ -238,13 +238,20 @@ export class ConsolidationEngine {
         (Date.now() - assoc.lastActivated.getTime()) / (1000 * 60 * 60 * 24);
       if (daysSince < 0.5) continue; // Skip recently activated
 
-      // Confidence-modulated half-life: higher confidence = slower decay (capped at 3x)
-      // Base: 7 days. Conf 0.5 → 7 days. Conf 0.8 → ~15 days. Conf 1.0 → 21 days (3x).
-      // Cap prevents any edge from becoming immortal.
+      // Confidence + access-count modulated half-life (synaptic tagging for edges)
+      // Base: 7 days. High confidence (0.8+): up to 21 days.
+      // High access count: further extends half-life (log-scaled, capped at 2x boost).
       const fromConf = engramConfMap.get(assoc.fromEngramId) ?? 0.5;
       const toConf = engramConfMap.get(assoc.toEngramId) ?? 0.5;
       const maxConf = Math.max(fromConf, toConf);
-      const halfLifeDays = Math.min(7 * (1 + 2 * Math.max(0, (maxConf - 0.5) / 0.5)), 21);
+      const fromEngram = engrams.find(e => e.id === assoc.fromEngramId);
+      const toEngram = engrams.find(e => e.id === assoc.toEngramId);
+      const maxAccess = Math.max(fromEngram?.accessCount ?? 0, toEngram?.accessCount ?? 0);
+      const accessBoost = Math.min(2.0, 1.0 + 0.5 * Math.log1p(maxAccess));
+      const halfLifeDays = Math.min(
+        7 * (1 + 2 * Math.max(0, (maxConf - 0.5) / 0.5)) * accessBoost,
+        42 // Hard cap: 6 weeks max
+      );
 
       const newWeight = decayAssociation(assoc.weight, daysSince, halfLifeDays);
       if (newWeight < PRUNE_THRESHOLD) {
