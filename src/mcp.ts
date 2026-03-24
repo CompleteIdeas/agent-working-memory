@@ -71,7 +71,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.5.4' });
+  const server = new McpServer({ name: 'agent-working-memory', version: '0.5.5' });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -105,7 +105,7 @@ consolidationScheduler.start();
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.5.4',
+  version: '0.5.5',
 });
 
 // --- Tools ---
