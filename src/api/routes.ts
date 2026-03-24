@@ -528,9 +528,24 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     return reply.send({ shifted, days: body.days });
   });
 
-  app.get('/health', async () => ({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    version: '0.5.4',
-  }));
+  app.get('/health', async () => {
+    const coordEnabled = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
+    const base: Record<string, unknown> = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      version: '0.5.5',
+      coordination: coordEnabled,
+    };
+    if (coordEnabled) {
+      try {
+        const db = deps.store.getDb();
+        const stats = db.prepare(`SELECT
+          (SELECT COUNT(*) FROM coord_agents WHERE status != 'dead') AS agents_alive,
+          (SELECT COUNT(*) FROM coord_assignments WHERE status = 'pending') AS pending_tasks,
+          (SELECT COUNT(*) FROM coord_locks) AS active_locks`).get() as { agents_alive: number; pending_tasks: number; active_locks: number };
+        Object.assign(base, stats);
+      } catch { /* tables may not exist yet */ }
+    }
+    return base;
+  });
 }

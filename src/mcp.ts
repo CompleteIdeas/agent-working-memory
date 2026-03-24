@@ -990,6 +990,17 @@ async function main() {
     },
   });
 
+  // Coordination MCP tools (opt-in via AWM_COORDINATION=true)
+  const coordEnabled = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
+  if (coordEnabled) {
+    const { initCoordinationTables } = await import('./coordination/schema.js');
+    const { registerCoordinationTools } = await import('./coordination/mcp-tools.js');
+    initCoordinationTables(store.getDb());
+    registerCoordinationTools(server, store.getDb());
+  } else {
+    console.error('AWM: coordination tools disabled (set AWM_COORDINATION=true to enable)');
+  }
+
   // Log to stderr (stdout is reserved for MCP protocol)
   console.error(`AgentWorkingMemory MCP server started (agent: ${AGENT_ID}, db: ${DB_PATH})`);
   console.error(`Hook sidecar on 127.0.0.1:${HOOK_PORT}${HOOK_SECRET ? ' (auth enabled)' : ' (no auth — set AWM_HOOK_SECRET)'}`);

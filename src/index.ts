@@ -91,6 +91,14 @@ async function main() {
     consolidationEngine, consolidationScheduler,
   });
 
+  // Coordination module (opt-in via AWM_COORDINATION=true)
+  const { isCoordinationEnabled, initCoordination } = await import('./coordination/index.js');
+  if (isCoordinationEnabled()) {
+    initCoordination(app, store.getDb());
+  } else {
+    console.log('  Coordination module disabled (set AWM_COORDINATION=true to enable)');
+  }
+
   // Background tasks
   stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
   consolidationScheduler.start();

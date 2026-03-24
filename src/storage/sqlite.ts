@@ -38,6 +38,11 @@ export class EngramStore {
     this.init();
   }
 
+  /** Expose the raw database handle for the coordination module. */
+  getDb(): Database.Database {
+    return this.db;
+  }
+
   private init(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS engrams (
