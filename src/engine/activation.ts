@@ -104,10 +104,27 @@ export class ActivationEngine {
       // Embedding unavailable — fall back to text-only matching
     }
 
-    // Phase 2: Parallel retrieval — BM25 with rank scores + all active engrams
-    // Use expanded query for BM25 (more terms = better keyword recall)
-    const bm25Ranked = this.store.searchBM25WithRank(query.agentId, searchContext, limit * 3);
-    const bm25ScoreMap = new Map(bm25Ranked.map(r => [r.engram.id, r.bm25Score]));
+    // Phase 2: Parallel retrieval — dual BM25 + all active engrams
+    // Two-pass BM25: (1) keyword-stripped query for precision, (2) expanded query for recall.
+    const keywordQuery = Array.from(tokenize(query.context)).join(' ');
+    const bm25Keyword = keywordQuery.length > 2
+      ? this.store.searchBM25WithRank(query.agentId, keywordQuery, limit * 3)
+      : [];
+    const bm25Expanded = this.store.searchBM25WithRank(query.agentId, searchContext, limit * 3);
+
+    // Merge: take the best BM25 score per engram from either pass
+    const bm25ScoreMap = new Map<string, number>();
+    const bm25EngramMap = new Map<string, any>();
+    for (const r of [...bm25Keyword, ...bm25Expanded]) {
+      const existing = bm25ScoreMap.get(r.engram.id) ?? 0;
+      if (r.bm25Score > existing) {
+        bm25ScoreMap.set(r.engram.id, r.bm25Score);
+        bm25EngramMap.set(r.engram.id, r.engram);
+      }
+    }
+    const bm25Ranked = Array.from(bm25EngramMap.entries()).map(([id, engram]) => ({
+      engram, bm25Score: bm25ScoreMap.get(id) ?? 0,
+    }));
 
     const allActive = this.store.getEngramsByAgent(
       query.agentId,
@@ -401,20 +418,45 @@ export class ActivationEngine {
       }
     }
 
-    // Phase 8a: Semantic drift penalty — if no candidate has meaningful vector match
-    // (none exceeded 1 stddev above mean), the query is likely off-topic.
-    if (queryEmbedding && rerankPool.length > 0) {
-      const maxVectorSim = Math.max(...rerankPool.map(r => r.phaseScores.vectorMatch));
-      if (maxVectorSim < 0.05) {
-        // Query is semantically distant from everything — apply drift penalty
+    // Phase 8: Multi-channel OOD detection + agreement gate
+    // Requires at least 2 of 3 retrieval channels to agree the query is in-domain.
+    if (rerankPool.length >= 3) {
+      const topBM25 = Math.max(...rerankPool.map(r => bm25ScoreMap.get(r.engram.id) ?? 0));
+      const topVector = queryEmbedding
+        ? Math.max(...rerankPool.map(r => r.phaseScores.vectorMatch))
+        : 0;
+      const topReranker = Math.max(...rerankPool.map(r => r.phaseScores.rerankerScore));
+
+      const bm25Ok = topBM25 > 0.3;
+      const vectorOk = topVector > 0.05;
+      const rerankerOk = topReranker > 0.25;
+      const channelsAgreeing = (bm25Ok ? 1 : 0) + (vectorOk ? 1 : 0) + (rerankerOk ? 1 : 0);
+
+      const rerankerScores = rerankPool
+        .map(r => r.phaseScores.rerankerScore)
+        .sort((a, b) => b - a);
+      const margin = rerankerScores.length >= 2
+        ? rerankerScores[0] - rerankerScores[1]
+        : rerankerScores[0];
+
+      const maxRawCosine = queryEmbedding && simValues.length > 0
+        ? Math.max(...simValues)
+        : 1.0;
+
+      // Hard abstention: fewer than 2 channels agree AND semantic drift is high
+      if (channelsAgreeing < 2 && maxRawCosine < (simMean + simStdDev * 1.5)) {
+        return [];
+      }
+
+      // Soft penalty: only 1 channel agrees or margin is thin
+      if (channelsAgreeing < 2 || margin < 0.05) {
         for (const item of rerankPool) {
-          item.score *= 0.5;
+          item.score *= 0.4;
         }
       }
     }
 
-    // Phase 8b: Entropy gating — if top-5 reranker scores are flat (low variance),
-    // the reranker can't distinguish relevant from irrelevant. Abstain.
+    // Legacy abstention gate (when explicitly requested)
     if (abstentionThreshold > 0 && rerankPool.length >= 3) {
       const topRerankerScores = rerankPool
         .map(r => r.phaseScores.rerankerScore)
@@ -424,7 +466,6 @@ export class ActivationEngine {
       const meanScore = topRerankerScores.reduce((s, v) => s + v, 0) / topRerankerScores.length;
       const variance = topRerankerScores.reduce((s, v) => s + (v - meanScore) ** 2, 0) / topRerankerScores.length;
 
-      // Abstain if: top score below threshold OR scores are flat (low discrimination)
       if (maxScore < abstentionThreshold || (maxScore < 0.5 && variance < 0.01)) {
         return [];
       }

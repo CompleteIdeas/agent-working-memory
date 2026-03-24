@@ -54,7 +54,7 @@ export class ConsolidationScheduler {
     this.running = true;
     try {
       console.log(`[scheduler] mini-consolidation for ${agentId}`);
-      this.consolidationEngine.consolidate(agentId);
+      await this.consolidationEngine.consolidate(agentId);
       this.store.markConsolidation(agentId, true);
     } catch (err) {
       console.error(`[scheduler] mini-consolidation failed for ${agentId}:`, err);
@@ -109,11 +109,11 @@ export class ConsolidationScheduler {
     }
   }
 
-  private runFullConsolidation(agentId: string, reason: string): void {
+  private async runFullConsolidation(agentId: string, reason: string): Promise<void> {
     this.running = true;
     try {
       console.log(`[scheduler] full consolidation for ${agentId} — trigger: ${reason}`);
-      const result = this.consolidationEngine.consolidate(agentId);
+      const result = await this.consolidationEngine.consolidate(agentId);
       this.store.markConsolidation(agentId, false);
       console.log(`[scheduler] consolidation done: ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
     } catch (err) {

@@ -54,7 +54,7 @@ import { RetractionEngine } from './engine/retraction.js';
 import { EvalEngine } from './engine/eval.js';
 import { ConsolidationEngine } from './engine/consolidation.js';
 import { ConsolidationScheduler } from './engine/consolidation-scheduler.js';
-import { evaluateSalience, computeNovelty } from './core/salience.js';
+import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './core/salience.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority } from './types/engram.js';
@@ -71,7 +71,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.4.0' });
+  const server = new McpServer({ name: 'agent-working-memory', version: '0.5.4' });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -105,7 +105,7 @@ consolidationScheduler.start();
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.4.0',
+  version: '0.5.4',
 });
 
 // --- Tools ---
@@ -143,8 +143,39 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('ID of an older memory this one replaces. The old memory is down-ranked, not deleted.'),
   },
   async (params) => {
-    // Check novelty — is this new information or a duplicate?
-    const novelty = computeNovelty(store, AGENT_ID, params.concept, params.content);
+    // Check novelty with match info for reinforcement
+    const noveltyResult = computeNoveltyWithMatch(store, AGENT_ID, params.concept, params.content);
+    const novelty = noveltyResult.novelty;
+
+    // --- Reinforce-on-Duplicate check ---
+    // Tightened thresholds: require near-exact match (novelty < 0.3, BM25 > 0.85, 60% content overlap)
+    if (novelty < 0.3
+        && noveltyResult.matchScore > 0.85
+        && noveltyResult.matchedEngramId) {
+      const matchedEngram = store.getEngram(noveltyResult.matchedEngramId);
+      if (matchedEngram) {
+        const existingTokens = new Set(matchedEngram.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+        const newTokens = new Set(params.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+        let overlap = 0;
+        for (const t of newTokens) { if (existingTokens.has(t)) overlap++; }
+        const contentOverlap = newTokens.size > 0 ? overlap / newTokens.size : 0;
+
+        if (contentOverlap > 0.6) {
+          // True duplicate — reinforce existing and skip creation
+          store.touchEngram(noveltyResult.matchedEngramId);
+          try { store.updateAutoCheckpointWrite(AGENT_ID, noveltyResult.matchedEngramId); } catch { /* non-fatal */ }
+          log(AGENT_ID, 'write:reinforce', `"${params.concept}" → reinforced "${matchedEngram.concept}" (overlap=${contentOverlap.toFixed(2)})`);
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `Reinforced existing memory "${matchedEngram.concept}" (overlap ${(contentOverlap * 100).toFixed(0)}%)`,
+            }],
+          };
+        }
+        // Partial match — continue to create new memory
+        log(AGENT_ID, 'write:partial-match', `"${params.concept}" partially matched "${matchedEngram.concept}" (overlap=${contentOverlap.toFixed(2)}), creating new memory`);
+      }
+    }
 
     const salience = evaluateSalience({
       content: params.content,
@@ -157,20 +188,11 @@ The concept should be a short label (3-8 words). The content should be the full 
       memoryClass: params.memory_class,
     });
 
-    if (salience.disposition === 'discard') {
-      log(AGENT_ID, 'write:discard', `"${params.concept}" salience=${salience.score.toFixed(2)} novelty=${novelty.toFixed(1)}`);
-      return {
-        content: [{
-          type: 'text' as const,
-          text: `Discarded (salience ${salience.score.toFixed(2)}, novelty ${novelty.toFixed(1)})`,
-        }],
-      };
-    }
+    // v0.5.4: No longer discard — store everything, use salience for ranking.
+    // Low-salience memories get low confidence so they rank below high-salience
+    // in retrieval, but remain available for recall when needed.
+    const isLowSalience = salience.disposition === 'discard';
 
-    // Confidence prior based on event type — decisions and root causes
-    // start higher than observations. This seeds variance so existing
-    // confidence-gated machinery (decay modulation, edge protection,
-    // feedback bonus, consolidation) starts doing useful work immediately.
     const CONFIDENCE_PRIORS: Record<string, number> = {
       decision: 0.65,
       friction: 0.60,
@@ -178,15 +200,17 @@ The concept should be a short label (3-8 words). The content should be the full 
       surprise: 0.55,
       observation: 0.45,
     };
-    const confidencePrior = salience.disposition === 'staging'
-      ? 0.40  // Staging promotions barely made it in
+    const confidencePrior = isLowSalience
+      ? 0.25
+      : salience.disposition === 'staging'
+      ? 0.40
       : CONFIDENCE_PRIORS[params.event_type ?? 'observation'] ?? 0.45;
 
     const engram = store.createEngram({
       agentId: AGENT_ID,
       concept: params.concept,
       content: params.content,
-      tags: params.tags,
+      tags: isLowSalience ? [...(params.tags ?? []), 'low-salience'] : params.tags,
       salience: salience.score,
       confidence: confidencePrior,
       salienceFeatures: salience.features,
@@ -220,7 +244,8 @@ The concept should be a short label (3-8 words). The content should be the full 
     // Auto-checkpoint: track write
     try { store.updateAutoCheckpointWrite(AGENT_ID, engram.id); } catch { /* non-fatal */ }
 
-    log(AGENT_ID, `write:${salience.disposition}`, `"${params.concept}" salience=${salience.score.toFixed(2)} novelty=${novelty.toFixed(1)} id=${engram.id}`);
+    const logDisposition = isLowSalience ? 'low-salience' : salience.disposition;
+    log(AGENT_ID, `write:${logDisposition}`, `"${params.concept}" salience=${salience.score.toFixed(2)} novelty=${novelty.toFixed(1)} id=${engram.id}`);
 
     return {
       content: [{
@@ -567,7 +592,7 @@ Use this at the start of every session or after compaction to pick up where you 
         // No recent consolidation — graceful exit didn't happen, run full cycle
         fullConsolidationTriggered = true;
         try {
-          const result = consolidationEngine.consolidate(AGENT_ID);
+          const result = await consolidationEngine.consolidate(AGENT_ID);
           store.markConsolidation(AGENT_ID, false);
           log(AGENT_ID, 'consolidation', `full sleep cycle on restore (no graceful exit, idle ${Math.round(idleMs / 60_000)}min, last consolidation ${Math.round(sinceLastConsolidation / 60_000)}min ago) — ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
         } catch { /* consolidation failure is non-fatal */ }
@@ -957,9 +982,9 @@ async function main() {
     agentId: AGENT_ID,
     secret: HOOK_SECRET,
     port: HOOK_PORT,
-    onConsolidate: (agentId, reason) => {
+    onConsolidate: async (agentId, reason) => {
       console.error(`[mcp] consolidation triggered: ${reason}`);
-      const result = consolidationEngine.consolidate(agentId);
+      const result = await consolidationEngine.consolidate(agentId);
       store.markConsolidation(agentId, false);
       console.error(`[mcp] consolidation done: ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
     },

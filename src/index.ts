@@ -32,12 +32,16 @@ import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { getEmbedder } from './core/embeddings.js';
 import { getReranker } from './core/reranker.js';
 import { getExpander } from './core/query-expander.js';
+import { initLogger } from './core/logger.js';
 
 const PORT = parseInt(process.env.AWM_PORT ?? '8400', 10);
 const DB_PATH = process.env.AWM_DB_PATH ?? 'memory.db';
 const API_KEY = process.env.AWM_API_KEY ?? null;
 
 async function main() {
+  // Logger — write activity to awm.log alongside the DB
+  initLogger(DB_PATH);
+
   // Storage
   const store = new EngramStore(DB_PATH);
 

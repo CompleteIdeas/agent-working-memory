@@ -166,3 +166,54 @@ export function computeNovelty(store: EngramStore, agentId: string, concept: str
     return 0.8;
   }
 }
+
+/**
+ * Result from novelty computation with match info for reinforcement.
+ */
+export interface NoveltyResult {
+  novelty: number;
+  matchedEngramId: string | null;
+  matchScore: number;
+}
+
+/**
+ * Compute novelty score AND return the best matching engram (for reinforcement-on-duplicate).
+ * Uses BM25 (synchronous, fast) to find the closest existing memory.
+ * Optionally checks workspace-scoped memories too (cross-agent dedup).
+ */
+export function computeNoveltyWithMatch(
+  store: EngramStore, agentId: string, concept: string, content: string,
+  workspace?: string | null
+): NoveltyResult {
+  try {
+    const contentStr = typeof content === 'string' ? content : '';
+    const conceptStr = typeof concept === 'string' ? concept : '';
+    const searchText = `${conceptStr} ${contentStr.slice(0, 100)}`;
+
+    // Agent-scoped search (limit:3 to avoid single shallow match suppressing novelty)
+    const results = store.searchBM25WithRank(agentId, searchText, 3);
+
+    // Workspace search — only if the store supports it (v0.5.4+)
+    let wsResults: { engram: { id: string }; bm25Score: number }[] = [];
+    if (workspace && typeof (store as any).searchBM25WithRankWorkspace === 'function') {
+      wsResults = (store as any).searchBM25WithRankWorkspace(agentId, searchText, 3, workspace);
+    }
+
+    const allResults = [...results, ...wsResults];
+    if (allResults.length === 0) return { novelty: 1.0, matchedEngramId: null, matchScore: 0 };
+
+    allResults.sort((a, b) => b.bm25Score - a.bm25Score);
+    const top = allResults[0];
+    const topScore = top.bm25Score;
+
+    // Concept penalty for exact duplicates
+    const conceptLower = conceptStr.toLowerCase().trim();
+    const exactMatch = allResults.some(r => (r.engram as any)?.concept?.toLowerCase().trim() === conceptLower);
+    const conceptPenalty = exactMatch ? 0.4 : 0;
+
+    const novelty = Math.max(0.1, Math.min(0.95, 1.0 - topScore - conceptPenalty));
+    return { novelty, matchedEngramId: top.engram.id, matchScore: topScore };
+  } catch {
+    return { novelty: 0.8, matchedEngramId: null, matchScore: 0 };
+  }
+}

@@ -99,22 +99,19 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       novelty,
     });
 
-    if (salience.disposition === 'discard') {
-      return reply.code(200).send({
-        stored: false,
-        disposition: 'discard',
-        salience: salience.score,
-        reasonCodes: salience.reasonCodes,
-      });
-    }
+    // v0.5.4: No longer discard — store with low confidence for ranking.
+    const isLowSalience = salience.disposition === 'discard';
+    const confidence = isLowSalience
+      ? 0.25
+      : body.confidence ?? (salience.disposition === 'staging' ? 0.40 : 0.50);
 
     const engram = store.createEngram({
       agentId: body.agentId,
       concept: body.concept,
       content: body.content,
-      tags: body.tags,
+      tags: isLowSalience ? [...(body.tags ?? []), 'low-salience'] : body.tags,
       salience: salience.score,
-      confidence: body.confidence,
+      confidence,
       salienceFeatures: salience.features,
       reasonCodes: salience.reasonCodes,
       ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
@@ -133,7 +130,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       }
     } catch { /* Temporal edge creation is non-fatal */ }
 
-    if (salience.disposition === 'active') {
+    if (salience.disposition === 'active' || isLowSalience) {
       connectionEngine.enqueue(engram.id);
 
       // Auto-assign to episode (1-hour window per agent)
@@ -156,7 +153,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
     return reply.code(201).send({
       stored: true,
-      disposition: salience.disposition,
+      disposition: isLowSalience ? 'low-salience' : salience.disposition,
       salience: salience.score,
       reasonCodes: salience.reasonCodes,
       engram,
@@ -345,7 +342,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
   app.post('/system/consolidate', async (req, reply) => {
     const body = req.body as { agentId: string };
-    const result = consolidationEngine.consolidate(body.agentId);
+    const result = await consolidationEngine.consolidate(body.agentId);
     return reply.send(result);
   });
 
