@@ -50,6 +50,10 @@ Usage:
   awm mcp                                           Start MCP server (used by Claude Code)
   awm serve [--port <port>]                         Start HTTP API server
   awm health [--port <port>]                        Check server health
+  awm export --db <path> [--agent <id>] [--output <file>] [--active-only]
+                                                    Export memories to JSON
+  awm import <file> --db <path> [--remap-agent <id>] [--dedupe] [--dry-run]
+                                                    Import memories from JSON
 
 Setup:
   awm setup --global     Recommended. Writes ~/.mcp.json so AWM is available
@@ -370,6 +374,264 @@ function health() {
   }
 }
 
+// ─── EXPORT ──────────────────────────────────────
+
+function exportMemories() {
+  let dbPath = '';
+  let agentFilter: string | null = null;
+  let outputPath: string | null = null;
+  let activeOnly = false;
+
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--db' && args[i + 1]) dbPath = args[++i];
+    else if (args[i] === '--agent' && args[i + 1]) agentFilter = args[++i];
+    else if (args[i] === '--output' && args[i + 1]) outputPath = args[++i];
+    else if (args[i] === '--active-only') activeOnly = true;
+  }
+
+  if (!dbPath) {
+    console.error('Error: --db <path> is required');
+    process.exit(1);
+  }
+
+  if (!existsSync(dbPath)) {
+    console.error(`Error: database not found: ${dbPath}`);
+    process.exit(1);
+  }
+
+  // Dynamic import to avoid loading better-sqlite3 for other commands
+  const Database = require('better-sqlite3');
+  const db = new Database(dbPath, { readonly: true });
+
+  // Build memory query
+  let memQuery = 'SELECT * FROM engrams';
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (agentFilter) {
+    conditions.push('agent_id = ?');
+    params.push(agentFilter);
+  }
+  if (activeOnly) {
+    conditions.push('retracted = 0');
+  }
+
+  if (conditions.length > 0) {
+    memQuery += ' WHERE ' + conditions.join(' AND ');
+  }
+  memQuery += ' ORDER BY created_at ASC';
+
+  const rows = db.prepare(memQuery).all(...params) as any[];
+
+  // Build memory objects (exclude embedding blobs)
+  const memories = rows.map((r: any) => ({
+    id: r.id,
+    agent_id: r.agent_id,
+    concept: r.concept,
+    content: r.content,
+    confidence: r.confidence,
+    salience: r.salience,
+    access_count: r.access_count,
+    last_accessed: r.last_accessed,
+    created_at: r.created_at,
+    stage: r.stage,
+    tags: r.tags ? JSON.parse(r.tags) : [],
+    memory_class: r.memory_class ?? 'working',
+    episode_id: r.episode_id ?? null,
+    task_status: r.task_status ?? null,
+    task_priority: r.task_priority ?? null,
+    supersedes: r.supersedes ?? null,
+    superseded_by: r.superseded_by ?? null,
+    retracted: r.retracted ?? 0,
+  }));
+
+  // Get memory IDs for association filtering
+  const memIds = new Set(memories.map((m: any) => m.id));
+
+  // Build associations
+  let assocQuery = 'SELECT * FROM associations';
+  const allAssocs = db.prepare(assocQuery).all() as any[];
+  const associations = allAssocs
+    .filter((a: any) => memIds.has(a.from_engram_id) && memIds.has(a.to_engram_id))
+    .map((a: any) => ({
+      from_id: a.from_engram_id,
+      to_id: a.to_engram_id,
+      weight: a.weight,
+      type: a.type ?? 'hebbian',
+      activation_count: a.activation_count ?? 0,
+    }));
+
+  // Collect unique agents
+  const agents = [...new Set(memories.map((m: any) => m.agent_id))];
+
+  const exportData = {
+    version: '0.5.6',
+    exported_at: new Date().toISOString(),
+    source_db: dbPath,
+    agent_filter: agentFilter,
+    memories,
+    associations,
+    stats: {
+      total_memories: memories.length,
+      total_associations: associations.length,
+      agents,
+    },
+  };
+
+  const json = JSON.stringify(exportData, null, 2);
+
+  if (outputPath) {
+    writeFileSync(outputPath, json + '\n');
+    console.error(`Exported ${memories.length} memories, ${associations.length} associations → ${outputPath}`);
+  } else {
+    process.stdout.write(json + '\n');
+  }
+
+  db.close();
+}
+
+// ─── IMPORT ──────────────────────────────────────
+
+function importMemories() {
+  let filePath = '';
+  let dbPath = '';
+  let remapAgent: string | null = null;
+  let dedupe = false;
+  let dryRun = false;
+  let includeRetracted = false;
+
+  // First non-flag arg after 'import' is the file path
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--db' && args[i + 1]) dbPath = args[++i];
+    else if (args[i] === '--remap-agent' && args[i + 1]) remapAgent = args[++i];
+    else if (args[i] === '--dedupe') dedupe = true;
+    else if (args[i] === '--dry-run') dryRun = true;
+    else if (args[i] === '--include-retracted') includeRetracted = true;
+    else if (!args[i].startsWith('--') && !filePath) filePath = args[i];
+  }
+
+  if (!filePath) {
+    console.error('Error: <file> is required');
+    process.exit(1);
+  }
+  if (!dbPath) {
+    console.error('Error: --db <path> is required');
+    process.exit(1);
+  }
+  if (!existsSync(filePath)) {
+    console.error(`Error: import file not found: ${filePath}`);
+    process.exit(1);
+  }
+
+  const importData = JSON.parse(readFileSync(filePath, 'utf-8'));
+  if (!importData.memories || !Array.isArray(importData.memories)) {
+    console.error('Error: invalid export file — missing memories array');
+    process.exit(1);
+  }
+
+  const Database = require('better-sqlite3');
+  const db = new Database(dbPath);
+
+  // Build dedup set if needed
+  const existingHashes = new Set<string>();
+  if (dedupe) {
+    const existing = db.prepare('SELECT concept, content FROM engrams').all() as any[];
+    for (const row of existing) {
+      const hash = (row.concept ?? '').toLowerCase().trim() + '||' + (row.content ?? '').toLowerCase().trim();
+      existingHashes.add(hash);
+    }
+  }
+
+  // Build old-id → new-id map
+  const { randomUUID } = require('node:crypto');
+  const idMap = new Map<string, string>();
+  let imported = 0;
+  let skippedDupes = 0;
+  let skippedRetracted = 0;
+
+  const insertMem = db.prepare(`
+    INSERT INTO engrams (id, agent_id, concept, content, confidence, salience,
+      access_count, last_accessed, created_at, stage, tags, memory_class,
+      episode_id, task_status, task_priority, supersedes, superseded_by, retracted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const insertAssoc = db.prepare(`
+    INSERT INTO associations (id, from_engram_id, to_engram_id, weight, type, activation_count, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+  `);
+
+  const importTx = db.transaction(() => {
+    // Import memories
+    for (const mem of importData.memories) {
+      // Skip retracted unless --include-retracted
+      if (mem.retracted && !includeRetracted) {
+        skippedRetracted++;
+        continue;
+      }
+
+      // Dedupe check
+      if (dedupe) {
+        const hash = (mem.concept ?? '').toLowerCase().trim() + '||' + (mem.content ?? '').toLowerCase().trim();
+        if (existingHashes.has(hash)) {
+          skippedDupes++;
+          continue;
+        }
+      }
+
+      const newId = randomUUID();
+      idMap.set(mem.id, newId);
+
+      const agentId = remapAgent ?? mem.agent_id;
+      const tags = Array.isArray(mem.tags) ? JSON.stringify(mem.tags) : (mem.tags ?? '[]');
+
+      if (!dryRun) {
+        insertMem.run(
+          newId, agentId, mem.concept, mem.content,
+          mem.confidence ?? 0.5, mem.salience ?? 0.5,
+          mem.access_count ?? 0, mem.last_accessed ?? mem.created_at,
+          mem.created_at, mem.stage ?? 'active', tags,
+          mem.memory_class ?? 'working', mem.episode_id ?? null,
+          mem.task_status ?? null, mem.task_priority ?? null,
+          mem.supersedes ?? null, mem.superseded_by ?? null,
+          mem.retracted ?? 0
+        );
+      }
+      imported++;
+    }
+
+    // Import associations (using remapped IDs)
+    let assocImported = 0;
+    const associations = importData.associations ?? [];
+    for (const assoc of associations) {
+      const fromId = idMap.get(assoc.from_id);
+      const toId = idMap.get(assoc.to_id);
+      if (!fromId || !toId) continue; // skip if either memory was skipped
+
+      if (!dryRun) {
+        insertAssoc.run(
+          randomUUID(), fromId, toId,
+          assoc.weight ?? 0.5, assoc.type ?? 'hebbian',
+          assoc.activation_count ?? 0
+        );
+      }
+      assocImported++;
+    }
+
+    return assocImported;
+  });
+
+  const assocCount = importTx();
+
+  const prefix = dryRun ? '[DRY RUN] Would import' : 'Imported';
+  console.log(`${prefix} ${imported} memories, ${assocCount} associations` +
+    (skippedDupes > 0 ? `, ${skippedDupes} skipped (dupes)` : '') +
+    (skippedRetracted > 0 ? `, ${skippedRetracted} skipped (retracted)` : '') +
+    (remapAgent ? ` (agent remapped to: ${remapAgent})` : ''));
+
+  db.close();
+}
+
 // ─── Dispatch ──────────────────────────────────────
 
 switch (command) {
@@ -384,6 +646,12 @@ switch (command) {
     break;
   case 'health':
     health();
+    break;
+  case 'export':
+    exportMemories();
+    break;
+  case 'import':
+    importMemories();
     break;
   case '--help':
   case '-h':
