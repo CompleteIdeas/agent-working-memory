@@ -73,8 +73,8 @@ async function main() {
   // API
   const app = Fastify({ logger: true });
 
-  // Bearer token auth — only enforced when AWM_API_KEY is set
-  if (API_KEY) {
+  // Bearer token auth — only enforced when AWM_API_KEY is explicitly set and non-empty
+  if (API_KEY && API_KEY !== 'NONE' && API_KEY.length > 1) {
     app.addHook('onRequest', async (req, reply) => {
       if (req.url === '/health') return; // Health check is always public
       const bearer = req.headers.authorization;
