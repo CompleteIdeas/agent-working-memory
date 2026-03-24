@@ -15,7 +15,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, basename, join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { homedir as osHomedir } from 'node:os';
 
@@ -54,6 +54,9 @@ Usage:
                                                     Export memories to JSON
   awm import <file> --db <path> [--remap-agent <id>] [--dedupe] [--dry-run]
                                                     Import memories from JSON
+  awm merge --target <db> --source <db> [--source ...]
+            [--remap uuid=name] [--remap-all-uuids <name>]
+            [--dedupe] [--dry-run]                  Merge multiple memory DBs
 
 Setup:
   awm setup --global     Recommended. Writes ~/.mcp.json so AWM is available
@@ -376,7 +379,7 @@ function health() {
 
 // ─── EXPORT ──────────────────────────────────────
 
-function exportMemories() {
+async function exportMemories() {
   let dbPath = '';
   let agentFilter: string | null = null;
   let outputPath: string | null = null;
@@ -400,7 +403,7 @@ function exportMemories() {
   }
 
   // Dynamic import to avoid loading better-sqlite3 for other commands
-  const Database = require('better-sqlite3');
+  const Database = (await import('better-sqlite3')).default;
   const db = new Database(dbPath, { readonly: true });
 
   // Build memory query
@@ -492,7 +495,7 @@ function exportMemories() {
 
 // ─── IMPORT ──────────────────────────────────────
 
-function importMemories() {
+async function importMemories() {
   let filePath = '';
   let dbPath = '';
   let remapAgent: string | null = null;
@@ -529,8 +532,28 @@ function importMemories() {
     process.exit(1);
   }
 
-  const Database = require('better-sqlite3');
+  const Database = (await import('better-sqlite3')).default;
   const db = new Database(dbPath);
+
+  // Ensure tables exist in target
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS engrams (
+      id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, concept TEXT NOT NULL, content TEXT NOT NULL,
+      embedding BLOB, confidence REAL NOT NULL DEFAULT 0.5, salience REAL NOT NULL DEFAULT 0.5,
+      access_count INTEGER NOT NULL DEFAULT 0, last_accessed TEXT NOT NULL, created_at TEXT NOT NULL,
+      salience_features TEXT NOT NULL DEFAULT '{}', reason_codes TEXT NOT NULL DEFAULT '[]',
+      stage TEXT NOT NULL DEFAULT 'active', ttl INTEGER, retracted INTEGER NOT NULL DEFAULT 0,
+      retracted_by TEXT, retracted_at TEXT, tags TEXT NOT NULL DEFAULT '[]',
+      episode_id TEXT, task_status TEXT, task_priority TEXT, blocked_by TEXT,
+      memory_class TEXT NOT NULL DEFAULT 'working', superseded_by TEXT, supersedes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS associations (
+      id TEXT PRIMARY KEY, from_engram_id TEXT NOT NULL, to_engram_id TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 0.1, confidence REAL NOT NULL DEFAULT 0.5,
+      type TEXT NOT NULL DEFAULT 'hebbian', activation_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, last_activated TEXT
+    );
+  `);
 
   // Build dedup set if needed
   const existingHashes = new Set<string>();
@@ -541,9 +564,6 @@ function importMemories() {
       existingHashes.add(hash);
     }
   }
-
-  // Build old-id → new-id map
-  const { randomUUID } = require('node:crypto');
   const idMap = new Map<string, string>();
   let imported = 0;
   let skippedDupes = 0;
@@ -632,6 +652,168 @@ function importMemories() {
   db.close();
 }
 
+// ─── MERGE ──────────────────────────────────────
+
+async function mergeMemories() {
+  const Database = (await import('better-sqlite3')).default;
+  const { createHash, randomUUID } = await import('node:crypto');
+
+  let target = '';
+  const sources: string[] = [];
+  const remapEntries = new Map<string, string>();
+  let remapAllUuids = '';
+  let dedupe = false;
+  let dryRun = false;
+
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--target' && args[i + 1]) {
+      target = args[++i];
+    } else if (args[i] === '--source' && args[i + 1]) {
+      sources.push(args[++i]);
+    } else if (args[i] === '--remap' && args[i + 1]) {
+      const val = args[++i];
+      const eqIdx = val.indexOf('=');
+      if (eqIdx > 0) remapEntries.set(val.slice(0, eqIdx), val.slice(eqIdx + 1));
+    } else if (args[i] === '--remap-all-uuids' && args[i + 1]) {
+      remapAllUuids = args[++i];
+    } else if (args[i] === '--dedupe') {
+      dedupe = true;
+    } else if (args[i] === '--dry-run') {
+      dryRun = true;
+    }
+  }
+
+  if (!target || sources.length === 0) {
+    console.error('Usage: awm merge --target <path> --source <path> [--source <path>...] [--remap uuid=name] [--remap-all-uuids name] [--dedupe] [--dry-run]');
+    process.exit(1);
+  }
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function remapAgentId(agentId: string): string {
+    if (remapEntries.has(agentId)) return remapEntries.get(agentId)!;
+    if (remapAllUuids && UUID_RE.test(agentId)) return remapAllUuids;
+    return agentId;
+  }
+
+  function contentHash(concept: string, content: string): string {
+    return createHash('sha256').update((concept + '\n' + content).toLowerCase().trim()).digest('hex');
+  }
+
+  console.log(`Target: ${target}${dryRun ? ' (DRY RUN)' : ''}`);
+
+  const targetDb = new Database(target);
+  targetDb.pragma('journal_mode = WAL');
+  targetDb.pragma('foreign_keys = ON');
+
+  // Ensure tables exist in target
+  targetDb.exec(`
+    CREATE TABLE IF NOT EXISTS engrams (
+      id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, concept TEXT NOT NULL, content TEXT NOT NULL,
+      embedding BLOB, confidence REAL NOT NULL DEFAULT 0.5, salience REAL NOT NULL DEFAULT 0.5,
+      access_count INTEGER NOT NULL DEFAULT 0, last_accessed TEXT NOT NULL, created_at TEXT NOT NULL,
+      salience_features TEXT NOT NULL DEFAULT '{}', reason_codes TEXT NOT NULL DEFAULT '[]',
+      stage TEXT NOT NULL DEFAULT 'active', ttl INTEGER, retracted INTEGER NOT NULL DEFAULT 0,
+      retracted_by TEXT, retracted_at TEXT, tags TEXT NOT NULL DEFAULT '[]'
+    );
+    CREATE TABLE IF NOT EXISTS associations (
+      id TEXT PRIMARY KEY, from_engram_id TEXT NOT NULL, to_engram_id TEXT NOT NULL,
+      weight REAL NOT NULL DEFAULT 0.1, confidence REAL NOT NULL DEFAULT 0.5,
+      type TEXT NOT NULL DEFAULT 'hebbian', activation_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, last_activated TEXT NOT NULL
+    );
+  `);
+
+  // Build dedupe hash set from existing target memories
+  const existingHashes = new Set<string>();
+  if (dedupe) {
+    const rows = targetDb.prepare('SELECT concept, content FROM engrams').all() as { concept: string; content: string }[];
+    for (const row of rows) existingHashes.add(contentHash(row.concept, row.content));
+    console.log(`Target has ${existingHashes.size} unique memories (for dedupe)\n`);
+  }
+
+  const insertEngram = targetDb.prepare(`
+    INSERT OR IGNORE INTO engrams (id, agent_id, concept, content, confidence, salience, access_count,
+      last_accessed, created_at, salience_features, reason_codes, stage, ttl,
+      retracted, retracted_by, retracted_at, tags)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const insertAssoc = targetDb.prepare(`
+    INSERT OR IGNORE INTO associations (id, from_engram_id, to_engram_id, weight, confidence, type,
+      activation_count, created_at, last_activated)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let totalMemories = 0, totalAssociations = 0, totalSkipped = 0;
+
+  for (const sourcePath of sources) {
+    if (!existsSync(sourcePath)) {
+      console.error(`  Source not found: ${sourcePath}`);
+      continue;
+    }
+
+    const sourceDb = new Database(sourcePath, { readonly: true });
+    const engrams = sourceDb.prepare(
+      `SELECT id, agent_id, concept, content, confidence, salience, access_count,
+        last_accessed, created_at, salience_features, reason_codes, stage, ttl,
+        retracted, retracted_by, retracted_at, tags FROM engrams`
+    ).all() as any[];
+    const assocs = sourceDb.prepare(
+      `SELECT id, from_engram_id, to_engram_id, weight, confidence, type,
+        activation_count, created_at, last_activated FROM associations`
+    ).all() as any[];
+
+    const idMap = new Map<string, string>();
+    const skippedIds = new Set<string>();
+
+    const result = targetDb.transaction(() => {
+      let imported = 0, skipped = 0;
+      for (const e of engrams) {
+        const hash = contentHash(e.concept, e.content);
+        if (dedupe && existingHashes.has(hash)) { skippedIds.add(e.id); skipped++; continue; }
+        const newId = randomUUID();
+        idMap.set(e.id, newId);
+        existingHashes.add(hash);
+        if (!dryRun) {
+          insertEngram.run(newId, remapAgentId(e.agent_id), e.concept, e.content, e.confidence,
+            e.salience, e.access_count, e.last_accessed, e.created_at, e.salience_features,
+            e.reason_codes, e.stage, e.ttl, e.retracted, e.retracted_by, e.retracted_at, e.tags);
+        }
+        imported++;
+      }
+      let assocImported = 0;
+      for (const a of assocs) {
+        if (skippedIds.has(a.from_engram_id) || skippedIds.has(a.to_engram_id)) continue;
+        const fromId = idMap.get(a.from_engram_id);
+        const toId = idMap.get(a.to_engram_id);
+        if (!fromId || !toId) continue;
+        if (!dryRun) {
+          insertAssoc.run(randomUUID(), fromId, toId, a.weight, a.confidence, a.type,
+            a.activation_count, a.created_at, a.last_activated);
+        }
+        assocImported++;
+      }
+      return { imported, skipped, assocImported };
+    })();
+
+    sourceDb.close();
+
+    const agentSet = new Set(engrams.map((e: any) => remapAgentId(e.agent_id)));
+    console.log(`  Source: ${sourcePath}`);
+    console.log(`    Engrams: ${engrams.length} total, ${result.imported} imported, ${result.skipped} skipped`);
+    console.log(`    Associations: ${assocs.length} total, ${result.assocImported} imported`);
+    console.log(`    Agents: ${agentSet.size} (${[...agentSet].slice(0, 5).join(', ')}${agentSet.size > 5 ? '...' : ''})\n`);
+
+    totalMemories += result.imported;
+    totalAssociations += result.assocImported;
+    totalSkipped += result.skipped;
+  }
+
+  targetDb.close();
+  console.log(`\nTotal: ${totalMemories} memories, ${totalAssociations} associations imported. ${totalSkipped} skipped.`);
+  if (dryRun) console.log('(dry run — no data written)');
+}
+
 // ─── Dispatch ──────────────────────────────────────
 
 switch (command) {
@@ -652,6 +834,9 @@ switch (command) {
     break;
   case 'import':
     importMemories();
+    break;
+  case 'merge':
+    mergeMemories();
     break;
   case '--help':
   case '-h':
