@@ -86,8 +86,27 @@ export class ActivationEngine {
     const useExpansion = query.useExpansion ?? true;
     const abstentionThreshold = query.abstentionThreshold ?? 0;
 
+    // Phase -1: Coref expansion — if query has pronouns, append recent entity names
+    // Helps conversational recall where "she/he/they/it" refers to a named entity.
+    let queryContext = query.context;
+    const pronounPattern = /\b(she|he|they|her|his|him|their|it|that|this|there)\b/i;
+    if (pronounPattern.test(queryContext)) {
+      // Pull recent entity names from the agent's most-accessed memories
+      try {
+        const recentEntities = this.store.getEngramsByAgent(query.agentId, 'active')
+          .sort((a, b) => b.accessCount - a.accessCount)
+          .slice(0, 10)
+          .flatMap(e => e.tags.filter(t => t.length >= 3 && !/^(session-|low-|D\d)/.test(t)))
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .slice(0, 5);
+        if (recentEntities.length > 0) {
+          queryContext = `${queryContext} ${recentEntities.join(' ')}`;
+        }
+      } catch { /* non-fatal */ }
+    }
+
     // Phase 0: Query expansion — add related terms to improve BM25 recall
-    let searchContext = query.context;
+    let searchContext = queryContext;
     if (useExpansion) {
       try {
         searchContext = await expandQuery(query.context);
@@ -96,10 +115,10 @@ export class ActivationEngine {
       }
     }
 
-    // Phase 1: Embed original query for vector similarity (original, not expanded)
+    // Phase 1: Embed query for vector similarity (uses coref-expanded context)
     let queryEmbedding: number[] | null = null;
     try {
-      queryEmbedding = await embed(query.context);
+      queryEmbedding = await embed(queryContext);
     } catch {
       // Embedding unavailable — fall back to text-only matching
     }
@@ -207,10 +226,12 @@ export class ActivationEngine {
 
       // --- Temporal signals ---
 
-      // ACT-R decay — confidence-modulated
-      // High-confidence memories (confirmed useful via feedback) decay slower.
-      // Default exponent: 0.5. At confidence 0.8+: 0.3 (much slower decay).
-      const decayExponent = 0.5 - 0.2 * Math.max(0, (engram.confidence - 0.5) / 0.5);
+      // ACT-R decay — confidence + replay modulated (synaptic tagging)
+      // High-confidence memories decay slower. Heavily-accessed memories also resist decay.
+      // Default exponent: 0.5. High confidence (0.8+): 0.3. High access (10+): further -0.05.
+      const confMod = 0.2 * Math.max(0, (engram.confidence - 0.5) / 0.5);
+      const replayMod = Math.min(0.1, 0.05 * Math.log1p(engram.accessCount));
+      const decayExponent = Math.max(0.2, 0.5 - confMod - replayMod);
       const decayScore = baseLevelActivation(engram.accessCount, ageDays, decayExponent);
 
       // Hebbian boost from associations — capped to prevent popular memories
@@ -450,6 +471,10 @@ export class ActivationEngine {
 
       // Soft penalty: only 1 channel agrees or margin is thin
       if (channelsAgreeing < 2 || margin < 0.05) {
+        // If caller explicitly requested abstention, honor it when agreement is weak
+        if (abstentionThreshold > 0) {
+          return [];
+        }
         for (const item of rerankPool) {
           item.score *= 0.4;
         }
