@@ -19,7 +19,24 @@ import {
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
 
+/** Pretty timestamp for coordination logs. */
+function ts(): string {
+  return new Date().toLocaleTimeString('en-GB', { hour12: false });
+}
+
+/** Log a coordination event in human-readable format. */
+function coordLog(msg: string): void {
+  console.log(`${ts()} [coord] ${msg}`);
+}
+
 export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Database): void {
+
+  // Log errors and non-200 responses
+  app.addHook('onResponse', async (request, reply) => {
+    if (reply.statusCode >= 400) {
+      coordLog(`${request.method} ${request.url} → ${reply.statusCode}`);
+    }
+  });
 
   // ─── Checkin ────────────────────────────────────────────────────
 
@@ -58,6 +75,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'registered', ?)`
     ).run(id, `${name} joined as ${role ?? 'worker'}${workspace ? ' [' + workspace + ']' : ''}${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
 
+    coordLog(`${name} registered (${role ?? 'worker'})${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
     return reply.code(201).send({ agentId: id, action: 'registered', status: 'idle', workspace });
   });
 
@@ -74,6 +92,9 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'checkout', 'agent signed off')`
     ).run(agentId);
 
+    // Look up agent name for logging
+    const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
+    coordLog(`${agent?.name ?? agentId} checked out`);
     return reply.send({ ok: true });
   });
 
@@ -110,6 +131,13 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_created', ?)`
     ).run(agentId ?? null, `task: ${task}`);
 
+    // Log assignment with agent name
+    if (agentId) {
+      const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
+      coordLog(`assigned → ${agent?.name ?? 'unknown'}: ${task.slice(0, 80)}`);
+    } else {
+      coordLog(`assignment queued (pending): ${task.slice(0, 80)}`);
+    }
     return reply.code(201).send({ assignmentId: id, status: agentId ? 'assigned' : 'pending' });
   });
 
@@ -212,6 +240,14 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     db.prepare(
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES ((SELECT agent_id FROM coord_assignments WHERE id = ?), 'assignment_update', ?)`
     ).run(id, `${id} → ${status}`);
+
+    // Log completion/failure with agent name and task
+    if (['completed', 'failed'].includes(status)) {
+      const info = db.prepare(
+        `SELECT a.task, g.name AS agent_name FROM coord_assignments a LEFT JOIN coord_agents g ON a.agent_id = g.id WHERE a.id = ?`
+      ).get(id) as { task: string; agent_name: string | null } | undefined;
+      coordLog(`${info?.agent_name ?? 'unknown'} ${status}: ${info?.task?.slice(0, 80) ?? id}`);
+    }
   }
 
   app.post('/assignment/:id/update', async (req, reply) => {
@@ -334,6 +370,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'command', ?)`
     ).run(issuedBy ?? null, `${command}${workspace ? ' [' + workspace + ']' : ''}: ${reason ?? 'no reason given'}`);
 
+    coordLog(`COMMAND: ${command}${reason ? ' — ' + reason : ''}`);
     return reply.code(201).send({ ok: true, command, reason, workspace });
   });
 
