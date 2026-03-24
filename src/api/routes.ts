@@ -531,6 +531,6 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
   app.get('/health', async () => ({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '0.3.0',
+    version: '0.5.4',
   }));
 }
