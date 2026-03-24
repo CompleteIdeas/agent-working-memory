@@ -464,8 +464,11 @@ export class ActivationEngine {
         ? Math.max(...simValues)
         : 1.0;
 
-      // Hard abstention: fewer than 2 channels agree AND semantic drift is high
-      if (channelsAgreeing < 2 && maxRawCosine < (simMean + simStdDev * 1.5)) {
+      // Stricter gate when caller explicitly requests abstention (e.g., noise filter queries)
+      const requiredChannels = abstentionThreshold > 0 ? 3 : 2;
+
+      // Hard abstention: fewer than required channels agree AND semantic drift is high
+      if (channelsAgreeing < requiredChannels && maxRawCosine < (simMean + simStdDev * 1.5)) {
         return [];
       }
 
