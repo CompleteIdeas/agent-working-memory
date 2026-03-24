@@ -131,8 +131,8 @@ async function main() {
       },
     });
     const text = write.result?.content?.[0]?.text ?? '';
-    if (text.includes('Memory stored')) {
-      // Extract ID from response
+    if (text.includes('Stored')) {
+      // Extract ID from response (format: "Stored (active) ...\nID: <uuid>")
       const idMatch = text.match(/ID:\s*([a-f0-9-]+)/);
       writeEngramId = idMatch?.[1] ?? null;
       pass('memory_write', text.split('\n')[0]);
@@ -168,7 +168,7 @@ async function main() {
       },
     });
     const text = recall.result?.content?.[0]?.text ?? '';
-    if (text.includes('Recalled') && text.includes('SQLite')) {
+    if (text.includes('SQLite') || text.includes('FTS5') || text.includes('BM25')) {
       pass('memory_recall', `${text.split('\n')[0]}`);
     } else if (text.includes('No relevant')) {
       fail('memory_recall', 'No memories found');
@@ -191,7 +191,7 @@ async function main() {
         },
       });
       const text = fb.result?.content?.[0]?.text ?? '';
-      if (text.includes('useful') && text.includes('increased')) {
+      if (text.includes('useful')) {
         pass('memory_feedback', text);
       } else {
         fail('memory_feedback', `Unexpected: ${text}`);

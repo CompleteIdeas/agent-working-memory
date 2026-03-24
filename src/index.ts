@@ -1,7 +1,7 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { resolve, dirname, basename } from 'node:path';
 import Fastify from 'fastify';
 
 // Load .env file if present (no external dependency)
@@ -39,6 +39,21 @@ const DB_PATH = process.env.AWM_DB_PATH ?? 'memory.db';
 const API_KEY = process.env.AWM_API_KEY ?? null;
 
 async function main() {
+  // Auto-backup: copy DB to backups/ on startup (cheap insurance)
+  if (existsSync(DB_PATH)) {
+    const dbDir = dirname(resolve(DB_PATH));
+    const backupDir = resolve(dbDir, 'backups');
+    mkdirSync(backupDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupPath = resolve(backupDir, `${basename(DB_PATH, '.db')}-${ts}.db`);
+    try {
+      copyFileSync(resolve(DB_PATH), backupPath);
+      console.log(`Backup: ${backupPath}`);
+    } catch (err) {
+      console.log(`Backup skipped: ${(err as Error).message}`);
+    }
+  }
+
   // Logger — write activity to awm.log alongside the DB
   initLogger(DB_PATH);
 

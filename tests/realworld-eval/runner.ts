@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, extname, basename } from 'node:path';
 
 const BASE_URL = process.argv[2] ?? 'http://localhost:8400';
-const CODEBASE_PATH = process.argv[3] ?? 'C:/Users/robert/project/SportsManagement';
+const CODEBASE_PATH = process.argv[3] ?? './test-codebase';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const TMP_DIR = join(tmpdir(), 'awm-realworld-eval');
@@ -322,7 +322,7 @@ const CHALLENGES: Challenge[] = [
   // Architecture questions
   {
     name: 'ARCH1',
-    question: 'What is the overall architecture of the platform?',
+    question: 'What is the overall architecture of the the platform?',
     expectedTags: ['architecture', 'documentation'],
     category: 'architecture',
   },
@@ -574,7 +574,7 @@ async function main() {
   // Build associations
   console.log('\n=== PHASE 2b: BUILDING ASSOCIATIONS ===');
   const associationQueries = [
-    'platform architecture monorepo',
+    'the platform architecture monorepo',
     'authentication JWT sessions login',
     'horse registration record manager transfer',
     'membership types pricing renewal',

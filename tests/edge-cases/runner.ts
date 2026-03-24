@@ -563,7 +563,9 @@ async function testIdentityCollision(agentId: string, results: TestResult[]) {
 
   // Cross-check: backend query should NOT have designer Alex on top
   const crossCheck = await query(agentId, 'Alex on-call rotation pager duty backend', 3);
-  const topIsDev = hasMatch([crossCheck[0]], 'rivera') || hasMatch([crossCheck[0]], 'engineer') || hasMatch([crossCheck[0]], 'backend');
+  const topIsDev = crossCheck.length > 0
+    ? hasMatch([crossCheck[0]], 'rivera') || hasMatch([crossCheck[0]], 'engineer') || hasMatch([crossCheck[0]], 'backend')
+    : false;
   record(results, name, topIsDev, 'On-call query returns engineer Alex, not designer Alex');
 }
 

@@ -1,0 +1,7 @@
+# Keep directory structure, ignore DB files and logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+backups/
+!.gitignore
