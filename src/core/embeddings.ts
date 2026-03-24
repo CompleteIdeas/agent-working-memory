@@ -3,16 +3,20 @@
 /**
  * Embedding Engine — local vector embeddings via transformers.js
  *
- * Default: gte-small (384 dimensions, ~34MB int8, MTEB 61.4) for semantic similarity.
+ * Default: bge-small-en-v1.5 (384 dimensions, ~90MB, MTEB retrieval-optimized).
+ * Better short-text similarity than MiniLM for agent memory concepts.
  * Configurable via AWM_EMBED_MODEL env var.
  * Model is downloaded once on first use and cached locally.
  *
  * Singleton pattern — call getEmbedder() to get the shared instance.
+ *
+ * NOTE: Changing the model invalidates existing embeddings.
+ * Set AWM_EMBED_MODEL=Xenova/all-MiniLM-L6-v2 for backward compatibility.
  */
 
 import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
 
-const MODEL_ID = process.env.AWM_EMBED_MODEL ?? 'Xenova/all-MiniLM-L6-v2';
+const MODEL_ID = process.env.AWM_EMBED_MODEL ?? 'Xenova/bge-small-en-v1.5';
 const DIMENSIONS = parseInt(process.env.AWM_EMBED_DIMS ?? '384', 10);
 const POOLING = (process.env.AWM_EMBED_POOLING ?? 'mean') as 'cls' | 'mean';
 
