@@ -29,9 +29,9 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. That's it — 13 memory tools appear automatically.
+Restart Claude Code. That's it — 14 memory tools appear automatically.
 
-First conversation will be ~30 seconds slower while ML models download (~124MB, cached locally). After that, everything runs on your machine.
+First conversation will be ~30 seconds slower while ML models download (~200MB total, cached locally). After that, everything runs on your machine.
 
 > For isolated memory per folder, see [Separate Memory Pools](#separate-memory-pools). For team onboarding, see [docs/quickstart.md](docs/quickstart.md).
 
@@ -59,44 +59,59 @@ Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM
 
 | | Typical RAG / Vector Store | AWM |
 |---|---|---|
-| **Storage** | Everything | Only novel, salient events (77% filtered at write time) |
-| **Retrieval** | Cosine similarity | 10-phase pipeline: BM25 + vectors + reranking + graph walk + decay |
+| **Storage** | Everything | Salience-filtered with low-confidence fallback (novel events go active, borderline enter staging, low-salience stored at reduced confidence) |
+| **Retrieval** | Cosine similarity | 10-phase pipeline: dual BM25 (keyword + expanded) + vectors + reranking + graph walk + decay + coref expansion |
 | **Connections** | None | Hebbian edges that strengthen when memories co-activate |
-| **Over time** | Grows forever, gets noisier | Consolidation: strengthens clusters, prunes noise, builds bridges |
-| **Forgetting** | Manual cleanup | Cognitive forgetting: unused memories fade, confirmed knowledge persists |
+| **Over time** | Grows forever, gets noisier | Consolidation: diameter-enforced clustering, cross-topic bridges, synaptic-tagged decay |
+| **Forgetting** | Manual cleanup | Cognitive forgetting: unused memories fade, reinforced knowledge persists (access-count modulated) |
 | **Feedback** | None | Useful/not-useful signals tune confidence and retrieval rank |
 | **Correction** | Delete and re-insert | Retraction: wrong memories invalidated, corrections linked, penalties propagate |
+| **Noise rejection** | None | Multi-channel agreement gate: requires 2+ retrieval channels to agree before returning results |
+| **Duplicates** | Stored repeatedly | Reinforce-on-duplicate: near-exact matches boost existing memory instead of creating copies |
 
-The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, and synaptic homeostasis — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](docs/cognitive-model.md) for details.
+The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](docs/cognitive-model.md) for details.
 
 ---
 
-## Benchmarks
+## Benchmarks (v0.5.4)
 
 | Eval | Score | What it tests |
 |------|-------|---------------|
-| Edge Cases | **100% (34/34)** | 9 failure modes: hub toxicity, flashbulb distortion, narcissistic interference, identity collision, noise forgetting benefit |
-| Stress Test | **92.3% (48/52)** | 500 memories, 100 sleep cycles, catastrophic forgetting, adversarial spam |
-| A/B Test | **AWM 100% vs Baseline 83%** | 100 project events, 24 recall questions |
-| Self-Test | **97.4%** | 31 pipeline component checks |
-| Workday | **86.7%** | 43 memories across 4 simulated work sessions |
-| Real-World | **93.1%** | 300 code chunks from a 71K-line production monorepo |
-| Token Savings | **64.5% savings** | Memory-guided context vs full conversation history |
+| Edge Cases | **100% (34/34)** | 9 failure modes: context collapse, hub toxicity, flashbulb distortion, narcissistic interference, identity collision, contradiction trapping, bridge overshoot, noise forgetting |
+| Stress Test | **96.2% (50/52)** | 500 memories, 100 sleep cycles, 10 topic clusters, 20 bridges/cycle, catastrophic forgetting, adversarial spam, recovery |
+| Workday | **93.3%** | 43 memories across 4 simulated work sessions, knowledge transfer, context switching, cross-cutting queries, noise filtering |
+| A/B Test | **AWM 85% vs Baseline 83%** | 100 project events, 24 recall questions, 22/22 fact recall |
+| Sleep Cycle | **85.7% pre-sleep** | 60 memories, 4 topic clusters, consolidation impact measurement |
+| Token Savings | **67.5% accuracy, 55% savings** | Memory-guided context vs full conversation history, 2.2x efficiency |
+| LoCoMo | **28.2%** | Industry-standard conversational memory benchmark (1,986 QA pairs, 10 conversations) |
+| Mini Multi-Hop | **80% (4/5)** | Entity bridging across conversation turns |
 
-All evals are reproducible: `npm run test:self`, `npm run test:edge`, `npm run test:stress`, etc. See [Testing & Evaluation](#testing--evaluation) and [docs/benchmarks.md](docs/benchmarks.md) for full details.
+### Consolidation (v0.5.4 with BGE-small)
+
+| Metric | Value |
+|--------|-------|
+| Topic clusters formed | **10** per consolidation cycle |
+| Cross-topic bridges | **20** in first cycle |
+| Edges strengthened | **127** per cycle |
+| Graph size at scale | **3,000-4,500 edges** (500 memories) |
+| Recall after 100 cycles | **90%** stable |
+| Catastrophic forgetting survival | **5/5** (100%) |
+
+All evals are reproducible: `npm run test:edge`, `npm run test:stress`, `npm run test:workday`, etc. See [Testing & Evaluation](#testing--evaluation).
 
 ---
 
 ## Features
 
-### Memory Tools (13)
+### Memory Tools (14)
 
 | Tool | Purpose |
 |------|---------|
-| `memory_write` | Store a memory (salience filter decides disposition) |
-| `memory_recall` | Retrieve relevant memories by context |
+| `memory_write` | Store a memory (salience filter + reinforce-on-duplicate) |
+| `memory_recall` | Retrieve relevant memories by context (dual BM25 + coref expansion) |
 | `memory_feedback` | Report whether a recalled memory was useful |
 | `memory_retract` | Invalidate a wrong memory with optional correction |
+| `memory_supersede` | Replace outdated memory with current version |
 | `memory_stats` | View memory health metrics and activity |
 | `memory_checkpoint` | Save execution state (survives context compaction) |
 | `memory_restore` | Recover state + relevant context at session start |
@@ -112,8 +127,8 @@ All evals are reproducible: `npm run test:self`, `npm run test:edge`, `npm run t
 By default, all projects share one memory pool. For isolated pools per folder, place a `.mcp.json` in each parent folder with a different `AWM_AGENT_ID`:
 
 ```
-C:\Users\you\work\.mcp.json          → AWM_AGENT_ID: "work"
-C:\Users\you\personal\.mcp.json      → AWM_AGENT_ID: "personal"
+C:\Users\you\work\.mcp.json          -> AWM_AGENT_ID: "work"
+C:\Users\you\personal\.mcp.json      -> AWM_AGENT_ID: "personal"
 ```
 
 Claude Code uses the closest `.mcp.json` ancestor. Same database, isolation by agent ID.
@@ -135,13 +150,17 @@ Installed by `awm setup --global`:
 - **SessionEnd** — auto-checkpoints and consolidates on close
 - **15-min timer** — silent auto-checkpoint while session is active
 
+### Auto-Backup
+
+The HTTP server automatically copies the database to a `backups/` directory on startup with a timestamp. Cheap insurance against data loss.
+
 ### Activity Log
 
 ```bash
 tail -f "$(npm root -g)/agent-working-memory/data/awm.log"
 ```
 
-Real-time: writes, recalls, checkpoints, consolidation, hook events.
+Real-time: writes, recalls, reinforcements, checkpoints, consolidation, hook events.
 
 ### Activity Stats
 
@@ -233,23 +252,25 @@ curl -X POST http://localhost:8400/memory/activate \
 
 ### The Memory Lifecycle
 
-1. **Write** — Salience scoring evaluates novelty, surprise, causal depth, and effort. High-salience memories go active; borderline ones enter staging; noise is discarded.
+1. **Write** — Salience scoring evaluates novelty, surprise, causal depth, and effort. High-salience memories go active; borderline ones enter staging; low-salience stored at reduced confidence for recall fallback. Near-duplicates reinforce existing memories instead of creating copies.
 
-2. **Connect** — Vector embedding (MiniLM-L6-v2, 384d). Temporal edges link to recent memories. Hebbian edges form between co-retrieved memories.
+2. **Connect** — Vector embedding (BGE-small-en-v1.5, 384d). Temporal edges link to recent memories. Hebbian edges form between co-retrieved memories. Coref expansion resolves pronouns to entity names.
 
-3. **Retrieve** — 10-phase pipeline: BM25 + semantic search + cross-encoder reranking + temporal decay (ACT-R) + graph walks + confidence gating.
+3. **Retrieve** — 10-phase pipeline: coref expansion + query expansion + dual BM25 (keyword-stripped + expanded) + semantic vectors + Rocchio pseudo-relevance feedback + ACT-R temporal decay (synaptic-tagged) + Hebbian boost + entity-bridge boost + graph walk + cross-encoder reranking + multi-channel agreement gate.
 
-4. **Consolidate** — 7-phase sleep cycle: replay clusters, strengthen edges, bridge cross-topic, decay unused, normalize hubs, forget noise, sweep staging.
+4. **Consolidate** — 7-phase sleep cycle: diameter-enforced clustering (prevents chaining), edge strengthening (access-weighted), cross-topic bridge formation (direct closest-pair), confidence-modulated decay (synaptic tagging extends half-life), synaptic homeostasis, cognitive forgetting, staging sweep. Embedding backfill ensures all memories are clusterable.
 
 5. **Feedback** — Useful/not-useful signals adjust confidence, affecting retrieval rank and forgetting resistance.
 
 ### Cognitive Foundations
 
-- **ACT-R activation decay** (Anderson 1993) — memories decay with time, strengthen with use
+- **ACT-R activation decay** (Anderson 1993) — memories decay with time, strengthen with use. Synaptic tagging: heavily-accessed memories decay slower (log-scaled).
 - **Hebbian learning** — co-retrieved memories form stronger associative edges
 - **Complementary Learning Systems** — fast capture (salience + staging) + slow consolidation (sleep cycle)
 - **Synaptic homeostasis** — edge weight normalization prevents hub domination
 - **Forgetting as feature** — noise removal improves signal-to-noise for connected memories
+- **Diameter-enforced clustering** — prevents semantic chaining (e.g., physics->biophysics->cooking = 1 cluster)
+- **Multi-channel agreement** — OOD detection requires multiple retrieval channels to agree
 
 ---
 
@@ -258,16 +279,16 @@ curl -X POST http://localhost:8400/memory/activate \
 ```
 src/
   core/             # Cognitive primitives
-    embeddings.ts     - Local vector embeddings (MiniLM-L6-v2, 384d)
+    embeddings.ts     - Local vector embeddings (BGE-small-en-v1.5, 384d)
     reranker.ts       - Cross-encoder passage scoring (ms-marco-MiniLM)
     query-expander.ts - Synonym expansion (flan-t5-small)
-    salience.ts       - Write-time importance scoring (novelty + salience)
+    salience.ts       - Write-time importance scoring (novelty + salience + reinforce-on-duplicate)
     decay.ts          - ACT-R temporal activation decay
     hebbian.ts        - Association strengthening/weakening
     logger.ts         - Append-only activity log (data/awm.log)
   engine/           # Processing pipelines
-    activation.ts     - 10-phase retrieval pipeline
-    consolidation.ts  - 7-phase sleep cycle consolidation
+    activation.ts     - 10-phase retrieval pipeline (dual BM25, coref, agreement gate)
+    consolidation.ts  - 7-phase sleep cycle (diameter clustering, direct bridging, synaptic tagging)
     connections.ts    - Discover links between memories
     staging.ts        - Weak signal buffer (promote or discard)
     retraction.ts     - Negative memory / corrections
@@ -278,13 +299,12 @@ src/
     sqlite.ts         - SQLite + FTS5 persistence layer
   api/
     routes.ts         - HTTP endpoints (memory + task + system)
-  mcp.ts            - MCP server (13 tools, incognito support)
+  mcp.ts            - MCP server (14 tools, incognito support)
   cli.ts            - CLI (setup, serve, hook config)
-  index.ts          - HTTP server entry point
+  index.ts          - HTTP server entry point (auto-backup on startup)
 ```
 
 For detailed architecture including pipeline phases, database schema, and system diagrams, see [docs/architecture.md](docs/architecture.md).
-For an implementation plan to improve memory precision and stale-context suppression, see [docs/memory-quality-hardening-rfc.md](docs/memory-quality-hardening-rfc.md).
 
 ---
 
@@ -300,13 +320,14 @@ npx vitest run    # 68 tests
 
 | Command | What it tests | Score |
 |---------|--------------|-------|
-| `npm run test:self` | 31 pipeline checks: embeddings, BM25, reranker, decay, confidence, Hebbian, graph walks, staging | **97.4%** |
-| `npm run test:edge` | 9 adversarial failure modes: context collapse, hub toxicity, flashbulb distortion, narcissistic interference, identity collision, contradiction, bridge overshoot, noise benefit | **100%** |
-| `npm run test:stress` | 500 memories, 100 sleep cycles, catastrophic forgetting, adversarial spam, recovery | **92.3%** |
-| `npm run test:workday` | 43 memories across 4 projects, 14 recall challenges | **86.7%** |
-| `npm run test:ab` | AWM vs keyword baseline, 100 events, 24 questions | **AWM 100% vs 83%** |
-| `npm run test:tokens` | Token savings vs full conversation history | **64.5%** |
-| `npm run test:realworld` | 300 chunks from 71K-line monorepo, 16 challenges | **93.1%** |
+| `npm run test:edge` | 9 adversarial failure modes: context collapse, hub toxicity, flashbulb distortion, narcissistic interference, identity collision, contradiction trapping, bridge overshoot, noise benefit | **100% (34/34)** |
+| `npm run test:stress` | 500 memories, 100 sleep cycles, 10 clusters, 20 bridges, catastrophic forgetting, adversarial spam, recovery | **96.2% (50/52)** |
+| `npm run test:workday` | 43 memories across 4 projects, 14 recall challenges, noise filtering | **93.3%** |
+| `npm run test:ab` | AWM vs keyword baseline, 100 events, 24 questions | **AWM 85% (22/22 recall)** |
+| `npm run test:sleep` | 60 memories, 4 topic clusters, consolidation impact | **85.7% pre-sleep** |
+| `npm run test:tokens` | Token savings vs full conversation history | **67.5% accuracy, 55% savings** |
+| `npm run test:locomo` | LoCoMo conversational memory benchmark (1,986 QA pairs) | **28.2%** |
+| `npm run test:self` | Pipeline component checks | **97.4%** |
 
 ---
 
@@ -317,11 +338,12 @@ npx vitest run    # 68 tests
 | `AWM_PORT` | `8400` | HTTP server port |
 | `AWM_DB_PATH` | `memory.db` | SQLite database path |
 | `AWM_AGENT_ID` | `claude-code` | Agent ID (memory namespace) |
-| `AWM_EMBED_MODEL` | `Xenova/all-MiniLM-L6-v2` | Embedding model |
+| `AWM_EMBED_MODEL` | `Xenova/bge-small-en-v1.5` | Embedding model (retrieval-optimized) |
 | `AWM_EMBED_DIMS` | `384` | Embedding dimensions |
 | `AWM_RERANKER_MODEL` | `Xenova/ms-marco-MiniLM-L-6-v2` | Reranker model |
 | `AWM_HOOK_PORT` | `8401` | Hook sidecar port |
 | `AWM_HOOK_SECRET` | *(none)* | Bearer token for hook auth |
+| `AWM_API_KEY` | *(none)* | Bearer token for HTTP API auth |
 | `AWM_INCOGNITO` | *(unset)* | Set to `1` to disable all tools |
 
 ## Tech Stack
@@ -333,26 +355,45 @@ npx vitest run    # 68 tests
 | HTTP | Fastify 5 |
 | MCP | @modelcontextprotocol/sdk |
 | ML Runtime | @huggingface/transformers (local ONNX) |
+| Embeddings | BGE-small-en-v1.5 (BAAI, retrieval-optimized, 384d) |
+| Reranker | ms-marco-MiniLM-L-6-v2 (cross-encoder) |
+| Query Expansion | flan-t5-small (synonym generation) |
 | Tests | Vitest 4 |
 | Validation | Zod 4 |
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.5.4
+
+- **BGE-small-en-v1.5 embedding model** — retrieval-optimized, 60% higher cosine for related short texts
+- **Diameter-enforced clustering** — prevents semantic chaining, forms 10 distinct topic clusters
+- **Direct cross-topic bridging** — 20 bridges per consolidation cycle
+- **Dual BM25 retrieval** — keyword-stripped + expanded queries for better precision
+- **Multi-channel agreement gate** — OOD detection prevents off-topic results
+- **Reinforce-on-duplicate** — near-duplicate writes boost existing memories
+- **No-discard salience** — low-salience memories stored at reduced confidence (available for fallback recall)
+- **Synaptic tagging** — access count modulates decay (heavily-used memories persist longer)
+- **Coref expansion** — pronoun queries auto-expanded with recent entity names
+- **Async consolidation** — embedding backfill ensures all memories are clusterable
+- **Auto-backup** — database copied to backups/ on server startup
+
+See [CHANGELOG-0.5.4.md](CHANGELOG-0.5.4.md) for full details.
+
 ## Project Status
 
-AWM is in active development (v0.5.x). The core memory pipeline, consolidation system, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.5.4). The core memory pipeline, consolidation system, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
 - Task management: **stable**
 - Hook sidecar and auto-checkpoint: **stable**
 - HTTP API: **stable** (for custom agents)
+- Cognitive consolidation (clustering, bridging): **stable** (v0.5.4)
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+See [CHANGELOG-0.5.4.md](CHANGELOG-0.5.4.md) for version history.
 
 ---
 
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
-
