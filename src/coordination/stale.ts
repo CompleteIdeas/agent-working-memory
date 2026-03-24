@@ -62,6 +62,14 @@ export function cleanupStale(db: Database.Database, thresholdSeconds: number): {
   return { stale, cleaned };
 }
 
+/** Prune heartbeat events older than 1 hour. Keeps assignment, registered, and command events permanently. */
+export function pruneOldHeartbeats(db: Database.Database): number {
+  const result = db.prepare(
+    `DELETE FROM coord_events WHERE event_type = 'heartbeat' AND created_at < datetime('now', '-1 hour')`
+  ).run();
+  return result.changes;
+}
+
 /** Clean slate on startup: mark all live agents dead, release locks, clear commands. */
 export function cleanSlate(db: Database.Database): void {
   const alive = db.prepare(

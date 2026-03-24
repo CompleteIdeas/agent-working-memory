@@ -10,7 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
-  checkinSchema, checkoutSchema,
+  checkinSchema, checkoutSchema, pulseSchema,
   assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema,
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
@@ -74,6 +74,17 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'checkout', 'agent signed off')`
     ).run(agentId);
 
+    return reply.send({ ok: true });
+  });
+
+  // ─── Pulse (lightweight heartbeat — no event row) ──────────────
+
+  app.patch('/pulse', async (req, reply) => {
+    const parsed = pulseSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
+    const { agentId } = parsed.data;
+
+    db.prepare(`UPDATE coord_agents SET last_seen = datetime('now') WHERE id = ?`).run(agentId);
     return reply.send({ ok: true });
   });
 

@@ -92,9 +92,16 @@ async function main() {
   });
 
   // Coordination module (opt-in via AWM_COORDINATION=true)
+  let heartbeatPruneTimer: ReturnType<typeof setInterval> | null = null;
   const { isCoordinationEnabled, initCoordination } = await import('./coordination/index.js');
   if (isCoordinationEnabled()) {
     initCoordination(app, store.getDb());
+    // Prune stale heartbeat events every 30s (keeps assignment/command events permanently)
+    const { pruneOldHeartbeats } = await import('./coordination/stale.js');
+    heartbeatPruneTimer = setInterval(() => {
+      const pruned = pruneOldHeartbeats(store.getDb());
+      if (pruned > 0) console.log(`[coordination] pruned ${pruned} old heartbeat event(s)`);
+    }, 30_000);
   } else {
     console.log('  Coordination module disabled (set AWM_COORDINATION=true to enable)');
   }
@@ -114,6 +121,7 @@ async function main() {
 
   // Graceful shutdown
   const shutdown = () => {
+    if (heartbeatPruneTimer) clearInterval(heartbeatPruneTimer);
     consolidationScheduler.stop();
     stagingBuffer.stop();
     store.close();

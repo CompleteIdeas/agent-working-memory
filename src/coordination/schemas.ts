@@ -112,6 +112,12 @@ export const findingsQuerySchema = z.object({
 export const assignmentIdParamSchema = z.object({ id: z.string().uuid() });
 export const findingIdParamSchema = z.object({ id: z.coerce.number().int().positive() });
 
+// ─── Pulse ─────────────────────────────────────────────────────
+
+export const pulseSchema = z.object({
+  agentId: z.string().uuid(),
+});
+
 // ─── Status / Events ────────────────────────────────────────────
 
 export const eventsQuerySchema = z.object({
