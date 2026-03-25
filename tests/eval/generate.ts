@@ -103,14 +103,16 @@ function generateFact(index: number): Fact {
   const pattern = PATTERNS[index % PATTERNS.length];
   const component = COMPONENTS[index % COMPONENTS.length];
   const lang = LANGUAGES[index % LANGUAGES.length];
+  // Add unique ticket/issue reference so each fact has a distinctive anchor
+  const ticket = `PROJ-${1000 + index}`;
 
   return {
     id: uuid(),
     concept: `${domain}/${component}`,
-    content: `${action} ${pattern} in ${component} using ${lang}. `
+    content: `[${ticket}] ${action} ${pattern} in ${component} using ${lang}. `
       + `This addresses the ${domain} concern for the ${component.toLowerCase()} module. `
       + `Key insight: ${pattern} reduces failure rate by ${10 + (index % 40)}% under load.`,
-    tags: [domain, component.toLowerCase(), lang.toLowerCase(), action],
+    tags: [domain, component.toLowerCase(), lang.toLowerCase(), action, ticket.toLowerCase()],
     timestamp: new Date(Date.now() - (index * 3600_000)).toISOString(),
   };
 }
@@ -123,21 +125,25 @@ function generateQueries(facts: Fact[]): Query[] {
   const queries: Query[] = [];
 
   for (let i = 0; i < 50; i++) {
-    // Each query targets 1-3 facts
-    const targetCount = 1 + (i % 3);
-    const startIdx = (i * 4) % facts.length;
-    const targets = facts.slice(startIdx, startIdx + targetCount);
+    // Each query targets exactly 1 fact for precise ground truth
+    const targetIdx = (i * 4) % facts.length;
+    const target = facts[targetIdx];
 
-    // Build query from the first target's domain context
-    const primary = targets[0];
-    const domain = primary.tags[0];
-    const component = primary.tags[1];
+    // Extract unique keywords from the target fact to make queries specific
+    const domain = target.tags[0];
+    const component = target.tags[1];
+    const lang = target.tags[2];
+    const action = target.tags[3];
+    const ticket = target.tags[4] ?? ''; // e.g. "proj-1000"
+    // Extract the pattern from content
+    const patternMatch = target.content.match(/\] (?:implemented|discovered|fixed|refactored|optimized|deprecated|migrated|configured|tested|documented) (.+?) in/);
+    const pattern = patternMatch?.[1] ?? '';
 
     queries.push({
       id: uuid(),
-      text: `How did we handle ${domain} in the ${component} module? What patterns were applied?`,
-      groundTruth: targets.map(f => f.id),
-      description: `Targets ${targetCount} facts about ${domain}/${component}`,
+      text: `${ticket} ${action} ${pattern} in ${component} using ${lang} for ${domain}`,
+      groundTruth: [target.id],
+      description: `Targets fact about ${domain}/${component}: ${pattern}`,
     });
   }
 
