@@ -582,7 +582,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     const base: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '0.5.5',
+      version: '0.6.0',
       coordination: coordEnabled,
     };
     if (coordEnabled) {

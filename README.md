@@ -363,34 +363,32 @@ npx vitest run    # 68 tests
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.5.4
+## What's New in v0.6.0
 
-- **BGE-small-en-v1.5 embedding model** — retrieval-optimized, 60% higher cosine for related short texts
-- **Diameter-enforced clustering** — prevents semantic chaining, forms 10 distinct topic clusters
-- **Direct cross-topic bridging** — 20 bridges per consolidation cycle
-- **Dual BM25 retrieval** — keyword-stripped + expanded queries for better precision
-- **Multi-channel agreement gate** — OOD detection prevents off-topic results
-- **Reinforce-on-duplicate** — near-duplicate writes boost existing memories
-- **No-discard salience** — low-salience memories stored at reduced confidence (available for fallback recall)
-- **Synaptic tagging** — access count modulates decay (heavily-used memories persist longer)
-- **Coref expansion** — pronoun queries auto-expanded with recent entity names
-- **Async consolidation** — embedding backfill ensures all memories are clusterable
-- **Auto-backup** — database copied to backups/ on server startup
+- **Memory taxonomy** — memories classified as `episodic`, `semantic`, `procedural`, or `unclassified`. Auto-classified on write. Filter by type on recall.
+- **Query-adaptive retrieval** — pipeline adapts to query type: `targeted` (boost exact matches), `exploratory` (wider graph walk, more semantic), `balanced` (default).
+- **Decision propagation** — decisions automatically broadcast to coordination layer for cross-agent discovery. Peer decisions shown on `memory_restore`.
+- **Completion verification** — workers must provide proof of work (result summary, optional commit SHA) when completing assignments.
+- **Task priority & dependencies** — priority field (0-10) and `blocked_by` for task ordering.
+- **Eval harness** — `npm run eval` benchmarks retrieval, associative, redundancy, and temporal performance with ablation mode.
+- **DB hardening** — busy_timeout, integrity check on startup, hot backups every 10 min, WAL checkpoint on shutdown.
+- **Consolidation recall fix** — redundancy pruning transfers associations and tags to survivor memory.
 
-See [CHANGELOG-0.5.4.md](CHANGELOG-0.5.4.md) for full details.
+See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.5.4). The core memory pipeline, consolidation system, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.6.0). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
+- Multi-agent coordination: **stable** (v0.6.0)
 - Task management: **stable**
 - Hook sidecar and auto-checkpoint: **stable**
 - HTTP API: **stable** (for custom agents)
-- Cognitive consolidation (clustering, bridging): **stable** (v0.5.4)
+- Eval harness: **stable** (v0.6.0)
 
-See [CHANGELOG-0.5.4.md](CHANGELOG-0.5.4.md) for version history.
+See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
