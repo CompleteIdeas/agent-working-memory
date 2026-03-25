@@ -70,6 +70,14 @@ export function pruneOldHeartbeats(db: Database.Database): number {
   return result.changes;
 }
 
+/** Purge dead agents older than 24 hours to prevent table bloat. */
+export function purgeDeadAgents(db: Database.Database, maxAgeHours = 24): number {
+  const result = db.prepare(
+    `DELETE FROM coord_agents WHERE status = 'dead' AND last_seen < datetime('now', '-' || ? || ' hours')`
+  ).run(maxAgeHours);
+  return result.changes;
+}
+
 /** Clean slate on startup: mark all live agents dead, release locks, clear commands. */
 export function cleanSlate(db: Database.Database): void {
   const alive = db.prepare(

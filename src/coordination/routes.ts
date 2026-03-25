@@ -15,6 +15,7 @@ import {
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
   findingCreateSchema, findingsQuerySchema, findingIdParamSchema,
+  decisionsQuerySchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
@@ -46,24 +47,31 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const { name, role, pid, metadata, capabilities, workspace } = parsed.data;
     const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
+    // Look up ANY existing agent with same name+workspace — including dead ones (upsert)
     const existing = workspace
       ? db.prepare(
-          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead'`
+          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? ORDER BY last_seen DESC LIMIT 1`
         ).get(name, workspace) as { id: string; status: string } | undefined
       : db.prepare(
-          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead'`
+          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL ORDER BY last_seen DESC LIMIT 1`
         ).get(name) as { id: string; status: string } | undefined;
 
     if (existing) {
+      const wasDead = existing.status === 'dead';
       db.prepare(
         `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities) WHERE id = ?`
       ).run(pid ?? null, capsJson, existing.id);
 
+      const eventType = wasDead ? 'reconnected' : 'heartbeat';
+      const detail = wasDead ? `${name} reconnected (was dead)` : `heartbeat from ${name}`;
       db.prepare(
-        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'heartbeat', ?)`
-      ).run(existing.id, `heartbeat from ${name}`);
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, ?, ?)`
+      ).run(existing.id, eventType, detail);
 
-      return reply.send({ agentId: existing.id, action: 'heartbeat', status: existing.status, workspace });
+      if (wasDead) coordLog(`${name} reconnected (reusing UUID ${existing.id.slice(0, 8)})`);
+      const action = wasDead ? 'reconnected' : 'heartbeat';
+      const status = wasDead ? 'idle' : existing.status;
+      return reply.send({ agentId: existing.id, action, status, workspace });
     }
 
     const id = randomUUID();
@@ -117,24 +125,28 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const { name, workspace, role, capabilities } = parsed.data;
     const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
-    // Step 1: Upsert agent (checkin / heartbeat)
+    // Step 1: Upsert agent (checkin / heartbeat) — including dead agents (reuse UUID)
     const existing = workspace
       ? db.prepare(
-          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead'`
+          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? ORDER BY last_seen DESC LIMIT 1`
         ).get(name, workspace) as { id: string; status: string } | undefined
       : db.prepare(
-          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead'`
+          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL ORDER BY last_seen DESC LIMIT 1`
         ).get(name) as { id: string; status: string } | undefined;
 
     let agentId: string;
     if (existing) {
       agentId = existing.id;
+      const wasDead = existing.status === 'dead';
       db.prepare(
         `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, capabilities = COALESCE(?, capabilities) WHERE id = ?`
       ).run(capsJson, agentId);
+      const eventType = wasDead ? 'reconnected' : 'heartbeat';
+      const detail = wasDead ? `${name} reconnected via /next` : `heartbeat from ${name}`;
       db.prepare(
-        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'heartbeat', ?)`
-      ).run(agentId, `heartbeat from ${name}`);
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, ?, ?)`
+      ).run(agentId, eventType, detail);
+      if (wasDead) coordLog(`${name} reconnected via /next (reusing UUID ${agentId.slice(0, 8)})`);
     } else {
       agentId = randomUUID();
       db.prepare(
@@ -611,6 +623,31 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     ).get() as { total: number };
 
     return reply.send({ total: total.total, bySeverity, byCategory });
+  });
+
+  // ─── Decisions (cross-agent propagation) ────────────────────────
+
+  app.get('/decisions', async (req, reply) => {
+    const q = decisionsQuerySchema.safeParse(req.query);
+    const { since_id, assignment_id, limit } = q.success ? q.data : { since_id: 0, assignment_id: undefined, limit: 20 };
+
+    let sql = `
+      SELECT d.id, d.author_id, a.name AS author_name, d.assignment_id, d.tags, d.summary, d.created_at
+      FROM coord_decisions d JOIN coord_agents a ON d.author_id = a.id
+      WHERE d.id > ?
+    `;
+    const params: unknown[] = [since_id];
+
+    if (assignment_id) {
+      sql += ` AND d.assignment_id = ?`;
+      params.push(assignment_id);
+    }
+
+    sql += ` ORDER BY d.created_at ASC LIMIT ?`;
+    params.push(limit);
+
+    const decisions = db.prepare(sql).all(...params);
+    return reply.send({ decisions });
   });
 
   // ─── Status ─────────────────────────────────────────────────────

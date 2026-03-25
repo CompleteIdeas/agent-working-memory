@@ -126,6 +126,14 @@ export const pulseSchema = z.object({
   agentId: z.string().uuid(),
 });
 
+// ─── Decisions ─────────────────────────────────────────────────
+
+export const decisionsQuerySchema = z.object({
+  since_id: z.coerce.number().int().min(0).default(0),
+  assignment_id: z.string().max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(20),
+});
+
 // ─── Status / Events ────────────────────────────────────────────
 
 export const eventsQuerySchema = z.object({

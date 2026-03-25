@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS coord_agents (
   workspace    TEXT
 );
 
+-- Prevent duplicate agent registrations for the same name+workspace
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coord_agents_name_workspace
+  ON coord_agents (name, COALESCE(workspace, ''));
+
 -- Coordination: assignments
 CREATE TABLE IF NOT EXISTS coord_assignments (
   id           TEXT PRIMARY KEY,
@@ -74,6 +78,19 @@ CREATE TABLE IF NOT EXISTS coord_findings (
   resolved_at  TEXT,
   FOREIGN KEY (agent_id) REFERENCES coord_agents(id)
 );
+
+-- Coordination: cross-agent decision propagation
+CREATE TABLE IF NOT EXISTS coord_decisions (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  author_id      TEXT NOT NULL,
+  assignment_id  TEXT,
+  tags           TEXT,
+  summary        TEXT NOT NULL,
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (author_id) REFERENCES coord_agents(id)
+);
+CREATE INDEX IF NOT EXISTS idx_coord_decisions_assignment
+  ON coord_decisions (assignment_id, created_at);
 
 -- Coordination: event audit trail
 CREATE TABLE IF NOT EXISTS coord_events (

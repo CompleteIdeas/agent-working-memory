@@ -103,6 +103,9 @@ const consolidationScheduler = new ConsolidationScheduler(store, consolidationEn
 stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
 consolidationScheduler.start();
 
+// Coordination DB handle — set when AWM_COORDINATION=true, used by memory_write for decision propagation
+let coordDb: import('better-sqlite3').Database | null = null;
+
 const server = new McpServer({
   name: 'agent-working-memory',
   version: '0.5.5',
@@ -243,6 +246,21 @@ The concept should be a short label (3-8 words). The content should be the full 
 
     // Auto-checkpoint: track write
     try { store.updateAutoCheckpointWrite(AGENT_ID, engram.id); } catch { /* non-fatal */ }
+
+    // Decision propagation: when decision_made=true and coordination is enabled,
+    // broadcast to coord_decisions so other agents can discover it
+    if (params.decision_made && coordDb) {
+      try {
+        const agent = coordDb.prepare(
+          `SELECT id, current_task FROM coord_agents WHERE name = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+        ).get(AGENT_ID) as { id: string; current_task: string | null } | undefined;
+        if (agent) {
+          coordDb.prepare(
+            `INSERT INTO coord_decisions (author_id, assignment_id, tags, summary) VALUES (?, ?, ?, ?)`
+          ).run(agent.id, agent.current_task, params.tags ? JSON.stringify(params.tags) : null, params.concept);
+        }
+      } catch { /* decision propagation is non-fatal */ }
+    }
 
     const logDisposition = isLowSalience ? 'low-salience' : salience.disposition;
     log(AGENT_ID, `write:${logDisposition}`, `"${params.concept}" salience=${salience.score.toFixed(2)} novelty=${novelty.toFixed(1)} id=${engram.id}`);
@@ -638,6 +656,29 @@ Use this at the start of every session or after compaction to pick up where you 
       }
     }
 
+    // Peer decisions: show recent decisions from other agents (last 30 min)
+    if (coordDb) {
+      try {
+        const myAgent = coordDb.prepare(
+          `SELECT id FROM coord_agents WHERE name = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+        ).get(AGENT_ID) as { id: string } | undefined;
+
+        const peerDecisions = coordDb.prepare(
+          `SELECT d.summary, a.name AS author_name, d.created_at
+           FROM coord_decisions d JOIN coord_agents a ON d.author_id = a.id
+           WHERE d.author_id != ? AND d.created_at > datetime('now', '-30 minutes')
+           ORDER BY d.created_at DESC LIMIT 10`
+        ).all(myAgent?.id ?? '') as Array<{ summary: string; author_name: string; created_at: string }>;
+
+        if (peerDecisions.length > 0) {
+          parts.push(`\n**Peer decisions (last 30 min):**`);
+          for (const d of peerDecisions) {
+            parts.push(`- [${d.author_name}] ${d.summary} (${d.created_at})`);
+          }
+        }
+      } catch { /* peer decisions are non-fatal */ }
+    }
+
     return {
       content: [{
         type: 'text' as const,
@@ -997,6 +1038,7 @@ async function main() {
     const { registerCoordinationTools } = await import('./coordination/mcp-tools.js');
     initCoordinationTables(store.getDb());
     registerCoordinationTools(server, store.getDb());
+    coordDb = store.getDb();
   } else {
     console.error('AWM: coordination tools disabled (set AWM_COORDINATION=true to enable)');
   }
@@ -1010,6 +1052,7 @@ async function main() {
     sidecar.close();
     consolidationScheduler.stop();
     stagingBuffer.stop();
+    try { store.walCheckpoint(); } catch { /* non-fatal */ }
     store.close();
   };
   process.on('SIGINT', () => { cleanup(); process.exit(0); });

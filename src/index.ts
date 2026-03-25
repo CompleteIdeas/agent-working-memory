@@ -1,6 +1,6 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
-import { readFileSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import Fastify from 'fastify';
 
@@ -60,6 +60,36 @@ async function main() {
   // Storage
   const store = new EngramStore(DB_PATH);
 
+  // Integrity check
+  const integrity = store.integrityCheck();
+  if (!integrity.ok) {
+    console.error(`DB integrity check FAILED: ${integrity.result}`);
+    // Close corrupt DB, restore from backup, and exit for process manager to restart
+    store.close();
+    const dbDir = dirname(resolve(DB_PATH));
+    const backupDir = resolve(dbDir, 'backups');
+    if (existsSync(backupDir)) {
+      const backups = readdirSync(backupDir)
+        .filter(f => f.endsWith('.db'))
+        .sort()
+        .reverse();
+      if (backups.length > 0) {
+        const restorePath = resolve(backupDir, backups[0]);
+        console.error(`Attempting restore from: ${restorePath}`);
+        try {
+          copyFileSync(restorePath, resolve(DB_PATH));
+          console.error('Restore complete — exiting for restart with restored DB');
+          process.exit(1);
+        } catch (restoreErr) {
+          console.error(`Restore failed: ${(restoreErr as Error).message}`);
+        }
+      }
+    }
+    console.error('No backup available — continuing with potentially corrupt DB');
+  } else {
+    console.log('  DB integrity check: ok');
+  }
+
   // Engines
   const activationEngine = new ActivationEngine(store);
   const connectionEngine = new ConnectionEngine(store, activationEngine);
@@ -110,6 +140,42 @@ async function main() {
   stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
   consolidationScheduler.start();
 
+  // Periodic hot backup every 10 minutes (keep last 6 = 1hr coverage)
+  const dbDir = dirname(resolve(DB_PATH));
+  const backupDir = resolve(dbDir, 'backups');
+  mkdirSync(backupDir, { recursive: true });
+
+  // Cleanup old backups on startup (older than 2 hours)
+  try {
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    const now = Date.now();
+    for (const f of readdirSync(backupDir).filter(f => f.endsWith('.db'))) {
+      const match = f.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+      if (match) {
+        const fileDate = new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`);
+        if (now - fileDate.getTime() > TWO_HOURS_MS) {
+          unlinkSync(resolve(backupDir, f));
+        }
+      }
+    }
+  } catch { /* cleanup is non-fatal */ }
+
+  const backupTimer = setInterval(() => {
+    try {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backupPath = resolve(backupDir, `${basename(DB_PATH, '.db')}-${ts}.db`);
+      store.backup(backupPath);
+      // Prune: keep only last 6 backups
+      const backups = readdirSync(backupDir).filter(f => f.endsWith('.db')).sort();
+      while (backups.length > 6) {
+        const old = backups.shift()!;
+        try { unlinkSync(resolve(backupDir, old)); } catch { /* non-fatal */ }
+      }
+    } catch (err) {
+      console.warn(`[backup] failed: ${(err as Error).message}`);
+    }
+  }, 10 * 60_000); // 10 minutes
+
   // Pre-load ML models (downloads on first run: embeddings ~22MB, reranker ~22MB, expander ~80MB)
   getEmbedder().catch(err => console.warn('Embedding model unavailable:', err.message));
   getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
@@ -121,9 +187,11 @@ async function main() {
 
   // Graceful shutdown
   const shutdown = () => {
+    clearInterval(backupTimer);
     if (heartbeatPruneTimer) clearInterval(heartbeatPruneTimer);
     consolidationScheduler.stop();
     stagingBuffer.stop();
+    try { store.walCheckpoint(); } catch { /* non-fatal */ }
     store.close();
     process.exit(0);
   };

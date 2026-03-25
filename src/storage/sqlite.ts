@@ -35,12 +35,35 @@ export class EngramStore {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
+    this.db.pragma('busy_timeout = 5000');
+    this.db.pragma('synchronous = NORMAL');
     this.init();
   }
 
   /** Expose the raw database handle for the coordination module. */
   getDb(): Database.Database {
     return this.db;
+  }
+
+  /** Run PRAGMA quick_check and return true if DB is healthy. */
+  integrityCheck(): { ok: boolean; result: string } {
+    try {
+      const rows = this.db.pragma('quick_check') as Array<{ quick_check: string }>;
+      const result = rows[0]?.quick_check ?? 'unknown';
+      return { ok: result === 'ok', result };
+    } catch (err) {
+      return { ok: false, result: (err as Error).message };
+    }
+  }
+
+  /** Hot backup using SQLite backup API. Returns the backup path. */
+  backup(destPath: string): void {
+    this.db.backup(destPath);
+  }
+
+  /** Flush WAL to main database file. */
+  walCheckpoint(): void {
+    this.db.pragma('wal_checkpoint(TRUNCATE)');
   }
 
   private init(): void {
