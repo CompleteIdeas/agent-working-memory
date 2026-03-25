@@ -336,10 +336,15 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   });
 
   function handleAssignmentUpdate(id: string, status: string, result: string | undefined, commitSha: string | undefined): { error?: string } {
-    // Verification gate: completed status requires a non-empty result (min 10 chars)
+    // Verification gate: completed status requires structured proof of work
     if (status === 'completed') {
-      if (!result || result.trim().length < 10) {
-        return { error: 'completion requires a result summary (commit SHA, output, or explanation) — minimum 10 characters' };
+      if (!result || result.trim().length < 20) {
+        return { error: 'completion requires a result summary — minimum 20 characters describing what was done' };
+      }
+      // Must mention at least one of: commit/SHA, build, audit, test, verified, fix, created, updated, implemented
+      const actionWords = /\b(commit|sha|[0-9a-f]{7,40}|build|audit|test|verified|fix|created|updated|implemented|added|refactored|documented)\b/i;
+      if (!actionWords.test(result)) {
+        return { error: 'completion result must describe the work done — include what was committed, built, tested, or verified' };
       }
     }
 
@@ -362,8 +367,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       }
     }
 
-    const eventDetail = status === 'completed'
-      ? `${id} → ${status}${commitSha ? ' [' + commitSha + ']' : ''}: ${(result ?? '').slice(0, 200)}`
+    const eventDetail = ['completed', 'failed'].includes(status)
+      ? `${id} → ${status}${commitSha ? ' [' + commitSha + ']' : ''}: ${(result ?? '').slice(0, 300)}`
       : `${id} → ${status}`;
     db.prepare(
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES ((SELECT agent_id FROM coord_assignments WHERE id = ?), 'assignment_update', ?)`
