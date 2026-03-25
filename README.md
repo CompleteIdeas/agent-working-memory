@@ -73,31 +73,49 @@ The design is based on cognitive science — ACT-R activation decay, Hebbian lea
 
 ---
 
-## Benchmarks (v0.5.4)
+## Benchmarks (v0.6.0)
 
-| Eval | Score | What it tests |
-|------|-------|---------------|
-| Edge Cases | **100% (34/34)** | 9 failure modes: context collapse, hub toxicity, flashbulb distortion, narcissistic interference, identity collision, contradiction trapping, bridge overshoot, noise forgetting |
-| Stress Test | **96.2% (50/52)** | 500 memories, 100 sleep cycles, 10 topic clusters, 20 bridges/cycle, catastrophic forgetting, adversarial spam, recovery |
-| Workday | **93.3%** | 43 memories across 4 simulated work sessions, knowledge transfer, context switching, cross-cutting queries, noise filtering |
-| A/B Test | **AWM 85% vs Baseline 83%** | 100 project events, 24 recall questions, 22/22 fact recall |
-| Sleep Cycle | **85.7% pre-sleep** | 60 memories, 4 topic clusters, consolidation impact measurement |
-| Token Savings | **67.5% accuracy, 55% savings** | Memory-guided context vs full conversation history, 2.2x efficiency |
-| LoCoMo | **28.2%** | Industry-standard conversational memory benchmark (1,986 QA pairs, 10 conversations) |
-| Mini Multi-Hop | **80% (4/5)** | Entity bridging across conversation turns |
+### Eval Harness (new in v0.6.0)
 
-### Consolidation (v0.5.4 with BGE-small)
+| Suite | Score | Threshold | What it tests |
+|-------|-------|-----------|---------------|
+| Retrieval | **Recall@5 = 0.800** | >= 0.80 | 200 facts, 50 queries — BM25 + vector + reranker pipeline precision |
+| Associative | **success@10 = 1.000** | >= 0.70 | 20 multi-hop causal chains — graph walk finds non-obvious connections |
+| Redundancy | **dedup F1 = 0.966** | >= 0.80 | 50 clusters × 4 paraphrases — consolidation removes duplicates correctly |
+| Temporal | **Spearman = 0.932** | >= 0.75 | 25 facts with controlled age/access — ACT-R decay ranking accuracy |
+
+Key finding: **consolidation improves retrieval by 30%** — post-consolidation recall (0.950) exceeds pre-consolidation (0.650). Removing redundant noise helps ranking.
+
+### Full Test Suite
+
+| Command | Score | What it tests |
+|---------|-------|---------------|
+| `npm run eval` | **4/4 suites pass** | Retrieval, associative, redundancy, temporal benchmarks with ablation support |
+| `npm run test:run` | **77/77 tests** | Unit tests: salience, decay, hebbian, supersession, coordination |
+| `npm run test:mcp` | **5/5 pass** | MCP protocol: write, recall, feedback, retract, stats |
+| `npm run test:self` | **94.1% EXCELLENT** | Pipeline component checks across all cognitive subsystems |
+| `npm run test:edge` | **All pass** | 9 failure modes: narcissistic interference, identity collision, contradiction trapping, bridge overshoot, noise forgetting |
+| `npm run test:stress` | **96.2% (50/52)** | 500 memories, 100 sleep cycles, catastrophic forgetting, adversarial spam, recovery |
+| `npm run test:workday` | **93.3% EXCELLENT** | 43 memories across 4 projects, cross-cutting queries, noise filtering |
+| `npm run test:ab` | **AWM 20/22 vs Baseline 18/22** | AWM outperforms keyword baseline on architecture + testing topics |
+| `npm run test:sleep` | **71.4%** | 60 memories, 4 topic clusters, consolidation impact across 3 cycles |
+| `npm run test:tokens` | **56.3% savings, 2.3x efficiency** | Memory-guided context vs full history, keyword accuracy 72.5% |
+| `npm run test:pilot` | **14/15 pass** | Production-like queries with noise rejection (5/5 noise rejected) |
+| `npm run test:locomo` | **28.2%** | Industry-standard LoCoMo conversational memory benchmark (1,986 QA pairs) |
+
+### Consolidation Health (v0.6.0)
 
 | Metric | Value |
 |--------|-------|
 | Topic clusters formed | **10** per consolidation cycle |
 | Cross-topic bridges | **20** in first cycle |
-| Edges strengthened | **127** per cycle |
+| Edges strengthened | **135** per cycle (access-weighted) |
 | Graph size at scale | **3,000-4,500 edges** (500 memories) |
 | Recall after 100 cycles | **90%** stable |
 | Catastrophic forgetting survival | **5/5** (100%) |
+| Post-dedup retrieval | **0.950** (consolidation improves recall) |
 
-All evals are reproducible: `npm run test:edge`, `npm run test:stress`, `npm run test:workday`, etc. See [Testing & Evaluation](#testing--evaluation).
+All evals are reproducible. See [Testing & Evaluation](#testing--evaluation).
 
 ---
 
@@ -313,21 +331,34 @@ For detailed architecture including pipeline phases, database schema, and system
 ### Unit Tests
 
 ```bash
-npx vitest run    # 68 tests
+npx vitest run    # 77 tests (salience, decay, hebbian, supersession)
 ```
 
-### Eval Suites
+### Eval Harness (v0.6.0)
 
-| Command | What it tests | Score |
-|---------|--------------|-------|
-| `npm run test:edge` | 9 adversarial failure modes: context collapse, hub toxicity, flashbulb distortion, narcissistic interference, identity collision, contradiction trapping, bridge overshoot, noise benefit | **100% (34/34)** |
-| `npm run test:stress` | 500 memories, 100 sleep cycles, 10 clusters, 20 bridges, catastrophic forgetting, adversarial spam, recovery | **96.2% (50/52)** |
-| `npm run test:workday` | 43 memories across 4 projects, 14 recall challenges, noise filtering | **93.3%** |
-| `npm run test:ab` | AWM vs keyword baseline, 100 events, 24 questions | **AWM 85% (22/22 recall)** |
-| `npm run test:sleep` | 60 memories, 4 topic clusters, consolidation impact | **85.7% pre-sleep** |
-| `npm run test:tokens` | Token savings vs full conversation history | **67.5% accuracy, 55% savings** |
-| `npm run test:locomo` | LoCoMo conversational memory benchmark (1,986 QA pairs) | **28.2%** |
-| `npm run test:self` | Pipeline component checks | **97.4%** |
+```bash
+npm run eval                        # All 4 benchmark suites
+npm run eval -- --suite=retrieval   # Single suite
+npm run eval -- --bm25-only         # Ablation: BM25 only
+npm run eval -- --no-graph-walk     # Ablation: disable graph walk
+```
+
+Suites: retrieval (Recall@5), associative (multi-hop), redundancy (dedup F1), temporal (Spearman vs ACT-R). Ablation flags isolate each pipeline component's contribution.
+
+### Full Test Suite
+
+```bash
+npm run test:mcp      # MCP protocol smoke test (5/5)
+npm run test:self     # Pipeline component checks (94.1%)
+npm run test:edge     # 9 adversarial failure modes
+npm run test:stress   # 500 memories, 100 consolidation cycles (96.2%)
+npm run test:workday  # 4-session production simulation (93.3%)
+npm run test:ab       # AWM vs baseline comparison
+npm run test:sleep    # Consolidation impact measurement
+npm run test:tokens   # Token savings analysis (56.3% savings)
+npm run test:pilot    # Production-like query validation (14/15)
+npm run test:locomo   # LoCoMo industry benchmark (28.2%)
+```
 
 ---
 

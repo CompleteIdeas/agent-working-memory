@@ -6,13 +6,18 @@
 - **Memory taxonomy** — `episodic` | `semantic` | `procedural` | `unclassified` classification on all engrams. Auto-classified on write based on content heuristics. Optional `memory_type` filter on `memory_recall`.
 - **Query-adaptive retrieval** — `targeted` | `exploratory` | `balanced` | `auto` pipeline modes. Targeted queries boost BM25 and narrow beam search; exploratory queries boost vector signals and widen graph walk.
 - **Decision propagation** — `coord_decisions` table + `GET /decisions` endpoint. When `decision_made=true` on `memory_write`, automatically broadcasts to coordination layer for cross-agent discovery. `memory_restore` shows peer decisions from last 30 minutes.
-- **Completion verification gates** — Workers must provide non-empty result (min 10 chars) when marking assignments completed. Optional `commit_sha` field stored on assignment. `GET /assignment/:id` endpoint for verification.
+- **Completion verification gates** — Workers must provide a result summary (min 20 chars) containing an action word (commit, build, test, verified, etc.) or commit SHA when marking assignments completed. Optional `commit_sha` field stored on assignment. `GET /assignment/:id` endpoint for verification.
 - **Task priority & dependencies** — `priority` (0-10) and `blocked_by` fields on `coord_assignments`. Higher priority tasks dispatched first.
 - **Eval harness** — `npm run eval` runs 4 benchmark suites: Retrieval (Recall@5), Associative (multi-hop success@10), Redundancy (dedup F1), Temporal (Spearman correlation). Includes ablation mode (`--no-graph-walk`, `--bm25-only`, etc.).
 
+### Fixes
+- **Engram ID in write response** — `memory_write` now returns the engram ID (`ID: <uuid>`) so downstream tools (feedback, retract, supersede) can reference the written memory. Fixes MCP smoke test failures.
+- **Retrieval pipeline tuning** — Softened z-score gate (1.0 → 0.5) for homogeneous corpora. Blended BM25+vector scoring replaces max(). Rocchio feedback uses consistent gate.
+- **Consolidation threshold** — Lowered redundancy cosine threshold from 0.85 to 0.75 to catch MiniLM paraphrases (which score 0.75-0.88). Dedup F1: 0.078 → 0.966.
+
 ### Improvements
-- **Worker registration dedup** — `UNIQUE` index on `(name, workspace)` prevents duplicate agent rows. Checkin and `/next` reuse dead agent UUIDs instead of creating new ones.
-- **Consolidation recall fix** — Redundancy pruning now transfers associations and merges tags from pruned memory to survivor, preventing post-consolidation recall drops.
+- **Worker registration dedup** — Checkin and `/next` reuse dead agent UUIDs instead of creating new ones.
+- **Consolidation recall fix** — Redundancy pruning now transfers associations and merges tags from pruned memory to survivor. Post-consolidation retrieval improves by 30% (0.650 → 0.950).
 - **SQLite DB hardening** — `busy_timeout=5000`, `synchronous=NORMAL` pragmas. Integrity check on startup with auto-restore from backups. Hot backup every 10 min (keeps last 6). WAL checkpoint on shutdown.
 - **Dead agent cleanup** — `purgeDeadAgents()` removes agents dead >24h. Runs on the heartbeat prune interval.
 - **Confidence boost on retrieval** — Frequently accessed memories gain confidence over time.
