@@ -290,9 +290,21 @@ export class EngramStore {
     return (this.db.prepare(query).all(...params) as any[]).map(r => this.rowToEngram(r));
   }
 
+  /**
+   * Touch an engram: increment access count, update last_accessed, and
+   * nudge confidence upward. Each retrieval is weak evidence the memory
+   * is useful — bounded so only explicit feedback can push confidence
+   * above 0.85. Diminishing returns: first accesses matter most.
+   *
+   * Boost: +0.02 per access, scaled by 1/sqrt(accessCount+1), capped at 0.85.
+   */
   touchEngram(id: string): void {
     this.db.prepare(`
-      UPDATE engrams SET access_count = access_count + 1, last_accessed = ? WHERE id = ?
+      UPDATE engrams
+      SET access_count = access_count + 1,
+          last_accessed = ?,
+          confidence = MIN(0.85, confidence + 0.02 / (1.0 + sqrt(access_count)))
+      WHERE id = ?
     `).run(new Date().toISOString(), id);
   }
 
