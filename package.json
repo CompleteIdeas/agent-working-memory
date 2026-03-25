@@ -25,6 +25,8 @@
     "test:stress": "tsx tests/stress-test/runner.ts",
     "test:edge": "tsx tests/edge-cases/runner.ts",
     "test:pilot": "tsx tests/pilot-metrics/runner.ts",
+    "eval": "tsx tests/eval/run.ts",
+    "eval:generate": "tsx tests/eval/generate.ts",
     "test:all": "vitest run && tsx tests/mcp-smoke.ts"
   },
   "engines": {

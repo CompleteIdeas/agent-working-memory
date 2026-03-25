@@ -1,0 +1,5 @@
+fixtures/
+results/
+eval-*.db
+eval-*.db-wal
+eval-*.db-shm
