@@ -10,7 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import {
-  checkinSchema, checkoutSchema, pulseSchema,
+  checkinSchema, checkoutSchema, pulseSchema, nextSchema,
   assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema,
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
@@ -109,6 +109,99 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     return reply.send({ ok: true });
   });
 
+  // ─── Next (combined checkin + commands + assignment poll) ───────
+
+  app.post('/next', async (req, reply) => {
+    const parsed = nextSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
+    const { name, workspace, role, capabilities } = parsed.data;
+    const capsJson = capabilities ? JSON.stringify(capabilities) : null;
+
+    // Step 1: Upsert agent (checkin / heartbeat)
+    const existing = workspace
+      ? db.prepare(
+          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead'`
+        ).get(name, workspace) as { id: string; status: string } | undefined
+      : db.prepare(
+          `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead'`
+        ).get(name) as { id: string; status: string } | undefined;
+
+    let agentId: string;
+    if (existing) {
+      agentId = existing.id;
+      db.prepare(
+        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, capabilities = COALESCE(?, capabilities) WHERE id = ?`
+      ).run(capsJson, agentId);
+      db.prepare(
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'heartbeat', ?)`
+      ).run(agentId, `heartbeat from ${name}`);
+    } else {
+      agentId = randomUUID();
+      db.prepare(
+        `INSERT INTO coord_agents (id, name, role, pid, status, metadata, capabilities, workspace) VALUES (?, ?, ?, NULL, 'idle', NULL, ?, ?)`
+      ).run(agentId, name, role ?? 'worker', capsJson, workspace ?? null);
+      db.prepare(
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'registered', ?)`
+      ).run(agentId, `${name} joined as ${role ?? 'worker'} via /next`);
+      coordLog(`${name} registered via /next (${role ?? 'worker'})${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
+    }
+
+    // Step 2: Get active commands
+    const activeCommands = workspace
+      ? db.prepare(
+          `SELECT id, command, reason, issued_by, issued_at, workspace
+           FROM coord_commands WHERE cleared_at IS NULL AND (workspace = ? OR workspace IS NULL)
+           ORDER BY issued_at DESC`
+        ).all(workspace) as Array<{ id: number; command: string; reason: string; issued_by: string; issued_at: string; workspace: string | null }>
+      : db.prepare(
+          `SELECT id, command, reason, issued_by, issued_at, workspace
+           FROM coord_commands WHERE cleared_at IS NULL
+           ORDER BY issued_at DESC`
+        ).all() as Array<{ id: number; command: string; reason: string; issued_by: string; issued_at: string; workspace: string | null }>;
+
+    // Step 3: Get or auto-claim assignment
+    let assignment = db.prepare(
+      `SELECT * FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress') ORDER BY created_at DESC LIMIT 1`
+    ).get(agentId) as Record<string, unknown> | undefined;
+
+    if (!assignment) {
+      const agentWorkspace = workspace ?? null;
+      const pending = agentWorkspace
+        ? db.prepare(
+            `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ORDER BY created_at ASC LIMIT 1`
+          ).get(agentWorkspace) as { id: string } | undefined
+        : db.prepare(
+            `SELECT * FROM coord_assignments WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`
+          ).get() as { id: string } | undefined;
+
+      if (pending) {
+        const claimed = db.prepare(
+          `UPDATE coord_assignments SET agent_id = ?, status = 'assigned', started_at = datetime('now') WHERE id = ? AND status = 'pending'`
+        ).run(agentId, pending.id);
+
+        if (claimed.changes > 0) {
+          db.prepare(
+            `UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ?`
+          ).run(pending.id, agentId);
+          db.prepare(
+            `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_claimed', ?)`
+          ).run(agentId, `auto-claimed assignment ${pending.id} via /next`);
+          assignment = db.prepare(`SELECT * FROM coord_assignments WHERE id = ?`).get(pending.id) as Record<string, unknown> | undefined;
+        }
+      }
+    }
+
+    // Read current agent status after all mutations
+    const agentRow = db.prepare(`SELECT status FROM coord_agents WHERE id = ?`).get(agentId) as { status: string };
+
+    return reply.send({
+      agentId,
+      status: agentRow.status,
+      assignment: assignment ?? null,
+      commands: activeCommands,
+    });
+  });
+
   // ─── Assignments ────────────────────────────────────────────────
 
   app.post('/assign', async (req, reply) => {
@@ -142,7 +235,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   });
 
   app.get('/assignment', async (req, reply) => {
-    const agentId = (req.headers['x-agent-id'] as string | undefined) ?? assignmentQuerySchema.parse(req.query).agentId;
+    const q = assignmentQuerySchema.parse(req.query);
+    let agentId = (req.headers['x-agent-id'] as string | undefined) ?? q.agentId;
+
+    // Fallback: resolve agentId from name + workspace
+    if (!agentId && q.name) {
+      const found = q.workspace
+        ? db.prepare(
+            `SELECT id FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead'`
+          ).get(q.name, q.workspace) as { id: string } | undefined
+        : db.prepare(
+            `SELECT id FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead'`
+          ).get(q.name) as { id: string } | undefined;
+      agentId = found?.id;
+    }
 
     if (!agentId) {
       return reply.send({ assignment: null });

@@ -528,6 +528,55 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     return reply.send({ shifted, days: body.days });
   });
 
+  // ─── Export ─────────────────────────────────────────────────────────────
+
+  app.get('/memory/export', async (req, reply) => {
+    const { agentId, all } = req.query as { agentId?: string; all?: string };
+    const includeAll = all === 'true';
+    const db = store.getDb();
+
+    let engramSql = `SELECT id, agent_id, concept, content, confidence, salience, access_count,
+      last_accessed, created_at, salience_features, reason_codes, stage, ttl,
+      retracted, retracted_by, retracted_at, tags
+      FROM engrams`;
+    const conditions: string[] = [];
+    const params: string[] = [];
+
+    if (agentId) {
+      conditions.push('agent_id = ?');
+      params.push(agentId);
+    }
+    if (!includeAll) {
+      conditions.push('retracted = 0');
+      conditions.push("stage = 'active'");
+    }
+    if (conditions.length > 0) {
+      engramSql += ' WHERE ' + conditions.join(' AND ');
+    }
+    engramSql += ' ORDER BY created_at ASC';
+
+    const engrams = db.prepare(engramSql).all(...params) as { id: string }[];
+
+    const engramIds = new Set(engrams.map(e => e.id));
+    const allAssocs = db.prepare(
+      `SELECT id, from_engram_id, to_engram_id, weight, confidence, type, activation_count, created_at, last_activated
+       FROM associations`
+    ).all() as { from_engram_id: string; to_engram_id: string }[];
+    const associations = allAssocs.filter(a => engramIds.has(a.from_engram_id) && engramIds.has(a.to_engram_id));
+
+    return reply.send({
+      exported_at: new Date().toISOString(),
+      agent_id: agentId ?? null,
+      include_all: includeAll,
+      engrams_count: engrams.length,
+      associations_count: associations.length,
+      engrams,
+      associations,
+    });
+  });
+
+  // ─── Health ─────────────────────────────────────────────────────────────
+
   app.get('/health', async () => {
     const coordEnabled = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
     const base: Record<string, unknown> = {

@@ -47,7 +47,15 @@ export const assignCreateSchema = z.object({
 
 export const assignmentQuerySchema = z.object({
   agentId: z.string().uuid().optional(),
+  name: z.string().min(1).max(50).optional(),
   workspace: z.string().max(50).optional(),
+});
+
+export const nextSchema = z.object({
+  name: z.string().min(1).max(50),
+  workspace: z.string().max(50).optional(),
+  role: agentRoleEnum.default('worker'),
+  capabilities: z.array(z.string().max(50)).max(20).optional(),
 });
 
 export const assignmentClaimSchema = z.object({
