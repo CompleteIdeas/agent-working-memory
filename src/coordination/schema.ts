@@ -24,9 +24,7 @@ CREATE TABLE IF NOT EXISTS coord_agents (
   workspace    TEXT
 );
 
--- Prevent duplicate agent registrations for the same name+workspace
-CREATE UNIQUE INDEX IF NOT EXISTS idx_coord_agents_name_workspace
-  ON coord_agents (name, COALESCE(workspace, ''));
+-- unique index on (name, workspace) is created after dedup in initCoordinationTables
 
 -- Coordination: assignments
 CREATE TABLE IF NOT EXISTS coord_assignments (
@@ -111,7 +109,30 @@ CREATE TABLE IF NOT EXISTS coord_events (
  * Safe to call multiple times (CREATE IF NOT EXISTS).
  */
 export function initCoordinationTables(db: Database.Database): void {
+  // Create tables (unique index is added separately after dedup)
   db.exec(COORDINATION_TABLES);
+
+  // Deduplicate coord_agents before creating the unique index.
+  // Keep only the most recently seen row for each (name, workspace) pair.
+  try {
+    db.exec(`
+      DELETE FROM coord_agents
+      WHERE rowid NOT IN (
+        SELECT MAX(rowid) FROM coord_agents
+        GROUP BY name, COALESCE(workspace, '')
+      )
+    `);
+  } catch { /* table may not exist yet — that's fine */ }
+
+  // Now create the unique index safely
+  try {
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_coord_agents_name_workspace
+        ON coord_agents (name, COALESCE(workspace, ''));
+    `);
+  } catch {
+    // Index may already exist from a previous run — that's fine
+  }
 
   // Migrations: add columns to existing coord_assignments tables
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN commit_sha TEXT`); } catch { /* exists */ }
