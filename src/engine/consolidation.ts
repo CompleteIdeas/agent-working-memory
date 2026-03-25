@@ -408,9 +408,28 @@ export class ConsolidationEngine {
 
         const sim = cosineSimilarity(sortedLow[i].embedding!, sortedLow[j].embedding!);
         if (sim >= REDUNDANCY_THRESHOLD) {
+          const survivorId = sortedLow[i].id;
+          const prunedId = sortedLow[j].id;
+
+          // Transfer associations from pruned memory to survivor
+          const prunedEdges = this.store.getAssociationsFor(prunedId);
+          for (const edge of prunedEdges) {
+            const peerId = edge.fromEngramId === prunedId ? edge.toEngramId : edge.fromEngramId;
+            if (peerId === survivorId) continue; // Skip self-loops
+            this.store.upsertAssociation(survivorId, peerId, edge.weight, edge.type, edge.confidence);
+          }
+
+          // Merge tags from pruned to survivor
+          const survivor = sortedLow[i];
+          const prunedMem = sortedLow[j];
+          const mergedTags = [...new Set([...survivor.tags, ...prunedMem.tags])];
+          if (mergedTags.length > survivor.tags.length) {
+            this.store.updateTags(survivorId, mergedTags);
+          }
+
           // Archive the lower-quality duplicate
-          this.store.updateStage(sortedLow[j].id, 'archived');
-          pruned.add(sortedLow[j].id);
+          this.store.updateStage(prunedId, 'archived');
+          pruned.add(prunedId);
           redundancyCount++;
         }
       }

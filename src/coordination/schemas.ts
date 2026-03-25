@@ -43,6 +43,8 @@ export const assignCreateSchema = z.object({
   task: z.string().min(1).max(1000),
   description: z.string().max(5000).optional(),
   workspace: z.string().max(50).optional(),
+  priority: z.number().int().min(0).max(10).default(0),
+  blocked_by: z.string().uuid().optional(),
 });
 
 export const assignmentQuerySchema = z.object({

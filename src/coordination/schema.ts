@@ -35,13 +35,16 @@ CREATE TABLE IF NOT EXISTS coord_assignments (
   task         TEXT NOT NULL,
   description  TEXT,
   status       TEXT NOT NULL DEFAULT 'pending',
+  priority     INTEGER NOT NULL DEFAULT 0,
+  blocked_by   TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   started_at   TEXT,
   completed_at TEXT,
   result       TEXT,
   commit_sha   TEXT,
   workspace    TEXT,
-  FOREIGN KEY (agent_id) REFERENCES coord_agents(id)
+  FOREIGN KEY (agent_id) REFERENCES coord_agents(id),
+  FOREIGN KEY (blocked_by) REFERENCES coord_assignments(id)
 );
 
 -- Coordination: file locks
@@ -110,8 +113,8 @@ CREATE TABLE IF NOT EXISTS coord_events (
 export function initCoordinationTables(db: Database.Database): void {
   db.exec(COORDINATION_TABLES);
 
-  // Migration: add commit_sha column to existing coord_assignments tables
-  try {
-    db.exec(`ALTER TABLE coord_assignments ADD COLUMN commit_sha TEXT`);
-  } catch { /* column already exists */ }
+  // Migrations: add columns to existing coord_assignments tables
+  try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN commit_sha TEXT`); } catch { /* exists */ }
+  try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
+  try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN blocked_by TEXT`); } catch { /* exists */ }
 }

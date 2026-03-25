@@ -178,12 +178,15 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     if (!assignment) {
       const agentWorkspace = workspace ?? null;
+      // Priority-ordered dispatch: higher priority first, then FIFO.
+      // Skip assignments blocked by incomplete dependencies.
+      const blockedFilter = `AND (blocked_by IS NULL OR blocked_by IN (SELECT id FROM coord_assignments WHERE status = 'completed'))`;
       const pending = agentWorkspace
         ? db.prepare(
-            `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ORDER BY created_at ASC LIMIT 1`
+            `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
           ).get(agentWorkspace) as { id: string } | undefined
         : db.prepare(
-            `SELECT * FROM coord_assignments WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`
+            `SELECT * FROM coord_assignments WHERE status = 'pending' ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
           ).get() as { id: string } | undefined;
 
       if (pending) {
@@ -219,12 +222,12 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   app.post('/assign', async (req, reply) => {
     const parsed = assignCreateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    const { agentId, task, description, workspace } = parsed.data;
+    const { agentId, task, description, workspace, priority, blocked_by } = parsed.data;
 
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO coord_assignments (id, agent_id, task, description, status, workspace) VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', workspace ?? null);
+      `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null);
 
     if (agentId) {
       db.prepare(
@@ -275,12 +278,13 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const agentRow = db.prepare(`SELECT workspace FROM coord_agents WHERE id = ?`).get(agentId) as { workspace: string | null } | undefined;
     const agentWorkspace = agentRow?.workspace;
 
+    const blockedFilter = `AND (blocked_by IS NULL OR blocked_by IN (SELECT id FROM coord_assignments WHERE status = 'completed'))`;
     const pending = agentWorkspace
       ? db.prepare(
-          `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ORDER BY created_at ASC LIMIT 1`
+          `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
         ).get(agentWorkspace) as { id: string } | undefined
       : db.prepare(
-          `SELECT * FROM coord_assignments WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1`
+          `SELECT * FROM coord_assignments WHERE status = 'pending' ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
         ).get() as { id: string } | undefined;
 
     if (pending) {
@@ -392,6 +396,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     ).get(id);
     if (!assignment) return reply.code(404).send({ error: 'assignment not found' });
     return reply.send({ assignment });
+  });
+
+  // List all non-completed assignments with priority and blocked_by status
+  app.get('/assignments', async (req, reply) => {
+    const assignments = db.prepare(
+      `SELECT a.*, g.name AS agent_name,
+              CASE WHEN a.blocked_by IS NOT NULL AND a.blocked_by NOT IN (SELECT id FROM coord_assignments WHERE status = 'completed')
+                   THEN 1 ELSE 0 END AS is_blocked
+       FROM coord_assignments a
+       LEFT JOIN coord_agents g ON a.agent_id = g.id
+       WHERE a.status NOT IN ('completed', 'failed')
+       ORDER BY a.priority DESC, a.created_at ASC`
+    ).all();
+    return reply.send({ assignments });
   });
 
   app.post('/assignment/:id/update', async (req, reply) => {

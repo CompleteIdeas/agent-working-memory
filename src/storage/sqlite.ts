@@ -546,6 +546,10 @@ export class EngramStore {
     this.db.prepare('UPDATE engrams SET memory_class = ? WHERE id = ?').run(memoryClass, id);
   }
 
+  updateTags(id: string, tags: string[]): void {
+    this.db.prepare('UPDATE engrams SET tags = ? WHERE id = ?').run(JSON.stringify(tags), id);
+  }
+
   // --- Associations ---
 
   upsertAssociation(
