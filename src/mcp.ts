@@ -111,6 +111,25 @@ const server = new McpServer({
   version: '0.5.5',
 });
 
+// --- Auto-classification for memory types ---
+
+function classifyMemoryType(content: string): 'episodic' | 'semantic' | 'procedural' | 'unclassified' {
+  const lower = content.toLowerCase();
+  // Procedural: how-to, steps, numbered lists
+  if (/\bhow to\b|\bsteps?:/i.test(content) || /^\s*\d+[\.\)]\s/m.test(content) || /\bthen run\b|\bfirst,?\s/i.test(content)) {
+    return 'procedural';
+  }
+  // Episodic: past tense events, incidents, specific time references
+  if (/\b(discovered|debugged|fixed|encountered|happened|resolved|found that|we did|i did|yesterday|last week|today)\b/i.test(content)) {
+    return 'episodic';
+  }
+  // Semantic: facts, decisions, rules, patterns
+  if (/\b(is|are|should|always|never|must|uses?|requires?|means|pattern|decision|rule|convention)\b/i.test(content) && content.length < 500) {
+    return 'semantic';
+  }
+  return 'unclassified';
+}
+
 // --- Tools ---
 
 server.tool(
@@ -142,6 +161,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('How much effort to resolve? 0=trivial, 1=significant debugging'),
     memory_class: z.enum(['canonical', 'working', 'ephemeral']).optional().default('working')
       .describe('Memory class: canonical (source-of-truth, never stages), working (default), ephemeral (temporary, decays faster)'),
+    memory_type: z.enum(['episodic', 'semantic', 'procedural', 'unclassified']).optional()
+      .describe('Memory type: episodic (events/incidents), semantic (facts/decisions), procedural (how-to/steps). Auto-classified if omitted.'),
     supersedes: z.string().optional()
       .describe('ID of an older memory this one replaces. The old memory is down-ranked, not deleted.'),
   },
@@ -209,6 +230,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       ? 0.40
       : CONFIDENCE_PRIORS[params.event_type ?? 'observation'] ?? 0.45;
 
+    const memoryType = params.memory_type ?? classifyMemoryType(params.content);
+
     const engram = store.createEngram({
       agentId: AGENT_ID,
       concept: params.concept,
@@ -220,6 +243,7 @@ The concept should be a short label (3-8 words). The content should be the full 
       reasonCodes: salience.reasonCodes,
       ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
       memoryClass: params.memory_class,
+      memoryType,
       supersedes: params.supersedes,
     });
 
@@ -294,6 +318,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     include_staging: z.boolean().optional().default(false).describe('Include weak/unconfirmed memories?'),
     use_reranker: z.boolean().optional().default(true).describe('Use cross-encoder re-ranking for better relevance (default true)'),
     use_expansion: z.boolean().optional().default(true).describe('Expand query with synonyms for better recall (default true)'),
+    memory_type: z.enum(['episodic', 'semantic', 'procedural']).optional().describe('Filter by memory type (omit to search all types)'),
   },
   async (params) => {
     const queryText = params.query ?? params.context;
@@ -313,6 +338,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       includeStaging: params.include_staging,
       useReranker: params.use_reranker,
       useExpansion: params.use_expansion,
+      memoryType: params.memory_type,
     });
 
     // Auto-checkpoint: track recall

@@ -43,6 +43,9 @@ export interface Engram {
   // Memory class
   memoryClass: MemoryClass;
 
+  // Memory type (content classification)
+  memoryType: MemoryType;
+
   // Supersession — "this replaces that" (not retraction — original wasn't wrong, just outdated)
   supersededBy: string | null;   // ID of the engram that replaced this one
   supersedes: string | null;     // ID of the engram this one replaces
@@ -71,6 +74,16 @@ export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low';
 export type MemoryClass = 'canonical' | 'working' | 'ephemeral';
 
 /**
+ * Memory type — content classification for retrieval routing.
+ *
+ * episodic:      Events, incidents, debugging sessions ("we did X because Y").
+ * semantic:      Facts, decisions, patterns ("X is true", "we use Y for Z").
+ * procedural:    How-to, steps, processes ("to deploy, run X then Y").
+ * unclassified:  Default for backwards compatibility.
+ */
+export type MemoryType = 'episodic' | 'semantic' | 'procedural' | 'unclassified';
+
+/**
  * Raw feature scores that produced the salience score.
  * Persisted for auditability and tuning.
  */
@@ -95,6 +108,7 @@ export interface EngramCreate {
   episodeId?: string;
   ttl?: number;
   memoryClass?: MemoryClass;
+  memoryType?: MemoryType;
   supersedes?: string;
   taskStatus?: TaskStatus;
   taskPriority?: TaskPriority;
@@ -147,6 +161,18 @@ export interface PhaseScores {
   rerankerScore: number;   // Cross-encoder relevance (0-1), 0 if reranker disabled
 }
 
+/**
+ * Query mode — controls how the activation pipeline weights its signals.
+ *
+ * targeted:    Query has identifiers, ticket IDs, specific names. Boost BM25,
+ *              narrow graph beam, stronger decay, stricter vector z-gate.
+ * exploratory: Vague/conceptual query. Boost vector/semantic signals, wider
+ *              graph beam, weaker decay, relaxed z-gate.
+ * balanced:    Default weights (current behavior).
+ * auto:        Classify automatically based on query characteristics.
+ */
+export type QueryMode = 'targeted' | 'exploratory' | 'balanced' | 'auto';
+
 export interface ActivationQuery {
   agentId: string;
   context: string;
@@ -158,6 +184,8 @@ export interface ActivationQuery {
   useExpansion?: boolean;      // Enable query expansion (default: true)
   abstentionThreshold?: number; // Min reranker score to return results (default: 0)
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
+  memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
+  mode?: QueryMode;            // Pipeline mode — 'auto' by default
 }
 
 /**

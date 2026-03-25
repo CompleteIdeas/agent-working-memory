@@ -26,9 +26,103 @@ import { embed, cosineSimilarity } from '../core/embeddings.js';
 import { rerank } from '../core/reranker.js';
 import { expandQuery } from '../core/query-expander.js';
 import type {
-  Engram, ActivationResult, ActivationQuery, Association, PhaseScores,
+  Engram, ActivationResult, ActivationQuery, Association, PhaseScores, QueryMode,
 } from '../types/index.js';
 import type { EngramStore } from '../storage/sqlite.js';
+
+// ─── Query-adaptive pipeline parameters ───────────────────────────
+
+interface AdaptiveParams {
+  mode: 'targeted' | 'exploratory' | 'balanced';
+  textWeight: number;       // Weight for text match in composite (default 0.6)
+  temporalWeight: number;   // Weight for temporal signals (default 0.4)
+  decayExponentBase: number;// Base ACT-R decay exponent (default 0.5)
+  zScoreGate: number;       // Z-score threshold for vector match (default 0.5)
+  beamWidth: number;        // Graph walk beam width (default 15)
+  hopPenalty: number;       // Graph walk hop penalty (default 0.3)
+}
+
+const ADAPTIVE_PRESETS: Record<'targeted' | 'exploratory' | 'balanced', AdaptiveParams> = {
+  targeted: {
+    mode: 'targeted',
+    textWeight: 0.75,       // Heavy BM25/keyword emphasis
+    temporalWeight: 0.25,
+    decayExponentBase: 0.6, // Stronger decay — recent exact matches matter more
+    zScoreGate: 0.8,        // Strict vector gate — only strong semantic matches
+    beamWidth: 3,           // Narrow beam — don't wander
+    hopPenalty: 0.2,        // Steeper hop penalty
+  },
+  exploratory: {
+    mode: 'exploratory',
+    textWeight: 0.4,        // Lower BM25 weight
+    temporalWeight: 0.6,    // Lean on temporal/associative signals
+    decayExponentBase: 0.3, // Weaker decay — surface older memories
+    zScoreGate: 0.3,        // Relaxed vector gate — cast wider net
+    beamWidth: 20,          // Wide beam — explore associations
+    hopPenalty: 0.4,        // Gentler hop penalty
+  },
+  balanced: {
+    mode: 'balanced',
+    textWeight: 0.6,
+    temporalWeight: 0.4,
+    decayExponentBase: 0.5,
+    zScoreGate: 0.5,
+    beamWidth: 15,
+    hopPenalty: 0.3,
+  },
+};
+
+/**
+ * Classify a query as targeted, exploratory, or balanced.
+ *
+ * Targeted signals: identifiers (PROJ-123, camelCase, snake_case, UUIDs),
+ * short queries (< 8 words), quoted strings, file paths.
+ *
+ * Exploratory signals: question words, long queries (> 15 words),
+ * vague modifiers ("general", "overview", "about", "related to").
+ */
+function classifyQuery(context: string): 'targeted' | 'exploratory' | 'balanced' {
+  const words = context.split(/\s+/).filter(w => w.length > 0);
+  const wordCount = words.length;
+  const lower = context.toLowerCase();
+
+  let targetedScore = 0;
+  let exploratoryScore = 0;
+
+  // Identifier patterns
+  if (/[A-Z]+-\d+/.test(context)) targetedScore += 2;          // PROJ-123
+  if (/[a-z][A-Z]/.test(context)) targetedScore += 1;          // camelCase
+  if (/\w+_\w+/.test(context)) targetedScore += 1;             // snake_case
+  if (/[0-9a-f]{8}-[0-9a-f]{4}/.test(lower)) targetedScore += 2; // UUID fragment
+  if (/["']/.test(context)) targetedScore += 1;                 // Quoted strings
+  if (/[\/\\]/.test(context)) targetedScore += 1;               // File paths
+  if (/\.\w{1,4}$/.test(context.trim())) targetedScore += 1;   // File extensions
+
+  // Short queries are usually targeted
+  if (wordCount <= 5) targetedScore += 2;
+  else if (wordCount <= 8) targetedScore += 1;
+
+  // Question words / exploratory modifiers
+  if (/^(what|how|why|when|where|who|which|can|does|is|are)\b/i.test(context)) exploratoryScore += 1;
+  if (/\b(overview|general|about|related|similar|like|broad|concept|idea|approach|strategy)\b/i.test(lower)) exploratoryScore += 1;
+  if (/\b(any|all|everything|anything)\b/i.test(lower)) exploratoryScore += 1;
+
+  // Long queries are usually exploratory
+  if (wordCount > 15) exploratoryScore += 2;
+  else if (wordCount > 10) exploratoryScore += 1;
+
+  const diff = targetedScore - exploratoryScore;
+  if (diff >= 2) return 'targeted';
+  if (diff <= -2) return 'exploratory';
+  return 'balanced';
+}
+
+function resolveAdaptiveParams(query: ActivationQuery): AdaptiveParams {
+  const mode = query.mode ?? 'auto';
+  if (mode !== 'auto') return ADAPTIVE_PRESETS[mode];
+  const classified = classifyQuery(query.context);
+  return ADAPTIVE_PRESETS[classified];
+}
 
 /**
  * Common English stopwords — filtered from similarity calculations.
@@ -85,6 +179,7 @@ export class ActivationEngine {
     const useReranker = query.useReranker ?? true;
     const useExpansion = query.useExpansion ?? true;
     const abstentionThreshold = query.abstentionThreshold ?? 0;
+    const adaptive = resolveAdaptiveParams(query);
 
     // Phase -1: Coref expansion — if query has pronouns, append recent entity names
     // Helps conversational recall where "she/he/they/it" refers to a named entity.
@@ -155,7 +250,12 @@ export class ActivationEngine {
     const candidateMap = new Map<string, Engram>();
     for (const r of bm25Ranked) candidateMap.set(r.engram.id, r.engram);
     for (const e of allActive) candidateMap.set(e.id, e);
-    const candidates = Array.from(candidateMap.values());
+    let candidates = Array.from(candidateMap.values());
+
+    // Filter by memory type if specified
+    if (query.memoryType) {
+      candidates = candidates.filter(e => e.memoryType === query.memoryType);
+    }
 
     if (candidates.length === 0) return [];
 
@@ -208,14 +308,13 @@ export class ActivationEngine {
 
       // --- Vector similarity (semantic signal) ---
       // Two-stage: absolute floor prevents noise, then z-score ranks within matches.
-      // Gate lowered from z > 1.0 to z > 0.5 to handle homogeneous corpora where
-      // relevant memories cluster tightly. Maps z=0.5..2.5 → 0..1 linearly.
+      // z-gate adapts to query mode: targeted uses strict gate (0.8), exploratory relaxes (0.3).
       let vectorMatch = 0;
       const rawSim = rawCosineSims.get(engram.id);
       if (rawSim !== undefined) {
         const zScore = (rawSim - simMean) / simStdDev;
-        if (zScore > 0.5) {
-          vectorMatch = Math.min(1, (zScore - 0.5) / 2.0);
+        if (zScore > adaptive.zScoreGate) {
+          vectorMatch = Math.min(1, (zScore - adaptive.zScoreGate) / 2.0);
         }
       }
 
@@ -230,10 +329,10 @@ export class ActivationEngine {
 
       // ACT-R decay — confidence + replay modulated (synaptic tagging)
       // High-confidence memories decay slower. Heavily-accessed memories also resist decay.
-      // Default exponent: 0.5. High confidence (0.8+): 0.3. High access (10+): further -0.05.
+      // Base exponent adapts to query mode: targeted (0.6) decays harder, exploratory (0.3) preserves older memories.
       const confMod = 0.2 * Math.max(0, (engram.confidence - 0.5) / 0.5);
       const replayMod = Math.min(0.1, 0.05 * Math.log1p(engram.accessCount));
-      const decayExponent = Math.max(0.2, 0.5 - confMod - replayMod);
+      const decayExponent = Math.max(0.2, adaptive.decayExponentBase - confMod - replayMod);
       const decayScore = baseLevelActivation(engram.accessCount, ageDays, decayExponent);
 
       // Hebbian boost from associations — capped to prevent popular memories

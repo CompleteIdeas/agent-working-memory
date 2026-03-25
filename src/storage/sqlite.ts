@@ -12,7 +12,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   Engram, EngramCreate, EngramStage, Association, AssociationType,
   SearchQuery, SalienceFeatures, ActivationEvent, StagingEvent,
-  RetrievalFeedbackEvent, Episode, TaskStatus, TaskPriority, MemoryClass,
+  RetrievalFeedbackEvent, Episode, TaskStatus, TaskPriority, MemoryClass, MemoryType,
   ConsciousState, AutoCheckpoint, CheckpointRow,
 } from '../types/index.js';
 
@@ -86,7 +86,8 @@ export class EngramStore {
         retracted INTEGER NOT NULL DEFAULT 0,
         retracted_by TEXT,
         retracted_at TEXT,
-        tags TEXT NOT NULL DEFAULT '[]'
+        tags TEXT NOT NULL DEFAULT '[]',
+        memory_type TEXT NOT NULL DEFAULT 'unclassified'
       );
 
       CREATE INDEX IF NOT EXISTS idx_engrams_agent ON engrams(agent_id);
@@ -234,6 +235,13 @@ export class EngramStore {
     try {
       this.db.exec(`ALTER TABLE conscious_state ADD COLUMN consolidation_cycle_count INTEGER NOT NULL DEFAULT 0`);
     } catch { /* column already exists */ }
+
+    // Migration: add memory_type column if missing
+    try {
+      this.db.prepare('SELECT memory_type FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'unclassified'`);
+    }
   }
 
   // --- Engram CRUD ---
@@ -248,8 +256,8 @@ export class EngramStore {
     this.db.prepare(`
       INSERT INTO engrams (id, agent_id, concept, content, embedding, confidence, salience,
         access_count, last_accessed, created_at, salience_features, reason_codes, stage, tags, episode_id,
-        ttl, memory_class, supersedes, task_status, task_priority, blocked_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)
+        ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.agentId, input.concept, input.content, embeddingBlob,
       input.confidence ?? 0.5,
@@ -265,6 +273,7 @@ export class EngramStore {
       input.taskStatus ?? null,
       input.taskPriority ?? null,
       input.blockedBy ?? null,
+      input.memoryType ?? 'unclassified',
     );
 
     return this.getEngram(id)!;
@@ -757,6 +766,7 @@ export class EngramStore {
       tags: JSON.parse(row.tags),
       episodeId: row.episode_id ?? null,
       memoryClass: (row.memory_class ?? 'working') as MemoryClass,
+      memoryType: (row.memory_type ?? 'unclassified') as MemoryType,
       supersededBy: row.superseded_by ?? null,
       supersedes: row.supersedes ?? null,
       taskStatus: row.task_status ?? null,
