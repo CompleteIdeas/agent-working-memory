@@ -362,12 +362,10 @@ export class ActivationEngine {
         : 0;
 
       // --- Composite score: relevance-gated additive ---
-      // Text relevance must be present for temporal signals to contribute.
-      // Without text relevance, a memory shouldn't activate regardless of recency.
-      // Temporal contribution scales with text relevance (weak match = weak temporal boost).
+      // Text/temporal weights adapt to query mode: targeted (0.75/0.25), exploratory (0.4/0.6).
       const temporalNorm = Math.min(softplus(decayScore + hebbianBoost), 3.0) / 3.0;
       const relevanceGate = textMatch > 0.1 ? textMatch : 0.0; // Proportional gate
-      const composite = (0.6 * textMatch + 0.4 * temporalNorm * relevanceGate + centralityBoost * relevanceGate + feedbackBonus * relevanceGate) * confidenceGate;
+      const composite = (adaptive.textWeight * textMatch + adaptive.temporalWeight * temporalNorm * relevanceGate + centralityBoost * relevanceGate + feedbackBonus * relevanceGate) * confidenceGate;
 
       const phaseScores: PhaseScores = {
         textMatch,
@@ -417,7 +415,7 @@ export class ActivationEngine {
             const rs = rawCosineSims.get(engram.id) ?? (queryEmbedding && engram.embedding ? cosineSimilarity(queryEmbedding, engram.embedding) : 0);
             if (rs) {
               const z = (rs - simMean) / simStdDev;
-              if (z > 0.5) vm = Math.min(1, (z - 0.5) / 2.0);
+              if (z > adaptive.zScoreGate) vm = Math.min(1, (z - adaptive.zScoreGate) / 2.0);
             }
             const tm = km > 0 && vm > 0
               ? 0.5 * Math.max(km, vm) + 0.3 * Math.min(km, vm) + 0.2 * (km * vm)
@@ -426,7 +424,7 @@ export class ActivationEngine {
             const rh = associations.length > 0 ? Math.min(associations.reduce((s, a) => s + a.weight, 0) / associations.length, 0.5) : 0;
             const tn = Math.min(softplus(ds + rh), 3.0) / 3.0;
             const rg = tm > 0.1 ? tm : 0.0;
-            const comp = (0.6 * tm + 0.4 * tn * rg) * engram.confidence;
+            const comp = (adaptive.textWeight * tm + adaptive.temporalWeight * tn * rg) * engram.confidence;
             scored.push({ engram, score: comp, phaseScores: { textMatch: tm, vectorMatch: vm, decayScore: ds, hebbianBoost: rh, graphBoost: 0, confidenceGate: engram.confidence, composite: comp, rerankerScore: 0 }, associations });
           }
         }
@@ -508,7 +506,7 @@ export class ActivationEngine {
     // Only walk from engrams that had text relevance (composite > 0 pre-walk)
     const sorted = scored.sort((a, b) => b.score - a.score);
     const topN = sorted.slice(0, limit * 3);
-    this.graphWalk(topN, 2, 0.3);
+    this.graphWalk(topN, 2, adaptive.hopPenalty, adaptive.beamWidth);
 
     // Phase 6: Initial filter and sort for re-ranking pool
     const pool = topN
@@ -657,11 +655,12 @@ export class ActivationEngine {
   private graphWalk(
     scored: { engram: Engram; score: number; phaseScores: PhaseScores; associations: Association[] }[],
     maxDepth: number,
-    hopPenalty: number
+    hopPenalty: number,
+    beamWidth: number = 15
   ): void {
     const scoreMap = new Map(scored.map(s => [s.engram.id, s]));
-    const MAX_TOTAL_BOOST = 0.25; // Slightly higher cap for beam search (deeper paths earn it)
-    const BEAM_WIDTH = 15;
+    const MAX_TOTAL_BOOST = 0.25;
+    const BEAM_WIDTH = beamWidth;
 
     // Seed the beam with high-scoring, text-relevant items
     const beam = scored
