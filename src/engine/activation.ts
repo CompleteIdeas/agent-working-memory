@@ -208,21 +208,23 @@ export class ActivationEngine {
 
       // --- Vector similarity (semantic signal) ---
       // Two-stage: absolute floor prevents noise, then z-score ranks within matches.
-      // Stage 1: Raw cosine must exceed mean + 1 stddev (absolute relevance gate)
-      // Stage 2: Z-score maps relative position to 0-1 for ranking quality
+      // Gate lowered from z > 1.0 to z > 0.5 to handle homogeneous corpora where
+      // relevant memories cluster tightly. Maps z=0.5..2.5 → 0..1 linearly.
       let vectorMatch = 0;
       const rawSim = rawCosineSims.get(engram.id);
       if (rawSim !== undefined) {
         const zScore = (rawSim - simMean) / simStdDev;
-        // Gate: must be at least 1 stddev above mean to be considered a match
-        if (zScore > 1.0) {
-          // Map z=1..3 → 0..1 linearly
-          vectorMatch = Math.min(1, (zScore - 1.0) / 2.0);
+        if (zScore > 0.5) {
+          vectorMatch = Math.min(1, (zScore - 0.5) / 2.0);
         }
       }
 
-      // Combined text match: best of keyword and vector signals
-      const textMatch = Math.max(keywordMatch, vectorMatch);
+      // Combined text match: weighted blend of keyword and vector signals.
+      // BM25 is better at lexical discrimination; vector is better at semantic matching.
+      // When both are non-zero, blend favors the stronger signal with a boost.
+      const textMatch = keywordMatch > 0 && vectorMatch > 0
+        ? 0.5 * Math.max(keywordMatch, vectorMatch) + 0.3 * Math.min(keywordMatch, vectorMatch) + 0.2 * (keywordMatch * vectorMatch)
+        : Math.max(keywordMatch, vectorMatch);
 
       // --- Temporal signals ---
 
@@ -316,9 +318,11 @@ export class ActivationEngine {
             const rs = rawCosineSims.get(engram.id) ?? (queryEmbedding && engram.embedding ? cosineSimilarity(queryEmbedding, engram.embedding) : 0);
             if (rs) {
               const z = (rs - simMean) / simStdDev;
-              if (z > 1.0) vm = Math.min(1, (z - 1.0) / 2.0);
+              if (z > 0.5) vm = Math.min(1, (z - 0.5) / 2.0);
             }
-            const tm = Math.max(km, vm);
+            const tm = km > 0 && vm > 0
+              ? 0.5 * Math.max(km, vm) + 0.3 * Math.min(km, vm) + 0.2 * (km * vm)
+              : Math.max(km, vm);
             const ds = baseLevelActivation(engram.accessCount, ageDays);
             const rh = associations.length > 0 ? Math.min(associations.reduce((s, a) => s + a.weight, 0) / associations.length, 0.5) : 0;
             const tn = Math.min(softplus(ds + rh), 3.0) / 3.0;

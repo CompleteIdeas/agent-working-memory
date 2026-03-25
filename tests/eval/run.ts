@@ -141,8 +141,8 @@ async function runRetrieval(facts: Fact[], queries: Query[]): Promise<SuiteResul
 
     return {
       name: 'retrieval',
-      pass: avgRecall >= 0.70, // Synthetic data has vocabulary overlap; 0.70 is a realistic baseline
-      threshold: 0.70,
+      pass: avgRecall >= 0.80,
+      threshold: 0.80, // 200 synthetic facts with 20-way domain overlap; 0.80 is strong for this corpus
       score: avgRecall,
       details: { 'recall@5': avgRecall, mrr: avgMRR, 'ndcg@10': avgNDCG, queries: queries.length },
     };
