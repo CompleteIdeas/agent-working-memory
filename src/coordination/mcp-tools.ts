@@ -27,14 +27,19 @@ export function registerCoordinationTools(server: McpServer, db: Database.Databa
     async ({ agent_name, role, pid, capabilities, workspace }) => {
       const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
+      // Look up ANY existing agent with same name+workspace — including dead ones (upsert, reuse UUID)
       const existing = workspace
-        ? db.prepare(`SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead'`).get(agent_name, workspace) as { id: string; status: string } | undefined
-        : db.prepare(`SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead'`).get(agent_name) as { id: string; status: string } | undefined;
+        ? db.prepare(`SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? ORDER BY last_seen DESC LIMIT 1`).get(agent_name, workspace) as { id: string; status: string } | undefined
+        : db.prepare(`SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL ORDER BY last_seen DESC LIMIT 1`).get(agent_name) as { id: string; status: string } | undefined;
 
       if (existing) {
-        db.prepare(`UPDATE coord_agents SET last_seen = datetime('now'), pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities) WHERE id = ?`).run(pid ?? null, capsJson, existing.id);
-        db.prepare(`INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'heartbeat', ?)`).run(existing.id, `heartbeat from ${agent_name}`);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ agentId: existing.id, action: 'heartbeat', status: existing.status }) }] };
+        const wasDead = existing.status === 'dead';
+        db.prepare(`UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities) WHERE id = ?`).run(pid ?? null, capsJson, existing.id);
+        const action = wasDead ? 'reconnected' : 'heartbeat';
+        const eventType = wasDead ? 'reconnected' : 'heartbeat';
+        const detail = wasDead ? `${agent_name} reconnected via MCP (was dead)` : `heartbeat from ${agent_name}`;
+        db.prepare(`INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, ?, ?)`).run(existing.id, eventType, detail);
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ agentId: existing.id, action, status: wasDead ? 'idle' : existing.status }) }] };
       }
 
       const id = randomUUID();
