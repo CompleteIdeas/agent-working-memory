@@ -197,13 +197,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       // Priority-ordered dispatch: higher priority first, then FIFO.
       // Skip assignments blocked by incomplete dependencies.
       const blockedFilter = `AND (blocked_by IS NULL OR blocked_by IN (SELECT id FROM coord_assignments WHERE status = 'completed'))`;
-      const pending = agentWorkspace
+
+      // First, check for tasks reserved specifically for this agent
+      const reserved = db.prepare(
+        `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id = ? ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
+      ).get(agentId) as { id: string } | undefined;
+
+      // Then fall back to truly unassigned tasks (agent_id IS NULL)
+      const pending = reserved ?? (agentWorkspace
         ? db.prepare(
-            `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
+            `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id IS NULL AND (workspace = ? OR workspace IS NULL) ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
           ).get(agentWorkspace) as { id: string } | undefined
         : db.prepare(
-            `SELECT * FROM coord_assignments WHERE status = 'pending' ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
-          ).get() as { id: string } | undefined;
+            `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id IS NULL ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
+          ).get() as { id: string } | undefined);
 
       if (pending) {
         const claimed = db.prepare(
@@ -238,7 +245,31 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   app.post('/assign', async (req, reply) => {
     const parsed = assignCreateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    const { agentId, task, description, workspace, priority, blocked_by } = parsed.data;
+    const { task, description, workspace, priority, blocked_by, worker_name } = parsed.data;
+    let { agentId } = parsed.data;
+
+    // Resolve worker_name → agentId if agentId not provided
+    if (!agentId && worker_name) {
+      let found = workspace
+        ? db.prepare(
+            `SELECT id FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+          ).get(worker_name, workspace) as { id: string } | undefined
+        : db.prepare(
+            `SELECT id FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+          ).get(worker_name) as { id: string } | undefined;
+
+      // Fallback: name-only lookup (handles workspace changes)
+      if (!found) {
+        found = db.prepare(
+          `SELECT id FROM coord_agents WHERE name = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+        ).get(worker_name) as { id: string } | undefined;
+      }
+
+      if (!found) {
+        return reply.code(404).send({ error: `worker not found: ${worker_name}` });
+      }
+      agentId = found.id;
+    }
 
     const id = randomUUID();
     db.prepare(
@@ -300,13 +331,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const agentWorkspace = agentRow?.workspace;
 
     const blockedFilter = `AND (blocked_by IS NULL OR blocked_by IN (SELECT id FROM coord_assignments WHERE status = 'completed'))`;
-    const pending = agentWorkspace
+
+    // First, check for tasks reserved specifically for this agent
+    const reserved = db.prepare(
+      `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id = ? ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
+    ).get(agentId) as { id: string } | undefined;
+
+    // Then fall back to truly unassigned tasks (agent_id IS NULL)
+    const pending = reserved ?? (agentWorkspace
       ? db.prepare(
-          `SELECT * FROM coord_assignments WHERE status = 'pending' AND (workspace = ? OR workspace IS NULL) ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
+          `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id IS NULL AND (workspace = ? OR workspace IS NULL) ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
         ).get(agentWorkspace) as { id: string } | undefined
       : db.prepare(
-          `SELECT * FROM coord_assignments WHERE status = 'pending' ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
-        ).get() as { id: string } | undefined;
+          `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id IS NULL ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
+        ).get() as { id: string } | undefined);
 
     if (pending) {
       const claimed = db.prepare(
@@ -863,5 +901,57 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const { stale, cleaned } = cleanupStale(db, threshold);
     return reply.send({ stale, threshold_seconds: threshold, cleaned });
+  });
+
+  // ─── Stats ──────────────────────────────────────────────────────
+
+  app.get('/stats', async (_req, reply) => {
+    const workers = db.prepare(`
+      SELECT
+        COUNT(*)                                    AS total,
+        SUM(CASE WHEN status != 'dead' THEN 1 ELSE 0 END)  AS alive,
+        SUM(CASE WHEN status = 'idle' THEN 1 ELSE 0 END)   AS idle,
+        SUM(CASE WHEN status = 'working' THEN 1 ELSE 0 END) AS working
+      FROM coord_agents
+    `).get() as { total: number; alive: number; idle: number; working: number };
+
+    const tasks = db.prepare(`
+      SELECT
+        COUNT(*)                                         AS total_assigned,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)    AS failed,
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END)   AS pending,
+        AVG(CASE
+          WHEN status = 'completed' AND started_at IS NOT NULL AND completed_at IS NOT NULL
+          THEN ROUND((julianday(completed_at) - julianday(started_at)) * 86400)
+          ELSE NULL
+        END) AS avg_completion_seconds
+      FROM coord_assignments
+    `).get() as { total_assigned: number; completed: number; failed: number; pending: number; avg_completion_seconds: number | null };
+
+    const decisions = db.prepare(`
+      SELECT
+        COUNT(*)                                                              AS total,
+        SUM(CASE WHEN created_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) AS last_hour
+      FROM coord_decisions
+    `).get() as { total: number; last_hour: number };
+
+    // Uptime = seconds since the earliest non-dead agent started
+    const uptime = db.prepare(`
+      SELECT ROUND((julianday('now') - julianday(MIN(started_at))) * 86400) AS uptime_seconds
+      FROM coord_agents WHERE status != 'dead'
+    `).get() as { uptime_seconds: number | null };
+
+    return reply.send({
+      workers,
+      tasks: {
+        ...tasks,
+        avg_completion_seconds: tasks.avg_completion_seconds != null
+          ? Math.round(tasks.avg_completion_seconds)
+          : null,
+      },
+      decisions,
+      uptime_seconds: uptime.uptime_seconds ?? 0,
+    });
   });
 }
