@@ -40,6 +40,7 @@ export const checkoutSchema = z.object({
 
 export const assignCreateSchema = z.object({
   agentId: z.string().uuid().optional(),
+  worker_name: z.string().min(1).max(50).optional(),
   task: z.string().min(1).max(1000),
   description: z.string().max(5000).optional(),
   workspace: z.string().max(50).optional(),
@@ -152,4 +153,27 @@ export const workersQuerySchema = z.object({
   capability: z.string().max(50).optional(),
   status: agentStatusEnum.optional(),
   workspace: z.string().max(50).optional(),
+});
+
+// ─── Stats ─────────────────────────────────────────────────────
+
+export const statsResponseSchema = z.object({
+  workers: z.object({
+    total: z.number().int(),
+    alive: z.number().int(),
+    idle: z.number().int(),
+    working: z.number().int(),
+  }),
+  tasks: z.object({
+    total_assigned: z.number().int(),
+    completed: z.number().int(),
+    failed: z.number().int(),
+    pending: z.number().int(),
+    avg_completion_seconds: z.number().nullable(),
+  }),
+  decisions: z.object({
+    total: z.number().int(),
+    last_hour: z.number().int(),
+  }),
+  uptime_seconds: z.number(),
 });
