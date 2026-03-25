@@ -48,7 +48,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
     // Look up ANY existing agent with same name+workspace — including dead ones (upsert)
-    const existing = workspace
+    // Falls back to name-only to handle workspace changes between sessions
+    let existing = workspace
       ? db.prepare(
           `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? ORDER BY last_seen DESC LIMIT 1`
         ).get(name, workspace) as { id: string; status: string } | undefined
@@ -56,11 +57,17 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
           `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL ORDER BY last_seen DESC LIMIT 1`
         ).get(name) as { id: string; status: string } | undefined;
 
+    if (!existing) {
+      existing = db.prepare(
+        `SELECT id, status FROM coord_agents WHERE name = ? ORDER BY last_seen DESC LIMIT 1`
+      ).get(name) as { id: string; status: string } | undefined;
+    }
+
     if (existing) {
       const wasDead = existing.status === 'dead';
       db.prepare(
-        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities) WHERE id = ?`
-      ).run(pid ?? null, capsJson, existing.id);
+        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace) WHERE id = ?`
+      ).run(pid ?? null, capsJson, workspace ?? null, existing.id);
 
       const eventType = wasDead ? 'reconnected' : 'heartbeat';
       const detail = wasDead ? `${name} reconnected (was dead)` : `heartbeat from ${name}`;
@@ -126,7 +133,9 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
     // Step 1: Upsert agent (checkin / heartbeat) — including dead agents (reuse UUID)
-    const existing = workspace
+    // Try exact name+workspace match first, then fall back to name-only to handle
+    // workspace changes between sessions (prevents orphaned assignments on old UUID)
+    let existing = workspace
       ? db.prepare(
           `SELECT id, status FROM coord_agents WHERE name = ? AND workspace = ? ORDER BY last_seen DESC LIMIT 1`
         ).get(name, workspace) as { id: string; status: string } | undefined
@@ -134,13 +143,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
           `SELECT id, status FROM coord_agents WHERE name = ? AND workspace IS NULL ORDER BY last_seen DESC LIMIT 1`
         ).get(name) as { id: string; status: string } | undefined;
 
+    // Fallback: name-only lookup if exact match failed (handles workspace change, e.g. NULL→PERSONAL)
+    if (!existing) {
+      existing = db.prepare(
+        `SELECT id, status FROM coord_agents WHERE name = ? ORDER BY last_seen DESC LIMIT 1`
+      ).get(name) as { id: string; status: string } | undefined;
+    }
+
     let agentId: string;
     if (existing) {
       agentId = existing.id;
       const wasDead = existing.status === 'dead';
       db.prepare(
-        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, capabilities = COALESCE(?, capabilities) WHERE id = ?`
-      ).run(capsJson, agentId);
+        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace) WHERE id = ?`
+      ).run(capsJson, workspace ?? null, agentId);
       const eventType = wasDead ? 'reconnected' : 'heartbeat';
       const detail = wasDead ? `${name} reconnected via /next` : `heartbeat from ${name}`;
       db.prepare(
@@ -253,15 +269,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const q = assignmentQuerySchema.parse(req.query);
     let agentId = (req.headers['x-agent-id'] as string | undefined) ?? q.agentId;
 
-    // Fallback: resolve agentId from name + workspace
+    // Fallback: resolve agentId from name + workspace (with name-only fallback)
     if (!agentId && q.name) {
-      const found = q.workspace
+      let found = q.workspace
         ? db.prepare(
             `SELECT id FROM coord_agents WHERE name = ? AND workspace = ? AND status != 'dead'`
           ).get(q.name, q.workspace) as { id: string } | undefined
         : db.prepare(
             `SELECT id FROM coord_agents WHERE name = ? AND workspace IS NULL AND status != 'dead'`
           ).get(q.name) as { id: string } | undefined;
+      if (!found) {
+        found = db.prepare(
+          `SELECT id FROM coord_agents WHERE name = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+        ).get(q.name) as { id: string } | undefined;
+      }
       agentId = found?.id;
     }
 
@@ -346,7 +367,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
         return { error: 'completion requires a result summary — minimum 20 characters describing what was done' };
       }
       // Must mention at least one of: commit/SHA, build, audit, test, verified, fix, created, updated, implemented
-      const actionWords = /\b(commit|sha|[0-9a-f]{7,40}|build|audit|test|verified|fix|created|updated|implemented|added|refactored|documented)\b/i;
+      const actionWords = /\b(committed?|sha|[0-9a-f]{7,40}|builds?|audite?d?|teste?d?|verified|fixe?d?|created?|updated?|implemented?|added|refactored?|documented?|resolved|merged|deployed|removed|migrated|wrote|reviewed)\b/i;
       if (!actionWords.test(result)) {
         return { error: 'completion result must describe the work done — include what was committed, built, tested, or verified' };
       }
