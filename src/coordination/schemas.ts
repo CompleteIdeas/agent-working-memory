@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 // ─── Enums ──────────────────────────────────────────────────────
 
-export const agentRoleEnum = z.enum(['worker', 'orchestrator', 'dev-lead']);
+export const agentRoleEnum = z.enum(['worker', 'orchestrator', 'coordinator', 'dev-lead']);
 export const agentStatusEnum = z.enum(['idle', 'working', 'dead']);
 export const assignmentStatusEnum = z.enum(['in_progress', 'completed', 'failed', 'blocked']);
 export const commandEnum = z.enum(['BUILD_FREEZE', 'PAUSE', 'RESUME', 'SHUTDOWN']);

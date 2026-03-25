@@ -586,8 +586,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
            ORDER BY name`
         ).all() as Array<{ id: string; name: string; role: string; status: string; current_task: string | null; last_seen: string }>;
 
-    const ready = agents.filter(a => a.status === targetStatus || a.role === 'orchestrator');
-    const notReady = agents.filter(a => a.status !== targetStatus && a.role !== 'orchestrator');
+    const ready = agents.filter(a => a.status === targetStatus || a.role === 'orchestrator' || a.role === 'coordinator');
+    const notReady = agents.filter(a => a.status !== targetStatus && a.role !== 'orchestrator' && a.role !== 'coordinator');
 
     return reply.send({
       allReady: notReady.length === 0,
@@ -752,7 +752,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
           `SELECT id, name, role, status, current_task, capabilities, workspace, last_seen,
                   ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
            FROM coord_agents
-           WHERE status != 'dead' AND role != 'orchestrator' AND workspace = ?
+           WHERE status != 'dead' AND role NOT IN ('orchestrator', 'coordinator') AND workspace = ?
            ORDER BY name`
         ).all(workspace) as Array<{
           id: string; name: string; role: string; status: string;
@@ -763,7 +763,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
           `SELECT id, name, role, status, current_task, capabilities, workspace, last_seen,
                   ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
            FROM coord_agents
-           WHERE status != 'dead' AND role != 'orchestrator'
+           WHERE status != 'dead' AND role NOT IN ('orchestrator', 'coordinator')
            ORDER BY name`
         ).all() as Array<{
           id: string; name: string; role: string; status: string;
