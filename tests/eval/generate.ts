@@ -247,22 +247,24 @@ function generateRedundancyClusters(): RedundancyCluster[] {
 
   for (let i = 0; i < 50; i++) {
     const template = baseKnowledge[i % baseKnowledge.length];
-    const variant = i >= 10 ? ` (context ${Math.floor(i / 10)})` : '';
+    // Each cluster gets a unique anchor so post-consolidation queries can distinguish them
+    const clusterAnchor = `CLUSTER-${i.toString().padStart(3, '0')}`;
+    const variant = i >= 10 ? ` (context ${Math.floor(i / 10)}, ${clusterAnchor})` : ` (${clusterAnchor})`;
     const canonicalId = uuid();
 
     const canonical: Fact = {
       id: canonicalId,
       concept: template.concept,
-      content: template.base + variant,
-      tags: [template.concept.split('/')[0], template.concept.split('/')[1]],
+      content: `[${clusterAnchor}] ${template.base}${variant}`,
+      tags: [template.concept.split('/')[0], template.concept.split('/')[1], clusterAnchor.toLowerCase()],
       timestamp: new Date(Date.now() - (i * 7200_000)).toISOString(),
     };
 
     const paraphrases = paraphraseTemplates.map((fn, j) => ({
       id: uuid(),
       concept: template.concept,
-      content: fn(template.base + variant),
-      tags: [template.concept.split('/')[0], template.concept.split('/')[1]],
+      content: `[${clusterAnchor}] ${fn(template.base + variant)}`,
+      tags: [template.concept.split('/')[0], template.concept.split('/')[1], clusterAnchor.toLowerCase()],
       timestamp: new Date(Date.now() - (i * 7200_000) + ((j + 1) * 600_000)).toISOString(),
     }));
 
