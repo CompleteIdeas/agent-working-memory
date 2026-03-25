@@ -292,7 +292,7 @@ The concept should be a short label (3-8 words). The content should be the full 
     return {
       content: [{
         type: 'text' as const,
-        text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]`,
+        text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`,
       }],
     };
   }
