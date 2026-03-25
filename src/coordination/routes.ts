@@ -335,11 +335,18 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     return reply.send({ ok: true, assignmentId: id });
   });
 
-  function handleAssignmentUpdate(id: string, status: string, result: string | undefined) {
+  function handleAssignmentUpdate(id: string, status: string, result: string | undefined, commitSha: string | undefined): { error?: string } {
+    // Verification gate: completed status requires a non-empty result (min 10 chars)
+    if (status === 'completed') {
+      if (!result || result.trim().length < 10) {
+        return { error: 'completion requires a result summary (commit SHA, output, or explanation) — minimum 10 characters' };
+      }
+    }
+
     if (['completed', 'failed'].includes(status)) {
       db.prepare(
-        `UPDATE coord_assignments SET status = ?, result = ?, completed_at = datetime('now') WHERE id = ?`
-      ).run(status, result ?? null, id);
+        `UPDATE coord_assignments SET status = ?, result = ?, commit_sha = ?, completed_at = datetime('now') WHERE id = ?`
+      ).run(status, result ?? null, commitSha ?? null, id);
     } else {
       db.prepare(
         `UPDATE coord_assignments SET status = ?, result = ? WHERE id = ?`
@@ -355,9 +362,12 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       }
     }
 
+    const eventDetail = status === 'completed'
+      ? `${id} → ${status}${commitSha ? ' [' + commitSha + ']' : ''}: ${(result ?? '').slice(0, 200)}`
+      : `${id} → ${status}`;
     db.prepare(
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES ((SELECT agent_id FROM coord_assignments WHERE id = ?), 'assignment_update', ?)`
-    ).run(id, `${id} → ${status}`);
+    ).run(id, eventDetail);
 
     // Log completion/failure with agent name and task
     if (['completed', 'failed'].includes(status)) {
@@ -366,13 +376,25 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       ).get(id) as { task: string; agent_name: string | null } | undefined;
       coordLog(`${info?.agent_name ?? 'unknown'} ${status}: ${info?.task?.slice(0, 80) ?? id}`);
     }
+
+    return {};
   }
+
+  app.get('/assignment/:id', async (req, reply) => {
+    const { id } = assignmentIdParamSchema.parse(req.params);
+    const assignment = db.prepare(
+      `SELECT a.*, g.name AS agent_name FROM coord_assignments a LEFT JOIN coord_agents g ON a.agent_id = g.id WHERE a.id = ?`
+    ).get(id);
+    if (!assignment) return reply.code(404).send({ error: 'assignment not found' });
+    return reply.send({ assignment });
+  });
 
   app.post('/assignment/:id/update', async (req, reply) => {
     const { id } = assignmentIdParamSchema.parse(req.params);
     const parsed = assignmentUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    handleAssignmentUpdate(id, parsed.data.status, parsed.data.result);
+    const gate = handleAssignmentUpdate(id, parsed.data.status, parsed.data.result, parsed.data.commit_sha);
+    if (gate.error) return reply.code(400).send({ error: gate.error });
     return reply.send({ ok: true });
   });
 
@@ -380,7 +402,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const { id } = assignmentIdParamSchema.parse(req.params);
     const parsed = assignmentUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    handleAssignmentUpdate(id, parsed.data.status, parsed.data.result);
+    const gate = handleAssignmentUpdate(id, parsed.data.status, parsed.data.result, parsed.data.commit_sha);
+    if (gate.error) return reply.code(400).send({ error: gate.error });
     return reply.send({ ok: true });
   });
 
@@ -388,7 +411,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const { id } = assignmentIdParamSchema.parse(req.params);
     const parsed = assignmentUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    handleAssignmentUpdate(id, parsed.data.status, parsed.data.result);
+    const gate = handleAssignmentUpdate(id, parsed.data.status, parsed.data.result, parsed.data.commit_sha);
+    if (gate.error) return reply.code(400).send({ error: gate.error });
     return reply.send({ ok: true });
   });
 

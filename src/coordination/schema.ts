@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS coord_assignments (
   started_at   TEXT,
   completed_at TEXT,
   result       TEXT,
+  commit_sha   TEXT,
   workspace    TEXT,
   FOREIGN KEY (agent_id) REFERENCES coord_agents(id)
 );
@@ -108,4 +109,9 @@ CREATE TABLE IF NOT EXISTS coord_events (
  */
 export function initCoordinationTables(db: Database.Database): void {
   db.exec(COORDINATION_TABLES);
+
+  // Migration: add commit_sha column to existing coord_assignments tables
+  try {
+    db.exec(`ALTER TABLE coord_assignments ADD COLUMN commit_sha TEXT`);
+  } catch { /* column already exists */ }
 }

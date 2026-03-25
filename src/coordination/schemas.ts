@@ -65,6 +65,7 @@ export const assignmentClaimSchema = z.object({
 export const assignmentUpdateSchema = z.object({
   status: assignmentStatusEnum,
   result: z.string().max(10000).optional(),
+  commit_sha: z.string().max(100).optional(),
 });
 
 // ─── Locks ──────────────────────────────────────────────────────
