@@ -596,6 +596,32 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       eventBus?.emit('assignment.completed', { assignmentId: id, agentId: assignInfo?.agent_id ?? null, result: result ?? null });
     }
 
+    // Auto-unblock: when an assignment completes, unblock any assignments that depend on it
+    if (status === 'completed') {
+      const blocked = db.prepare(
+        `SELECT id, agent_id, task FROM coord_assignments WHERE blocked_by = ? AND status = 'blocked'`
+      ).all(id) as Array<{ id: string; agent_id: string | null; task: string }>;
+
+      if (blocked.length > 0) {
+        const unblockTx = db.transaction(() => {
+          for (const dep of blocked) {
+            db.prepare(
+              `UPDATE coord_assignments SET blocked_by = NULL, status = 'assigned' WHERE id = ?`
+            ).run(dep.id);
+            db.prepare(
+              `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_unblocked', ?)`
+            ).run(dep.agent_id, `unblocked by completion of ${id}: ${dep.task.slice(0, 80)}`);
+          }
+        });
+        unblockTx();
+
+        for (const dep of blocked) {
+          coordLog(`auto-unblocked: ${dep.task.slice(0, 60)} (was blocked by ${id})`);
+          eventBus?.emit('assignment.updated', { assignmentId: dep.id, agentId: dep.agent_id, status: 'assigned', result: undefined });
+        }
+      }
+    }
+
     return {};
   }
 
