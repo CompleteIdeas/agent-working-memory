@@ -12,7 +12,7 @@ import type { EngramStore } from '../storage/sqlite.js';
 import { randomUUID } from 'node:crypto';
 import {
   checkinSchema, checkoutSchema, pulseSchema, nextSchema,
-  assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema, assignmentsListSchema,
+  assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema, assignmentsListSchema, reassignSchema,
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
   findingCreateSchema, findingsQuerySchema, findingIdParamSchema, findingUpdateSchema,
@@ -535,6 +535,63 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     ).all(...params, q.limit, q.offset);
 
     return reply.send({ assignments, total });
+  });
+
+  app.post('/reassign', async (req, reply) => {
+    const parsed = reassignSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
+    const { assignmentId, target_worker_name } = parsed.data;
+    let { targetAgentId } = parsed.data;
+
+    // Verify assignment exists and is active
+    const assignment = db.prepare(
+      `SELECT id, agent_id, task, status FROM coord_assignments WHERE id = ?`
+    ).get(assignmentId) as { id: string; agent_id: string | null; task: string; status: string } | undefined;
+    if (!assignment) return reply.code(404).send({ error: 'assignment not found' });
+    if (['completed', 'failed'].includes(assignment.status)) {
+      return reply.code(400).send({ error: `cannot reassign ${assignment.status} assignment` });
+    }
+
+    // Resolve target_worker_name → targetAgentId
+    if (!targetAgentId && target_worker_name) {
+      const found = db.prepare(
+        `SELECT id FROM coord_agents WHERE name = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`
+      ).get(target_worker_name) as { id: string } | undefined;
+      if (!found) return reply.code(404).send({ error: `target worker not found: ${target_worker_name}` });
+      targetAgentId = found.id;
+    }
+
+    // Release old agent: set idle, clear current_task, release locks
+    if (assignment.agent_id) {
+      db.prepare(
+        `UPDATE coord_agents SET status = 'idle', current_task = NULL WHERE id = ?`
+      ).run(assignment.agent_id);
+      db.prepare(
+        `DELETE FROM coord_locks WHERE agent_id = ?`
+      ).run(assignment.agent_id);
+    }
+
+    if (targetAgentId) {
+      // Reassign to target
+      db.prepare(
+        `UPDATE coord_assignments SET agent_id = ?, status = 'assigned', started_at = datetime('now') WHERE id = ?`
+      ).run(targetAgentId, assignmentId);
+      db.prepare(
+        `UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ?`
+      ).run(assignmentId, targetAgentId);
+    } else {
+      // No target — return to pending for auto-claim
+      db.prepare(
+        `UPDATE coord_assignments SET agent_id = NULL, status = 'pending', started_at = NULL WHERE id = ?`
+      ).run(assignmentId);
+    }
+
+    db.prepare(
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'reassignment', ?)`
+    ).run(assignment.agent_id ?? null, `${assignmentId} reassigned from ${assignment.agent_id ?? 'unassigned'} to ${targetAgentId ?? 'pending'}`);
+
+    coordLog(`reassign: ${assignment.task.slice(0, 60)} → ${targetAgentId ?? 'pending'}`);
+    return reply.send({ ok: true, assignmentId, newAgentId: targetAgentId ?? null, status: targetAgentId ? 'assigned' : 'pending' });
   });
 
   app.post('/assignment/:id/update', async (req, reply) => {

@@ -74,6 +74,12 @@ export const assignmentsListSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+export const reassignSchema = z.object({
+  assignmentId: z.string().uuid(),
+  targetAgentId: z.string().uuid().optional(),
+  target_worker_name: z.string().min(1).max(50).optional(),
+});
+
 export const assignmentUpdateSchema = z.object({
   status: assignmentStatusEnum,
   result: z.string().max(10000).optional(),
