@@ -13,6 +13,8 @@ import { initCoordinationTables } from './schema.js';
 import { registerCoordinationRoutes } from './routes.js';
 import { cleanSlate } from './stale.js';
 
+export type * from './types.js';
+
 /** Check if coordination is enabled via environment variable. */
 export function isCoordinationEnabled(): boolean {
   const val = process.env.AWM_COORDINATION;
