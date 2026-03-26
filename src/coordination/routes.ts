@@ -15,7 +15,7 @@ import {
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
   findingCreateSchema, findingsQuerySchema, findingIdParamSchema,
-  decisionsQuerySchema,
+  decisionsQuerySchema, decisionCreateSchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
@@ -273,8 +273,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null);
+      `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null, agentId ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null);
 
     if (agentId) {
       db.prepare(
@@ -754,6 +754,21 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const decisions = db.prepare(sql).all(...params);
     return reply.send({ decisions });
+  });
+
+  app.post('/decisions', async (req, reply) => {
+    const { agentId, assignment_id, tags, summary } = decisionCreateSchema.parse(req.body);
+
+    // Verify agent exists
+    const agent = db.prepare(`SELECT id FROM coord_agents WHERE id = ?`).get(agentId) as { id: string } | undefined;
+    if (!agent) return reply.code(404).send({ error: 'agent not found' });
+
+    db.prepare(
+      `INSERT INTO coord_decisions (author_id, assignment_id, tags, summary) VALUES (?, ?, ?, ?)`
+    ).run(agentId, assignment_id ?? null, tags ?? null, summary);
+
+    const row = db.prepare(`SELECT last_insert_rowid() AS id`).get() as { id: number };
+    return reply.code(201).send({ ok: true, id: row.id });
   });
 
   // ─── Status ─────────────────────────────────────────────────────

@@ -138,6 +138,13 @@ export const decisionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 
+export const decisionCreateSchema = z.object({
+  agentId: z.string().uuid(),
+  assignment_id: z.string().max(100).optional(),
+  tags: z.string().max(500).optional(),
+  summary: z.string().min(1).max(5000),
+});
+
 // ─── Status / Events ────────────────────────────────────────────
 
 export const eventsQuerySchema = z.object({
