@@ -1326,4 +1326,41 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       uptime_seconds: uptime.uptime_seconds ?? 0,
     });
   });
+
+  // ─── Deep Health ───────────────────────────────────────────────
+
+  app.get('/health/deep', async (_req, reply) => {
+    const dbHealthy = store ? store.integrityCheck().ok : true;
+
+    const agents = db.prepare(
+      `SELECT COUNT(*) AS alive FROM coord_agents WHERE status != 'dead'`
+    ).get() as { alive: number };
+
+    const staleThreshold = 120;
+    const staleCount = (db.prepare(
+      `SELECT COUNT(*) AS c FROM coord_agents
+       WHERE status != 'dead'
+         AND (julianday('now') - julianday(last_seen)) * 86400 > ?`
+    ).get(staleThreshold) as { c: number }).c;
+
+    const pending = (db.prepare(
+      `SELECT COUNT(*) AS c FROM coord_assignments WHERE status IN ('pending', 'assigned', 'in_progress')`
+    ).get() as { c: number }).c;
+
+    const uptimeRow = db.prepare(
+      `SELECT ROUND((julianday('now') - julianday(MIN(started_at))) * 86400) AS s
+       FROM coord_agents WHERE status != 'dead'`
+    ).get() as { s: number | null };
+
+    const status = (!dbHealthy || staleCount > 2) ? 'degraded' : 'ok';
+
+    return reply.send({
+      status,
+      db_healthy: dbHealthy,
+      agents_alive: agents.alive,
+      stale_agents: staleCount,
+      pending_tasks: pending,
+      uptime_seconds: uptimeRow.s ?? 0,
+    });
+  });
 }
