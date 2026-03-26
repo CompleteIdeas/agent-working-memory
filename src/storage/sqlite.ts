@@ -30,6 +30,7 @@ const DEFAULT_SALIENCE_FEATURES: SalienceFeatures = {
 
 export class EngramStore {
   private db: Database.Database;
+  private walTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(dbPath: string = 'memory.db') {
     this.db = new Database(dbPath);
@@ -37,7 +38,9 @@ export class EngramStore {
     this.db.pragma('foreign_keys = ON');
     this.db.pragma('busy_timeout = 5000');
     this.db.pragma('synchronous = NORMAL');
+    this.db.pragma('wal_autocheckpoint = 1000');
     this.init();
+    this.startWalCheckpointTimer();
   }
 
   /** Expose the raw database handle for the coordination module. */
@@ -63,7 +66,27 @@ export class EngramStore {
 
   /** Flush WAL to main database file. */
   walCheckpoint(): void {
-    this.db.pragma('wal_checkpoint(TRUNCATE)');
+    try {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch {
+      // Checkpoint can fail if another connection holds the DB; non-fatal
+    }
+  }
+
+  /** Start periodic WAL checkpoint every 5 minutes to prevent unbounded WAL growth. */
+  private startWalCheckpointTimer(): void {
+    this.walTimer = setInterval(() => {
+      this.walCheckpoint();
+    }, 5 * 60 * 1000);
+    this.walTimer.unref();
+  }
+
+  /** Stop the WAL checkpoint timer (call before close). */
+  stopWalCheckpointTimer(): void {
+    if (this.walTimer) {
+      clearInterval(this.walTimer);
+      this.walTimer = null;
+    }
   }
 
   private init(): void {
@@ -1012,6 +1035,8 @@ export class EngramStore {
   }
 
   close(): void {
+    this.stopWalCheckpointTimer();
+    this.walCheckpoint();
     this.db.close();
   }
 }
