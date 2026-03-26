@@ -67,7 +67,7 @@ export const assignmentClaimSchema = z.object({
 });
 
 export const assignmentsListSchema = z.object({
-  status: assignmentStatusEnum.optional(),
+  status: z.enum(['pending', 'assigned', 'in_progress', 'completed', 'failed', 'blocked']).optional(),
   workspace: z.string().max(50).optional(),
   agent_id: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(20),
