@@ -32,6 +32,26 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
   // Clean slate: mark stale agents as dead from previous sessions
   cleanSlate(db);
 
+  // CORS — allow localhost origins only (coordination is local-only)
+  app.addHook('onRequest', async (request, reply) => {
+    const origin = request.headers.origin ?? '';
+    if (/^https?:\/\/localhost(:\d+)?$/.test(origin) || /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) {
+      reply.header('Access-Control-Allow-Origin', origin);
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    }
+    if (request.method === 'OPTIONS') {
+      return reply.code(204).send();
+    }
+  });
+
+  // Body size limit — 50KB max for coordination requests
+  app.addHook('onRoute', (routeOptions) => {
+    if (!routeOptions.bodyLimit) {
+      routeOptions.bodyLimit = 50_000;
+    }
+  });
+
   // Mount all coordination HTTP routes
   registerCoordinationRoutes(app, db, store);
 
