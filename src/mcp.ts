@@ -62,6 +62,7 @@ import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { embed } from './core/embeddings.js';
 import { startSidecar } from './hooks/sidecar.js';
 import { initLogger, log, getLogPath } from './core/logger.js';
+import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-decisions.js';
 
 // --- Incognito Mode ---
 // When AWM_INCOGNITO=1, register zero tools. Claude won't see memory tools at all.
@@ -349,11 +350,16 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
 
     log(AGENT_ID, 'recall', `"${queryText.slice(0, 80)}" → ${results.length} results`);
 
+    // Peer decisions: append recent decisions by other agents relevant to this query
+    const peerSuffix = coordDb
+      ? formatPeerDecisions(queryPeerDecisions(coordDb, AGENT_ID, queryText))
+      : '';
+
     if (results.length === 0) {
       return {
         content: [{
           type: 'text' as const,
-          text: 'No relevant memories found.',
+          text: 'No relevant memories found.' + peerSuffix,
         }],
       };
     }
@@ -365,7 +371,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     return {
       content: [{
         type: 'text' as const,
-        text: lines.join('\n'),
+        text: lines.join('\n') + peerSuffix,
       }],
     };
   }
