@@ -12,7 +12,7 @@ import type { EngramStore } from '../storage/sqlite.js';
 import { randomUUID } from 'node:crypto';
 import {
   checkinSchema, checkoutSchema, pulseSchema, nextSchema,
-  assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema,
+  assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema, assignmentsListSchema,
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
   findingCreateSchema, findingsQuerySchema, findingIdParamSchema,
@@ -497,18 +497,43 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     return reply.send({ assignment });
   });
 
-  // List all non-completed assignments with priority and blocked_by status
+  // List assignments with optional filters and pagination
   app.get('/assignments', async (req, reply) => {
+    const q = assignmentsListSchema.parse(req.query);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (q.status) {
+      conditions.push('a.status = ?');
+      params.push(q.status);
+    }
+    if (q.workspace) {
+      conditions.push('(a.workspace = ? OR a.workspace IS NULL)');
+      params.push(q.workspace);
+    }
+    if (q.agent_id) {
+      conditions.push('a.agent_id = ?');
+      params.push(q.agent_id);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const total = (db.prepare(
+      `SELECT COUNT(*) AS count FROM coord_assignments a ${where}`
+    ).get(...params) as { count: number }).count;
+
     const assignments = db.prepare(
       `SELECT a.*, g.name AS agent_name,
               CASE WHEN a.blocked_by IS NOT NULL AND a.blocked_by NOT IN (SELECT id FROM coord_assignments WHERE status = 'completed')
                    THEN 1 ELSE 0 END AS is_blocked
        FROM coord_assignments a
        LEFT JOIN coord_agents g ON a.agent_id = g.id
-       WHERE a.status NOT IN ('completed', 'failed')
-       ORDER BY a.priority DESC, a.created_at ASC`
-    ).all();
-    return reply.send({ assignments });
+       ${where}
+       ORDER BY a.priority DESC, a.created_at DESC
+       LIMIT ? OFFSET ?`
+    ).all(...params, q.limit, q.offset);
+
+    return reply.send({ assignments, total });
   });
 
   app.post('/assignment/:id/update', async (req, reply) => {

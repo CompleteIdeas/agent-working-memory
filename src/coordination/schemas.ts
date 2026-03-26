@@ -66,6 +66,14 @@ export const assignmentClaimSchema = z.object({
   agentId: z.string().uuid(),
 });
 
+export const assignmentsListSchema = z.object({
+  status: assignmentStatusEnum.optional(),
+  workspace: z.string().max(50).optional(),
+  agent_id: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 export const assignmentUpdateSchema = z.object({
   status: assignmentStatusEnum,
   result: z.string().max(10000).optional(),
