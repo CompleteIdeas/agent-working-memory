@@ -122,19 +122,9 @@ async function main() {
   });
 
   // Coordination module (opt-in via AWM_COORDINATION=true)
-  let heartbeatPruneTimer: ReturnType<typeof setInterval> | null = null;
-  const { isCoordinationEnabled, initCoordination } = await import('./coordination/index.js');
+  const { isCoordinationEnabled, initCoordination, stopCoordinationCleanup } = await import('./coordination/index.js');
   if (isCoordinationEnabled()) {
     initCoordination(app, store.getDb(), store);
-    // Prune stale heartbeat events every 30s (keeps assignment/command events permanently)
-    // Purge dead agents older than 24h every 30s to prevent table bloat
-    const { pruneOldHeartbeats, purgeDeadAgents } = await import('./coordination/stale.js');
-    heartbeatPruneTimer = setInterval(() => {
-      const pruned = pruneOldHeartbeats(store.getDb());
-      if (pruned > 0) console.log(`[coordination] pruned ${pruned} old heartbeat event(s)`);
-      const purged = purgeDeadAgents(store.getDb());
-      if (purged > 0) console.log(`[coordination] purged ${purged} dead agent(s) older than 24h`);
-    }, 30_000);
   } else {
     console.log('  Coordination module disabled (set AWM_COORDINATION=true to enable)');
   }
@@ -191,7 +181,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = () => {
     clearInterval(backupTimer);
-    if (heartbeatPruneTimer) clearInterval(heartbeatPruneTimer);
+    stopCoordinationCleanup();
     consolidationScheduler.stop();
     stagingBuffer.stop();
     try { store.walCheckpoint(); } catch { /* non-fatal */ }

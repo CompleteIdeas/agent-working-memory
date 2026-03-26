@@ -11,9 +11,12 @@ import type { EngramStore } from '../storage/sqlite.js';
 import { ZodError } from 'zod';
 import { initCoordinationTables } from './schema.js';
 import { registerCoordinationRoutes } from './routes.js';
-import { cleanSlate } from './stale.js';
+import { cleanSlate, pruneOldHeartbeats, purgeDeadAgents } from './stale.js';
 
 export type * from './types.js';
+
+/** Active cleanup intervals — cleared on shutdown. */
+const cleanupIntervals: NodeJS.Timeout[] = [];
 
 /** Check if coordination is enabled via environment variable. */
 export function isCoordinationEnabled(): boolean {
@@ -46,5 +49,21 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
     });
   });
 
+  // Periodic cleanup: prune heartbeat events every 30 min, purge dead agents every hour
+  cleanupIntervals.push(
+    setInterval(() => {
+      try { pruneOldHeartbeats(db); } catch { /* db may be closed */ }
+    }, 30 * 60 * 1000),
+    setInterval(() => {
+      try { purgeDeadAgents(db, 24); } catch { /* db may be closed */ }
+    }, 60 * 60 * 1000),
+  );
+
   console.log('  Coordination module enabled');
+}
+
+/** Stop periodic cleanup intervals. Call on server shutdown. */
+export function stopCoordinationCleanup(): void {
+  for (const id of cleanupIntervals) clearInterval(id);
+  cleanupIntervals.length = 0;
 }
