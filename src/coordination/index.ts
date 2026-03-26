@@ -13,11 +13,21 @@ import { initCoordinationTables } from './schema.js';
 import { registerCoordinationRoutes } from './routes.js';
 import { cleanSlate, pruneOldHeartbeats, purgeDeadAgents } from './stale.js';
 import { createWriteMutex, needsWriteLock } from './write-mutex.js';
+import { createEventBus, type CoordinationEventBus } from './events.js';
 
 export type * from './types.js';
+export { type CoordinationEventBus, type CoordinationEvents } from './events.js';
 
 /** Active cleanup intervals — cleared on shutdown. */
 const cleanupIntervals: NodeJS.Timeout[] = [];
+
+/** Singleton event bus for this coordination module instance. */
+let coordinationEventBus: CoordinationEventBus | null = null;
+
+/** Get the coordination event bus (available after initCoordination). */
+export function getEventBus(): CoordinationEventBus | null {
+  return coordinationEventBus;
+}
 
 /** Check if coordination is enabled via environment variable. */
 export function isCoordinationEnabled(): boolean {
@@ -64,8 +74,11 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
     }
   });
 
+  // Create event bus for decoupled side-effects
+  coordinationEventBus = createEventBus();
+
   // Mount all coordination HTTP routes
-  registerCoordinationRoutes(app, db, store);
+  registerCoordinationRoutes(app, db, store, coordinationEventBus);
 
   // ZodError handler — coordination routes use .parse() which throws on invalid params
   app.setErrorHandler((error: Error & { statusCode?: number }, _request, reply) => {
