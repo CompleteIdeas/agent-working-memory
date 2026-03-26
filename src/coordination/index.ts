@@ -12,6 +12,7 @@ import { ZodError } from 'zod';
 import { initCoordinationTables } from './schema.js';
 import { registerCoordinationRoutes } from './routes.js';
 import { cleanSlate, pruneOldHeartbeats, purgeDeadAgents } from './stale.js';
+import { createWriteMutex, needsWriteLock } from './write-mutex.js';
 
 export type * from './types.js';
 
@@ -49,6 +50,17 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
   app.addHook('onRoute', (routeOptions) => {
     if (!routeOptions.bodyLimit) {
       routeOptions.bodyLimit = 50_000;
+    }
+  });
+
+  // Write serialization: serialize POST/PATCH/PUT/DELETE through a mutex
+  // to prevent SQLITE_BUSY under 5+ concurrent worker burst
+  const writeMutex = createWriteMutex();
+  app.addHook('preHandler', async (request, reply) => {
+    if (needsWriteLock(request.method, request.url)) {
+      const release = await writeMutex.acquire();
+      // Release after response is sent (onResponse fires after reply)
+      reply.raw.on('finish', release);
     }
   });
 
