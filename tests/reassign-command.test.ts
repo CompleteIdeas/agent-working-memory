@@ -313,3 +313,131 @@ describe('RESUME command', () => {
     expect(data.commands[0].command).toBe('PAUSE');
   });
 });
+
+// ─── Assignment status transitions ──────────────────────────────
+
+describe('assignment status transitions', () => {
+  it('allows assigned -> in_progress', async () => {
+    const agentId = await registerAgent('Trans-A');
+    const assignId = await createAssignment(agentId, 'Transition test');
+
+    const { status } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    expect(status).toBe(200);
+  });
+
+  it('allows assigned -> failed', async () => {
+    const agentId = await registerAgent('Trans-B');
+    const assignId = await createAssignment(agentId, 'Fail from assigned');
+
+    const { status } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'failed', result: 'Agent crashed before starting work on the task' },
+    });
+    expect(status).toBe(200);
+  });
+
+  it('allows in_progress -> completed', async () => {
+    const agentId = await registerAgent('Trans-C');
+    const assignId = await createAssignment(agentId, 'Complete test');
+
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+
+    const { status } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'completed', result: 'Implemented and tested the feature successfully' },
+    });
+    expect(status).toBe(200);
+  });
+
+  it('allows in_progress -> blocked', async () => {
+    const agentId = await registerAgent('Trans-D');
+    const assignId = await createAssignment(agentId, 'Block test');
+
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+
+    const { status } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'blocked' },
+    });
+    expect(status).toBe(200);
+  });
+
+  it('rejects assigned -> completed (must go through in_progress)', async () => {
+    const agentId = await registerAgent('Trans-E');
+    const assignId = await createAssignment(agentId, 'Skip in_progress');
+
+    const { status, data } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'completed', result: 'Implemented and tested the feature successfully' },
+    });
+    expect(status).toBe(400);
+    expect(data.error).toContain('invalid transition');
+  });
+
+  it('rejects completed -> in_progress', async () => {
+    const agentId = await registerAgent('Trans-F');
+    const assignId = await createAssignment(agentId, 'Reverse test');
+
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'completed', result: 'Implemented and tested the feature successfully' },
+    });
+
+    const { status, data } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    expect(status).toBe(400);
+    expect(data.error).toContain('cannot update completed');
+  });
+
+  it('rejects failed -> in_progress', async () => {
+    const agentId = await registerAgent('Trans-G');
+    const assignId = await createAssignment(agentId, 'Failed reverse');
+
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'failed', result: 'Agent disconnected and could not complete the work' },
+    });
+
+    const { status, data } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    expect(status).toBe(400);
+    expect(data.error).toContain('cannot update failed');
+  });
+
+  it('allows blocked -> in_progress (unblock)', async () => {
+    const agentId = await registerAgent('Trans-H');
+    const assignId = await createAssignment(agentId, 'Unblock test');
+
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'blocked' },
+    });
+
+    const { status } = await http(`/assignment/${assignId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    expect(status).toBe(200);
+  });
+});

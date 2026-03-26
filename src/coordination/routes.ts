@@ -481,7 +481,25 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     return reply.send({ ok: true, assignmentId: id });
   });
 
+  const VALID_TRANSITIONS: Record<string, string[]> = {
+    assigned: ['in_progress', 'failed'],
+    in_progress: ['completed', 'failed', 'blocked'],
+    blocked: ['in_progress', 'failed'],
+  };
+
   function handleAssignmentUpdate(id: string, status: string, result: string | undefined, commitSha: string | undefined): { error?: string } {
+    // Status transition validation
+    const current = db.prepare(`SELECT status FROM coord_assignments WHERE id = ?`).get(id) as { status: string } | undefined;
+    if (!current) return { error: 'assignment not found' };
+
+    const allowed = VALID_TRANSITIONS[current.status];
+    if (allowed && !allowed.includes(status)) {
+      return { error: `invalid transition: ${current.status} → ${status}. Valid: ${allowed.join(', ')}` };
+    }
+    if (!allowed && ['completed', 'failed'].includes(current.status)) {
+      return { error: `cannot update ${current.status} assignment` };
+    }
+
     // Verification gate: completed status requires structured proof of work
     if (status === 'completed') {
       if (!result || result.trim().length < 20) {
