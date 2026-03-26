@@ -155,6 +155,7 @@ export const pulseSchema = z.object({
 export const decisionsQuerySchema = z.object({
   since_id: z.coerce.number().int().min(0).default(0),
   assignment_id: z.string().max(100).optional(),
+  workspace: z.string().max(50).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(20),
 });
 

@@ -968,7 +968,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
   app.get('/decisions', async (req, reply) => {
     const q = decisionsQuerySchema.safeParse(req.query);
-    const { since_id, assignment_id, limit } = q.success ? q.data : { since_id: 0, assignment_id: undefined, limit: 20 };
+    const { since_id, assignment_id, workspace, limit } = q.success ? q.data : { since_id: 0, assignment_id: undefined, workspace: undefined, limit: 20 };
 
     let sql = `
       SELECT d.id, d.author_id, a.name AS author_name, d.assignment_id, d.tags, d.summary, d.created_at
@@ -980,6 +980,11 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     if (assignment_id) {
       sql += ` AND d.assignment_id = ?`;
       params.push(assignment_id);
+    }
+
+    if (workspace) {
+      sql += ` AND (a.workspace = ? OR a.workspace IS NULL)`;
+      params.push(workspace);
     }
 
     sql += ` ORDER BY d.created_at ASC LIMIT ?`;
