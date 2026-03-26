@@ -18,6 +18,7 @@ import {
   findingCreateSchema, findingsQuerySchema, findingIdParamSchema,
   decisionsQuerySchema, decisionCreateSchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
+  agentIdParamSchema,
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
 
@@ -1004,6 +1005,75 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const { stale, cleaned } = cleanupStale(db, threshold);
     return reply.send({ stale, threshold_seconds: threshold, cleaned });
+  });
+
+  // ─── Agent Management ───────────────────────────────────────────
+
+  app.get('/agent/:id', async (req, reply) => {
+    const params = agentIdParamSchema.safeParse(req.params);
+    if (!params.success) return reply.code(400).send({ error: params.error.issues[0].message });
+    const { id } = params.data;
+
+    const agent = db.prepare(
+      `SELECT id, name, role, status, current_task, pid, capabilities, workspace, metadata, last_seen, started_at,
+              ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
+       FROM coord_agents WHERE id = ?`
+    ).get(id) as Record<string, unknown> | undefined;
+
+    if (!agent) return reply.code(404).send({ error: 'agent not found' });
+
+    // Include active assignment and locks
+    const assignment = db.prepare(
+      `SELECT id, task, status, priority, created_at FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress') ORDER BY created_at DESC LIMIT 1`
+    ).get(id) as Record<string, unknown> | undefined;
+
+    const locks = db.prepare(
+      `SELECT file_path, locked_at, reason FROM coord_locks WHERE agent_id = ?`
+    ).all(id);
+
+    return reply.send({ agent, assignment: assignment ?? null, locks });
+  });
+
+  app.delete('/agent/:id', async (req, reply) => {
+    const params = agentIdParamSchema.safeParse(req.params);
+    if (!params.success) return reply.code(400).send({ error: params.error.issues[0].message });
+    const { id } = params.data;
+
+    const agent = db.prepare(`SELECT id, name, status FROM coord_agents WHERE id = ?`).get(id) as { id: string; name: string; status: string } | undefined;
+    if (!agent) return reply.code(404).send({ error: 'agent not found' });
+    if (agent.status === 'dead') return reply.send({ ok: true, action: 'already_dead', agent_name: agent.name });
+
+    // Fail active assignments
+    const failedAssignments = db.prepare(
+      `UPDATE coord_assignments SET status = 'failed', result = 'agent killed by coordinator', completed_at = datetime('now')
+       WHERE agent_id = ? AND status IN ('assigned', 'in_progress')`
+    ).run(id);
+
+    if (failedAssignments.changes > 0) {
+      db.prepare(
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_failed', ?)`
+      ).run(id, `killed: failed ${failedAssignments.changes} active assignment(s)`);
+    }
+
+    // Release locks
+    const releasedLocks = db.prepare(`DELETE FROM coord_locks WHERE agent_id = ?`).run(id);
+
+    // Mark dead
+    db.prepare(`UPDATE coord_agents SET status = 'dead', current_task = NULL WHERE id = ?`).run(id);
+
+    db.prepare(
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'agent_killed', ?)`
+    ).run(id, `${agent.name} killed: failed ${failedAssignments.changes} assignment(s), released ${releasedLocks.changes} lock(s)`);
+
+    coordLog(`${agent.name} killed — failed ${failedAssignments.changes} assignment(s), released ${releasedLocks.changes} lock(s)`);
+
+    return reply.send({
+      ok: true,
+      action: 'killed',
+      agent_name: agent.name,
+      failed_assignments: failedAssignments.changes,
+      released_locks: releasedLocks.changes,
+    });
   });
 
   // ─── Stats ──────────────────────────────────────────────────────

@@ -174,6 +174,10 @@ export const workersQuerySchema = z.object({
   workspace: z.string().max(50).optional(),
 });
 
+// ─── Agent Params ─────────────────────────────────────────
+
+export const agentIdParamSchema = z.object({ id: z.string().uuid() });
+
 // ─── Stats ─────────────────────────────────────────────────────
 
 export const statsResponseSchema = z.object({
