@@ -95,6 +95,16 @@ CREATE TABLE IF NOT EXISTS coord_decisions (
 CREATE INDEX IF NOT EXISTS idx_coord_decisions_assignment
   ON coord_decisions (assignment_id, created_at);
 
+-- Coordination: channel sessions (push-based coordination)
+CREATE TABLE IF NOT EXISTS coord_channel_sessions (
+  agent_id     TEXT PRIMARY KEY REFERENCES coord_agents(id),
+  channel_id   TEXT NOT NULL,
+  connected_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_push_at TEXT,
+  push_count   INTEGER NOT NULL DEFAULT 0,
+  status       TEXT NOT NULL DEFAULT 'connected'
+);
+
 -- Coordination: event audit trail
 CREATE TABLE IF NOT EXISTS coord_events (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,

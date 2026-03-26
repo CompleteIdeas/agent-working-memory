@@ -210,6 +210,22 @@ export interface FindingsResponse {
   stats: FindingSeverityCount[];
 }
 
+// ─── Channel Sessions ─────────────────────────────────────────
+
+export interface ChannelSession {
+  agent_id: string;
+  agent_name: string;
+  channel_id: string;
+  connected_at: string;
+  last_push_at: string | null;
+  push_count: number;
+  status: string;
+}
+
+export interface ChannelSessionsResponse {
+  sessions: ChannelSession[];
+}
+
 // ─── Status ────────────────────────────────────────────────────
 
 export interface StatusResponse {

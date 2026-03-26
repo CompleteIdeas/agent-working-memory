@@ -197,6 +197,17 @@ export const timelineQuerySchema = z.object({
   since: z.string().max(30).optional(),
 });
 
+// ─── Channel Sessions ──────────────────────────────────────────
+
+export const channelRegisterSchema = z.object({
+  agentId: z.string().uuid(),
+  channelId: z.string().min(1).max(200),
+});
+
+export const channelDeregisterSchema = z.object({
+  agentId: z.string().uuid(),
+});
+
 // ─── Stats ─────────────────────────────────────────────────────
 
 export const statsResponseSchema = z.object({

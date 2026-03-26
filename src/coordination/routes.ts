@@ -19,6 +19,7 @@ import {
   decisionsQuerySchema, decisionCreateSchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
   agentIdParamSchema, timelineQuerySchema,
+  channelRegisterSchema, channelDeregisterSchema,
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
 
@@ -1435,5 +1436,63 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       pending_tasks: pending,
       uptime_seconds: uptimeRow.s ?? 0,
     });
+  });
+
+  // ─── Channel Sessions ───────────────────────────────────────────
+
+  /** POST /channel/register — Register or update a channel session for an agent. */
+  app.post('/channel/register', async (request, reply) => {
+    const parsed = channelRegisterSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    const { agentId, channelId } = parsed.data;
+
+    const agent = db.prepare('SELECT id FROM coord_agents WHERE id = ?').get(agentId) as { id: string } | undefined;
+    if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+
+    db.prepare(`
+      INSERT INTO coord_channel_sessions (agent_id, channel_id, connected_at, status)
+      VALUES (?, ?, datetime('now'), 'connected')
+      ON CONFLICT(agent_id) DO UPDATE SET
+        channel_id = excluded.channel_id,
+        connected_at = datetime('now'),
+        status = 'connected',
+        push_count = 0,
+        last_push_at = NULL
+    `).run(agentId, channelId);
+
+    db.prepare(`INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'channel_register', ?)`).run(
+      agentId, JSON.stringify({ channelId })
+    );
+
+    coordLog(`channel/register: ${agentId} → ${channelId}`);
+    return reply.send({ ok: true });
+  });
+
+  /** DELETE /channel/register — Deregister a channel session for an agent. */
+  app.delete('/channel/register', async (request, reply) => {
+    const parsed = channelDeregisterSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    const { agentId } = parsed.data;
+
+    const result = db.prepare('DELETE FROM coord_channel_sessions WHERE agent_id = ?').run(agentId);
+
+    db.prepare(`INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'channel_deregister', NULL)`).run(agentId);
+
+    coordLog(`channel/deregister: ${agentId} (rows: ${result.changes})`);
+    return reply.send({ ok: true });
+  });
+
+  /** GET /channel/sessions — List all active channel sessions with agent names. */
+  app.get('/channel/sessions', async (_request, reply) => {
+    const sessions = db.prepare(`
+      SELECT cs.agent_id, a.name AS agent_name, cs.channel_id,
+             cs.connected_at, cs.last_push_at, cs.push_count, cs.status
+      FROM coord_channel_sessions cs
+      JOIN coord_agents a ON a.id = cs.agent_id
+      WHERE cs.status = 'connected'
+      ORDER BY cs.connected_at DESC
+    `).all();
+
+    return reply.send({ sessions });
   });
 }
