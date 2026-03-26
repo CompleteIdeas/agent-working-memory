@@ -738,7 +738,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const locks = db.prepare(
       `SELECT l.file_path, l.agent_id, a.name AS agent_name, l.locked_at, l.reason
        FROM coord_locks l JOIN coord_agents a ON l.agent_id = a.id
-       ORDER BY l.locked_at DESC`
+       ORDER BY l.locked_at DESC LIMIT 200`
     ).all();
 
     return reply.send({ locks });
@@ -1016,7 +1016,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `SELECT id, name, role, status, current_task, last_seen,
               ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
        FROM coord_agents WHERE status != 'dead'
-       ORDER BY role, name`
+       ORDER BY role, name LIMIT 200`
     ).all();
 
     const assignments = db.prepare(
@@ -1024,12 +1024,12 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
               a.created_at, a.started_at, a.completed_at
        FROM coord_assignments a LEFT JOIN coord_agents ag ON a.agent_id = ag.id
        WHERE a.status NOT IN ('completed', 'failed')
-       ORDER BY a.created_at`
+       ORDER BY a.created_at LIMIT 200`
     ).all();
 
     const locks = db.prepare(
       `SELECT l.file_path, l.agent_id, a.name AS agent_name, l.locked_at, l.reason
-       FROM coord_locks l JOIN coord_agents a ON l.agent_id = a.id`
+       FROM coord_locks l JOIN coord_agents a ON l.agent_id = a.id LIMIT 200`
     ).all();
 
     const stats = db.prepare(
@@ -1065,7 +1065,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
                   ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
            FROM coord_agents
            WHERE status != 'dead' AND role NOT IN ('orchestrator', 'coordinator') AND workspace = ?
-           ORDER BY name`
+           ORDER BY name LIMIT 200`
         ).all(workspace) as Array<{
           id: string; name: string; role: string; status: string;
           current_task: string | null; capabilities: string | null;
@@ -1076,7 +1076,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
                   ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
            FROM coord_agents
            WHERE status != 'dead' AND role NOT IN ('orchestrator', 'coordinator')
-           ORDER BY name`
+           ORDER BY name LIMIT 200`
         ).all() as Array<{
           id: string; name: string; role: string; status: string;
           current_task: string | null; capabilities: string | null;
