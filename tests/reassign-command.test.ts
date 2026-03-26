@@ -204,9 +204,10 @@ describe('POST /reassign', () => {
     const agentA = await registerAgent('UUID-404-Source');
     const assignId = await createAssignment(agentA, 'Bad UUID target');
 
+    // Use a valid UUID format that doesn't exist in coord_agents
     const { status, data } = await http('/reassign', {
       method: 'POST',
-      body: { assignmentId: assignId, targetAgentId: '00000000-0000-0000-0000-000000000099' },
+      body: { assignmentId: assignId, targetAgentId: 'a0000000-0000-4000-a000-000000000099' },
     });
     expect(status).toBe(404);
     expect(data.error).toContain('target agent not found');
