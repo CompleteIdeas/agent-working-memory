@@ -245,7 +245,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   app.post('/assign', async (req, reply) => {
     const parsed = assignCreateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    const { task, description, workspace, priority, blocked_by, worker_name } = parsed.data;
+    const { task, description, workspace, priority, blocked_by, worker_name, context } = parsed.data;
     let { agentId } = parsed.data;
 
     // Resolve worker_name → agentId if agentId not provided
@@ -283,8 +283,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null, agentId ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null);
+      `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace, started_at, context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null, agentId ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null, context ?? null);
 
     if (agentId) {
       db.prepare(

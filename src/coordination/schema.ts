@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS coord_assignments (
   result       TEXT,
   commit_sha   TEXT,
   workspace    TEXT,
+  context      TEXT,
   FOREIGN KEY (agent_id) REFERENCES coord_agents(id),
   FOREIGN KEY (blocked_by) REFERENCES coord_assignments(id)
 );
@@ -138,4 +139,5 @@ export function initCoordinationTables(db: Database.Database): void {
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN commit_sha TEXT`); } catch { /* exists */ }
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN blocked_by TEXT`); } catch { /* exists */ }
+  try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN context TEXT`); } catch { /* exists */ }
 }

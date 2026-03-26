@@ -46,6 +46,7 @@ export const assignCreateSchema = z.object({
   workspace: z.string().max(50).optional(),
   priority: z.number().int().min(0).max(10).default(0),
   blocked_by: z.string().uuid().optional(),
+  context: z.string().max(10000).optional(),
 });
 
 export const assignmentQuerySchema = z.object({
