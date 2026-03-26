@@ -144,16 +144,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId } = parsed.data;
 
-    db.prepare(`DELETE FROM coord_locks WHERE agent_id = ?`).run(agentId);
-    db.prepare(`DELETE FROM coord_channel_sessions WHERE agent_id = ?`).run(agentId);
-    db.prepare(
-      `UPDATE coord_agents SET status = 'dead', last_seen = datetime('now') WHERE id = ?`
-    ).run(agentId);
-    db.prepare(
-      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'checkout', 'agent signed off')`
-    ).run(agentId);
+    // Atomic transaction: delete locks + channel session + update agent + event
+    const checkoutTx = db.transaction(() => {
+      db.prepare(`DELETE FROM coord_locks WHERE agent_id = ?`).run(agentId);
+      db.prepare(`DELETE FROM coord_channel_sessions WHERE agent_id = ?`).run(agentId);
+      db.prepare(
+        `UPDATE coord_agents SET status = 'dead', last_seen = datetime('now') WHERE id = ?`
+      ).run(agentId);
+      db.prepare(
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'checkout', 'agent signed off')`
+      ).run(agentId);
+    });
+    checkoutTx();
 
-    // Look up agent name for logging
+    // Look up agent name for logging (outside tx — read-only)
     const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
     coordLog(`${agent?.name ?? agentId} checked out`);
     return reply.send({ ok: true });
@@ -328,21 +332,40 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     }
 
     const id = randomUUID();
-    db.prepare(
-      `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace, started_at, context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null, agentId ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null, context ?? null);
+    let pushed = false;
 
-    if (agentId) {
+    // Atomic transaction: assignment insert + agent status + event + channel push
+    const assignTx = db.transaction(() => {
       db.prepare(
-        `UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ?`
-      ).run(id, agentId);
-    }
+        `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace, started_at, context) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, agentId ?? null, task, description ?? null, agentId ? 'assigned' : 'pending', priority, blocked_by ?? null, workspace ?? null, agentId ? new Date().toISOString().replace('T', ' ').slice(0, 19) : null, context ?? null);
 
-    db.prepare(
-      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_created', ?)`
-    ).run(agentId ?? null, `task: ${task}`);
+      if (agentId) {
+        db.prepare(
+          `UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ?`
+        ).run(id, agentId);
+      }
 
-    // Bridge context to AWM engrams for cross-agent recall
+      db.prepare(
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_created', ?)`
+      ).run(agentId ?? null, `task: ${task}`);
+
+      // Push notification: if assigned agent has an active channel session, update push stats
+      if (agentId) {
+        const session = db.prepare(
+          `SELECT agent_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
+        ).get(agentId) as { agent_id: string } | undefined;
+        if (session) {
+          db.prepare(
+            `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
+          ).run(agentId);
+          pushed = true;
+        }
+      }
+    });
+    assignTx();
+
+    // Bridge context to AWM engrams (outside transaction — engram store has its own DB)
     if (store && context) {
       try {
         const ctx = JSON.parse(context) as Record<string, unknown>;
@@ -368,20 +391,6 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
         }
       } catch {
         // Context is not valid JSON — skip engram bridge silently
-      }
-    }
-
-    // Push notification: if assigned agent has an active channel session, update push stats
-    let pushed = false;
-    if (agentId) {
-      const session = db.prepare(
-        `SELECT agent_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
-      ).get(agentId) as { agent_id: string } | undefined;
-      if (session) {
-        db.prepare(
-          `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
-        ).run(agentId);
-        pushed = true;
       }
     }
 
@@ -528,33 +537,37 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       }
     }
 
-    if (['completed', 'failed'].includes(status)) {
-      db.prepare(
-        `UPDATE coord_assignments SET status = ?, result = ?, commit_sha = ?, completed_at = datetime('now') WHERE id = ?`
-      ).run(status, result ?? null, commitSha ?? null, id);
-    } else {
-      db.prepare(
-        `UPDATE coord_assignments SET status = ?, result = ? WHERE id = ?`
-      ).run(status, result ?? null, id);
-    }
-
-    if (['completed', 'failed'].includes(status)) {
-      const assignment = db.prepare(`SELECT agent_id FROM coord_assignments WHERE id = ?`).get(id) as { agent_id: string } | undefined;
-      if (assignment?.agent_id) {
+    // Atomic transaction: assignment update + agent status + event
+    const updateTx = db.transaction(() => {
+      if (['completed', 'failed'].includes(status)) {
         db.prepare(
-          `UPDATE coord_agents SET status = 'idle', current_task = NULL WHERE id = ?`
-        ).run(assignment.agent_id);
+          `UPDATE coord_assignments SET status = ?, result = ?, commit_sha = ?, completed_at = datetime('now') WHERE id = ?`
+        ).run(status, result ?? null, commitSha ?? null, id);
+      } else {
+        db.prepare(
+          `UPDATE coord_assignments SET status = ?, result = ? WHERE id = ?`
+        ).run(status, result ?? null, id);
       }
-    }
 
-    const eventDetail = ['completed', 'failed'].includes(status)
-      ? `${id} → ${status}${commitSha ? ' [' + commitSha + ']' : ''}: ${(result ?? '').slice(0, 300)}`
-      : `${id} → ${status}`;
-    db.prepare(
-      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES ((SELECT agent_id FROM coord_assignments WHERE id = ?), 'assignment_update', ?)`
-    ).run(id, eventDetail);
+      if (['completed', 'failed'].includes(status)) {
+        const assignment = db.prepare(`SELECT agent_id FROM coord_assignments WHERE id = ?`).get(id) as { agent_id: string } | undefined;
+        if (assignment?.agent_id) {
+          db.prepare(
+            `UPDATE coord_agents SET status = 'idle', current_task = NULL WHERE id = ?`
+          ).run(assignment.agent_id);
+        }
+      }
 
-    // Log completion/failure with agent name and task
+      const eventDetail = ['completed', 'failed'].includes(status)
+        ? `${id} → ${status}${commitSha ? ' [' + commitSha + ']' : ''}: ${(result ?? '').slice(0, 300)}`
+        : `${id} → ${status}`;
+      db.prepare(
+        `INSERT INTO coord_events (agent_id, event_type, detail) VALUES ((SELECT agent_id FROM coord_assignments WHERE id = ?), 'assignment_update', ?)`
+      ).run(id, eventDetail);
+    });
+    updateTx();
+
+    // Log completion/failure with agent name and task (outside tx — read-only)
     if (['completed', 'failed'].includes(status)) {
       const info = db.prepare(
         `SELECT a.task, g.name AS agent_name FROM coord_assignments a LEFT JOIN coord_agents g ON a.agent_id = g.id WHERE a.id = ?`
