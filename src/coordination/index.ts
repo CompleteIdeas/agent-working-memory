@@ -7,6 +7,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
+import type { EngramStore } from '../storage/sqlite.js';
 import { ZodError } from 'zod';
 import { initCoordinationTables } from './schema.js';
 import { registerCoordinationRoutes } from './routes.js';
@@ -19,7 +20,7 @@ export function isCoordinationEnabled(): boolean {
 }
 
 /** Initialize the coordination module: create tables, clean slate, mount routes, error handler. */
-export function initCoordination(app: FastifyInstance, db: Database.Database): void {
+export function initCoordination(app: FastifyInstance, db: Database.Database, store?: EngramStore): void {
   // Create coordination tables (idempotent)
   initCoordinationTables(db);
 
@@ -27,7 +28,7 @@ export function initCoordination(app: FastifyInstance, db: Database.Database): v
   cleanSlate(db);
 
   // Mount all coordination HTTP routes
-  registerCoordinationRoutes(app, db);
+  registerCoordinationRoutes(app, db, store);
 
   // ZodError handler — coordination routes use .parse() which throws on invalid params
   app.setErrorHandler((error: Error & { statusCode?: number }, _request, reply) => {

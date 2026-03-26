@@ -8,6 +8,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import type Database from 'better-sqlite3';
+import type { EngramStore } from '../storage/sqlite.js';
 import { randomUUID } from 'node:crypto';
 import {
   checkinSchema, checkoutSchema, pulseSchema, nextSchema,
@@ -30,7 +31,7 @@ function coordLog(msg: string): void {
   console.log(`${ts()} [coord] ${msg}`);
 }
 
-export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Database): void {
+export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Database, store?: EngramStore): void {
 
   // Log errors and non-200 responses
   app.addHook('onResponse', async (request, reply) => {
@@ -295,6 +296,35 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     db.prepare(
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_created', ?)`
     ).run(agentId ?? null, `task: ${task}`);
+
+    // Bridge context to AWM engrams for cross-agent recall
+    if (store && context) {
+      try {
+        const ctx = JSON.parse(context) as Record<string, unknown>;
+        const parts: string[] = [];
+        if (ctx.files) parts.push(`Files: ${JSON.stringify(ctx.files)}`);
+        if (ctx.references) parts.push(`References: ${JSON.stringify(ctx.references)}`);
+        if (ctx.decisions) parts.push(`Decisions: ${JSON.stringify(ctx.decisions)}`);
+        if (ctx.acceptance_criteria) parts.push(`Acceptance criteria: ${JSON.stringify(ctx.acceptance_criteria)}`);
+        // Include any remaining keys
+        for (const [k, v] of Object.entries(ctx)) {
+          if (!['files', 'references', 'decisions', 'acceptance_criteria'].includes(k) && v) {
+            parts.push(`${k}: ${JSON.stringify(v)}`);
+          }
+        }
+        if (parts.length > 0) {
+          store.createEngram({
+            agentId: agentId ?? 'coordinator',
+            concept: `Task context: ${task.slice(0, 80)}`,
+            content: parts.join('\n'),
+            tags: ['shared', 'context', `task/${id}`],
+            memoryClass: 'canonical',
+          });
+        }
+      } catch {
+        // Context is not valid JSON — skip engram bridge silently
+      }
+    }
 
     // Log assignment with agent name
     if (agentId) {

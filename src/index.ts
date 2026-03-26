@@ -125,7 +125,7 @@ async function main() {
   let heartbeatPruneTimer: ReturnType<typeof setInterval> | null = null;
   const { isCoordinationEnabled, initCoordination } = await import('./coordination/index.js');
   if (isCoordinationEnabled()) {
-    initCoordination(app, store.getDb());
+    initCoordination(app, store.getDb(), store);
     // Prune stale heartbeat events every 30s (keeps assignment/command events permanently)
     // Purge dead agents older than 24h every 30s to prevent table bloat
     const { pruneOldHeartbeats, purgeDeadAgents } = await import('./coordination/stale.js');
