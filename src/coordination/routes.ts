@@ -34,10 +34,16 @@ function coordLog(msg: string): void {
 
 export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Database, store?: EngramStore): void {
 
-  // Log errors and non-200 responses
+  // Request logging — one line per request with method, url, status, response time
+  app.addHook('onRequest', async (request) => {
+    (request as any)._startTime = Date.now();
+  });
   app.addHook('onResponse', async (request, reply) => {
-    if (reply.statusCode >= 400) {
-      coordLog(`${request.method} ${request.url} → ${reply.statusCode}`);
+    const ms = Date.now() - ((request as any)._startTime ?? Date.now());
+    // Skip noisy polling endpoints at 2xx to reduce log spam
+    const isPolling = (request.url === '/next' || request.url === '/pulse' || request.url === '/health') && reply.statusCode < 300;
+    if (!isPolling) {
+      coordLog(`${request.method} ${request.url} ${reply.statusCode} ${ms}ms`);
     }
   });
 
