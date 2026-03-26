@@ -200,6 +200,18 @@ describe('POST /reassign', () => {
     expect(status).toBe(404);
   });
 
+  it('returns 404 for non-existent targetAgentId', async () => {
+    const agentA = await registerAgent('UUID-404-Source');
+    const assignId = await createAssignment(agentA, 'Bad UUID target');
+
+    const { status, data } = await http('/reassign', {
+      method: 'POST',
+      body: { assignmentId: assignId, targetAgentId: '00000000-0000-0000-0000-000000000099' },
+    });
+    expect(status).toBe(404);
+    expect(data.error).toContain('target agent not found');
+  });
+
   it('records a reassignment event', async () => {
     const agentA = await registerAgent('Event-Source');
     const agentB = await registerAgent('Event-Target');

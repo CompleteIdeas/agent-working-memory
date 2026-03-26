@@ -621,6 +621,12 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       targetAgentId = found.id;
     }
 
+    // Verify targetAgentId exists
+    if (targetAgentId) {
+      const target = db.prepare(`SELECT id FROM coord_agents WHERE id = ?`).get(targetAgentId) as { id: string } | undefined;
+      if (!target) return reply.code(404).send({ error: 'target agent not found' });
+    }
+
     // Release old agent: set idle, clear current_task, release locks
     if (assignment.agent_id) {
       db.prepare(
