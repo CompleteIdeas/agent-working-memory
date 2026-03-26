@@ -869,15 +869,38 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
   app.get('/events', async (req, reply) => {
     const q = eventsQuerySchema.safeParse(req.query);
-    const limit = q.success ? q.data.limit : 50;
+    if (!q.success) return reply.code(400).send({ error: q.error.issues[0].message });
+    const { since_id, agent_id, event_type, limit } = q.data;
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (since_id > 0) {
+      conditions.push('e.id > ?');
+      params.push(since_id);
+    }
+    if (agent_id) {
+      conditions.push('e.agent_id = ?');
+      params.push(agent_id);
+    }
+    if (event_type) {
+      conditions.push('e.event_type = ?');
+      params.push(event_type);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(limit);
 
     const events = db.prepare(
       `SELECT e.id, e.agent_id, a.name AS agent_name, e.event_type, e.detail, e.created_at
        FROM coord_events e LEFT JOIN coord_agents a ON e.agent_id = a.id
-       ORDER BY e.created_at DESC LIMIT ?`
-    ).all(limit);
+       ${where}
+       ORDER BY e.id ASC LIMIT ?`
+    ).all(...params);
 
-    return reply.send({ events });
+    const last_id = events.length > 0 ? (events[events.length - 1] as { id: number }).id : since_id;
+
+    return reply.send({ events, last_id });
   });
 
   app.get('/stale', async (req, reply) => {

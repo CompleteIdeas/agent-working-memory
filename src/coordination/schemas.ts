@@ -141,6 +141,9 @@ export const decisionsQuerySchema = z.object({
 // ─── Status / Events ────────────────────────────────────────────
 
 export const eventsQuerySchema = z.object({
+  since_id: z.coerce.number().int().min(0).default(0),
+  agent_id: z.string().uuid().optional(),
+  event_type: z.string().max(50).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
