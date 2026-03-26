@@ -189,6 +189,13 @@ export const workersQuerySchema = z.object({
 
 export const agentIdParamSchema = z.object({ id: z.string().uuid() });
 
+// ─── Timeline ─────────────────────────────────────────────
+
+export const timelineQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  since: z.string().max(30).optional(),
+});
+
 // ─── Stats ─────────────────────────────────────────────────────
 
 export const statsResponseSchema = z.object({

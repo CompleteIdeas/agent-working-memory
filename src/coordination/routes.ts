@@ -18,7 +18,7 @@ import {
   findingCreateSchema, findingsQuerySchema, findingIdParamSchema, findingUpdateSchema,
   decisionsQuerySchema, decisionCreateSchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
-  agentIdParamSchema,
+  agentIdParamSchema, timelineQuerySchema,
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
 
@@ -1181,6 +1181,38 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       failed_assignments: failedAssignments.changes,
       released_locks: releasedLocks.changes,
     });
+  });
+
+  // ─── Timeline ─────────────────────────────────────────────────────
+
+  app.get('/timeline', async (req, reply) => {
+    const q = timelineQuerySchema.safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: q.error.issues[0].message });
+    const { limit, since } = q.data;
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (since) {
+      conditions.push('e.created_at >= ?');
+      params.push(since);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(limit);
+
+    const timeline = db.prepare(
+      `SELECT e.created_at AS timestamp, a.name AS agent_name, e.event_type, e.detail,
+              t.task AS assignment_task
+       FROM coord_events e
+       LEFT JOIN coord_agents a ON e.agent_id = a.id
+       LEFT JOIN coord_assignments t ON a.current_task = t.id
+       ${where}
+       ORDER BY e.created_at DESC, e.id DESC
+       LIMIT ?`
+    ).all(...params);
+
+    return reply.send({ timeline });
   });
 
   // ─── Stats ──────────────────────────────────────────────────────
