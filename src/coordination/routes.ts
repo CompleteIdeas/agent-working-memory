@@ -19,7 +19,7 @@ import {
   decisionsQuerySchema, decisionCreateSchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
   agentIdParamSchema, timelineQuerySchema,
-  channelRegisterSchema, channelDeregisterSchema,
+  channelRegisterSchema, channelDeregisterSchema, channelPushSchema,
 } from './schemas.js';
 import { detectStale, cleanupStale } from './stale.js';
 
@@ -145,6 +145,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const { agentId } = parsed.data;
 
     db.prepare(`DELETE FROM coord_locks WHERE agent_id = ?`).run(agentId);
+    db.prepare(`DELETE FROM coord_channel_sessions WHERE agent_id = ?`).run(agentId);
     db.prepare(
       `UPDATE coord_agents SET status = 'dead', last_seen = datetime('now') WHERE id = ?`
     ).run(agentId);
@@ -370,14 +371,28 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       }
     }
 
+    // Push notification: if assigned agent has an active channel session, update push stats
+    let pushed = false;
+    if (agentId) {
+      const session = db.prepare(
+        `SELECT agent_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
+      ).get(agentId) as { agent_id: string } | undefined;
+      if (session) {
+        db.prepare(
+          `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
+        ).run(agentId);
+        pushed = true;
+      }
+    }
+
     // Log assignment with agent name
     if (agentId) {
       const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
-      coordLog(`assigned → ${agent?.name ?? 'unknown'}: ${task.slice(0, 80)}`);
+      coordLog(`assigned → ${agent?.name ?? 'unknown'}: ${task.slice(0, 80)}${pushed ? ' (push)' : ''}`);
     } else {
       coordLog(`assignment queued (pending): ${task.slice(0, 80)}`);
     }
-    return reply.code(201).send({ assignmentId: id, status: agentId ? 'assigned' : 'pending' });
+    return reply.code(201).send({ assignmentId: id, status: agentId ? 'assigned' : 'pending', pushed });
   });
 
   app.get('/assignment', async (req, reply) => {
@@ -1480,6 +1495,30 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     coordLog(`channel/deregister: ${agentId} (rows: ${result.changes})`);
     return reply.send({ ok: true });
+  });
+
+  /** POST /channel/push — Push a message to an agent's channel session. */
+  app.post('/channel/push', async (request, reply) => {
+    const parsed = channelPushSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
+    const { agentId, message } = parsed.data;
+
+    const session = db.prepare(
+      `SELECT agent_id, channel_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
+    ).get(agentId) as { agent_id: string; channel_id: string } | undefined;
+    if (!session) return reply.status(404).send({ error: 'No active channel session for agent' });
+
+    db.prepare(
+      `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
+    ).run(agentId);
+
+    db.prepare(
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'channel_push', ?)`
+    ).run(agentId, message.slice(0, 500));
+
+    const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
+    coordLog(`channel/push → ${agent?.name ?? agentId}: ${message.slice(0, 80)}`);
+    return reply.send({ ok: true, channelId: session.channel_id });
   });
 
   /** GET /channel/sessions — List all active channel sessions with agent names. */

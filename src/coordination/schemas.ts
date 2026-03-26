@@ -208,6 +208,11 @@ export const channelDeregisterSchema = z.object({
   agentId: z.string().uuid(),
 });
 
+export const channelPushSchema = z.object({
+  agentId: z.string().uuid(),
+  message: z.string().min(1).max(10000),
+});
+
 // ─── Stats ─────────────────────────────────────────────────────
 
 export const statsResponseSchema = z.object({
