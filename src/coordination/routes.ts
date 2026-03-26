@@ -1332,6 +1332,68 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     });
   });
 
+  // ─── Prometheus Metrics ────────────────────────────────────────
+
+  app.get('/metrics', async (_req, reply) => {
+    const agentsByStatus = db.prepare(
+      `SELECT status, COUNT(*) AS count FROM coord_agents GROUP BY status`
+    ).all() as Array<{ status: string; count: number }>;
+
+    const assignmentsByStatus = db.prepare(
+      `SELECT status, COUNT(*) AS count FROM coord_assignments GROUP BY status`
+    ).all() as Array<{ status: string; count: number }>;
+
+    const locksActive = (db.prepare(
+      `SELECT COUNT(*) AS count FROM coord_locks`
+    ).get() as { count: number }).count;
+
+    const findingsBySeverity = db.prepare(
+      `SELECT severity, COUNT(*) AS count FROM coord_findings WHERE status = 'open' GROUP BY severity`
+    ).all() as Array<{ severity: string; count: number }>;
+
+    const eventsTotal = (db.prepare(
+      `SELECT COUNT(*) AS count FROM coord_events`
+    ).get() as { count: number }).count;
+
+    const uptime = (db.prepare(
+      `SELECT ROUND((julianday('now') - julianday(MIN(started_at))) * 86400) AS seconds FROM coord_agents WHERE status != 'dead'`
+    ).get() as { seconds: number | null }).seconds ?? 0;
+
+    const lines: string[] = [
+      '# HELP coord_agents_total Number of agents by status',
+      '# TYPE coord_agents_total gauge',
+    ];
+    for (const row of agentsByStatus) {
+      lines.push(`coord_agents_total{status="${row.status}"} ${row.count}`);
+    }
+
+    lines.push('# HELP coord_assignments_total Number of assignments by status');
+    lines.push('# TYPE coord_assignments_total gauge');
+    for (const row of assignmentsByStatus) {
+      lines.push(`coord_assignments_total{status="${row.status}"} ${row.count}`);
+    }
+
+    lines.push('# HELP coord_locks_active Number of active file locks');
+    lines.push('# TYPE coord_locks_active gauge');
+    lines.push(`coord_locks_active ${locksActive}`);
+
+    lines.push('# HELP coord_findings_total Open findings by severity');
+    lines.push('# TYPE coord_findings_total gauge');
+    for (const row of findingsBySeverity) {
+      lines.push(`coord_findings_total{severity="${row.severity}"} ${row.count}`);
+    }
+
+    lines.push('# HELP coord_events_total Total coordination events');
+    lines.push('# TYPE coord_events_total counter');
+    lines.push(`coord_events_total ${eventsTotal}`);
+
+    lines.push('# HELP coord_uptime_seconds Seconds since first agent registered');
+    lines.push('# TYPE coord_uptime_seconds gauge');
+    lines.push(`coord_uptime_seconds ${uptime}`);
+
+    return reply.type('text/plain; version=0.0.4; charset=utf-8').send(lines.join('\n') + '\n');
+  });
+
   // ─── Deep Health ───────────────────────────────────────────────
 
   app.get('/health/deep', async (_req, reply) => {
