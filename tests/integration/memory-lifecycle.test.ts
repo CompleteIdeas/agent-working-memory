@@ -9,8 +9,10 @@ import { EvalEngine } from '../../src/engine/eval.js';
 import { evaluateSalience } from '../../src/core/salience.js';
 import { DEFAULT_AGENT_CONFIG } from '../../src/types/agent.js';
 import { unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const TEST_DB = 'test-lifecycle.db';
+const TEST_DB = join(tmpdir(), `awm-lifecycle-${Date.now()}.db`);
 const AGENT_ID = 'test-agent-001';
 
 let store: EngramStore;

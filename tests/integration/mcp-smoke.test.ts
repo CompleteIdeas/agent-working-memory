@@ -31,8 +31,10 @@ import { evaluateSalience } from '../../src/core/salience.js';
 import { DEFAULT_AGENT_CONFIG } from '../../src/types/agent.js';
 import type { ConsciousState } from '../../src/types/checkpoint.js';
 import { unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const TEST_DB = 'test-mcp-smoke.db';
+const TEST_DB = join(tmpdir(), `awm-mcp-smoke-${Date.now()}.db`);
 const AGENT_ID = 'mcp-smoke-agent';
 
 let store: EngramStore;

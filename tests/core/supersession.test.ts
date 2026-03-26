@@ -16,8 +16,10 @@ import { ActivationEngine } from '../../src/engine/activation.js';
 import { evaluateSalience, computeNovelty } from '../../src/core/salience.js';
 import { randomUUID } from 'node:crypto';
 import { unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const TEST_DB = `test-supersession-${randomUUID()}.db`;
+const TEST_DB = join(tmpdir(), `awm-supersession-${Date.now()}.db`);
 const AGENT_ID = 'test-agent';
 
 let store: EngramStore;
