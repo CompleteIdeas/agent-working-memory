@@ -1454,6 +1454,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
        FROM coord_agents WHERE status != 'dead'`
     ).get() as { s: number | null };
 
+    // WAL file size and autocheckpoint setting
+    let walSizeBytes: number | null = null;
+    let walAutocheckpoint: number | null = null;
+    try {
+      const fs = require('fs');
+      const walPath = db.name + '-wal';
+      const stat = fs.statSync(walPath);
+      walSizeBytes = stat.size;
+    } catch { /* WAL file may not exist */ }
+    try {
+      const acRow = db.pragma('wal_autocheckpoint') as Array<{ wal_autocheckpoint: number }>;
+      walAutocheckpoint = acRow[0]?.wal_autocheckpoint ?? null;
+    } catch { /* pragma read failed */ }
+
     const status = (!dbHealthy || staleCount > 2) ? 'degraded' : 'ok';
 
     return reply.send({
@@ -1463,6 +1477,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       stale_agents: staleCount,
       pending_tasks: pending,
       uptime_seconds: uptimeRow.s ?? 0,
+      wal_size_bytes: walSizeBytes,
+      wal_autocheckpoint: walAutocheckpoint,
     });
   });
 
