@@ -360,7 +360,6 @@ describe('cleanSlate', () => {
   });
 
   it('clears active commands when live agents exist', () => {
-    // cleanSlate only clears commands when there are live agents to process
     insertAgent('Slate-Cmd', 'idle', '0 seconds');
     db.prepare(
       `INSERT INTO coord_commands (command, reason) VALUES ('BUILD_FREEZE', 'test')`
@@ -374,13 +373,26 @@ describe('cleanSlate', () => {
     expect(active).toBe(0);
   });
 
-  it('does nothing when no live agents exist', () => {
-    const deadId = insertAgent('Already-Dead', 'dead', '0 seconds');
+  it('clears commands even when no live agents exist', () => {
+    insertAgent('Already-Dead', 'dead', '0 seconds');
+    db.prepare(
+      `INSERT INTO coord_commands (command, reason) VALUES ('BUILD_FREEZE', 'orphaned')`
+    ).run();
 
-    // Should not throw
     cleanSlate(db);
 
-    // Dead agent unchanged
+    // Commands should still be cleared (fix: command clearing runs before early return)
+    const active = (db.prepare(
+      `SELECT COUNT(*) as c FROM coord_commands WHERE cleared_at IS NULL`
+    ).get() as any).c;
+    expect(active).toBe(0);
+  });
+
+  it('does nothing to agents when no live agents exist', () => {
+    const deadId = insertAgent('Already-Dead2', 'dead', '0 seconds');
+
+    cleanSlate(db);
+
     expect(agentRow(deadId).status).toBe('dead');
   });
 

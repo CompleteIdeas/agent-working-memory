@@ -398,3 +398,50 @@ describe('GET /stats', () => {
     expect(data.tasks.avg_completion_seconds).toBeNull();
   });
 });
+
+// ─── Multi-assign guard ─────────────────────────────────────────
+
+describe('POST /assign — multi-assign guard', () => {
+  it('rejects assigning to agent with active assignment (409)', async () => {
+    const agentId = await registerAgent('Busy-Worker');
+
+    // First assignment succeeds
+    const { status: s1 } = await http('/assign', {
+      method: 'POST',
+      body: { agentId, task: 'First task' },
+    });
+    expect(s1).toBe(201);
+
+    // Second assignment to same agent should be rejected
+    const { status: s2, data } = await http('/assign', {
+      method: 'POST',
+      body: { agentId, task: 'Second task' },
+    });
+    expect(s2).toBe(409);
+    expect(data.error).toContain('active assignment');
+  });
+
+  it('allows assigning after previous task is completed', async () => {
+    const agentId = await registerAgent('Sequential-Worker');
+
+    const { data: d1 } = await http('/assign', {
+      method: 'POST',
+      body: { agentId, task: 'Task one' },
+    });
+    await http(`/assignment/${d1.assignmentId}`, {
+      method: 'PATCH',
+      body: { status: 'in_progress' },
+    });
+    await http(`/assignment/${d1.assignmentId}`, {
+      method: 'PATCH',
+      body: { status: 'completed', result: 'Implemented and verified the feature successfully' },
+    });
+
+    // Now should accept new assignment
+    const { status } = await http('/assign', {
+      method: 'POST',
+      body: { agentId, task: 'Task two' },
+    });
+    expect(status).toBe(201);
+  });
+});
