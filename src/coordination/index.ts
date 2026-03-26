@@ -14,9 +14,11 @@ import { registerCoordinationRoutes } from './routes.js';
 import { cleanSlate, pruneOldHeartbeats, purgeDeadAgents } from './stale.js';
 import { createWriteMutex, needsWriteLock } from './write-mutex.js';
 import { createEventBus, type CoordinationEventBus } from './events.js';
+import { loadPlugins, teardownPlugins } from './plugin-loader.js';
 
 export type * from './types.js';
 export { type CoordinationEventBus, type CoordinationEvents } from './events.js';
+export type { AWMPlugin, AWMPluginContext } from './plugin.js';
 
 /** Active cleanup intervals — cleared on shutdown. */
 const cleanupIntervals: NodeJS.Timeout[] = [];
@@ -104,11 +106,17 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
     }, 60 * 60 * 1000),
   );
 
+  // Load plugins (async — fire and forget, errors logged per-plugin)
+  loadPlugins({ events: coordinationEventBus, db, fastify: app }).catch((err) => {
+    console.error('  [plugin] Plugin loader error:', (err as Error).message);
+  });
+
   console.log('  Coordination module enabled');
 }
 
-/** Stop periodic cleanup intervals. Call on server shutdown. */
-export function stopCoordinationCleanup(): void {
+/** Stop periodic cleanup intervals and teardown plugins. Call on server shutdown. */
+export async function stopCoordinationCleanup(): Promise<void> {
   for (const id of cleanupIntervals) clearInterval(id);
   cleanupIntervals.length = 0;
+  await teardownPlugins();
 }

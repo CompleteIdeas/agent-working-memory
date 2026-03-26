@@ -179,9 +179,9 @@ async function main() {
   console.log(`AgentWorkingMemory v0.6.0 listening on port ${PORT}`);
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     clearInterval(backupTimer);
-    stopCoordinationCleanup();
+    await stopCoordinationCleanup();
     consolidationScheduler.stop();
     stagingBuffer.stop();
     try { store.walCheckpoint(); } catch { /* non-fatal */ }
