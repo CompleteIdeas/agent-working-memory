@@ -1,5 +1,40 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **POST /decisions** — Explicit decision creation endpoint (previously only via memory_write hook).
+- **POST /reassign** — Move assignments between workers or return to pending.
+- **GET /assignments** — Paginated listing with status/workspace/agent_id filters and total count.
+- **DELETE /command/:id** — Clear individual commands by ID.
+- **GET /metrics** — Prometheus exposition format metrics (agents, assignments, locks, findings, events, uptime).
+- **GET /timeline** — Unified activity feed combining events and decisions.
+- **GET /agent/:id** — Individual agent details with active assignment and locks.
+- **DELETE /agent/:id** — Kill an agent and fail its assignments.
+- **GET /health/deep** — DB integrity and agent health check.
+- **PATCH /finding/:id** — Update finding status/severity/suggestion.
+- **Context field** — `context` TEXT column on `coord_assignments` for structured task references (files, decisions, acceptance criteria).
+- **Engram bridge** — POST /assign with valid context JSON auto-creates canonical engrams for cross-agent recall.
+- **Request logging** — All requests logged with method, URL, status code, and response time. Noisy polling endpoints suppressed at 2xx.
+- **Rate limiting** — 60 requests/minute per agent (sliding window). /health exempt.
+- **Workspace isolation** — GET /decisions now filters by workspace.
+- **API docs** — `docs/coordination-api.md` with all 38 endpoints.
+- **Tests** — context-bridge (4), concurrency (3), assignments (11), error-handling (18), reassign/command tests.
+
+### Fixed
+- **started_at on direct assign** — POST /assign now sets `started_at` when agentId is provided, fixing avg_completion_seconds.
+- **Stats null handling** — COALESCE on decisions.last_hour, Math.round on avg_completion_seconds.
+- **Multi-assign guard** — POST /assign rejects if agent already has active assignment (409).
+- **cleanSlate order** — Fixed initialization ordering in coordination startup.
+- **Unbounded queries** — LIMIT 200 added to GET /status, /workers, /locks.
+- **Assignment list status enum** — Expanded to include `pending` and `assigned` (was missing from query schema).
+- **Legacy test file** — Removed empty coordination.test.ts that caused vitest "no suite found" failure.
+
+### Security
+- **Rate limiting** — Per-agent 60 req/min sliding window prevents runaway polling.
+- **Query limits** — All list endpoints capped at LIMIT 200.
+- **Assignment status validation** — State transition validation on PATCH (e.g., cannot go from completed to in_progress).
+
 ## 0.6.0 (2026-03-25)
 
 ### New Features
