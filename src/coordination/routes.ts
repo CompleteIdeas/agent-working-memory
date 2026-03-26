@@ -271,6 +271,16 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       agentId = found.id;
     }
 
+    // Reject if agent already has an active assignment
+    if (agentId) {
+      const active = db.prepare(
+        `SELECT id, task FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress') LIMIT 1`
+      ).get(agentId) as { id: string; task: string } | undefined;
+      if (active) {
+        return reply.code(409).send({ error: `agent already has active assignment: ${active.id}`, active_task: active.task });
+      }
+    }
+
     const id = randomUUID();
     db.prepare(
       `INSERT INTO coord_assignments (id, agent_id, task, description, status, priority, blocked_by, workspace, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -969,8 +979,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const decisions = db.prepare(`
       SELECT
-        COUNT(*)                                                              AS total,
-        SUM(CASE WHEN created_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) AS last_hour
+        COALESCE(COUNT(*), 0)                                                              AS total,
+        COALESCE(SUM(CASE WHEN created_at >= datetime('now', '-1 hour') THEN 1 ELSE 0 END), 0) AS last_hour
       FROM coord_decisions
     `).get() as { total: number; last_hour: number };
 

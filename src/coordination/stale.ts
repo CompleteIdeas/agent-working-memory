@@ -80,6 +80,9 @@ export function purgeDeadAgents(db: Database.Database, maxAgeHours = 24): number
 
 /** Clean slate on startup: mark all live agents dead, release locks, clear commands. */
 export function cleanSlate(db: Database.Database): void {
+  // Always clear commands, even if no alive agents remain
+  db.prepare(`UPDATE coord_commands SET cleared_at = datetime('now') WHERE cleared_at IS NULL`).run();
+
   const alive = db.prepare(
     `SELECT id, name FROM coord_agents WHERE status != 'dead'`
   ).all() as Array<{ id: string; name: string }>;
@@ -90,8 +93,6 @@ export function cleanSlate(db: Database.Database): void {
     db.prepare(`UPDATE coord_agents SET status = 'dead', current_task = NULL WHERE id = ?`).run(agent.id);
     db.prepare(`DELETE FROM coord_locks WHERE agent_id = ?`).run(agent.id);
   }
-
-  db.prepare(`UPDATE coord_commands SET cleared_at = datetime('now') WHERE cleared_at IS NULL`).run();
 
   console.log(`  Coordination clean slate: marked ${alive.length} agent(s) from previous session as dead`);
 }
