@@ -695,6 +695,25 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     });
   });
 
+  app.delete('/command/:id', async (req, reply) => {
+    const id = Number((req.params as Record<string, string>).id);
+    if (!Number.isInteger(id) || id <= 0) return reply.code(400).send({ error: 'invalid command id' });
+
+    const result = db.prepare(
+      `UPDATE coord_commands SET cleared_at = datetime('now') WHERE id = ? AND cleared_at IS NULL`
+    ).run(id);
+
+    if (result.changes === 0) {
+      return reply.code(404).send({ error: 'command not found or already cleared' });
+    }
+
+    db.prepare(
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (NULL, 'command', ?)`
+    ).run(`command ${id} cleared via DELETE`);
+
+    return reply.send({ ok: true });
+  });
+
   app.get('/command/wait', async (req, reply) => {
     const q = commandWaitQuerySchema.safeParse(req.query);
     const { status: targetStatus, workspace } = q.success ? q.data : { status: 'idle', workspace: undefined };
