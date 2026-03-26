@@ -15,7 +15,7 @@ import {
   assignCreateSchema, assignmentQuerySchema, assignmentClaimSchema, assignmentUpdateSchema, assignmentIdParamSchema, assignmentsListSchema,
   lockAcquireSchema, lockReleaseSchema,
   commandCreateSchema, commandWaitQuerySchema,
-  findingCreateSchema, findingsQuerySchema, findingIdParamSchema,
+  findingCreateSchema, findingsQuerySchema, findingIdParamSchema, findingUpdateSchema,
   decisionsQuerySchema, decisionCreateSchema,
   eventsQuerySchema, staleQuerySchema, workersQuerySchema,
   agentIdParamSchema,
@@ -798,6 +798,37 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `UPDATE coord_findings SET status = 'resolved', resolved_at = datetime('now') WHERE id = ?`
     ).run(id);
     return reply.send({ ok: true });
+  });
+
+  app.patch('/finding/:id', async (req, reply) => {
+    const { id } = findingIdParamSchema.parse(req.params);
+    const parsed = findingUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
+    const { status, suggestion } = parsed.data;
+
+    const existing = db.prepare(`SELECT id FROM coord_findings WHERE id = ?`).get(id);
+    if (!existing) return reply.code(404).send({ error: 'finding not found' });
+
+    const sets: string[] = [];
+    const params: unknown[] = [];
+
+    if (status) {
+      sets.push('status = ?');
+      params.push(status);
+      if (status === 'resolved') {
+        sets.push("resolved_at = datetime('now')");
+      }
+    }
+    if (suggestion !== undefined) {
+      sets.push('suggestion = ?');
+      params.push(suggestion);
+    }
+
+    if (sets.length === 0) return reply.send({ ok: true, changed: false });
+
+    params.push(id);
+    db.prepare(`UPDATE coord_findings SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    return reply.send({ ok: true, changed: true });
   });
 
   app.get('/findings/summary', async (_req, reply) => {

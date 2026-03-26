@@ -63,6 +63,7 @@ afterAll(async () => {
 beforeEach(() => {
   db.exec(`DELETE FROM coord_events`);
   db.exec(`DELETE FROM coord_decisions`);
+  db.exec(`DELETE FROM coord_findings`);
   db.exec(`DELETE FROM coord_locks`);
   db.exec(`DELETE FROM coord_assignments`);
   db.exec(`DELETE FROM coord_agents`);
@@ -443,5 +444,77 @@ describe('POST /assign — multi-assign guard', () => {
       body: { agentId, task: 'Task two' },
     });
     expect(status).toBe(201);
+  });
+});
+
+// ─── PATCH /finding/:id ─────────────────────────────────────────
+
+describe('PATCH /finding/:id', () => {
+  it('updates finding status to resolved', async () => {
+    const agentId = await registerAgent('Finding-Worker');
+    await http('/finding', {
+      method: 'POST',
+      body: { agentId, category: 'bug', severity: 'warn', description: 'Test bug' },
+    });
+
+    const { data: findings } = await http('/findings');
+    const findingId = findings.findings[0].id;
+
+    const { status, data } = await http(`/finding/${findingId}`, {
+      method: 'PATCH',
+      body: { status: 'resolved' },
+    });
+
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.changed).toBe(true);
+
+    // Verify resolved
+    const { data: summary } = await http('/findings/summary');
+    expect(summary.total).toBe(0);
+  });
+
+  it('updates suggestion field', async () => {
+    const agentId = await registerAgent('Finding-Worker2');
+    await http('/finding', {
+      method: 'POST',
+      body: { agentId, category: 'bug', severity: 'info', description: 'Minor issue' },
+    });
+
+    const { data: findings } = await http('/findings');
+    const findingId = findings.findings[0].id;
+
+    await http(`/finding/${findingId}`, {
+      method: 'PATCH',
+      body: { suggestion: 'Try refactoring the auth module' },
+    });
+
+    const row = db.prepare(`SELECT suggestion FROM coord_findings WHERE id = ?`).get(findingId) as any;
+    expect(row.suggestion).toBe('Try refactoring the auth module');
+  });
+
+  it('returns 404 for non-existent finding', async () => {
+    const { status } = await http('/finding/99999', {
+      method: 'PATCH',
+      body: { status: 'resolved' },
+    });
+    expect(status).toBe(404);
+  });
+
+  it('returns changed:false when no fields provided', async () => {
+    const agentId = await registerAgent('Finding-Worker3');
+    await http('/finding', {
+      method: 'POST',
+      body: { agentId, category: 'bug', severity: 'info', description: 'No change test' },
+    });
+
+    const { data: findings } = await http('/findings');
+    const findingId = findings.findings[0].id;
+
+    const { data } = await http(`/finding/${findingId}`, {
+      method: 'PATCH',
+      body: {},
+    });
+    expect(data.changed).toBe(false);
   });
 });

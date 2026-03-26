@@ -128,6 +128,11 @@ export const findingsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
+export const findingUpdateSchema = z.object({
+  status: findingStatusEnum.optional(),
+  suggestion: z.string().max(5000).optional(),
+});
+
 // ─── Param Schemas ─────────────────────────────────────────────
 
 export const assignmentIdParamSchema = z.object({ id: z.string().uuid() });
