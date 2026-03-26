@@ -47,6 +47,42 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     }
   });
 
+  // Rate limiting — 60 requests/minute per agent (sliding window)
+  const RATE_LIMIT = 60;
+  const RATE_WINDOW_MS = 60_000;
+  const rateBuckets = new Map<string, number[]>();
+
+  // Cleanup stale buckets every 5 minutes
+  setInterval(() => {
+    const cutoff = Date.now() - RATE_WINDOW_MS;
+    for (const [key, timestamps] of rateBuckets) {
+      const fresh = timestamps.filter(t => t > cutoff);
+      if (fresh.length === 0) rateBuckets.delete(key);
+      else rateBuckets.set(key, fresh);
+    }
+  }, 300_000).unref();
+
+  app.addHook('preHandler', async (request, reply) => {
+    if (request.url === '/health') return; // exempt
+
+    // Identify agent by name from body or query, or agentId
+    const body = request.body as Record<string, unknown> | undefined;
+    const query = request.query as Record<string, unknown> | undefined;
+    const key = (body?.name ?? body?.agentId ?? query?.agentId ?? query?.name ?? request.ip) as string;
+    if (!key) return;
+
+    const now = Date.now();
+    const cutoff = now - RATE_WINDOW_MS;
+    const timestamps = rateBuckets.get(key) ?? [];
+    const recent = timestamps.filter(t => t > cutoff);
+    recent.push(now);
+    rateBuckets.set(key, recent);
+
+    if (recent.length > RATE_LIMIT) {
+      return reply.code(429).send({ error: 'rate limit exceeded — max 60 requests/minute' });
+    }
+  });
+
   // ─── Checkin ────────────────────────────────────────────────────
 
   app.post('/checkin', async (req, reply) => {
