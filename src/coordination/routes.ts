@@ -48,6 +48,10 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     }
   });
 
+  // Pulse coalescing — skip DB write if last pulse was <10s ago
+  const PULSE_COALESCE_MS = 10_000;
+  const lastPulseTime = new Map<string, number>();
+
   // Rate limiting — 60 requests/minute per agent (sliding window)
   const RATE_LIMIT = 60;
   const RATE_WINDOW_MS = 60_000;
@@ -170,6 +174,14 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId } = parsed.data;
 
+    // Coalesce: skip DB write if last pulse was <10s ago
+    const now = Date.now();
+    const lastTime = lastPulseTime.get(agentId) ?? 0;
+    if (now - lastTime < PULSE_COALESCE_MS) {
+      return reply.send({ ok: true, coalesced: true });
+    }
+
+    lastPulseTime.set(agentId, now);
     db.prepare(`UPDATE coord_agents SET last_seen = datetime('now') WHERE id = ?`).run(agentId);
     return reply.send({ ok: true });
   });
