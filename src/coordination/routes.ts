@@ -33,6 +33,19 @@ function coordLog(msg: string): void {
   console.log(`${ts()} [coord] ${msg}`);
 }
 
+/**
+ * Optional session-token check.
+ * If X-Session-Token header is present and doesn't match the stored token → returns false (caller should 403).
+ * If header is absent, or no token stored (old agent row) → returns true (pass through).
+ */
+function sessionTokenOk(db: Database.Database, agentId: string, req: import('fastify').FastifyRequest): boolean {
+  const provided = req.headers['x-session-token'];
+  if (!provided) return true;
+  const row = db.prepare(`SELECT session_token FROM coord_agents WHERE id = ?`).get(agentId) as { session_token: string | null } | undefined;
+  if (!row || !row.session_token) return true; // not found or no token stored — backward compat
+  return row.session_token === provided;
+}
+
 export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Database, store?: EngramStore, eventBus?: import('./events.js').CoordinationEventBus): void {
 
   // Request logging — one line per request with method, url, status, response time
@@ -114,9 +127,13 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     if (existing) {
       const wasDead = existing.status === 'dead';
+      // Issue a fresh token on reconnect; reuse existing token for live heartbeats
+      const sessionToken = wasDead ? randomUUID() : (
+        (db.prepare(`SELECT session_token FROM coord_agents WHERE id = ?`).get(existing.id) as { session_token: string | null }).session_token ?? randomUUID()
+      );
       db.prepare(
-        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace) WHERE id = ?`
-      ).run(pid ?? null, capsJson, workspace ?? null, existing.id);
+        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace), session_token = ? WHERE id = ?`
+      ).run(pid ?? null, capsJson, workspace ?? null, sessionToken, existing.id);
 
       const eventType = wasDead ? 'reconnected' : 'heartbeat';
       const detail = wasDead ? `${name} reconnected (was dead)` : `heartbeat from ${name}`;
@@ -127,13 +144,14 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       if (wasDead) coordLog(`${name} reconnected (reusing UUID ${existing.id.slice(0, 8)})`);
       const action = wasDead ? 'reconnected' : 'heartbeat';
       const status = wasDead ? 'idle' : existing.status;
-      return reply.send({ agentId: existing.id, action, status, workspace });
+      return reply.send({ agentId: existing.id, sessionToken, action, status, workspace });
     }
 
     const id = randomUUID();
+    const sessionToken = randomUUID();
     db.prepare(
-      `INSERT INTO coord_agents (id, name, role, pid, status, metadata, capabilities, workspace) VALUES (?, ?, ?, ?, 'idle', ?, ?, ?)`
-    ).run(id, name, role ?? 'worker', pid ?? null, metadata ? JSON.stringify(metadata) : null, capsJson, workspace ?? null);
+      `INSERT INTO coord_agents (id, name, role, pid, status, metadata, capabilities, workspace, session_token) VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, ?)`
+    ).run(id, name, role ?? 'worker', pid ?? null, metadata ? JSON.stringify(metadata) : null, capsJson, workspace ?? null, sessionToken);
 
     db.prepare(
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'registered', ?)`
@@ -141,13 +159,41 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     coordLog(`${name} registered (${role ?? 'worker'})${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
     eventBus?.emit('agent.checkin', { agentId: id, name, role: role ?? 'worker', workspace: workspace ?? undefined });
-    return reply.code(201).send({ agentId: id, action: 'registered', status: 'idle', workspace });
+    return reply.code(201).send({ agentId: id, sessionToken, action: 'registered', status: 'idle', workspace });
+  });
+
+  // ─── Shutdown (graceful coordination teardown) ─────────────────
+
+  app.post('/shutdown', async (_req, reply) => {
+    // Mark all live agents as dead
+    const alive = db.prepare(
+      `SELECT id, name FROM coord_agents WHERE status != 'dead'`
+    ).all() as Array<{ id: string; name: string }>;
+
+    const shutdownTx = db.transaction(() => {
+      for (const agent of alive) {
+        db.prepare(`DELETE FROM coord_locks WHERE agent_id = ?`).run(agent.id);
+        db.prepare(`UPDATE coord_agents SET status = 'dead', current_task = NULL WHERE id = ?`).run(agent.id);
+        db.prepare(
+          `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'shutdown', 'graceful shutdown')`
+        ).run(agent.id);
+      }
+    });
+    shutdownTx();
+
+    // Flush WAL before caller terminates the process
+    try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* non-fatal if DB is closing */ }
+
+    coordLog(`Graceful shutdown: ${alive.length} agent(s) marked offline`);
+    return reply.send({ ok: true, agents_marked_offline: alive.length });
   });
 
   app.post('/checkout', async (req, reply) => {
     const parsed = checkoutSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId } = parsed.data;
+
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
 
     // Atomic transaction: delete locks + channel session + update agent + event
     const checkoutTx = db.transaction(() => {
@@ -175,6 +221,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const parsed = pulseSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId } = parsed.data;
+
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
 
     // Coalesce: skip DB write if last pulse was <10s ago
     const now = Date.now();
@@ -215,12 +263,16 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     }
 
     let agentId: string;
+    let sessionToken: string;
     if (existing) {
       agentId = existing.id;
       const wasDead = existing.status === 'dead';
+      // Fresh token on reconnect; reuse existing on heartbeat
+      const existingToken = (db.prepare(`SELECT session_token FROM coord_agents WHERE id = ?`).get(agentId) as { session_token: string | null }).session_token;
+      sessionToken = wasDead ? randomUUID() : (existingToken ?? randomUUID());
       db.prepare(
-        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace) WHERE id = ?`
-      ).run(capsJson, workspace ?? null, agentId);
+        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace), session_token = ? WHERE id = ?`
+      ).run(capsJson, workspace ?? null, sessionToken, agentId);
       const eventType = wasDead ? 'reconnected' : 'heartbeat';
       const detail = wasDead ? `${name} reconnected via /next` : `heartbeat from ${name}`;
       db.prepare(
@@ -229,9 +281,10 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       if (wasDead) coordLog(`${name} reconnected via /next (reusing UUID ${agentId.slice(0, 8)})`);
     } else {
       agentId = randomUUID();
+      sessionToken = randomUUID();
       db.prepare(
-        `INSERT INTO coord_agents (id, name, role, pid, status, metadata, capabilities, workspace) VALUES (?, ?, ?, NULL, 'idle', NULL, ?, ?)`
-      ).run(agentId, name, role ?? 'worker', capsJson, workspace ?? null);
+        `INSERT INTO coord_agents (id, name, role, pid, status, metadata, capabilities, workspace, session_token) VALUES (?, ?, ?, NULL, 'idle', NULL, ?, ?, ?)`
+      ).run(agentId, name, role ?? 'worker', capsJson, workspace ?? null, sessionToken);
       db.prepare(
         `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'registered', ?)`
       ).run(agentId, `${name} joined as ${role ?? 'worker'} via /next`);
@@ -298,6 +351,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     return reply.send({
       agentId,
+      sessionToken,
       status: agentRow.status,
       assignment: assignment ?? null,
       commands: activeCommands,
@@ -501,6 +555,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const parsed = assignmentClaimSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId } = parsed.data;
+
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
 
     const result = db.prepare(
       `UPDATE coord_assignments SET agent_id = ?, status = 'assigned', started_at = datetime('now') WHERE id = ? AND status = 'pending'`
@@ -770,6 +826,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId, filePath, reason } = parsed.data;
 
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
+
     const inserted = db.prepare(
       `INSERT OR IGNORE INTO coord_locks (file_path, agent_id, reason) VALUES (?, ?, ?)`
     ).run(filePath, agentId, reason ?? null);
@@ -800,6 +858,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const parsed = lockReleaseSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId, filePath } = parsed.data;
+
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
 
     const result = db.prepare(
       `DELETE FROM coord_locks WHERE file_path = ? AND agent_id = ?`
@@ -947,6 +1007,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
     const { agentId, category, severity, filePath, lineNumber, description, suggestion } = parsed.data;
 
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
+
     db.prepare(
       `INSERT INTO coord_findings (agent_id, category, severity, file_path, line_number, description, suggestion)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -1082,6 +1144,8 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     // Verify agent exists
     const agent = db.prepare(`SELECT id FROM coord_agents WHERE id = ?`).get(agentId) as { id: string } | undefined;
     if (!agent) return reply.code(404).send({ error: 'agent not found' });
+
+    if (!sessionTokenOk(db, agentId, req)) return reply.code(403).send({ error: 'invalid session token' });
 
     db.prepare(
       `INSERT INTO coord_decisions (author_id, assignment_id, tags, summary) VALUES (?, ?, ?, ?)`

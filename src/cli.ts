@@ -13,11 +13,10 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { resolve, basename, join, dirname } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { homedir as osHomedir } from 'node:os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -45,9 +44,9 @@ function printUsage() {
 AgentWorkingMemory — Cognitive memory for AI agents
 
 Usage:
-  awm setup [--global] [--agent-id <id>] [--db-path <path>] [--no-claude-md]
-            [--no-hooks] [--hook-port <port>]       Configure MCP for Claude Code
-  awm mcp                                           Start MCP server (used by Claude Code)
+  awm setup [target] [options]                      Configure AWM for an AI CLI
+  awm doctor [target|--all]                         Validate AWM integrations
+  awm mcp                                           Start MCP server (stdio)
   awm serve [--port <port>]                         Start HTTP API server
   awm health [--port <port>]                        Check server health
   awm export --db <path> [--agent <id>] [--output <file>] [--active-only]
@@ -58,31 +57,38 @@ Usage:
             [--remap uuid=name] [--remap-all-uuids <name>]
             [--dedupe] [--dry-run]                  Merge multiple memory DBs
 
-Setup:
-  awm setup --global     Recommended. Writes ~/.mcp.json so AWM is available
-                         in every project — one brain across all your work.
+Setup targets:
+  claude-code (default)   .mcp.json + CLAUDE.md + hooks
+  codex                   ~/.codex/config.toml + AGENTS.md
+  cursor                  .cursor/mcp.json + .cursorrules
+  http                    Connection info for HTTP API
 
-  awm setup              Project-level. Writes .mcp.json in the current directory
-                         and appends workflow instructions to CLAUDE.md.
+Setup options:
+  --global            Use global scope (recommended for claude-code)
+  --agent-id <id>     Agent identifier (default: project name)
+  --db-path <path>    Database path (default: <awm>/data/memory.db)
+  --no-instructions   Skip instruction file (CLAUDE.md, AGENTS.md, etc.)
+  --no-claude-md      Alias for --no-instructions
+  --no-hooks          Skip hook installation
+  --hook-port PORT    Sidecar port for hooks (default: 8401)
 
-  --no-claude-md    Skip CLAUDE.md modification
-  --no-hooks        Skip hook installation (no auto-checkpoint)
-  --hook-port PORT  Sidecar port for hooks (default: 8401)
-
-  Restart Claude Code after setup to pick up the new MCP server.
+Examples:
+  awm setup --global              Claude Code, global (recommended)
+  awm setup codex                 Codex CLI
+  awm setup cursor                Cursor IDE
+  awm setup http                  Generic HTTP integration
+  awm doctor --all                Check all configured targets
 `.trim());
 }
 
 // ─── SETUP ──────────────────────────────────────
 
-function setup() {
-  const cwd = process.cwd();
-  const projectName = basename(cwd).toLowerCase().replace(/[^a-z0-9-]/g, '-');
-
+async function setup() {
   // Parse flags
-  let agentId = projectName;
+  let target = 'claude-code';
+  let agentId: string | undefined;
   let dbPath: string | null = null;
-  let skipClaudeMd = false;
+  let skipInstructions = false;
   let isGlobal = false;
   let skipHooks = false;
   let hookPort = '8401';
@@ -92,247 +98,107 @@ function setup() {
       agentId = args[++i];
     } else if (args[i] === '--db-path' && args[i + 1]) {
       dbPath = args[++i];
-    } else if (args[i] === '--no-claude-md') {
-      skipClaudeMd = true;
+    } else if (args[i] === '--no-claude-md' || args[i] === '--no-instructions') {
+      skipInstructions = true;
     } else if (args[i] === '--no-hooks') {
       skipHooks = true;
     } else if (args[i] === '--hook-port' && args[i + 1]) {
       hookPort = args[++i];
     } else if (args[i] === '--global') {
       isGlobal = true;
-      agentId = 'claude'; // unified agent ID for global setup
+    } else if (!args[i].startsWith('--')) {
+      // Positional arg = target
+      target = args[i];
     }
   }
 
-  // Find the package root (where src/mcp.ts lives)
-  const packageRoot = resolve(__dirname, '..');
-  const mcpScript = join(packageRoot, 'src', 'mcp.ts');
-  const mcpDist = join(packageRoot, 'dist', 'mcp.js');
+  // Load adapter
+  const { getAdapter } = await import('./adapters/index.js');
+  const { buildSetupContext } = await import('./adapters/common.js');
 
-  // Determine DB path — default to <awm-root>/data/memory.db (shared across projects)
-  if (!dbPath) {
-    dbPath = join(packageRoot, 'data', 'memory.db');
-  }
-  const dbDir = dirname(dbPath);
-
-  // Ensure data directory exists
-  if (!existsSync(dbDir)) {
-    mkdirSync(dbDir, { recursive: true });
-    console.log(`Created data directory: ${dbDir}`);
+  let adapter;
+  try {
+    adapter = await getAdapter(target);
+  } catch (e: any) {
+    console.error(e.message);
+    process.exit(1);
   }
 
-  // Generate hook secret (or reuse existing one)
-  let hookSecret = '';
-  const secretPath = join(dirname(dbPath!), '.awm-hook-secret');
-  if (existsSync(secretPath)) {
-    hookSecret = readFileSync(secretPath, 'utf-8').trim();
-  }
-  if (!hookSecret) {
-    hookSecret = randomBytes(32).toString('hex');
-    mkdirSync(dirname(secretPath), { recursive: true });
-    writeFileSync(secretPath, hookSecret + '\n');
+  // Force global for adapters that don't support project scope
+  if (!adapter.supportsProjectScope && !isGlobal) {
+    isGlobal = true;
   }
 
-  // Determine command based on platform and whether dist exists
-  const isWindows = process.platform === 'win32';
-  const hasDist = existsSync(mcpDist);
+  // Build context
+  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort });
 
-  const envVars: Record<string, string> = {
-    AWM_DB_PATH: (isWindows ? dbPath!.replace(/\\/g, '/') : dbPath!),
-    AWM_AGENT_ID: agentId,
-    AWM_HOOK_PORT: hookPort,
-    AWM_HOOK_SECRET: hookSecret,
-  };
+  // Run adapter
+  const configAction = adapter.writeMcpConfig(ctx);
+  const instructionsAction = adapter.writeInstructions(ctx, skipInstructions);
+  const hooksAction = adapter.writeHooks(ctx, skipHooks);
 
-  let mcpConfig: { command: string; args: string[]; env: Record<string, string> };
-
-  if (hasDist) {
-    mcpConfig = {
-      command: 'node',
-      args: [mcpDist.replace(/\\/g, '/')],
-      env: envVars,
-    };
-  } else if (isWindows) {
-    mcpConfig = {
-      command: 'cmd',
-      args: ['/c', 'npx', 'tsx', mcpScript.replace(/\\/g, '/')],
-      env: envVars,
-    };
-  } else {
-    mcpConfig = {
-      command: 'npx',
-      args: ['tsx', mcpScript],
-      env: envVars,
-    };
-  }
-
-  // Read or create .mcp.json
-  const mcpJsonPath = isGlobal ? join(osHomedir(), '.mcp.json') : join(cwd, '.mcp.json');
-  let existing: any = { mcpServers: {} };
-  if (existsSync(mcpJsonPath)) {
-    try {
-      existing = JSON.parse(readFileSync(mcpJsonPath, 'utf-8'));
-      if (!existing.mcpServers) existing.mcpServers = {};
-    } catch {
-      existing = { mcpServers: {} };
-    }
-  }
-
-  existing.mcpServers['agent-working-memory'] = mcpConfig;
-  writeFileSync(mcpJsonPath, JSON.stringify(existing, null, 2) + '\n');
-
-  // Auto-append CLAUDE.md snippet unless --no-claude-md
-  let claudeMdAction = '';
-  const claudeMdSnippet = `
-
-## Memory (AWM)
-You have persistent memory via the agent-working-memory MCP server.
-
-### Lifecycle (always do these)
-- Session start: call memory_restore to recover previous context
-- Starting a task: call memory_task_begin (checkpoints + recalls relevant memories)
-- Finishing a task: call memory_task_end with a summary
-- Auto-checkpoint: hooks handle compaction, session end, and 15-min timer (no action needed)
-
-### Write memory when:
-- A project decision is made or changed
-- A root cause is discovered after debugging
-- A reusable implementation pattern is established
-- A user preference, constraint, or requirement is clarified
-- A prior assumption is found to be wrong
-- A significant piece of work is completed
-
-### Recall memory when:
-- Starting work on a new task or subsystem
-- Re-entering code you haven't touched recently
-- After a failed attempt — check if there's prior knowledge
-- Before refactoring or making architectural changes
-- When a topic comes up that you might have prior context on
-
-### Also:
-- After using a recalled memory: call memory_feedback (useful/not-useful)
-- To correct wrong info: call memory_retract
-- To track work items: memory_task_add, memory_task_update, memory_task_list, memory_task_next
-`;
-
-  // For global: write to ~/.claude/CLAUDE.md (loaded by Claude Code in every session)
-  // For project: write to ./CLAUDE.md in the current directory
-  const claudeMdPath = isGlobal
-    ? join(osHomedir(), '.claude', 'CLAUDE.md')
-    : join(cwd, 'CLAUDE.md');
-
-  // Ensure parent directory exists (for ~/.claude/CLAUDE.md)
-  const claudeMdDir = dirname(claudeMdPath);
-  if (!existsSync(claudeMdDir)) {
-    mkdirSync(claudeMdDir, { recursive: true });
-  }
-
-  if (skipClaudeMd) {
-    claudeMdAction = '  CLAUDE.md: skipped (--no-claude-md)';
-  } else if (existsSync(claudeMdPath)) {
-    const content = readFileSync(claudeMdPath, 'utf-8');
-    if (content.includes('## Memory (AWM)')) {
-      claudeMdAction = '  CLAUDE.md: already has AWM section (skipped)';
-    } else {
-      writeFileSync(claudeMdPath, content.trimEnd() + '\n' + claudeMdSnippet);
-      claudeMdAction = '  CLAUDE.md: appended AWM workflow section';
-    }
-  } else {
-    const title = isGlobal ? '# Global Instructions' : `# ${basename(cwd)}`;
-    writeFileSync(claudeMdPath, `${title}\n${claudeMdSnippet}`);
-    claudeMdAction = '  CLAUDE.md: created with AWM workflow section';
-  }
-
-  // --- Hook configuration ---
-  let hookAction = '';
-  if (skipHooks) {
-    hookAction = '  Hooks: skipped (--no-hooks)';
-  } else {
-    // Write hooks to Claude Code settings (~/.claude/settings.json)
-    const settingsPath = join(osHomedir(), '.claude', 'settings.json');
-    let settings: any = {};
-    if (existsSync(settingsPath)) {
-      try {
-        settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-      } catch {
-        settings = {};
-      }
-    }
-
-    if (!settings.hooks) settings.hooks = {};
-
-    const hookUrl = `http://127.0.0.1:${hookPort}/hooks/checkpoint`;
-
-    // Stop — remind Claude to write/recall/switch tasks after each response
-    settings.hooks.Stop = [{
-      matcher: '',
-      hooks: [{
-        type: 'command',
-        command: 'echo "MEMORY: (1) Did you learn anything new? Call memory_write. (2) Are you about to work on a topic you might have prior knowledge about? Call memory_recall. (3) Switching tasks? Call memory_task_begin."',
-        timeout: 5,
-        async: true,
-      }],
-    }];
-
-    // Build hook command with multi-port fallback for separate memory pools.
-    // When users have work (port 8401) and personal (port 8402) pools via
-    // per-folder .mcp.json, the hook needs to try both ports since the global
-    // settings.json can't know which pool is active in the current session.
-    const altPort = hookPort === '8401' ? '8402' : '8401';
-    const hookUrlAlt = `http://127.0.0.1:${altPort}/hooks/checkpoint`;
-    const buildHookCmd = (event: string, maxTime: number) => {
-      const primary = `curl -sf -X POST ${hookUrl} -H "Content-Type: application/json" -H "Authorization: Bearer ${hookSecret}" -d "{\\"hook_event_name\\":\\"${event}\\"}" --max-time ${maxTime}`;
-      const fallback = `curl -sf -X POST ${hookUrlAlt} -H "Content-Type: application/json" -H "Authorization: Bearer ${hookSecret}" -d "{\\"hook_event_name\\":\\"${event}\\"}" --max-time ${maxTime}`;
-      return `${primary} || ${fallback}`;
-    };
-
-    // PreCompact — auto-checkpoint before context compaction
-    settings.hooks.PreCompact = [{
-      matcher: '',
-      hooks: [{
-        type: 'command',
-        command: buildHookCmd('PreCompact', 5),
-        timeout: 10,
-      }],
-    }];
-
-    // SessionEnd — auto-checkpoint on session close (fast timeout to avoid cancellation)
-    settings.hooks.SessionEnd = [{
-      matcher: '',
-      hooks: [{
-        type: 'command',
-        command: buildHookCmd('SessionEnd', 2),
-        timeout: 5,
-      }],
-    }];
-
-    // Ensure settings directory exists
-    const settingsDir = dirname(settingsPath);
-    if (!existsSync(settingsDir)) {
-      mkdirSync(settingsDir, { recursive: true });
-    }
-
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-    hookAction = `  Hooks: Stop (memory reminder) + PreCompact + SessionEnd → auto-checkpoint (port ${hookPort})`;
-  }
-
-  const scope = isGlobal ? 'globally (all projects)' : cwd;
   console.log(`
-AWM configured ${isGlobal ? 'globally' : 'for: ' + cwd}
+AWM configured for ${adapter.name}${isGlobal ? ' (global)' : ''}
 
-  Agent ID:    ${agentId}
-  DB path:     ${dbPath}
-  MCP config:  ${mcpJsonPath}
-  Hook port:   ${hookPort}
-  Hook secret: ${hookSecret.slice(0, 8)}...
-${claudeMdAction}
-${hookAction}
+  Agent ID:    ${ctx.agentId}
+  DB path:     ${ctx.dbPath}
+  ${configAction}
+  ${instructionsAction}
+  ${hooksAction}
 
 Next steps:
-  1. Restart Claude Code to pick up the MCP server
-  2. The memory tools will appear automatically
-  3. Hooks auto-checkpoint on context compaction and session end${isGlobal ? '\n  4. One brain across all your projects — no per-project setup needed' : ''}
+  1. Restart ${adapter.name} to pick up the MCP server
+  2. Memory tools will appear automatically${adapter.id === 'codex' ? ' (verify with /mcp)' : ''}
 `.trim());
+}
+
+// ─── DOCTOR ──────────────────────────────────────
+
+async function doctor() {
+  const { getAdapter, listAdapters } = await import('./adapters/index.js');
+  const { buildSetupContext } = await import('./adapters/common.js');
+
+  let targets: string[] = [];
+  let checkAll = false;
+
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--all') {
+      checkAll = true;
+    } else if (!args[i].startsWith('--')) {
+      targets.push(args[i]);
+    }
+  }
+
+  if (checkAll) {
+    targets = listAdapters();
+  } else if (targets.length === 0) {
+    targets = listAdapters();
+  }
+
+  const ctx = buildSetupContext({ isGlobal: true, hookPort: '8401' });
+
+  console.log('AWM Doctor\n');
+
+  for (const targetId of targets) {
+    let adapter;
+    try {
+      adapter = await getAdapter(targetId);
+    } catch {
+      console.log(`  ? ${targetId}: unknown target (skipped)`);
+      continue;
+    }
+
+    console.log(`  ${adapter.name}:`);
+    const results = adapter.diagnose(ctx);
+    for (const r of results) {
+      const icon = r.status === 'ok' ? '+' : r.status === 'warn' ? '~' : 'x';
+      console.log(`    [${icon}] ${r.check}: ${r.message}`);
+      if (r.fix) {
+        console.log(`        Fix: ${r.fix}`);
+      }
+    }
+    console.log();
+  }
 }
 
 // ─── MCP ──────────────────────────────────────
@@ -818,7 +684,10 @@ async function mergeMemories() {
 
 switch (command) {
   case 'setup':
-    setup();
+    await setup();
+    break;
+  case 'doctor':
+    await doctor();
     break;
   case 'mcp':
     mcp();

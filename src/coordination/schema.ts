@@ -11,17 +11,18 @@ import type Database from 'better-sqlite3';
 const COORDINATION_TABLES = `
 -- Coordination: agents in the hive
 CREATE TABLE IF NOT EXISTS coord_agents (
-  id           TEXT PRIMARY KEY,
-  name         TEXT NOT NULL,
-  role         TEXT NOT NULL DEFAULT 'worker',
-  status       TEXT NOT NULL DEFAULT 'idle',
-  pid          INTEGER,
-  started_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  last_seen    TEXT NOT NULL DEFAULT (datetime('now')),
-  current_task TEXT,
-  metadata     TEXT,
-  capabilities TEXT,
-  workspace    TEXT
+  id             TEXT PRIMARY KEY,
+  name           TEXT NOT NULL,
+  role           TEXT NOT NULL DEFAULT 'worker',
+  status         TEXT NOT NULL DEFAULT 'idle',
+  pid            INTEGER,
+  started_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen      TEXT NOT NULL DEFAULT (datetime('now')),
+  current_task   TEXT,
+  metadata       TEXT,
+  capabilities   TEXT,
+  workspace      TEXT,
+  session_token  TEXT
 );
 
 -- unique index on (name, workspace) is created after dedup in initCoordinationTables
@@ -150,4 +151,7 @@ export function initCoordinationTables(db: Database.Database): void {
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN blocked_by TEXT`); } catch { /* exists */ }
   try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN context TEXT`); } catch { /* exists */ }
+
+  // Migration: session token for hijack prevention (added 2026-03-26)
+  try { db.exec(`ALTER TABLE coord_agents ADD COLUMN session_token TEXT`); } catch { /* exists */ }
 }

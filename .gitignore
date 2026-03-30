@@ -21,3 +21,4 @@ tests/eval/fixtures/
 *.db-wal
 *.db-shm
 docker-compose.test.yml
+.awm-hook-secret

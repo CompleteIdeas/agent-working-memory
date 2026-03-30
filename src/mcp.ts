@@ -26,7 +26,7 @@
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Load .env file if present (no external dependency)
 try {
@@ -42,6 +42,12 @@ try {
     if (!process.env[key]) process.env[key] = val;
   }
 } catch { /* No .env file */ }
+
+// MCP uses stdout for JSON-RPC. Redirect console.log to stderr so engine
+// startup messages (ConsolidationScheduler, model loading, etc.) don't
+// corrupt the transport. This MUST happen before any engine imports.
+console.log = console.error;
+
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 
@@ -111,6 +117,58 @@ const server = new McpServer({
   name: 'agent-working-memory',
   version: '0.6.0',
 });
+
+server.registerResource(
+  'awm-overview',
+  'awm://server/overview',
+  {
+    title: 'AWM Overview',
+    description: 'AgentWorkingMemory MCP server metadata and discovery notes',
+    mimeType: 'text/markdown',
+  },
+  async () => ({
+    contents: [{
+      uri: 'awm://server/overview',
+      text: [
+        '# Agent Working Memory',
+        '',
+        `Agent: ${AGENT_ID}`,
+        `DB: ${DB_PATH}`,
+        `Coordination: ${process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1' ? 'enabled' : 'disabled'}`,
+        '',
+        'This MCP server primarily exposes tools such as `memory_restore`, `memory_recall`, `memory_write`, and task/checkpoint operations.',
+        'The resources below exist so generic MCP clients can discover the server through `resources/list` and `resources/templates/list`.',
+      ].join('\n'),
+      mimeType: 'text/markdown',
+    }],
+  })
+);
+
+server.registerResource(
+  'awm-memory-template',
+  new ResourceTemplate('awm://memory/{id}', { list: undefined }),
+  {
+    title: 'AWM Memory By ID',
+    description: 'Metadata resource template for a memory identifier',
+    mimeType: 'text/markdown',
+  },
+  async (_uri, variables) => ({
+    contents: [{
+      uri: `awm://memory/${variables.id ?? ''}`,
+      text: [
+        '# AWM Memory Reference',
+        '',
+        `Requested memory id: ${variables.id ?? ''}`,
+        '',
+        'Use the AWM memory tools for actual retrieval and mutation:',
+        '- `memory_recall` for cognitive retrieval',
+        '- `memory_restore` for session state',
+        '- `memory_feedback`, `memory_retract`, `memory_supersede` for memory maintenance',
+      ].join('\n'),
+      mimeType: 'text/markdown',
+    }],
+  })
+);
 
 // --- Auto-classification for memory types ---
 

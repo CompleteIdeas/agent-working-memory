@@ -486,6 +486,99 @@ describe('dead agent reconnection', () => {
   });
 });
 
+// ─── Registration dedup ─────────────────────────────────────────
+
+describe('registration dedup', () => {
+  it('repeated /checkin with same name+workspace returns same UUID (heartbeat)', async () => {
+    const { data: first } = await http('/checkin', {
+      method: 'POST',
+      body: { name: 'Dedup-A', role: 'worker', workspace: 'TEST' },
+    });
+    expect(first.action).toBe('registered');
+    const agentId = first.agentId;
+
+    const { data: second } = await http('/checkin', {
+      method: 'POST',
+      body: { name: 'Dedup-A', role: 'worker', workspace: 'TEST' },
+    });
+    expect(second.agentId).toBe(agentId);
+    expect(second.action).toBe('heartbeat');
+
+    // Only one row in coord_agents for this name+workspace
+    const rowCount = (db.prepare(
+      `SELECT COUNT(*) as c FROM coord_agents WHERE name = ? AND workspace = ?`
+    ).get('Dedup-A', 'TEST') as any).c;
+    expect(rowCount).toBe(1);
+  });
+
+  it('repeated /next with same name+workspace returns same UUID (live agent)', async () => {
+    const { data: first } = await http('/next', {
+      method: 'POST',
+      body: { name: 'Dedup-B', role: 'worker', workspace: 'TEST' },
+    });
+    const agentId = first.agentId;
+
+    const { data: second } = await http('/next', {
+      method: 'POST',
+      body: { name: 'Dedup-B', role: 'worker', workspace: 'TEST' },
+    });
+    expect(second.agentId).toBe(agentId);
+
+    const rowCount = (db.prepare(
+      `SELECT COUNT(*) as c FROM coord_agents WHERE name = ? AND workspace = ?`
+    ).get('Dedup-B', 'TEST') as any).c;
+    expect(rowCount).toBe(1);
+  });
+
+  it('UNIQUE index prevents direct DB-level duplicate insert', () => {
+    const id1 = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO coord_agents (id, name, role, status, workspace) VALUES (?, ?, 'worker', 'idle', 'TEST')`
+    ).run(id1, 'Dedup-Direct');
+
+    expect(() => {
+      db.prepare(
+        `INSERT INTO coord_agents (id, name, role, status, workspace) VALUES (?, ?, 'worker', 'idle', 'TEST')`
+      ).run(crypto.randomUUID(), 'Dedup-Direct');
+    }).toThrow(/UNIQUE constraint failed/i);
+  });
+
+  it('UNIQUE index treats NULL workspace as distinct slot per name', () => {
+    const id1 = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO coord_agents (id, name, role, status, workspace) VALUES (?, ?, 'worker', 'idle', NULL)`
+    ).run(id1, 'Dedup-Null');
+
+    // Second insert with same name + NULL workspace should also fail
+    expect(() => {
+      db.prepare(
+        `INSERT INTO coord_agents (id, name, role, status, workspace) VALUES (?, ?, 'worker', 'idle', NULL)`
+      ).run(crypto.randomUUID(), 'Dedup-Null');
+    }).toThrow(/UNIQUE constraint failed/i);
+  });
+
+  it('/checkin with no workspace deduplicates by name', async () => {
+    const { data: first } = await http('/checkin', {
+      method: 'POST',
+      body: { name: 'Dedup-NoWS', role: 'worker' },
+    });
+    expect(first.action).toBe('registered');
+    const agentId = first.agentId;
+
+    const { data: second } = await http('/checkin', {
+      method: 'POST',
+      body: { name: 'Dedup-NoWS', role: 'worker' },
+    });
+    expect(second.agentId).toBe(agentId);
+    expect(second.action).toBe('heartbeat');
+
+    const rowCount = (db.prepare(
+      `SELECT COUNT(*) as c FROM coord_agents WHERE name = ? AND workspace IS NULL`
+    ).get('Dedup-NoWS') as any).c;
+    expect(rowCount).toBe(1);
+  });
+});
+
 // ─── Edge cases ─────────────────────────────────────────────────
 
 describe('edge cases', () => {
