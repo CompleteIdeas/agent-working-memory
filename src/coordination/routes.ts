@@ -65,8 +65,9 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   const PULSE_COALESCE_MS = 10_000;
   const lastPulseTime = new Map<string, number>();
 
-  // Rate limiting — 60 requests/minute per agent (sliding window)
-  const RATE_LIMIT = 60;
+  // Rate limiting — 300 requests/minute per agent (sliding window)
+  // Hive agents poll frequently + synapse-push polls /events every 2s
+  const RATE_LIMIT = 300;
   const RATE_WINDOW_MS = 60_000;
   const rateBuckets = new Map<string, number[]>();
 
