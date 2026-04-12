@@ -65,7 +65,7 @@ Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM
 | **Over time** | Grows forever, gets noisier | Consolidation: diameter-enforced clustering, cross-topic bridges, synaptic-tagged decay |
 | **Forgetting** | Manual cleanup | Cognitive forgetting: unused memories fade, reinforced knowledge persists (access-count modulated) |
 | **Feedback** | None | Useful/not-useful signals tune confidence and retrieval rank |
-| **Correction** | Delete and re-insert | Retraction: wrong memories invalidated, corrections linked, penalties propagate |
+| **Correction** | Delete and re-insert | Retraction: wrong memories invalidated, corrections linked, penalties propagate (depth 2, decaying) |
 | **Noise rejection** | None | Multi-channel agreement gate: requires 2+ retrieval channels to agree before returning results |
 | **Duplicates** | Stored repeatedly | Reinforce-on-duplicate: near-exact matches boost existing memory instead of creating copies |
 
@@ -394,22 +394,28 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.6.0
+## What's New in v0.6.1
+
+- **Embedding version tracking** — new `embedding_model` column prevents silent drift when changing models. Each embedding records its source model.
+- **Batch embedding backfill** — consolidation uses `embedBatch()` (batch size 32) instead of single-item loop. 10x faster for large backfills.
+- **Deeper retraction propagation** — confidence penalties now propagate 2 hops (was 1) with 50% decay per hop, capped at 20 affected nodes.
+- **Retrieval timeouts** — 5s timeout on query expansion, 10s on cross-encoder reranker. Both fail gracefully to text-only signals.
+- **Channel push delivery** — assignments delivered directly to worker HTTP endpoints with mailbox fallback.
+- **Cross-UUID assignment migration** — resolves assignments across alternate agent UUIDs.
+
+### v0.6.0
 
 - **Memory taxonomy** — memories classified as `episodic`, `semantic`, `procedural`, or `unclassified`. Auto-classified on write. Filter by type on recall.
-- **Query-adaptive retrieval** — pipeline adapts to query type: `targeted` (boost exact matches), `exploratory` (wider graph walk, more semantic), `balanced` (default).
-- **Decision propagation** — decisions automatically broadcast to coordination layer for cross-agent discovery. Peer decisions shown on `memory_restore`.
-- **Completion verification** — workers must provide proof of work (result summary, optional commit SHA) when completing assignments.
-- **Task priority & dependencies** — priority field (0-10) and `blocked_by` for task ordering.
-- **Eval harness** — `npm run eval` benchmarks retrieval, associative, redundancy, and temporal performance with ablation mode.
+- **Query-adaptive retrieval** — pipeline adapts to query type: `targeted` | `exploratory` | `balanced` | `auto`.
+- **Decision propagation** — decisions broadcast to coordination layer for cross-agent discovery.
+- **Eval harness** — `npm run eval` benchmarks retrieval, associative, redundancy, and temporal performance.
 - **DB hardening** — busy_timeout, integrity check on startup, hot backups every 10 min, WAL checkpoint on shutdown.
-- **Consolidation recall fix** — redundancy pruning transfers associations and tags to survivor memory.
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.6.0). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.6.1). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**

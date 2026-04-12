@@ -98,7 +98,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     rateBuckets.set(key, recent);
 
     if (recent.length > RATE_LIMIT) {
-      return reply.code(429).send({ error: 'rate limit exceeded — max 60 requests/minute' });
+      return reply.code(429).send({ error: `rate limit exceeded — max ${RATE_LIMIT} requests/minute` });
     }
   });
 
@@ -107,7 +107,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   app.post('/checkin', async (req, reply) => {
     const parsed = checkinSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    const { name, role, pid, metadata, capabilities, workspace } = parsed.data;
+    const { name, role, pid, metadata, capabilities, workspace, channelUrl } = parsed.data;
     const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
     // Look up ANY existing agent with same name+workspace — including dead ones (upsert)
@@ -143,6 +143,20 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       ).run(existing.id, eventType, detail);
 
       if (wasDead) coordLog(`${name} reconnected (reusing UUID ${existing.id.slice(0, 8)})`);
+      // Auto-register channel session if channelUrl provided
+      if (channelUrl) {
+        db.prepare(`
+          INSERT INTO coord_channel_sessions (agent_id, channel_id, connected_at, status)
+          VALUES (?, ?, datetime('now'), 'connected')
+          ON CONFLICT(agent_id) DO UPDATE SET
+            channel_id = excluded.channel_id,
+            connected_at = datetime('now'),
+            status = 'connected',
+            push_count = 0,
+            last_push_at = NULL
+        `).run(existing.id, channelUrl);
+        coordLog(`channel auto-registered: ${name} (${existing.id.slice(0, 8)}) → ${channelUrl}`);
+      }
       const action = wasDead ? 'reconnected' : 'heartbeat';
       const status = wasDead ? 'idle' : existing.status;
       return reply.send({ agentId: existing.id, sessionToken, action, status, workspace });
@@ -157,6 +171,21 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     db.prepare(
       `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'registered', ?)`
     ).run(id, `${name} joined as ${role ?? 'worker'}${workspace ? ' [' + workspace + ']' : ''}${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
+
+    // Auto-register channel session if channelUrl provided
+    if (channelUrl) {
+      db.prepare(`
+        INSERT INTO coord_channel_sessions (agent_id, channel_id, connected_at, status)
+        VALUES (?, ?, datetime('now'), 'connected')
+        ON CONFLICT(agent_id) DO UPDATE SET
+          channel_id = excluded.channel_id,
+          connected_at = datetime('now'),
+          status = 'connected',
+          push_count = 0,
+          last_push_at = NULL
+      `).run(id, channelUrl);
+      coordLog(`channel auto-registered: ${name} (${id.slice(0, 8)}) → ${channelUrl}`);
+    }
 
     coordLog(`${name} registered (${role ?? 'worker'})${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
     eventBus?.emit('agent.checkin', { agentId: id, name, role: role ?? 'worker', workspace: workspace ?? undefined });
@@ -242,7 +271,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   app.post('/next', async (req, reply) => {
     const parsed = nextSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0].message });
-    const { name, workspace, role, capabilities } = parsed.data;
+    const { name, workspace, role, capabilities, channelUrl } = parsed.data;
     const capsJson = capabilities ? JSON.stringify(capabilities) : null;
 
     // Step 1: Upsert agent (checkin / heartbeat) — including dead agents (reuse UUID)
@@ -292,6 +321,21 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       coordLog(`${name} registered via /next (${role ?? 'worker'})${capabilities ? ' [' + capabilities.join(', ') + ']' : ''}`);
     }
 
+    // Auto-register channel session if channelUrl provided
+    if (channelUrl) {
+      db.prepare(`
+        INSERT INTO coord_channel_sessions (agent_id, channel_id, connected_at, status)
+        VALUES (?, ?, datetime('now'), 'connected')
+        ON CONFLICT(agent_id) DO UPDATE SET
+          channel_id = excluded.channel_id,
+          connected_at = datetime('now'),
+          status = 'connected',
+          push_count = 0,
+          last_push_at = NULL
+      `).run(agentId, channelUrl);
+      coordLog(`channel auto-registered via /next: ${name} (${agentId.slice(0, 8)}) → ${channelUrl}`);
+    }
+
     // Step 2: Get active commands
     const activeCommands = workspace
       ? db.prepare(
@@ -309,6 +353,29 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     let assignment = db.prepare(
       `SELECT * FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress') ORDER BY created_at DESC LIMIT 1`
     ).get(agentId) as Record<string, unknown> | undefined;
+
+    // Cross-UUID fallback: check if this agent name has assignments under a different UUID
+    // (happens when POST /assign resolved worker_name to a stale/alternate UUID)
+    if (!assignment) {
+      const altIds = db.prepare(
+        `SELECT id FROM coord_agents WHERE name = ? AND id != ? AND status != 'dead'`
+      ).all(name, agentId) as Array<{ id: string }>;
+
+      for (const alt of altIds) {
+        const altActive = db.prepare(
+          `SELECT * FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress') ORDER BY created_at DESC LIMIT 1`
+        ).get(alt.id) as Record<string, unknown> | undefined;
+        if (altActive) {
+          // Migrate assignment to the current agent UUID
+          db.prepare(`UPDATE coord_assignments SET agent_id = ? WHERE id = ?`).run(agentId, altActive.id as string);
+          db.prepare(`UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ?`).run(altActive.id as string, agentId);
+          altActive.agent_id = agentId;
+          coordLog(`assignment ${(altActive.id as string).slice(0, 8)} migrated from alt UUID ${alt.id.slice(0, 8)} to ${agentId.slice(0, 8)} (same agent: ${name})`);
+          assignment = altActive;
+          break;
+        }
+      }
+    }
 
     if (!assignment) {
       const agentWorkspace = workspace ?? null;
@@ -347,8 +414,29 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       }
     }
 
+    // If agent has an active assignment, ensure status is 'working'
+    if (assignment) {
+      db.prepare(`UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ? AND status != 'working'`).run(assignment.id as string, agentId);
+    }
+
     // Read current agent status after all mutations
     const agentRow = db.prepare(`SELECT status FROM coord_agents WHERE id = ?`).get(agentId) as { status: string };
+
+    // Deliver queued mailbox messages (persistent messages that survived disconnects/restarts)
+    const mailbox = db.prepare(
+      `SELECT id, message, source, created_at FROM coord_mailbox
+       WHERE worker_name = ? AND delivered_at IS NULL
+       AND (workspace = ? OR workspace IS NULL)
+       ORDER BY created_at ASC LIMIT 10`
+    ).all(name, workspace ?? null) as Array<{ id: number; message: string; source: string; created_at: string }>;
+
+    if (mailbox.length > 0) {
+      const ids = mailbox.map(m => m.id);
+      db.prepare(
+        `UPDATE coord_mailbox SET delivered_at = datetime('now') WHERE id IN (${ids.map(() => '?').join(',')})`
+      ).run(...ids);
+      coordLog(`mailbox: delivered ${mailbox.length} queued message(s) to ${name}`);
+    }
 
     return reply.send({
       agentId,
@@ -356,6 +444,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       status: agentRow.status,
       assignment: assignment ?? null,
       commands: activeCommands,
+      mailbox: mailbox.length > 0 ? mailbox.map(m => ({ message: m.message, source: m.source, queued_at: m.created_at })) : undefined,
     });
   });
 
@@ -419,20 +508,44 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
         `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_created', ?)`
       ).run(agentId ?? null, `task: ${task}`);
 
-      // Push notification: if assigned agent has an active channel session, update push stats
+      // Record channel push intent in the DB (stats + event)
       if (agentId) {
         const session = db.prepare(
-          `SELECT agent_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
-        ).get(agentId) as { agent_id: string } | undefined;
+          `SELECT agent_id, channel_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
+        ).get(agentId) as { agent_id: string; channel_id: string } | undefined;
         if (session) {
+          // Record channel_push event so agent sees it on next poll/restore
+          const pushMsg = `NEW ASSIGNMENT: ${task}${description ? ' — ' + description.slice(0, 200) : ''}`;
           db.prepare(
-            `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
-          ).run(agentId);
+            `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'channel_push', ?)`
+          ).run(agentId, pushMsg.slice(0, 500));
           pushed = true;
         }
       }
     });
     assignTx();
+
+    // Actually deliver the push to the worker's channel HTTP endpoint (outside DB transaction)
+    let delivered = false;
+    if (pushed && agentId) {
+      const session = db.prepare(
+        `SELECT channel_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
+      ).get(agentId) as { channel_id: string } | undefined;
+      if (session) {
+        const pushMsg = `NEW ASSIGNMENT: ${task}${description ? ' — ' + description.slice(0, 200) : ''}`;
+        const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
+        const result = await deliverToChannel(
+          agentId, session.channel_id, pushMsg,
+          { source: 'coordinator', agent: agent?.name ?? agentId, assignmentId: id }
+        );
+        delivered = result.delivered;
+        if (delivered) {
+          db.prepare(
+            `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
+          ).run(agentId);
+        }
+      }
+    }
 
     // Bridge context to AWM engrams (outside transaction — engram store has its own DB)
     if (store && context) {
@@ -463,15 +576,29 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       }
     }
 
+    // If push failed or no channel, queue to mailbox so worker gets it on next /next poll
+    let queued = false;
+    if (agentId && !delivered) {
+      const agent = db.prepare(`SELECT name, workspace FROM coord_agents WHERE id = ?`).get(agentId) as { name: string; workspace: string | null } | undefined;
+      if (agent) {
+        const mailMsg = `NEW ASSIGNMENT [${id.slice(0, 8)}]: ${task.slice(0, 500)}`;
+        db.prepare(
+          `INSERT INTO coord_mailbox (worker_name, workspace, message, source) VALUES (?, ?, ?, 'coordinator')`
+        ).run(agent.name, agent.workspace, mailMsg);
+        queued = true;
+        coordLog(`mailbox/queue → ${agent.name}: assignment ${id.slice(0, 8)} (live push unavailable)`);
+      }
+    }
+
     // Log assignment with agent name
     if (agentId) {
       const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
-      coordLog(`assigned → ${agent?.name ?? 'unknown'}: ${task.slice(0, 80)}${pushed ? ' (push)' : ''}`);
+      coordLog(`assigned → ${agent?.name ?? 'unknown'}: ${task.slice(0, 80)}${delivered ? ' (pushed+delivered)' : queued ? ' (queued to mailbox)' : ''}`);
     } else {
       coordLog(`assignment queued (pending): ${task.slice(0, 80)}`);
     }
     eventBus?.emit('assignment.created', { assignmentId: id, agentId: agentId ?? '', task, workspace: workspace ?? undefined });
-    return reply.code(201).send({ assignmentId: id, status: agentId ? 'assigned' : 'pending', pushed });
+    return reply.code(201).send({ assignmentId: id, status: agentId ? 'assigned' : 'pending', pushed, delivered, queued });
   });
 
   app.get('/assignment', async (req, reply) => {
@@ -505,8 +632,31 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     if (active) return reply.send({ assignment: active });
 
-    const agentRow = db.prepare(`SELECT workspace FROM coord_agents WHERE id = ?`).get(agentId) as { workspace: string | null } | undefined;
-    const agentWorkspace = agentRow?.workspace;
+    // Cross-UUID fallback: if the agent has other UUIDs (e.g., from workspace changes or reconnects
+    // that created a new row), check those too. This fixes the case where POST /assign resolved
+    // worker_name to a different UUID than the one the worker is currently using.
+    const agentRow = db.prepare(`SELECT name, workspace FROM coord_agents WHERE id = ?`).get(agentId) as { name: string; workspace: string | null } | undefined;
+    if (agentRow) {
+      const altIds = db.prepare(
+        `SELECT id FROM coord_agents WHERE name = ? AND id != ? AND status != 'dead'`
+      ).all(agentRow.name, agentId) as Array<{ id: string }>;
+
+      for (const alt of altIds) {
+        const altActive = db.prepare(
+          `SELECT * FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress') ORDER BY created_at DESC LIMIT 1`
+        ).get(alt.id) as Record<string, unknown> | undefined;
+        if (altActive) {
+          // Reassign to the current agent UUID so future lookups work directly
+          db.prepare(`UPDATE coord_assignments SET agent_id = ? WHERE id = ?`).run(agentId, altActive.id as string);
+          db.prepare(`UPDATE coord_agents SET status = 'working', current_task = ? WHERE id = ?`).run(altActive.id as string, agentId);
+          altActive.agent_id = agentId;
+          coordLog(`assignment ${(altActive.id as string).slice(0, 8)} migrated from alt UUID ${alt.id.slice(0, 8)} to ${agentId.slice(0, 8)} (same agent: ${agentRow.name})`);
+          return reply.send({ assignment: altActive });
+        }
+      }
+    }
+
+    const agentWorkspace = agentRow?.workspace ?? null;
 
     const blockedFilter = `AND (blocked_by IS NULL OR blocked_by IN (SELECT id FROM coord_assignments WHERE status = 'completed'))`;
 
@@ -544,7 +694,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     }
 
     const busyCount = (db.prepare(
-      `SELECT COUNT(*) as c FROM coord_agents WHERE status = 'working' AND last_seen > datetime('now', '-120 seconds')`
+      `SELECT COUNT(*) as c FROM coord_agents WHERE status = 'working' AND last_seen > datetime('now', '-300 seconds')`
     ).get() as { c: number }).c;
 
     const retryAfter = busyCount > 0 ? 30 : 300;
@@ -896,8 +1046,11 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     if (command === 'RESUME') {
       if (workspace) {
+        // Clear commands targeting this workspace AND global commands (workspace IS NULL).
+        // Global commands (e.g. SHUTDOWN with no workspace) apply to all workspaces,
+        // so RESUME for a workspace must also clear them — otherwise they persist forever.
         db.prepare(
-          `UPDATE coord_commands SET cleared_at = datetime('now') WHERE cleared_at IS NULL AND workspace = ?`
+          `UPDATE coord_commands SET cleared_at = datetime('now') WHERE cleared_at IS NULL AND (workspace = ? OR workspace IS NULL)`
         ).run(workspace);
       } else {
         db.prepare(
@@ -1256,7 +1409,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       workspace: w.workspace,
       lastSeen: w.last_seen,
       secondsSinceSeen: w.seconds_since_seen,
-      alive: w.seconds_since_seen < 120,
+      alive: w.seconds_since_seen < 300,
     }));
 
     return reply.send({
@@ -1305,7 +1458,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
   app.get('/stale', async (req, reply) => {
     const q = staleQuerySchema.safeParse(req.query);
-    const threshold = q.success ? q.data.seconds : 120;
+    const threshold = q.success ? q.data.seconds : 300;
     const cleanup = q.success ? q.data.cleanup : undefined;
 
     const stale = detectStale(db, threshold);
@@ -1320,7 +1473,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
   app.post('/stale/cleanup', async (req, reply) => {
     const q = staleQuerySchema.safeParse(req.query);
-    const threshold = q.success ? q.data.seconds : 120;
+    const threshold = q.success ? q.data.seconds : 300;
 
     const { stale, cleaned } = cleanupStale(db, threshold);
     return reply.send({ stale, threshold_seconds: threshold, cleaned });
@@ -1550,7 +1703,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       `SELECT COUNT(*) AS alive FROM coord_agents WHERE status != 'dead'`
     ).get() as { alive: number };
 
-    const staleThreshold = 120;
+    const staleThreshold = 300;
     const staleCount = (db.prepare(
       `SELECT COUNT(*) AS c FROM coord_agents
        WHERE status != 'dead'
@@ -1640,28 +1793,77 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     return reply.send({ ok: true });
   });
 
-  /** POST /channel/push — Push a message to an agent's channel session. */
+  /**
+   * Deliver a message to a worker's channel HTTP endpoint.
+   * Returns { delivered, error? }. On connection failure, marks session dead.
+   */
+  async function deliverToChannel(
+    agentId: string, channelUrl: string, content: string, meta?: Record<string, string>
+  ): Promise<{ delivered: boolean; error?: string }> {
+    try {
+      const res = await fetch(`${channelUrl}/push`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, meta: meta ?? {} }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return { delivered: false, error: `channel returned ${res.status}` };
+      }
+      return { delivered: true };
+    } catch (err) {
+      // Connection refused / timeout → worker process is dead, mark session disconnected
+      db.prepare(
+        `UPDATE coord_channel_sessions SET status = 'disconnected' WHERE agent_id = ?`
+      ).run(agentId);
+      const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
+      coordLog(`channel/deliver FAILED → ${agent?.name ?? agentId}: ${err instanceof Error ? err.message : err} — session marked disconnected`);
+      return { delivered: false, error: `worker unreachable: ${err instanceof Error ? err.message : err}` };
+    }
+  }
+
+  /** POST /channel/push — Push a message to an agent. Tries live delivery first, falls back to mailbox queue. */
   app.post('/channel/push', async (request, reply) => {
     const parsed = channelPushSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
     const { agentId, message } = parsed.data;
 
+    const agent = db.prepare(`SELECT name, workspace FROM coord_agents WHERE id = ?`).get(agentId) as { name: string; workspace: string | null } | undefined;
+    if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+
+    // Try live channel delivery first
     const session = db.prepare(
       `SELECT agent_id, channel_id FROM coord_channel_sessions WHERE agent_id = ? AND status = 'connected'`
     ).get(agentId) as { agent_id: string; channel_id: string } | undefined;
-    if (!session) return reply.status(404).send({ error: 'No active channel session for agent' });
 
+    if (session) {
+      const { delivered } = await deliverToChannel(
+        agentId, session.channel_id, message,
+        { source: 'coordinator', agent: agent.name }
+      );
+
+      if (delivered) {
+        db.prepare(
+          `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
+        ).run(agentId);
+        db.prepare(
+          `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'channel_push', ?)`
+        ).run(agentId, message.slice(0, 500));
+        coordLog(`channel/push → ${agent.name}: ${message.slice(0, 80)}`);
+        return reply.send({ ok: true, delivered: true, channelId: session.channel_id });
+      }
+      // Live delivery failed — fall through to mailbox
+    }
+
+    // Queue to mailbox (delivered on next /next poll)
     db.prepare(
-      `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
-    ).run(agentId);
-
+      `INSERT INTO coord_mailbox (worker_name, workspace, message, source) VALUES (?, ?, ?, 'coordinator')`
+    ).run(agent.name, agent.workspace, message);
     db.prepare(
-      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'channel_push', ?)`
-    ).run(agentId, message.slice(0, 500));
-
-    const agent = db.prepare(`SELECT name FROM coord_agents WHERE id = ?`).get(agentId) as { name: string } | undefined;
-    coordLog(`channel/push → ${agent?.name ?? agentId}: ${message.slice(0, 80)}`);
-    return reply.send({ ok: true, channelId: session.channel_id });
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'mailbox_queued', ?)`
+    ).run(agentId, `queued for ${agent.name}: ${message.slice(0, 200)}`);
+    coordLog(`mailbox/queue → ${agent.name}: ${message.slice(0, 80)} (live delivery unavailable)`);
+    return reply.send({ ok: true, delivered: false, queued: true, hint: 'Message queued in mailbox — will be delivered on next /next poll' });
   });
 
   /** GET /channel/sessions — List all active channel sessions with agent names. */
@@ -1676,5 +1878,40 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     `).all();
 
     return reply.send({ sessions });
+  });
+
+  /** POST /channel/probe — Probe all connected channel sessions, mark dead ones as disconnected. */
+  app.post('/channel/probe', async (_request, reply) => {
+    const sessions = db.prepare(
+      `SELECT cs.agent_id, a.name AS agent_name, cs.channel_id
+       FROM coord_channel_sessions cs
+       JOIN coord_agents a ON a.id = cs.agent_id
+       WHERE cs.status = 'connected'`
+    ).all() as Array<{ agent_id: string; agent_name: string; channel_id: string }>;
+
+    const results: Array<{ agent: string; alive: boolean; error?: string }> = [];
+
+    for (const session of sessions) {
+      try {
+        const res = await fetch(`${session.channel_id}/health`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (res.ok) {
+          results.push({ agent: session.agent_name, alive: true });
+        } else {
+          db.prepare(`UPDATE coord_channel_sessions SET status = 'disconnected' WHERE agent_id = ?`).run(session.agent_id);
+          results.push({ agent: session.agent_name, alive: false, error: `health returned ${res.status}` });
+        }
+      } catch (err) {
+        db.prepare(`UPDATE coord_channel_sessions SET status = 'disconnected' WHERE agent_id = ?`).run(session.agent_id);
+        results.push({ agent: session.agent_name, alive: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    const alive = results.filter(r => r.alive).length;
+    const dead = results.filter(r => !r.alive).length;
+    if (dead > 0) coordLog(`channel/probe: ${alive} alive, ${dead} dead — dead sessions marked disconnected`);
+
+    return reply.send({ probed: results.length, alive, dead, results });
   });
 }

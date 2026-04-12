@@ -144,13 +144,22 @@ export class ConsolidationEngine {
     const needsEmbedding = allActive.filter(e => !e.embedding || e.embedding.length === 0);
     if (needsEmbedding.length > 0) {
       try {
-        const { embed } = await import('../core/embeddings.js');
-        for (const e of needsEmbedding) {
+        const { embedBatch, getModelId } = await import('../core/embeddings.js');
+        const BATCH_SIZE = 32;
+        const modelId = getModelId?.() ?? 'unknown';
+        for (let b = 0; b < needsEmbedding.length; b += BATCH_SIZE) {
+          const batch = needsEmbedding.slice(b, b + BATCH_SIZE);
           try {
-            const vec = await embed(`${e.concept} ${e.content}`);
-            this.store.updateEmbedding(e.id, vec);
-            e.embedding = vec;
-          } catch { /* non-fatal */ }
+            const texts = batch.map(e => `${e.concept} ${e.content}`);
+            const vecs = await embedBatch(texts);
+            for (let j = 0; j < batch.length; j++) {
+              this.store.updateEmbedding(batch[j].id, vecs[j], modelId);
+              batch[j].embedding = vecs[j];
+            }
+          } catch { /* batch failed, skip — non-fatal */ }
+        }
+        if (needsEmbedding.length > 0) {
+          console.log(`[consolidation] Backfilled ${needsEmbedding.filter(e => e.embedding?.length).length}/${needsEmbedding.length} embeddings (model: ${modelId})`);
         }
       } catch { /* embeddings module unavailable */ }
     }

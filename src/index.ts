@@ -101,7 +101,8 @@ async function main() {
   const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine);
 
   // API — disable Fastify's default request logging (too noisy for hive polling)
-  const app = Fastify({ logger: false });
+  // bodyLimit: 512KB to prevent Content-Length mismatch errors with large task payloads
+  const app = Fastify({ logger: false, bodyLimit: 512_000 });
 
   // Bearer token auth — only enforced when AWM_API_KEY is explicitly set and non-empty
   if (API_KEY && API_KEY !== 'NONE' && API_KEY.length > 1) {

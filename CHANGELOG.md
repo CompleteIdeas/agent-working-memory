@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## 0.6.1 (2026-04-12)
+
+### Memory Integrity
+- **Embedding version tracking** — New `embedding_model` column on engrams table. Every embedding now records which model generated it, preventing silent drift when the embedding model is changed. `updateEmbedding()` accepts optional `modelId` parameter.
+- **Batch embedding backfill** — Consolidation Phase 1 now uses `embedBatch()` (batch size 32) instead of single-item loop. 10x faster for large backfill operations. Logs progress: "Backfilled N/M embeddings (model: X)".
+- **`getModelId()` export** — New function in `core/embeddings.ts` returns the current embedding model ID for version tracking.
+- **Deeper retraction propagation** — `propagateConfidenceReduction` now traverses depth 2 (was 1) with 50% penalty decay per hop. Capped at 20 total affected nodes to prevent graph-wide cascades. Uses `visited` set for cycle safety.
+
+### Retrieval Reliability
+- **Query expansion timeout** — 5-second timeout on flan-t5-small expansion model. Falls back to original query on timeout. Timer properly cleaned up on the happy path.
+- **Reranker timeout** — 10-second timeout on ms-marco cross-encoder reranker. Falls back to composite scores on timeout. Timer properly cleaned up.
+
+### Coordination
+- **Channel push delivery** — POST /assign now delivers assignments directly to worker channel HTTP endpoints (not just recording in DB). Falls back to mailbox queue if live delivery fails.
+- **Mailbox queue** — Persistent message queue for workers that survive disconnects. Delivered on next /next poll. Messages queued when live push fails.
+- **Channel auto-registration** — `channelUrl` parameter on /checkin and /next auto-registers channel sessions.
+- **Cross-UUID assignment migration** — /next and GET /assignment resolve assignments across alternate UUIDs for the same agent name.
+- **Channel liveness probe** — Periodic 60s health check marks unreachable channel sessions as disconnected. Manual POST /channel/probe endpoint.
+- **POST /channel/push** — Now tries live delivery first, falls back to mailbox. Returns `{ delivered, queued }` status.
+- **RESUME clears global commands** — RESUME for a workspace now also clears global (workspace=NULL) commands that would otherwise persist forever.
+- **Stale threshold** — Agent alive threshold increased from 120s to 300s to accommodate longer task execution.
+
 ### Added
 - **POST /decisions** — Explicit decision creation endpoint (previously only via memory_write hook).
 - **POST /reassign** — Move assignments between workers or return to pending.

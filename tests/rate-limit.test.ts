@@ -73,8 +73,8 @@ describe('rate limiting', () => {
     const agentName = 'Flood-Agent';
     let hitLimit = false;
 
-    // Fire 65 requests rapidly — should trigger 429 after 60
-    for (let i = 0; i < 65; i++) {
+    // Fire 310 requests rapidly — should trigger 429 after 300 (the actual rate limit)
+    for (let i = 0; i < 310; i++) {
       const { status } = await http('/next', {
         method: 'POST',
         body: { name: agentName, workspace: 'RL-TEST' },

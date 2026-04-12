@@ -53,6 +53,11 @@ export async function embed(text: string): Promise<number[]> {
   return Array.from(result.data as Float32Array).slice(0, DIMENSIONS);
 }
 
+/** Get the current embedding model ID (for version tracking in stored embeddings) */
+export function getModelId(): string {
+  return MODEL_ID;
+}
+
 /**
  * Generate embeddings for multiple texts in a batch.
  * More efficient than calling embed() in a loop.

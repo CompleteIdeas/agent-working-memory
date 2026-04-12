@@ -58,10 +58,10 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
     }
   });
 
-  // Body size limit — 50KB max for coordination requests
+  // Body size limit — 256KB max for coordination requests (tasks with context can be large)
   app.addHook('onRoute', (routeOptions) => {
     if (!routeOptions.bodyLimit) {
-      routeOptions.bodyLimit = 50_000;
+      routeOptions.bodyLimit = 256_000;
     }
   });
 
@@ -104,6 +104,30 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
     setInterval(() => {
       try { purgeDeadAgents(db, 24); } catch { /* db may be closed */ }
     }, 60 * 60 * 1000),
+  );
+
+  // Periodic channel liveness probe every 60s — mark unreachable sessions as disconnected
+  cleanupIntervals.push(
+    setInterval(async () => {
+      try {
+        const sessions = db.prepare(
+          `SELECT agent_id, channel_id FROM coord_channel_sessions WHERE status = 'connected'`
+        ).all() as Array<{ agent_id: string; channel_id: string }>;
+
+        for (const session of sessions) {
+          try {
+            const res = await fetch(`${session.channel_id}/health`, {
+              signal: AbortSignal.timeout(3000),
+            });
+            if (!res.ok) {
+              db.prepare(`UPDATE coord_channel_sessions SET status = 'disconnected' WHERE agent_id = ?`).run(session.agent_id);
+            }
+          } catch {
+            db.prepare(`UPDATE coord_channel_sessions SET status = 'disconnected' WHERE agent_id = ?`).run(session.agent_id);
+          }
+        }
+      } catch { /* db may be closed */ }
+    }, 60_000),
   );
 
   // Load plugins (async — fire and forget, errors logged per-plugin)

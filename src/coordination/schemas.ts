@@ -30,6 +30,7 @@ export const checkinSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   capabilities: z.array(z.string().max(50)).max(20).optional(),
   workspace: z.string().max(50).optional(),
+  channelUrl: z.string().url().max(200).optional(),
 });
 
 export const checkoutSchema = z.object({
@@ -60,6 +61,7 @@ export const nextSchema = z.object({
   workspace: z.string().max(50).optional(),
   role: agentRoleEnum.default('worker'),
   capabilities: z.array(z.string().max(50)).max(20).optional(),
+  channelUrl: z.string().url().max(200).optional(),
 });
 
 export const assignmentClaimSchema = z.object({

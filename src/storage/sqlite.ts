@@ -235,6 +235,13 @@ export class EngramStore {
       `);
     }
 
+    // Migration: add embedding_model for version tracking (prevents drift on model change)
+    try {
+      this.db.prepare('SELECT embedding_model FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN embedding_model TEXT`);
+    }
+
     // Migration: add conscious_state table for checkpointing
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS conscious_state (
@@ -350,9 +357,13 @@ export class EngramStore {
     );
   }
 
-  updateEmbedding(id: string, embedding: number[]): void {
+  updateEmbedding(id: string, embedding: number[], modelId?: string): void {
     const blob = Buffer.from(new Float32Array(embedding).buffer);
-    this.db.prepare('UPDATE engrams SET embedding = ? WHERE id = ?').run(blob, id);
+    if (modelId) {
+      this.db.prepare('UPDATE engrams SET embedding = ?, embedding_model = ? WHERE id = ?').run(blob, modelId, id);
+    } else {
+      this.db.prepare('UPDATE engrams SET embedding = ? WHERE id = ?').run(blob, id);
+    }
   }
 
   retractEngram(id: string, retractedBy: string | null): void {

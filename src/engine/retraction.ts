@@ -60,40 +60,56 @@ export class RetractionEngine {
       this.store.retractEngram(target.id, correction.id);
     }
 
-    // Reduce confidence of closely associated engrams (contamination spread)
-    const associatesAffected = this.propagateConfidenceReduction(target.id, 0.1, 1);
+    // Reduce confidence of associated engrams (contamination spread)
+    // Depth 2 with 50% decay per hop, capped at 20 total affected nodes
+    const associatesAffected = this.propagateConfidenceReduction(target.id, 0.1, 2);
 
     return { retractedId: target.id, correctionId, associatesAffected };
   }
 
   /**
    * Reduce confidence of engrams associated with a retracted engram.
-   * Shallow propagation (depth 1) to avoid over-penalizing.
+   * Propagates up to maxDepth hops with decaying penalty (50% per hop).
+   * Capped at MAX_AFFECTED to prevent cascading through the graph.
    */
+  private static readonly MAX_AFFECTED = 20;
+
   private propagateConfidenceReduction(
     engramId: string,
     penalty: number,
     maxDepth: number,
-    currentDepth: number = 0
+    currentDepth: number = 0,
+    visited: Set<string> = new Set(),
   ): number {
     if (currentDepth >= maxDepth) return 0;
+    if (visited.size >= RetractionEngine.MAX_AFFECTED) return 0;
+    visited.add(engramId);
 
     let affected = 0;
     const associations = this.store.getAssociationsFor(engramId);
     for (const assoc of associations) {
       if (assoc.type === 'invalidation') continue; // Don't penalize corrections
+      if (visited.size >= RetractionEngine.MAX_AFFECTED) break;
 
       const neighborId = assoc.fromEngramId === engramId
         ? assoc.toEngramId
         : assoc.fromEngramId;
+      if (visited.has(neighborId)) continue;
+
       const neighbor = this.store.getEngram(neighborId);
       if (!neighbor || neighbor.retracted) continue;
 
-      // Scale penalty by association weight
-      const scaledPenalty = penalty * assoc.weight;
+      // Scale penalty by association weight and decay per hop (50% per depth level)
+      const depthDecay = Math.pow(0.5, currentDepth);
+      const scaledPenalty = penalty * assoc.weight * depthDecay;
       const newConfidence = Math.max(0.1, neighbor.confidence - scaledPenalty);
       this.store.updateConfidence(neighborId, newConfidence);
       affected++;
+
+      // Recurse to next depth
+      affected += this.propagateConfidenceReduction(
+        neighborId, penalty, maxDepth, currentDepth + 1, visited
+      );
     }
     return affected;
   }

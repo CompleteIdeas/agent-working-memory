@@ -106,6 +106,22 @@ CREATE TABLE IF NOT EXISTS coord_channel_sessions (
   status       TEXT NOT NULL DEFAULT 'connected'
 );
 
+-- Coordination: named mailbox (persistent message queue per worker name)
+-- Messages survive AWM restarts and worker disconnects.
+-- Delivered on next /next poll, then marked delivered.
+CREATE TABLE IF NOT EXISTS coord_mailbox (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  worker_name  TEXT NOT NULL,
+  workspace    TEXT,
+  message      TEXT NOT NULL,
+  source       TEXT DEFAULT 'coordinator',
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  delivered_at TEXT,
+  read_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_coord_mailbox_worker
+  ON coord_mailbox (worker_name, workspace, delivered_at);
+
 -- Coordination: event audit trail
 CREATE TABLE IF NOT EXISTS coord_events (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,

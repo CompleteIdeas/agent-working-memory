@@ -70,6 +70,7 @@ beforeEach(() => {
   db.exec(`DELETE FROM coord_locks`);
   db.exec(`DELETE FROM coord_assignments`);
   db.exec(`DELETE FROM coord_agents`);
+  try { db.exec(`DELETE FROM coord_mailbox`); } catch { /* table may not exist */ }
 });
 
 // ─── POST /channel/register ─────────────────────────────────────
@@ -169,9 +170,9 @@ describe('GET /channel/sessions', () => {
 // ─── POST /channel/push ─────────────────────────────────────────
 
 describe('POST /channel/push', () => {
-  it('pushes a message and increments push_count', async () => {
+  it('falls back to mailbox when live delivery fails (fake channel URL)', async () => {
     const agentId = insertAgent('Worker-A');
-    await http('/channel/register', { method: 'POST', body: { agentId, channelId: 'ch-push' } });
+    await http('/channel/register', { method: 'POST', body: { agentId, channelId: 'http://127.0.0.1:59999' } });
 
     const { status, data } = await http('/channel/push', {
       method: 'POST',
@@ -179,45 +180,56 @@ describe('POST /channel/push', () => {
     });
     expect(status).toBe(200);
     expect(data.ok).toBe(true);
-    expect(data.channelId).toBe('ch-push');
+    // Live delivery fails on unreachable URL, falls back to mailbox
+    expect(data.delivered).toBe(false);
+    expect(data.queued).toBe(true);
 
-    const row = db.prepare('SELECT push_count, last_push_at FROM coord_channel_sessions WHERE agent_id = ?').get(agentId) as any;
-    expect(row.push_count).toBe(1);
-    expect(row.last_push_at).toBeTruthy();
+    // Mailbox should have the message
+    const mailbox = db.prepare('SELECT * FROM coord_mailbox WHERE worker_name = ?').all('Worker-A') as any[];
+    expect(mailbox.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('returns 404 when no channel session exists', async () => {
+  it('queues to mailbox when no channel session exists', async () => {
     const agentId = insertAgent('Worker-A');
-    const { status } = await http('/channel/push', {
+    const { status, data } = await http('/channel/push', {
       method: 'POST',
       body: { agentId, message: 'test' },
+    });
+    // Agent exists but no session → queues to mailbox
+    expect(status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.queued).toBe(true);
+  });
+
+  it('returns 404 when agent does not exist', async () => {
+    const { status } = await http('/channel/push', {
+      method: 'POST',
+      body: { agentId: crypto.randomUUID(), message: 'test' },
     });
     expect(status).toBe(404);
   });
 
-  it('increments push_count on successive pushes', async () => {
+  it('queues messages on successive pushes', async () => {
     const agentId = insertAgent('Worker-A');
-    await http('/channel/register', { method: 'POST', body: { agentId, channelId: 'ch-multi' } });
-
+    // No channel registered — all go to mailbox
     await http('/channel/push', { method: 'POST', body: { agentId, message: 'msg 1' } });
     await http('/channel/push', { method: 'POST', body: { agentId, message: 'msg 2' } });
     await http('/channel/push', { method: 'POST', body: { agentId, message: 'msg 3' } });
 
-    const row = db.prepare('SELECT push_count FROM coord_channel_sessions WHERE agent_id = ?').get(agentId) as any;
-    expect(row.push_count).toBe(3);
+    const mailbox = db.prepare('SELECT * FROM coord_mailbox WHERE worker_name = ?').all('Worker-A') as any[];
+    expect(mailbox.length).toBe(3);
   });
 
-  it('creates an event for each push', async () => {
+  it('creates a mailbox_queued event for each push without live channel', async () => {
     const agentId = insertAgent('Worker-A');
-    await http('/channel/register', { method: 'POST', body: { agentId, channelId: 'ch-evt' } });
 
     await http('/channel/push', { method: 'POST', body: { agentId, message: 'hello world' } });
 
     const events = db.prepare(
-      `SELECT * FROM coord_events WHERE agent_id = ? AND event_type = 'channel_push'`
+      `SELECT * FROM coord_events WHERE agent_id = ? AND event_type = 'mailbox_queued'`
     ).all(agentId) as any[];
     expect(events).toHaveLength(1);
-    expect(events[0].detail).toBe('hello world');
+    expect(events[0].detail).toContain('hello world');
   });
 });
 
@@ -249,16 +261,18 @@ describe('DELETE /channel/register', () => {
     expect(data.ok).toBe(true);
   });
 
-  it('push fails after deregister', async () => {
+  it('push falls back to mailbox after deregister', async () => {
     const agentId = insertAgent('Worker-A');
-    await http('/channel/register', { method: 'POST', body: { agentId, channelId: 'ch-gone' } });
+    await http('/channel/register', { method: 'POST', body: { agentId, channelId: 'http://127.0.0.1:59999' } });
     await http('/channel/register', { method: 'DELETE', body: { agentId } });
 
-    const { status } = await http('/channel/push', {
+    const { status, data } = await http('/channel/push', {
       method: 'POST',
-      body: { agentId, message: 'should fail' },
+      body: { agentId, message: 'should queue to mailbox' },
     });
-    expect(status).toBe(404);
+    // No session after deregister → queues to mailbox
+    expect(status).toBe(200);
+    expect(data.queued).toBe(true);
   });
 });
 

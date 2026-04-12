@@ -203,10 +203,16 @@ export class ActivationEngine {
     // Phase 0: Query expansion — add related terms to improve BM25 recall
     let searchContext = queryContext;
     if (useExpansion) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        searchContext = await expandQuery(query.context);
+        searchContext = await Promise.race([
+          expandQuery(query.context),
+          new Promise<string>((_, reject) => { timer = setTimeout(() => reject(new Error('expansion timeout')), 5000); }),
+        ]);
       } catch {
-        // Expansion unavailable — use original query
+        // Expansion unavailable or timed out — use original query
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     }
 
@@ -522,7 +528,11 @@ export class ActivationEngine {
         const passages = rerankPool.map(r =>
           `${r.engram.concept}: ${r.engram.content}`
         );
-        const rerankResults = await rerank(query.context, passages);
+        let rerankTimer: ReturnType<typeof setTimeout> | undefined;
+        const rerankResults = await Promise.race([
+          rerank(query.context, passages),
+          new Promise<never>((_, reject) => { rerankTimer = setTimeout(() => reject(new Error('reranker timeout')), 10000); }),
+        ]).finally(() => { if (rerankTimer) clearTimeout(rerankTimer); });
 
         // Adaptive reranker blend (Codex recommendation):
         // When BM25/text signals are strong, trust them more; when weak, lean on reranker.
