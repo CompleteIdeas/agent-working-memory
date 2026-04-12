@@ -186,6 +186,7 @@ export interface ActivationQuery {
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default
+  workspace?: string;          // Search across all agents in this workspace (hive mode). If unset, agent-scoped only.
 }
 
 /**

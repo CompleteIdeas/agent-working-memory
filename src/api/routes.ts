@@ -170,6 +170,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       useReranker?: boolean;
       useExpansion?: boolean;
       abstentionThreshold?: number;
+      workspace?: string;
     };
 
     const results = await activationEngine.activate({
@@ -181,6 +182,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       useReranker: body.useReranker,
       useExpansion: body.useExpansion,
       abstentionThreshold: body.abstentionThreshold,
+      workspace: body.workspace,
     });
 
     // Auto-checkpoint: track recall for consolidation scheduling

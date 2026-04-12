@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## 0.7.0 (2026-04-12)
+
+### Workspace-Scoped Recall
+- **`workspace` parameter on `memory_recall`** — search across all agents in a workspace for hive memory sharing. Omit for agent-scoped recall (standalone mode). Set `AWM_WORKSPACE` env var for automatic workspace scoping on all recalls.
+- **Workspace-aware BM25 and retrieval** — `searchBM25WithRankMultiAgent()` and `getEngramsByAgents()` for multi-agent corpus search.
+- **`getWorkspaceAgentIds()`** — resolves all live agents in a workspace via coordination tables. Falls back to single-agent if coordination is disabled.
+- Also added to HTTP API (`POST /memory/activate`) and internal `memory_restore` / `memory_task_begin` recalls.
+
+### Validation-Gated Hebbian Learning (Kairos-Inspired)
+- **Edges no longer strengthen on co-retrieval alone.** Co-activated pairs are held in a `ValidationGatedBuffer` until `memory_feedback` is called.
+- **Positive feedback → strengthen** associations between co-retrieved memories (signal=1.0).
+- **Negative feedback → slight weakening** (signal=-0.3).
+- **No feedback within 60 seconds → discard** (neutral — no strengthening or weakening).
+- This structurally prevents hub toxicity from noisy co-retrieval (e.g., "Task completed" memories that co-activate with everything but add no value).
+- `memory_feedback` response now reports how many associations were strengthened/weakened.
+
+### Multi-Graph Traversal (MAGMA-Inspired)
+- **Graph walk decomposed into four orthogonal sub-graphs** instead of one beam search over all edge types:
+  - **Semantic** (connection + hebbian edges, weight 0.40) — standard weight-based walk
+  - **Temporal** (temporal edges, weight 0.20) — recency-weighted connections
+  - **Causal** (causal edges, weight 0.25) — 2x boost (high-value reasoning chains)
+  - **Entity** (bridge edges, weight 0.15) — cross-topic entity connections
+- Each sub-graph runs an independent beam search with proportional beam width.
+- Boosts are **fused** across sub-graphs and capped at 0.25 total per engram.
+- Inspired by MAGMA (Jiang et al., Jan 2026) which demonstrated 45.5% accuracy gains from multi-graph decomposition.
+
+### Power-Law Edge Decay (DASH Model)
+- **Replaced exponential decay** (`weight × 0.5^(t/halfLife)`) with **power-law decay** (`weight × (1 + t/scale)^(-0.8)`).
+- Power law retains associations longer: at 30 days, retains ~32% vs exponential's ~6%. At 90 days: ~20% vs ~0.02%.
+- Matches empirical forgetting research (Averell & Heathcote, 2011) and prevents premature loss of valuable old associations.
+
 ## 0.6.1 (2026-04-12)
 
 ### Memory Integrity

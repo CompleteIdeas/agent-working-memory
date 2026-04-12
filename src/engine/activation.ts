@@ -21,7 +21,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { baseLevelActivation, softplus } from '../core/decay.js';
-import { strengthenAssociation, CoActivationBuffer } from '../core/hebbian.js';
+import { strengthenAssociation, CoActivationBuffer, ValidationGatedBuffer } from '../core/hebbian.js';
 import { embed, cosineSimilarity } from '../core/embeddings.js';
 import { rerank } from '../core/reranker.js';
 import { expandQuery } from '../core/query-expander.js';
@@ -163,10 +163,12 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 export class ActivationEngine {
   private store: EngramStore;
   private coActivationBuffer: CoActivationBuffer;
+  readonly validationGate: ValidationGatedBuffer;
 
   constructor(store: EngramStore) {
     this.store = store;
     this.coActivationBuffer = new CoActivationBuffer(50);
+    this.validationGate = new ValidationGatedBuffer();
   }
 
   /**
@@ -181,14 +183,18 @@ export class ActivationEngine {
     const abstentionThreshold = query.abstentionThreshold ?? 0;
     const adaptive = resolveAdaptiveParams(query);
 
+    // Resolve workspace scope: if workspace is set, search across all agents in that workspace
+    const agentIds = query.workspace
+      ? this.store.getWorkspaceAgentIds(query.agentId, query.workspace)
+      : [query.agentId];
+    const isWorkspaceScoped = agentIds.length > 1;
+
     // Phase -1: Coref expansion — if query has pronouns, append recent entity names
-    // Helps conversational recall where "she/he/they/it" refers to a named entity.
     let queryContext = query.context;
     const pronounPattern = /\b(she|he|they|her|his|him|their|it|that|this|there)\b/i;
     if (pronounPattern.test(queryContext)) {
-      // Pull recent entity names from the agent's most-accessed memories
       try {
-        const recentEntities = this.store.getEngramsByAgent(query.agentId, 'active')
+        const recentEntities = this.store.getEngramsByAgents(agentIds, 'active')
           .sort((a, b) => b.accessCount - a.accessCount)
           .slice(0, 10)
           .flatMap(e => e.tags.filter(t => t.length >= 3 && !/^(session-|low-|D\d)/.test(t)))
@@ -228,9 +234,9 @@ export class ActivationEngine {
     // Two-pass BM25: (1) keyword-stripped query for precision, (2) expanded query for recall.
     const keywordQuery = Array.from(tokenize(query.context)).join(' ');
     const bm25Keyword = keywordQuery.length > 2
-      ? this.store.searchBM25WithRank(query.agentId, keywordQuery, limit * 3)
+      ? this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3)
       : [];
-    const bm25Expanded = this.store.searchBM25WithRank(query.agentId, searchContext, limit * 3);
+    const bm25Expanded = this.store.searchBM25WithRankMultiAgent(agentIds, searchContext, limit * 3);
 
     // Merge: take the best BM25 score per engram from either pass
     const bm25ScoreMap = new Map<string, number>();
@@ -246,8 +252,8 @@ export class ActivationEngine {
       engram, bm25Score: bm25ScoreMap.get(id) ?? 0,
     }));
 
-    const allActive = this.store.getEngramsByAgent(
-      query.agentId,
+    const allActive = this.store.getEngramsByAgents(
+      agentIds,
       query.includeStaging ? undefined : 'active',
       query.includeRetracted ?? false
     );
@@ -402,7 +408,7 @@ export class ActivationEngine {
       // Take top 5 feedback terms and re-search
       const extraTerms = Array.from(feedbackTerms).slice(0, 5).join(' ');
       if (extraTerms) {
-        const feedbackBM25 = this.store.searchBM25WithRank(query.agentId, `${searchContext} ${extraTerms}`, limit * 2);
+        const feedbackBM25 = this.store.searchBM25WithRankMultiAgent(agentIds, `${searchContext} ${extraTerms}`, limit * 2);
         for (const r of feedbackBM25) {
           if (!candidateMap.has(r.engram.id)) {
             candidateMap.set(r.engram.id, r.engram);
@@ -632,13 +638,21 @@ export class ActivationEngine {
 
     const activatedIds = results.map(r => r.engram.id);
 
-    // Side effects: touch, co-activate, Hebbian update (skip for internal/system calls)
+    // Side effects: touch, co-activate, defer Hebbian to validation gate (skip for internal/system calls)
     if (!query.internal) {
       for (const id of activatedIds) {
         this.store.touchEngram(id);
       }
       this.coActivationBuffer.pushBatch(activatedIds);
-      this.updateHebbianWeights();
+      // Validation-gated Hebbian: defer strengthening until feedback arrives
+      const pairs = this.coActivationBuffer.getCoActivatedPairs(10_000);
+      const seen = new Set<string>();
+      const uniquePairs: [string, string][] = [];
+      for (const [a, b] of pairs) {
+        const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+        if (!seen.has(key)) { seen.add(key); uniquePairs.push([a, b]); }
+      }
+      this.validationGate.addPending(activatedIds, uniquePairs);
 
       // Log activation event for eval
       const latencyMs = performance.now() - startTime;
@@ -658,10 +672,27 @@ export class ActivationEngine {
   }
 
   /**
-   * Beam search graph walk — replaces naive BFS.
-   * Scores paths (not just nodes), uses query-dependent edge filtering,
-   * and supports deeper exploration with focused beams.
+   * Multi-graph traversal (MAGMA-inspired).
+   *
+   * Instead of one beam search over all edge types, runs independent traversals
+   * per graph type with specialized scoring, then fuses the boosts.
+   *
+   * Four sub-graphs:
+   * - Semantic (connection + hebbian edges) → standard weight-based walk
+   * - Temporal (temporal edges) → recency-weighted (favor recent connections)
+   * - Causal (causal edges) → full weight walk (causal links are high-value)
+   * - Entity (bridge edges) → entity-tag-weighted walk
+   *
+   * Each sub-graph contributes independently to the final graph boost,
+   * weighted by configurable per-graph weights.
    */
+  private static readonly GRAPH_WEIGHTS = {
+    semantic: 0.40,   // connection + hebbian
+    temporal: 0.20,   // temporal edges
+    causal: 0.25,     // causal edges (high-value signal)
+    entity: 0.15,     // bridge edges
+  };
+
   private graphWalk(
     scored: { engram: Engram; score: number; phaseScores: PhaseScores; associations: Association[] }[],
     maxDepth: number,
@@ -670,85 +701,120 @@ export class ActivationEngine {
   ): void {
     const scoreMap = new Map(scored.map(s => [s.engram.id, s]));
     const MAX_TOTAL_BOOST = 0.25;
-    const BEAM_WIDTH = beamWidth;
 
-    // Seed the beam with high-scoring, text-relevant items
-    const beam = scored
-      .filter(item => item.phaseScores.textMatch >= 0.15)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, BEAM_WIDTH);
+    // Define which edge types belong to each sub-graph
+    const graphTypes: Record<string, string[]> = {
+      semantic: ['connection', 'hebbian'],
+      temporal: ['temporal'],
+      causal: ['causal'],
+      entity: ['bridge'],
+    };
 
-    // Track which engrams have been explored (avoid cycles)
-    const explored = new Set<string>();
+    // Run independent traversals per sub-graph, accumulate boosts
+    const boostAccum = new Map<string, number>(); // engramId → total boost
 
-    for (let depth = 0; depth < maxDepth; depth++) {
-      const nextBeam: typeof beam = [];
+    for (const [graphName, edgeTypes] of Object.entries(graphTypes)) {
+      const graphWeight = ActivationEngine.GRAPH_WEIGHTS[graphName as keyof typeof ActivationEngine.GRAPH_WEIGHTS];
+      const subBeamWidth = Math.max(3, Math.ceil(beamWidth * graphWeight));
 
-      for (const item of beam) {
-        if (explored.has(item.engram.id)) continue;
-        explored.add(item.engram.id);
+      // Seed beam
+      const beam = scored
+        .filter(item => item.phaseScores.textMatch >= 0.15)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, subBeamWidth);
 
-        // Get associations — for depth > 0, fetch from store if not in scored set
-        const associations = item.associations.length > 0
-          ? item.associations
-          : this.store.getAssociationsFor(item.engram.id);
+      const explored = new Set<string>();
 
-        for (const assoc of associations) {
-          const neighborId = assoc.fromEngramId === item.engram.id
-            ? assoc.toEngramId
-            : assoc.fromEngramId;
+      for (let depth = 0; depth < maxDepth; depth++) {
+        const nextBeam: typeof beam = [];
 
-          if (explored.has(neighborId)) continue;
+        for (const item of beam) {
+          if (explored.has(item.engram.id)) continue;
+          explored.add(item.engram.id);
 
-          const neighbor = scoreMap.get(neighborId);
-          if (!neighbor) continue;
+          const associations = item.associations.length > 0
+            ? item.associations
+            : this.store.getAssociationsFor(item.engram.id);
 
-          // Query-dependent edge filtering: neighbor must have SOME relevance
-          // (textMatch > 0.05 for deeper hops, relaxed from 0.1)
-          const relevanceFloor = depth === 0 ? 0.1 : 0.05;
-          if (neighbor.phaseScores.textMatch < relevanceFloor) continue;
+          // Filter to only edges of this sub-graph type
+          const relevantEdges = associations.filter(a => edgeTypes.includes(a.type));
 
-          // Skip if neighbor already at boost cap
-          if (neighbor.phaseScores.graphBoost >= MAX_TOTAL_BOOST) continue;
+          for (const assoc of relevantEdges) {
+            const neighborId = assoc.fromEngramId === item.engram.id
+              ? assoc.toEngramId
+              : assoc.fromEngramId;
 
-          // Path score: source score * edge weight * hop penalty^(depth+1)
-          const normalizedWeight = Math.min(assoc.weight, 5.0) / 5.0;
-          const pathScore = item.score * normalizedWeight * Math.pow(hopPenalty, depth + 1);
+            if (explored.has(neighborId)) continue;
+            const neighbor = scoreMap.get(neighborId);
+            if (!neighbor) continue;
 
-          const boost = Math.min(pathScore, 0.15, MAX_TOTAL_BOOST - neighbor.phaseScores.graphBoost);
-          if (boost > 0.001) {
-            neighbor.score += boost;
-            neighbor.phaseScores.graphBoost += boost;
-            nextBeam.push(neighbor);
+            const relevanceFloor = depth === 0 ? 0.1 : 0.05;
+            if (neighbor.phaseScores.textMatch < relevanceFloor) continue;
+
+            // Path score with graph-type-specific weighting
+            const normalizedWeight = Math.min(assoc.weight, 5.0) / 5.0;
+            let pathScore = item.score * normalizedWeight * Math.pow(hopPenalty, depth + 1);
+
+            // Causal edges get a 2x boost — they represent verified reasoning chains
+            if (graphName === 'causal') pathScore *= 2.0;
+
+            // Weight by sub-graph importance
+            const boost = Math.min(pathScore * graphWeight, 0.15);
+            if (boost > 0.001) {
+              boostAccum.set(neighborId, (boostAccum.get(neighborId) ?? 0) + boost);
+              nextBeam.push(neighbor);
+            }
           }
         }
-      }
 
-      // Prune beam for next depth level
-      if (nextBeam.length === 0) break;
-      beam.length = 0;
-      beam.push(...nextBeam
-        .sort((a, b) => b.score - a.score)
-        .slice(0, BEAM_WIDTH)
-      );
+        if (nextBeam.length === 0) break;
+        beam.length = 0;
+        beam.push(...nextBeam
+          .sort((a, b) => b.score - a.score)
+          .slice(0, subBeamWidth)
+        );
+      }
+    }
+
+    // Apply fused boosts to scored items
+    for (const [engramId, totalBoost] of boostAccum) {
+      const item = scoreMap.get(engramId);
+      if (!item) continue;
+      const capped = Math.min(totalBoost, MAX_TOTAL_BOOST - item.phaseScores.graphBoost);
+      if (capped > 0.001) {
+        item.score += capped;
+        item.phaseScores.graphBoost += capped;
+      }
     }
   }
 
-  private updateHebbianWeights(): void {
-    const pairs = this.coActivationBuffer.getCoActivatedPairs(10_000);
-    // Deduplicate pairs to prevent repeated strengthening
-    const seen = new Set<string>();
-    for (const [a, b] of pairs) {
-      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+  /**
+   * Resolve validation-gated Hebbian update for a specific engram.
+   * Called by memory_feedback — only strengthens when retrieval was useful.
+   * This prevents hub toxicity from noisy co-retrieval (Kairos-inspired).
+   */
+  resolveHebbianFeedback(engramId: string, useful: boolean): number {
+    const { pairs, signal } = this.validationGate.resolveFeedback(engramId, useful);
+    let updated = 0;
 
+    for (const [a, b] of pairs) {
       const existing = this.store.getAssociation(a, b) ?? this.store.getAssociation(b, a);
       const currentWeight = existing?.weight ?? 0.1;
-      const newWeight = strengthenAssociation(currentWeight);
-      this.store.upsertAssociation(a, b, newWeight, 'hebbian');
-      this.store.upsertAssociation(b, a, newWeight, 'hebbian');
+
+      if (signal > 0) {
+        // Positive feedback → strengthen
+        const newWeight = strengthenAssociation(currentWeight, signal);
+        this.store.upsertAssociation(a, b, newWeight, 'hebbian');
+        this.store.upsertAssociation(b, a, newWeight, 'hebbian');
+      } else {
+        // Negative feedback → slight weakening (decay by signal magnitude)
+        const newWeight = Math.max(0.001, currentWeight * (1 + signal)); // signal is -0.3
+        this.store.upsertAssociation(a, b, newWeight, 'hebbian');
+        this.store.upsertAssociation(b, a, newWeight, 'hebbian');
+      }
+      updated++;
     }
+    return updated;
   }
 
   private explain(phases: PhaseScores, engram: Engram, associations: Association[]): string {

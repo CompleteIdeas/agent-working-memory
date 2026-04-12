@@ -150,8 +150,8 @@ describe('Full memory lifecycle', () => {
   });
 });
 
-describe('Hebbian association formation', () => {
-  it('co-activated engrams form associations', async () => {
+describe('Hebbian association formation (validation-gated)', () => {
+  it('co-activated engrams form associations after positive feedback', async () => {
     const e1 = store.createEngram({
       agentId: AGENT_ID,
       concept: 'typescript generics',
@@ -166,7 +166,7 @@ describe('Hebbian association formation', () => {
       salience: 0.6,
     });
 
-    // Activate with context that should hit both
+    // Activate with context that should hit both — pairs deferred to validation gate
     await activation.activate({
       agentId: AGENT_ID,
       context: 'typescript type generics inference code',
@@ -174,12 +174,16 @@ describe('Hebbian association formation', () => {
       useExpansion: false,
     });
 
-    // Check that associations formed
+    // Provide positive feedback — this triggers validation-gated Hebbian strengthening
+    const updated = activation.resolveHebbianFeedback(e1.id, true);
+
+    // After feedback: associations should exist
     const assocs = store.getAssociationsFor(e1.id);
     const linkedToE2 = assocs.some(
       a => a.fromEngramId === e2.id || a.toEngramId === e2.id
     );
     expect(linkedToE2).toBe(true);
+    expect(updated).toBeGreaterThan(0);
   });
 });
 

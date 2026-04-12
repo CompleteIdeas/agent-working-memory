@@ -66,6 +66,8 @@ Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM
 | **Forgetting** | Manual cleanup | Cognitive forgetting: unused memories fade, reinforced knowledge persists (access-count modulated) |
 | **Feedback** | None | Useful/not-useful signals tune confidence and retrieval rank |
 | **Correction** | Delete and re-insert | Retraction: wrong memories invalidated, corrections linked, penalties propagate (depth 2, decaying) |
+| **Graph** | None or single graph | Multi-graph: semantic, temporal, causal, entity — independent traversal with fused scoring |
+| **Learning** | Unconditional co-activation | Validation-gated: edges strengthen only on positive feedback (Kairos-inspired) |
 | **Noise rejection** | None | Multi-channel agreement gate: requires 2+ retrieval channels to agree before returning results |
 | **Duplicates** | Stored repeatedly | Reinforce-on-duplicate: near-exact matches boost existing memory instead of creating copies |
 
@@ -394,14 +396,16 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.6.1
+## What's New in v0.7.0
 
-- **Embedding version tracking** — new `embedding_model` column prevents silent drift when changing models. Each embedding records its source model.
-- **Batch embedding backfill** — consolidation uses `embedBatch()` (batch size 32) instead of single-item loop. 10x faster for large backfills.
-- **Deeper retraction propagation** — confidence penalties now propagate 2 hops (was 1) with 50% decay per hop, capped at 20 affected nodes.
-- **Retrieval timeouts** — 5s timeout on query expansion, 10s on cross-encoder reranker. Both fail gracefully to text-only signals.
-- **Channel push delivery** — assignments delivered directly to worker HTTP endpoints with mailbox fallback.
-- **Cross-UUID assignment migration** — resolves assignments across alternate agent UUIDs.
+- **Workspace-scoped recall** — `memory_recall` can now search across all agents in a workspace. Essential for hive workflows where decisions and discoveries need to be instantly available to all agents. Set `AWM_WORKSPACE` env var or pass `workspace` parameter. Standalone agents unaffected.
+- **Validation-gated Hebbian learning** (Kairos-inspired) — associations only strengthen when `memory_feedback(useful=true)` confirms the retrieval was valuable. Prevents hub toxicity from noisy co-retrieval. No feedback = neutral. Negative feedback = slight weakening.
+- **Multi-graph traversal** (MAGMA-inspired) — graph walk decomposed into four orthogonal sub-graphs (semantic, temporal, causal, entity), each with independent beam search and specialized scoring. Boosts fused across sub-graphs. Inspired by MAGMA's 45.5% accuracy gains.
+- **Power-law edge decay** (DASH model) — edges decay via power law instead of exponential. Retains valuable old associations ~5x longer at 30 days. Matches empirical human forgetting curves.
+
+### v0.6.1
+
+- Embedding version tracking, batch backfill, deeper retraction propagation, retrieval timeouts, channel push delivery.
 
 ### v0.6.0
 
@@ -415,7 +419,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.6.1). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.0). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**

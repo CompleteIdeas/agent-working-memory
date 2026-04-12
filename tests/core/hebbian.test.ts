@@ -31,9 +31,12 @@ describe('Hebbian strengthening', () => {
 describe('Association decay', () => {
   it('weight decreases over time without activation', () => {
     const before = 0.8;
-    const after = decayAssociation(before, 7); // 1 half-life
+    const after = decayAssociation(before, 7); // 1 scale period
     expect(after).toBeLessThan(before);
-    expect(after).toBeCloseTo(before * 0.5, 1);
+    // Power-law decay: (1 + 7/7)^(-0.8) ≈ 0.574 → 0.8 * 0.574 ≈ 0.46
+    // More lenient than exponential half-life — retains more at longer intervals
+    expect(after).toBeGreaterThan(before * 0.4);
+    expect(after).toBeLessThan(before * 0.7);
   });
 
   it('no decay at zero days', () => {

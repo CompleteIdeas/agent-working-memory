@@ -330,6 +330,83 @@ export class EngramStore {
   }
 
   /**
+   * Get engrams across multiple agents (workspace-scoped recall).
+   * Used when workspace mode is enabled for hive memory sharing.
+   */
+  getEngramsByAgents(agentIds: string[], stage?: EngramStage, includeRetracted: boolean = false): Engram[] {
+    if (agentIds.length === 0) return [];
+    if (agentIds.length === 1) return this.getEngramsByAgent(agentIds[0], stage, includeRetracted);
+
+    const placeholders = agentIds.map(() => '?').join(',');
+    let query = `SELECT * FROM engrams WHERE agent_id IN (${placeholders})`;
+    const params: any[] = [...agentIds];
+
+    if (stage) {
+      query += ' AND stage = ?';
+      params.push(stage);
+    }
+    if (!includeRetracted) {
+      query += ' AND retracted = 0';
+    }
+
+    return (this.db.prepare(query).all(...params) as any[]).map(r => this.rowToEngram(r));
+  }
+
+  /**
+   * BM25 search across multiple agents (workspace-scoped).
+   */
+  searchBM25WithRankMultiAgent(agentIds: string[], query: string, limit: number = 10): { engram: Engram; bm25Score: number }[] {
+    if (agentIds.length === 0) return [];
+    if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit);
+
+    const sanitized = query
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 1)
+      .map(w => `"${w}"`)
+      .join(' OR ');
+
+    if (!sanitized) return [];
+
+    try {
+      const placeholders = agentIds.map(() => '?').join(',');
+      const rows = this.db.prepare(`
+        SELECT e.*, rank FROM engrams e
+        JOIN engrams_fts ON e.rowid = engrams_fts.rowid
+        WHERE engrams_fts MATCH ? AND e.agent_id IN (${placeholders}) AND e.retracted = 0
+        ORDER BY rank
+        LIMIT ?
+      `).all(sanitized, ...agentIds, limit) as any[];
+
+      return rows.map(r => ({
+        engram: this.rowToEngram(r),
+        bm25Score: Math.abs(r.rank ?? 0) / (1 + Math.abs(r.rank ?? 0)),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get all distinct agent IDs that share a workspace (requires coord_agents table).
+   * Returns just the queried agentId if coordination tables don't exist.
+   */
+  getWorkspaceAgentIds(agentId: string, workspace: string): string[] {
+    try {
+      const rows = this.db.prepare(
+        `SELECT DISTINCT id FROM coord_agents WHERE workspace = ? AND status != 'dead'`
+      ).all(workspace) as Array<{ id: string }>;
+      const ids = rows.map(r => r.id);
+      // Ensure the querying agent is always included
+      if (!ids.includes(agentId)) ids.push(agentId);
+      return ids;
+    } catch {
+      // No coordination tables — fall back to single agent
+      return [agentId];
+    }
+  }
+
+  /**
    * Touch an engram: increment access count, update last_accessed, and
    * nudge confidence upward. Each retrieval is weak evidence the memory
    * is useful — bounded so only explicit feedback can push confidence

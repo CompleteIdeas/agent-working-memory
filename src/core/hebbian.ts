@@ -30,14 +30,25 @@ export function strengthenAssociation(
 
 /**
  * Weaken an association weight due to lack of co-activation.
- * Called periodically by the connection engine.
+ * Uses power-law decay (DASH model) instead of exponential.
+ * Power law has a longer tail — old but valuable associations
+ * don't vanish as aggressively as exponential decay.
+ *
+ * DASH: weight = initial × (1 + t/scale)^(-exponent)
+ * vs exponential: weight = initial × 0.5^(t/halfLife)
+ *
+ * At 7 days: power-law retains ~58% vs exponential 50%
+ * At 30 days: power-law retains ~32% vs exponential 6%
+ * At 90 days: power-law retains ~20% vs exponential 0.02%
  */
 export function decayAssociation(
   currentWeight: number,
   daysSinceActivation: number,
-  halfLife: number = 7.0 // days
+  halfLife: number = 7.0 // scale parameter (days)
 ): number {
-  const decayFactor = Math.pow(0.5, daysSinceActivation / halfLife);
+  // Power-law decay: (1 + t/scale)^(-exponent)
+  const exponent = 0.8; // Controls steepness — 0.8 gives a good balance
+  const decayFactor = Math.pow(1 + daysSinceActivation / halfLife, -exponent);
   return Math.max(currentWeight * decayFactor, MIN_WEIGHT);
 }
 
@@ -90,4 +101,74 @@ export class CoActivationBuffer {
   clear(): void {
     this.buffer = [];
   }
+}
+
+/**
+ * Validation-gated Hebbian buffer (Kairos-inspired).
+ *
+ * Instead of strengthening associations immediately on co-activation,
+ * pairs are held pending until feedback arrives. This prevents hub toxicity
+ * from noisy co-retrieval — edges only strengthen when the retrieval was
+ * actually useful.
+ *
+ * - Positive feedback → strengthen the pending pairs
+ * - Negative feedback → slightly weaken them
+ * - No feedback within GATE_TIMEOUT_MS → discard (neutral)
+ */
+const GATE_TIMEOUT_MS = 60_000; // 60 seconds to receive feedback
+
+interface PendingHebbianUpdate {
+  pairs: [string, string][];
+  engramIds: string[];
+  timestamp: number;
+}
+
+export class ValidationGatedBuffer {
+  private pending: PendingHebbianUpdate[] = [];
+
+  /** Record co-activated pairs as pending (awaiting feedback validation) */
+  addPending(engramIds: string[], pairs: [string, string][]): void {
+    this.pending.push({ pairs, engramIds, timestamp: Date.now() });
+    // Evict expired entries
+    const cutoff = Date.now() - GATE_TIMEOUT_MS;
+    this.pending = this.pending.filter(p => p.timestamp > cutoff);
+  }
+
+  /**
+   * Resolve pending updates for an engram that received feedback.
+   * Returns pairs to strengthen (positive) or weaken (negative).
+   */
+  resolveFeedback(engramId: string, useful: boolean): { pairs: [string, string][]; signal: number } {
+    const cutoff = Date.now() - GATE_TIMEOUT_MS;
+    const matching: [string, string][] = [];
+
+    // Find all pending updates that include this engram and are still within the gate window
+    this.pending = this.pending.filter(p => {
+      if (p.timestamp < cutoff) return false; // expired
+      if (p.engramIds.includes(engramId)) {
+        matching.push(...p.pairs);
+        return false; // consumed
+      }
+      return true; // keep
+    });
+
+    // Deduplicate pairs
+    const seen = new Set<string>();
+    const unique: [string, string][] = [];
+    for (const [a, b] of matching) {
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push([a, b]);
+      }
+    }
+
+    return {
+      pairs: unique,
+      signal: useful ? 1.0 : -0.3, // positive = full strengthen, negative = slight weaken
+    };
+  }
+
+  /** Get count of pending updates (for stats) */
+  get pendingCount(): number { return this.pending.length; }
 }

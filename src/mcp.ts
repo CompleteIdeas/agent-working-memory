@@ -378,6 +378,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     use_reranker: z.boolean().optional().default(true).describe('Use cross-encoder re-ranking for better relevance (default true)'),
     use_expansion: z.boolean().optional().default(true).describe('Expand query with synonyms for better recall (default true)'),
     memory_type: z.enum(['episodic', 'semantic', 'procedural']).optional().describe('Filter by memory type (omit to search all types)'),
+    workspace: z.string().optional().describe('Search across all agents in this workspace (hive mode). Omit for agent-scoped recall only.'),
   },
   async (params) => {
     const queryText = params.query ?? params.context;
@@ -389,6 +390,8 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
         }],
       };
     }
+    // Use workspace from param, env var, or omit for agent-scoped
+    const workspace = params.workspace ?? process.env.AWM_WORKSPACE ?? undefined;
     const results = await activationEngine.activate({
       agentId: AGENT_ID,
       context: queryText,
@@ -398,6 +401,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       useReranker: params.use_reranker,
       useExpansion: params.use_expansion,
       memoryType: params.memory_type,
+      workspace,
     });
 
     // Auto-checkpoint: track recall
@@ -456,10 +460,13 @@ Always call this after using a recalled memory so the system learns what's valua
       store.updateConfidence(engram.id, engram.confidence + delta);
     }
 
+    // Validation-gated Hebbian: resolve pending co-activation pairs for this engram
+    const hebbianUpdated = activationEngine.resolveHebbianFeedback(params.engram_id, params.useful);
+
     return {
       content: [{
         type: 'text' as const,
-        text: `Feedback: ${params.useful ? '+useful' : '-not useful'}`,
+        text: `Feedback: ${params.useful ? '+useful' : '-not useful'}${hebbianUpdated > 0 ? ` (${hebbianUpdated} association${hebbianUpdated > 1 ? 's' : ''} ${params.useful ? 'strengthened' : 'weakened'})` : ''}`,
       }],
     };
   }
@@ -673,6 +680,7 @@ Use this at the start of every session or after compaction to pick up where you 
           minScore: 0.05,
           useReranker: true,
           useExpansion: true,
+          workspace: process.env.AWM_WORKSPACE ?? undefined,
         });
         recalledMemories = results.map(r => ({
           id: r.engram.id,
@@ -983,6 +991,7 @@ This ensures your state is saved before you start, and primes recall with releva
         minScore: 0.05,
         useReranker: true,
         useExpansion: true,
+        workspace: process.env.AWM_WORKSPACE ?? undefined,
       });
 
       if (results.length > 0) {
