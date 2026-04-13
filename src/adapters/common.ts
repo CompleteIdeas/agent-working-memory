@@ -158,6 +158,14 @@ You have persistent memory via the agent-working-memory MCP server.
 - A prior assumption is found to be wrong
 - A significant piece of work is completed
 
+### When writing, include metadata for better recall:
+- \`project\`: current project name (e.g., "EquiHub", "AWM")
+- \`topic\`: subject area (e.g., "database-migration", "auth-flow")
+- \`session_id\`: conversation grouping ID — associates related memories
+- \`source\`: how acquired (code-reading, debugging, discussion, research, testing, observation)
+- \`confidence_level\`: verified (tested), observed (read in code), assumed (reasoning)
+- \`intent\`: decision, finding, todo, question, or context
+
 ### Recall memory when:
 - Starting work on a new task or subsystem
 - Re-entering code you haven't touched recently
@@ -166,7 +174,7 @@ You have persistent memory via the agent-working-memory MCP server.
 - When a topic comes up that you might have prior context on
 
 ### Also:
-- After using a recalled memory: call memory_feedback (useful/not-useful)
+- After using a recalled memory: call memory_feedback (useful/not-useful) — strengthens useful associations
 - To correct wrong info: call memory_retract or memory_supersede
 - To track work items: memory_task_add, memory_task_update, memory_task_list, memory_task_next
 `.trimStart();

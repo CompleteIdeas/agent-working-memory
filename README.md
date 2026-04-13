@@ -31,6 +31,17 @@ awm setup --global
 
 Restart Claude Code. That's it — 14 memory tools appear automatically.
 
+### Upgrading
+
+```bash
+npm install -g agent-working-memory@latest
+awm setup --global          # Updates MCP config, CLAUDE.md instructions, and hooks
+```
+
+Restart Claude Code after upgrading. Your existing memory database is preserved — all upgrades are backward compatible. New features (metadata tags, workspace recall, synthesis) are opt-in.
+
+> **From v0.6.x → v0.7.x:** The `memory_write` tool now accepts optional metadata parameters (`project`, `topic`, `session_id`, etc.) that improve recall quality. Re-running `awm setup --global` updates your CLAUDE.md with instructions for the agent to use them.
+
 First conversation will be ~30 seconds slower while ML models download (~200MB total, cached locally). After that, everything runs on your machine.
 
 > For isolated memory per folder, see [Separate Memory Pools](#separate-memory-pools). For team onboarding, see [docs/quickstart.md](docs/quickstart.md).
