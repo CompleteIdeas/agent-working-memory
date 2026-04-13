@@ -393,13 +393,14 @@ export class EngramStore {
    */
   getWorkspaceAgentIds(agentId: string, workspace: string): string[] {
     try {
+      // Return agent names (not UUIDs) — engrams.agent_id uses name strings
       const rows = this.db.prepare(
-        `SELECT DISTINCT id FROM coord_agents WHERE workspace = ? AND status != 'dead'`
-      ).all(workspace) as Array<{ id: string }>;
-      const ids = rows.map(r => r.id);
+        `SELECT DISTINCT name FROM coord_agents WHERE workspace = ? AND status != 'dead'`
+      ).all(workspace) as Array<{ name: string }>;
+      const names = rows.map(r => r.name);
       // Ensure the querying agent is always included
-      if (!ids.includes(agentId)) ids.push(agentId);
-      return ids;
+      if (!names.includes(agentId)) names.push(agentId);
+      return names;
     } catch {
       // No coordination tables — fall back to single agent
       return [agentId];
