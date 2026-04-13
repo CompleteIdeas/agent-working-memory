@@ -213,36 +213,121 @@ export class ConsolidationEngine {
       }
     }
 
-    // --- Phase 2.5: Synthesis — create higher-level summary memories from clusters ---
-    // For clusters of 3+ members, extract a deterministic synthesis that captures
-    // the combined understanding. No external LLM — uses keyword extraction only.
+    // --- Phase 2.5: Two types of synthesis ---
+    //
+    // Type A: SESSION SYNTHESIS (perfect recall)
+    //   Groups by shared metadata tags (sid=, proj=, topic=).
+    //   Summarizes what happened in a conversation/project session.
+    //   Helps find specific facts by providing a topical anchor.
+    //
+    // Type B: PATTERN SYNTHESIS (novel recall)
+    //   Uses the existing vector-similarity clusters.
+    //   Finds structural patterns across disparate topics.
+    //   "Debugging X by Y" + "Resolving A by B" → pattern: "conflict → ordering"
+    //   Lower confidence — these are speculative connections, not facts.
+
     let synthCount = 0;
+    const synthStopwords = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for',
+      'on', 'with', 'that', 'this', 'it', 'was', 'are', 'be', 'has', 'had', 'but', 'not', 'from',
+      'by', 'as', 'at', 'i', 'you', 'we', 'my', 'your', 'can', 'will', 'do', 'did', 'if', 'user',
+      'assistant', 'would', 'like', 'just', 'also', 'about', 'really', 'think', 'know', 'want',
+      'here', 'there', 'some', 'more', 'very', 'been', 'have', 'what', 'when', 'how', 'they']);
+
+    // --- Type A: Session synthesis (tag-based grouping) ---
+    // Group engrams by shared session/project tags, NOT vector similarity
+    const tagGroups = new Map<string, Engram[]>();
+    for (const e of engrams) {
+      if (e.tags.includes('synth=true')) continue; // Skip existing syntheses
+      for (const tag of e.tags) {
+        if (tag.startsWith('sid=') || tag.startsWith('proj=') || tag.startsWith('topic=')) {
+          const group = tagGroups.get(tag) ?? [];
+          group.push(e);
+          tagGroups.set(tag, group);
+        }
+      }
+    }
+
+    for (const [tag, group] of tagGroups) {
+      if (group.length < MIN_CLUSTER_SIZE_FOR_SYNTHESIS) continue;
+      if (synthCount >= MAX_SYNTHESES_PER_CYCLE) break;
+
+      // Check if a synthesis for this tag already exists
+      const existing = engrams.find(e =>
+        e.tags.includes('synth=true') && e.tags.includes(tag)
+      );
+      if (existing) continue;
+
+      // Extract key terms from this group
+      const wordCounts = new Map<string, number>();
+      for (const e of group) {
+        const words = e.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
+        for (const w of words) {
+          if (w.length > 3 && !synthStopwords.has(w)) {
+            wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
+          }
+        }
+      }
+      const keyTerms = [...wordCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([word]) => word);
+
+      // Extract unique concepts (deduplicated)
+      const concepts = [...new Set(group.map(e => e.concept))];
+
+      const synthContent = [
+        `Session summary (${tag}, ${group.length} turns).`,
+        `Key topics: ${keyTerms.slice(0, 8).join(', ')}.`,
+        `Discussed: ${keyTerms.slice(8).join(', ')}.`,
+      ].join(' ');
+
+      const synthEngram = this.store.createEngram({
+        agentId,
+        concept: `session: ${tag} (${keyTerms.slice(0, 3).join(', ')})`,
+        content: synthContent,
+        tags: [tag, 'synth=true', 'synth-type=session'],
+        salience: 0.6,
+        confidence: 0.55,
+        memoryType: 'semantic',
+      });
+
+      // Set embedding to group centroid
+      const centroid = this.computeCentroid(group);
+      if (centroid.length > 0) {
+        this.store.updateEmbedding(synthEngram.id, centroid);
+      }
+
+      // Link to sources
+      for (const source of group.slice(0, 10)) { // Cap links to prevent explosion
+        this.store.upsertAssociation(synthEngram.id, source.id, 0.4, 'causal');
+      }
+
+      synthCount++;
+      result.synthesesCreated++;
+    }
+
+    // --- Type B: Pattern synthesis (vector-similarity clusters, speculative) ---
+    // Only create these for clusters where members come from DIFFERENT sessions/projects.
+    // This finds cross-domain patterns: "debugging technique A" + "architecture pattern B"
     for (const cluster of clusters) {
       if (cluster.length < MIN_CLUSTER_SIZE_FOR_SYNTHESIS) continue;
       if (synthCount >= MAX_SYNTHESES_PER_CYCLE) break;
-
-      // Skip if any member is already a synthesis (prevent recursive synthesis)
       if (cluster.some(e => e.tags.includes('synth=true'))) continue;
 
-      // Extract unique concepts and shared tags
-      const concepts = [...new Set(cluster.map(e => e.concept))].slice(0, 5);
-      const allClusterTags = cluster.flatMap(e => e.tags);
-      const tagCounts = new Map<string, number>();
-      for (const tag of allClusterTags) {
-        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      // Only create pattern synthesis if cluster spans multiple sessions
+      const sessionTags = new Set<string>();
+      for (const e of cluster) {
+        for (const tag of e.tags) {
+          if (tag.startsWith('sid=') || tag.startsWith('proj=')) sessionTags.add(tag);
+        }
       }
-      // Keep tags that appear in 2+ members (consensus)
-      const sharedTags = [...tagCounts.entries()]
-        .filter(([, count]) => count >= 2)
-        .map(([tag]) => tag);
+      if (sessionTags.size < 2) continue; // Same session → skip (Type A handles it)
 
-      // Extract key content terms (simple TF approach: most frequent non-trivial words)
       const wordCounts = new Map<string, number>();
-      const stopwords = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'on', 'with', 'that', 'this', 'it', 'was', 'are', 'be', 'has', 'had', 'but', 'not', 'from', 'by', 'as', 'at', 'i', 'you', 'we', 'my', 'your', 'can', 'will', 'do', 'did', 'if']);
       for (const e of cluster) {
         const words = e.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
         for (const w of words) {
-          if (w.length > 3 && !stopwords.has(w)) {
+          if (w.length > 3 && !synthStopwords.has(w)) {
             wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
           }
         }
@@ -252,41 +337,28 @@ export class ConsolidationEngine {
         .slice(0, 10)
         .map(([word]) => word);
 
-      // Date range
-      const dates = cluster.map(e => e.createdAt).sort();
-      const dateRange = dates.length > 1
-        ? `${dates[0].toISOString().slice(0, 10)} to ${dates[dates.length - 1].toISOString().slice(0, 10)}`
-        : dates[0]?.toISOString().slice(0, 10) ?? 'unknown';
-
-      // Build synthesis content
       const synthContent = [
-        `Synthesis of ${cluster.length} related memories (${dateRange}).`,
-        `Topics: ${concepts.join(', ')}.`,
-        `Key terms: ${keyTerms.join(', ')}.`,
+        `Pattern across ${sessionTags.size} sessions (${cluster.length} memories).`,
+        `Common themes: ${keyTerms.join(', ')}.`,
       ].join(' ');
 
-      const synthConcept = `synthesis: ${concepts.slice(0, 3).join(', ')}`;
-
-      // Create synthesis engram
       const synthEngram = this.store.createEngram({
         agentId,
-        concept: synthConcept,
+        concept: `pattern: ${keyTerms.slice(0, 3).join(', ')}`,
         content: synthContent,
-        tags: [...sharedTags, 'synth=true', `synth-size=${cluster.length}`],
-        salience: 0.7,
-        confidence: 0.6,
+        tags: [...sessionTags, 'synth=true', 'synth-type=pattern'],
+        salience: 0.5,       // Lower — speculative
+        confidence: 0.4,     // Lower — these are hypotheses not facts
         memoryType: 'semantic',
       });
 
-      // Set embedding to cluster centroid
       const centroid = this.computeCentroid(cluster);
       if (centroid.length > 0) {
         this.store.updateEmbedding(synthEngram.id, centroid);
       }
 
-      // Create causal edges from synthesis to each source
-      for (const source of cluster) {
-        this.store.upsertAssociation(synthEngram.id, source.id, 0.5, 'causal');
+      for (const source of cluster.slice(0, 8)) {
+        this.store.upsertAssociation(synthEngram.id, source.id, 0.3, 'bridge');
       }
 
       synthCount++;
