@@ -325,8 +325,6 @@ export class EngramStore {
     if (!includeRetracted) {
       query += ' AND retracted = 0';
     }
-    // Skip superseded engrams — they've been replaced by newer versions
-    query += ' AND superseded_by IS NULL';
 
     return (this.db.prepare(query).all(...params) as any[]).map(r => this.rowToEngram(r));
   }
@@ -350,7 +348,6 @@ export class EngramStore {
     if (!includeRetracted) {
       query += ' AND retracted = 0';
     }
-    query += ' AND superseded_by IS NULL';
 
     return (this.db.prepare(query).all(...params) as any[]).map(r => this.rowToEngram(r));
   }
@@ -363,9 +360,9 @@ export class EngramStore {
     if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit);
 
     const sanitized = query
-      .replace(/[^\w\s\-]/g, '')
+      .replace(/[^\w\s]/g, '')
       .split(/\s+/)
-      .filter(w => w.length > 1 && !EngramStore.BM25_STOPWORDS.has(w.toLowerCase()))
+      .filter(w => w.length > 1)
       .map(w => `"${w}"`)
       .join(' OR ');
 
@@ -376,7 +373,7 @@ export class EngramStore {
       const rows = this.db.prepare(`
         SELECT e.*, rank FROM engrams e
         JOIN engrams_fts ON e.rowid = engrams_fts.rowid
-        WHERE engrams_fts MATCH ? AND e.agent_id IN (${placeholders}) AND e.retracted = 0 AND e.superseded_by IS NULL
+        WHERE engrams_fts MATCH ? AND e.agent_id IN (${placeholders}) AND e.retracted = 0
         ORDER BY rank
         LIMIT ?
       `).all(sanitized, ...agentIds, limit) as any[];
@@ -407,24 +404,6 @@ export class EngramStore {
       // No coordination tables — fall back to single agent
       return [agentId];
     }
-  }
-
-  /**
-   * Get the most recently accessed engrams for an agent (or agents).
-   * Used as a temporal supplement to BM25 candidates in the activation pipeline.
-   * Much faster than loading all active engrams.
-   */
-  getRecentEngrams(agentIds: string[], limit: number = 50, stage?: EngramStage): Engram[] {
-    const placeholders = agentIds.map(() => '?').join(',');
-    let query = `SELECT * FROM engrams WHERE agent_id IN (${placeholders}) AND retracted = 0 AND superseded_by IS NULL`;
-    const params: any[] = [...agentIds];
-    if (stage) {
-      query += ' AND stage = ?';
-      params.push(stage);
-    }
-    query += ` ORDER BY last_accessed DESC LIMIT ?`;
-    params.push(limit);
-    return (this.db.prepare(query).all(...params) as any[]).map(r => this.rowToEngram(r));
   }
 
   /**
@@ -513,25 +492,12 @@ export class EngramStore {
    * FTS5 rank is negative (lower = better match).
    * We normalize to 0-1 where higher = better.
    */
-  private static readonly BM25_STOPWORDS = new Set([
-    'the', 'is', 'at', 'of', 'on', 'in', 'to', 'for', 'it', 'an', 'a', 'and', 'or',
-    'was', 'are', 'be', 'has', 'had', 'do', 'did', 'but', 'not', 'this', 'that', 'with',
-    'from', 'by', 'as', 'can', 'will', 'if', 'its', 'my', 'our', 'your', 'their',
-    'what', 'which', 'who', 'when', 'where', 'how', 'all', 'each', 'every', 'both',
-    'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'too', 'very',
-    'just', 'about', 'above', 'after', 'again', 'also', 'been', 'before', 'being',
-    'between', 'could', 'does', 'during', 'here', 'into', 'only', 'own', 'same',
-    'should', 'so', 'than', 'then', 'there', 'these', 'those', 'through', 'under',
-    'until', 'while', 'would', 'based', 'provided',
-  ]);
-
   searchBM25WithRank(agentId: string, query: string, limit: number = 10): { engram: Engram; bm25Score: number }[] {
-    // Sanitize query for FTS5: preserve hyphens (meaningful in entity names),
-    // filter stopwords, quote terms to prevent FTS5 column interpretation
+    // Sanitize query for FTS5: quote each word to prevent column name interpretation
     const sanitized = query
-      .replace(/[^\w\s\-]/g, '')
+      .replace(/[^\w\s]/g, '')
       .split(/\s+/)
-      .filter(w => w.length > 1 && !EngramStore.BM25_STOPWORDS.has(w.toLowerCase()))
+      .filter(w => w.length > 1)
       .map(w => `"${w}"`)
       .join(' OR ');
 
@@ -541,7 +507,7 @@ export class EngramStore {
       const rows = this.db.prepare(`
         SELECT e.*, rank FROM engrams e
         JOIN engrams_fts ON e.rowid = engrams_fts.rowid
-        WHERE engrams_fts MATCH ? AND e.agent_id = ? AND e.retracted = 0 AND e.superseded_by IS NULL
+        WHERE engrams_fts MATCH ? AND e.agent_id = ? AND e.retracted = 0
         ORDER BY rank
         LIMIT ?
       `).all(sanitized, agentId, limit) as any[];

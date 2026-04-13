@@ -48,6 +48,7 @@ import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 import { embed, embedBatch } from '../core/embeddings.js';
+import { extractMetaTags } from '../core/auto-tagger.js';
 
 export interface MemoryDeps {
   store: EngramStore;
@@ -105,11 +106,18 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       ? 0.25
       : body.confidence ?? (salience.disposition === 'staging' ? 0.40 : 0.50);
 
+    // Auto-tag for improved categorical recall
+    const userTags = body.tags ?? [];
+    const metaTags = extractMetaTags(body.concept, body.content);
+    const allTags = isLowSalience
+      ? [...userTags, ...metaTags, 'low-salience']
+      : [...userTags, ...metaTags];
+
     const engram = store.createEngram({
       agentId: body.agentId,
       concept: body.concept,
       content: body.content,
-      tags: isLowSalience ? [...(body.tags ?? []), 'low-salience'] : body.tags,
+      tags: allTags,
       salience: salience.score,
       confidence,
       salienceFeatures: salience.features,
@@ -182,13 +190,14 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
     const results: Array<{ id: string; concept: string; disposition: string }> = [];
 
-    // Write all engrams (salience is lightweight, skip novelty check for batch speed)
+    // Write all engrams with auto-tagging
     for (const mem of body.memories) {
+      const metaTags = extractMetaTags(mem.concept, mem.content);
       const engram = store.createEngram({
         agentId: body.agentId,
         concept: mem.concept,
         content: mem.content,
-        tags: mem.tags,
+        tags: [...(mem.tags ?? []), ...metaTags],
         salience: 0.5,
         confidence: 0.5,
         supersedes: mem.supersedes ?? undefined,

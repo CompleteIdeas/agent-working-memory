@@ -61,6 +61,7 @@ import { EvalEngine } from './engine/eval.js';
 import { ConsolidationEngine } from './engine/consolidation.js';
 import { ConsolidationScheduler } from './engine/consolidation-scheduler.js';
 import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './core/salience.js';
+import { extractMetaTags } from './core/auto-tagger.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority } from './types/engram.js';
@@ -291,11 +292,18 @@ The concept should be a short label (3-8 words). The content should be the full 
 
     const memoryType = params.memory_type ?? classifyMemoryType(params.content);
 
+    // Auto-tag: extract meta-tags from content for improved BM25 recall
+    const userTags = params.tags ?? [];
+    const metaTags = extractMetaTags(params.concept, params.content);
+    const allTags = isLowSalience
+      ? [...userTags, ...metaTags, 'low-salience']
+      : [...userTags, ...metaTags];
+
     const engram = store.createEngram({
       agentId: AGENT_ID,
       concept: params.concept,
       content: params.content,
-      tags: isLowSalience ? [...(params.tags ?? []), 'low-salience'] : params.tags,
+      tags: allTags,
       salience: salience.score,
       confidence: confidencePrior,
       salienceFeatures: salience.features,
