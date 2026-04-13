@@ -105,6 +105,13 @@ export interface ConsolidationResult {
 const MAX_SYNTHESES_PER_CYCLE = 5;
 const MIN_CLUSTER_SIZE_FOR_SYNTHESIS = 3;
 
+/** Shared stopwords for synthesis keyword extraction */
+const SYNTH_STOPWORDS = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for',
+  'on', 'with', 'that', 'this', 'it', 'was', 'are', 'be', 'has', 'had', 'but', 'not', 'from',
+  'by', 'as', 'at', 'i', 'you', 'we', 'my', 'your', 'can', 'will', 'do', 'did', 'if', 'user',
+  'assistant', 'would', 'like', 'just', 'also', 'about', 'really', 'think', 'know', 'want',
+  'here', 'there', 'some', 'more', 'very', 'been', 'have', 'what', 'when', 'how', 'they']);
+
 export class ConsolidationEngine {
   private store: EngramStore;
 
@@ -227,11 +234,6 @@ export class ConsolidationEngine {
     //   Lower confidence — these are speculative connections, not facts.
 
     let synthCount = 0;
-    const synthStopwords = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for',
-      'on', 'with', 'that', 'this', 'it', 'was', 'are', 'be', 'has', 'had', 'but', 'not', 'from',
-      'by', 'as', 'at', 'i', 'you', 'we', 'my', 'your', 'can', 'will', 'do', 'did', 'if', 'user',
-      'assistant', 'would', 'like', 'just', 'also', 'about', 'really', 'think', 'know', 'want',
-      'here', 'there', 'some', 'more', 'very', 'been', 'have', 'what', 'when', 'how', 'they']);
 
     // --- Type A: Session synthesis (tag-based grouping) ---
     // Group engrams by shared session/project tags, NOT vector similarity
@@ -262,7 +264,7 @@ export class ConsolidationEngine {
       for (const e of group) {
         const words = e.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
         for (const w of words) {
-          if (w.length > 3 && !synthStopwords.has(w)) {
+          if (w.length > 3 && !SYNTH_STOPWORDS.has(w)) {
             wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
           }
         }
@@ -327,7 +329,7 @@ export class ConsolidationEngine {
       for (const e of cluster) {
         const words = e.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
         for (const w of words) {
-          if (w.length > 3 && !synthStopwords.has(w)) {
+          if (w.length > 3 && !SYNTH_STOPWORDS.has(w)) {
             wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
           }
         }
@@ -401,21 +403,18 @@ export class ConsolidationEngine {
     // that received positive feedback are more durable — just like how
     // practiced memories are more resistant to forgetting in the brain.
     // Base half-life: 7 days. High-confidence (0.8+) gets up to 30 days.
-    const engramConfMap = new Map(engrams.map(e => [e.id, e.confidence]));
+    const engramMap = new Map(engrams.map(e => [e.id, e]));
     const associations = this.store.getAllAssociations(agentId);
     for (const assoc of associations) {
       const daysSince =
         (Date.now() - assoc.lastActivated.getTime()) / (1000 * 60 * 60 * 24);
-      if (daysSince < 0.5) continue; // Skip recently activated
+      if (daysSince < 0.5) continue;
 
-      // Confidence + access-count modulated half-life (synaptic tagging for edges)
-      // Base: 7 days. High confidence (0.8+): up to 21 days.
-      // High access count: further extends half-life (log-scaled, capped at 2x boost).
-      const fromConf = engramConfMap.get(assoc.fromEngramId) ?? 0.5;
-      const toConf = engramConfMap.get(assoc.toEngramId) ?? 0.5;
+      const fromEngram = engramMap.get(assoc.fromEngramId);
+      const toEngram = engramMap.get(assoc.toEngramId);
+      const fromConf = fromEngram?.confidence ?? 0.5;
+      const toConf = toEngram?.confidence ?? 0.5;
       const maxConf = Math.max(fromConf, toConf);
-      const fromEngram = engrams.find(e => e.id === assoc.fromEngramId);
-      const toEngram = engrams.find(e => e.id === assoc.toEngramId);
       const maxAccess = Math.max(fromEngram?.accessCount ?? 0, toEngram?.accessCount ?? 0);
       const accessBoost = Math.min(2.0, 1.0 + 0.5 * Math.log1p(maxAccess));
       const halfLifeDays = Math.min(

@@ -61,7 +61,6 @@ import { EvalEngine } from './engine/eval.js';
 import { ConsolidationEngine } from './engine/consolidation.js';
 import { ConsolidationScheduler } from './engine/consolidation-scheduler.js';
 import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './core/salience.js';
-import { extractMetaTags } from './core/auto-tagger.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority } from './types/engram.js';
@@ -79,7 +78,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.7.0' });
+  const server = new McpServer({ name: 'agent-working-memory', version: '0.7.1' });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -116,7 +115,7 @@ let coordDb: import('better-sqlite3').Database | null = null;
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.7.0',
+  version: '0.7.1',
 });
 
 server.registerResource(

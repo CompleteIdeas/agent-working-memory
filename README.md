@@ -396,12 +396,16 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.7.0
+## What's New in v0.7.1
 
-- **Workspace-scoped recall** — `memory_recall` can now search across all agents in a workspace. Essential for hive workflows where decisions and discoveries need to be instantly available to all agents. Set `AWM_WORKSPACE` env var or pass `workspace` parameter. Standalone agents unaffected.
-- **Validation-gated Hebbian learning** (Kairos-inspired) — associations only strengthen when `memory_feedback(useful=true)` confirms the retrieval was valuable. Prevents hub toxicity from noisy co-retrieval. No feedback = neutral. Negative feedback = slight weakening.
-- **Multi-graph traversal** (MAGMA-inspired) — graph walk decomposed into four orthogonal sub-graphs (semantic, temporal, causal, entity), each with independent beam search and specialized scoring. Boosts fused across sub-graphs. Inspired by MAGMA's 45.5% accuracy gains.
-- **Power-law edge decay** (DASH model) — edges decay via power law instead of exponential. Retains valuable old associations ~5x longer at 30 days. Matches empirical human forgetting curves.
+- **Agent-provided metadata tags** — `memory_write` accepts `project`, `topic`, `source`, `confidence_level`, `session_id`, `intent`. Stored as searchable prefixed tags (`proj=X`, `sid=Z`). Session ID tags alone improved LongMemEval recall 3x.
+- **Dual synthesis** — consolidation creates two types of summary memories: session summaries (tag-based, for perfect recall) and pattern syntheses (cross-session, for novel recall/creative connections).
+- **Bulk write + supersession** — `POST /memory/write-batch` for batch ingestion with `POST /memory/supersede` for knowledge updates.
+- **LongMemEval benchmark** — adapter built, baseline established at 40-50% with gpt-4o-mini.
+
+### v0.7.0
+
+- Workspace-scoped recall, validation-gated Hebbian (Kairos), multi-graph traversal (MAGMA), power-law edge decay (DASH).
 
 ### v0.6.1
 

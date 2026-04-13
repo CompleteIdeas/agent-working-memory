@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## 0.7.1 (2026-04-13)
+
+### Agent-Provided Metadata Tags
+- **`memory_write` accepts structured metadata** — `project`, `topic`, `source`, `confidence_level`, `session_id`, `intent` parameters on both MCP and HTTP API.
+- **Stored as prefixed searchable tags** — `proj=EquiHub`, `topic=database-migration`, `sid=abc123`, `src=debugging`, `conf=verified`, `intent=decision`. Indexed in FTS5 for BM25 recall boost.
+- **Session ID tags** proven to improve recall 3x on LongMemEval (20% → 50-62%) by enabling AWM's entity-bridge boost to associate memories from the same conversation.
+- **Batch write supports sessionId** at batch level or per-memory.
+
+### Dual Synthesis (Consolidation Phase 2.5)
+- **Session synthesis (Type A)** — groups memories by shared metadata tags (`sid=`, `proj=`, `topic=`), creates keyword-extracted summaries. Helps perfect recall by providing topical anchors.
+- **Pattern synthesis (Type B)** — uses vector-similarity clusters that span multiple sessions/projects. Discovers cross-domain patterns for novel recall. Lower confidence (0.4) — these are speculative connections.
+- Synthesis memories tagged `synth=true` + `synth-type=session|pattern`. Linked to sources via causal/bridge edges.
+- Recursive synthesis prevention — existing syntheses excluded from clustering.
+- Capped at 5 syntheses per consolidation cycle.
+
+### Bulk Write & Supersession
+- **`POST /memory/write-batch`** — batch ingestion with synchronous embedding and inline supersession.
+- **`POST /memory/supersede`** — HTTP endpoint for marking outdated memories (was MCP-only).
+- **Superseded engrams filtered from BM25 and retrieval** — `superseded_by IS NULL` on search queries.
+
+### Retrieval Improvements
+- **BM25 hyphen preservation** — entity names like "Salem-Keizer" no longer stripped of hyphens.
+- **`bm25Only` mode** on ActivationQuery — skip embedding for fast text-only retrieval in bulk scenarios.
+- **Auto-tagger module** created (`core/auto-tagger.ts`) with 13 categories + entity extraction. Disabled by default — generic tags dilute BM25 signal. Preserved for future use with smarter context models.
+
+### Benchmarks
+- **LongMemEval baseline established** — 40-50% with gpt-4o-mini (session tags + synthesis). Adapter at `LongMemEval/awm_benchmark.py`.
+- **MemoryAgentBench CR** — 21% exact match on FactConsolidation. Adapter built.
+- **Internal eval maintained** — 4/4 suites pass (Recall@5=0.800, Associative=1.000, Redundancy=0.966, Temporal=0.932).
+- **Stress test improved** — 96.2% (up from 94.2%), catastrophic forgetting 100% (was 80%).
+
 ## 0.7.0 (2026-04-12)
 
 ### Workspace-Scoped Recall

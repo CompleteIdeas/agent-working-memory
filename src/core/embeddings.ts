@@ -8,10 +8,6 @@
  * Configurable via AWM_EMBED_MODEL env var.
  * Model is downloaded once on first use and cached locally.
  *
- * GPU acceleration: set AWM_DEVICE=cuda (NVIDIA) or AWM_DEVICE=directml (AMD/Intel)
- * Requires: npm install onnxruntime-node-gpu
- * Without GPU package, falls back to CPU automatically.
- *
  * Singleton pattern — call getEmbedder() to get the shared instance.
  *
  * NOTE: Changing the model invalidates existing embeddings.
@@ -24,16 +20,12 @@ const MODEL_ID = process.env.AWM_EMBED_MODEL ?? 'Xenova/bge-small-en-v1.5';
 const DIMENSIONS = parseInt(process.env.AWM_EMBED_DIMS ?? '384', 10);
 const POOLING = (process.env.AWM_EMBED_POOLING ?? 'mean') as 'cls' | 'mean';
 
-// AWM runs on CPU — small ONNX models (22-90MB) are faster on CPU than GPU
-// due to kernel launch + data transfer overhead exceeding the computation itself.
-
 let instance: FeatureExtractionPipeline | null = null;
 let initPromise: Promise<FeatureExtractionPipeline> | null = null;
 
 /**
  * Get or initialize the embedding pipeline (singleton).
  * First call downloads the model (~22MB), subsequent calls are instant.
- * Uses GPU if AWM_DEVICE is set and onnxruntime-node-gpu is installed.
  */
 export async function getEmbedder(): Promise<FeatureExtractionPipeline> {
   if (instance) return instance;
