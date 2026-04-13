@@ -47,7 +47,7 @@ import type { SalienceEventType } from '../core/salience.js';
 import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
-import { embed } from '../core/embeddings.js';
+import { embed, embedBatch } from '../core/embeddings.js';
 
 export interface MemoryDeps {
   store: EngramStore;
@@ -160,6 +160,69 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     });
   });
 
+  /**
+   * Bulk write — accepts many facts in one request.
+   * Creates engrams in a single transaction, embeds in batch.
+   * Returns all IDs for downstream supersession calls.
+   */
+  app.post('/memory/write-batch', async (req, reply) => {
+    const body = req.body as {
+      agentId: string;
+      memories: Array<{
+        concept: string;
+        content: string;
+        tags?: string[];
+        supersedes?: string; // ID of engram this one replaces
+      }>;
+    };
+
+    if (!body.agentId || !body.memories || body.memories.length === 0) {
+      return reply.code(400).send({ error: 'agentId and non-empty memories array required' });
+    }
+
+    const results: Array<{ id: string; concept: string; disposition: string }> = [];
+
+    // Write all engrams (salience is lightweight, skip novelty check for batch speed)
+    for (const mem of body.memories) {
+      const engram = store.createEngram({
+        agentId: body.agentId,
+        concept: mem.concept,
+        content: mem.content,
+        tags: mem.tags,
+        salience: 0.5,
+        confidence: 0.5,
+        supersedes: mem.supersedes ?? undefined,
+      });
+
+      // Handle supersession inline — archive superseded memory to remove from active pool
+      if (mem.supersedes) {
+        store.supersedeEngram(mem.supersedes, engram.id);
+        store.updateConfidence(mem.supersedes, 0.1);
+        store.updateStage(mem.supersedes, 'archived'); // Remove from active search pool
+      }
+
+      results.push({ id: engram.id, concept: mem.concept, disposition: 'active' });
+    }
+
+    // Batch embed synchronously — ensures embeddings are ready before queries hit
+    const texts = body.memories.map((m, i) => `${m.concept} ${m.content}`);
+    try {
+      const vecs = await embedBatch(texts);
+      for (let i = 0; i < vecs.length; i++) {
+        if (results[i]) {
+          store.updateEmbedding(results[i].id, vecs[i]);
+        }
+      }
+    } catch { /* Embedding failure is non-fatal */ }
+
+    try { store.updateAutoCheckpointWrite(body.agentId, results[results.length - 1]?.id ?? ''); } catch {}
+
+    return reply.code(201).send({
+      stored: results.length,
+      results,
+    });
+  });
+
   app.post('/memory/activate', async (req, reply) => {
     const body = req.body as {
       agentId: string;
@@ -171,6 +234,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       useExpansion?: boolean;
       abstentionThreshold?: number;
       workspace?: string;
+      bm25Only?: boolean;
     };
 
     const results = await activationEngine.activate({
@@ -183,6 +247,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       useExpansion: body.useExpansion,
       abstentionThreshold: body.abstentionThreshold,
       workspace: body.workspace,
+      bm25Only: body.bm25Only,
     });
 
     // Auto-checkpoint: track recall for consolidation scheduling
@@ -246,6 +311,36 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     try { store.touchActivity(body.agentId); } catch { /* non-fatal */ }
 
     return reply.send(result);
+  });
+
+  app.post('/memory/supersede', async (req, reply) => {
+    const body = req.body as {
+      oldEngramId: string;
+      newEngramId: string;
+      reason?: string;
+    };
+
+    const oldEngram = store.getEngram(body.oldEngramId);
+    const newEngram = store.getEngram(body.newEngramId);
+    if (!oldEngram) return reply.code(404).send({ error: `Old engram ${body.oldEngramId} not found` });
+    if (!newEngram) return reply.code(404).send({ error: `New engram ${body.newEngramId} not found` });
+
+    // Create causal association (new → old)
+    store.upsertAssociation(body.newEngramId, body.oldEngramId, 0.8, 'causal', 1.0);
+
+    // Reduce old engram confidence to 20% (keep for historical reference)
+    store.updateConfidence(body.oldEngramId, oldEngram.confidence * 0.2);
+
+    // Mark supersession via store method
+    store.supersedeEngram(body.oldEngramId, body.newEngramId);
+
+    try { store.touchActivity(oldEngram.agentId); } catch { /* non-fatal */ }
+
+    return reply.send({
+      superseded: body.oldEngramId,
+      supersededBy: body.newEngramId,
+      reason: body.reason ?? 'outdated',
+    });
   });
 
   // ============================================================

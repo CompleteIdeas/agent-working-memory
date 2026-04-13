@@ -223,11 +223,14 @@ export class ActivationEngine {
     }
 
     // Phase 1: Embed query for vector similarity (uses coref-expanded context)
+    // Skip embedding when bm25Only is set (fast text-only retrieval for bulk scenarios)
     let queryEmbedding: number[] | null = null;
-    try {
-      queryEmbedding = await embed(queryContext);
-    } catch {
-      // Embedding unavailable — fall back to text-only matching
+    if (!query.bm25Only) {
+      try {
+        queryEmbedding = await embed(queryContext);
+      } catch {
+        // Embedding unavailable — fall back to text-only matching
+      }
     }
 
     // Phase 2: Parallel retrieval — dual BM25 + all active engrams
@@ -252,16 +255,19 @@ export class ActivationEngine {
       engram, bm25Score: bm25ScoreMap.get(id) ?? 0,
     }));
 
-    const allActive = this.store.getEngramsByAgents(
-      agentIds,
+    // Build candidate pool from BM25 results + recently accessed engrams.
+    // DO NOT load all active engrams — O(n) scan kills performance at scale.
+    // BM25 handles keyword relevance; recent-access pool handles temporal signal.
+    const MAX_RECENT = 50; // Cap recent-access supplement
+    const recentActive = this.store.getRecentEngrams(
+      agentIds, MAX_RECENT,
       query.includeStaging ? undefined : 'active',
-      query.includeRetracted ?? false
     );
 
-    // Merge candidates (deduplicate)
+    // Merge candidates (deduplicate): BM25 results + recent engrams
     const candidateMap = new Map<string, Engram>();
     for (const r of bm25Ranked) candidateMap.set(r.engram.id, r.engram);
-    for (const e of allActive) candidateMap.set(e.id, e);
+    for (const e of recentActive) candidateMap.set(e.id, e);
     let candidates = Array.from(candidateMap.values());
 
     // Filter by memory type if specified

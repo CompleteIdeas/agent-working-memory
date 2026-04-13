@@ -187,6 +187,7 @@ export interface ActivationQuery {
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default
   workspace?: string;          // Search across all agents in this workspace (hive mode). If unset, agent-scoped only.
+  bm25Only?: boolean;          // Skip embedding — fast text-only retrieval for bulk/benchmark scenarios
 }
 
 /**

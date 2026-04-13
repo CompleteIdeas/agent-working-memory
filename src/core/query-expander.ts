@@ -15,7 +15,6 @@
 import { pipeline, type Text2TextGenerationPipeline } from '@huggingface/transformers';
 
 const MODEL_ID = 'Xenova/flan-t5-small';
-
 let instance: Text2TextGenerationPipeline | null = null;
 let initPromise: Promise<Text2TextGenerationPipeline> | null = null;
 

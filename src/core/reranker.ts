@@ -23,7 +23,6 @@ import {
 
 const DEFAULT_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
 const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
-
 let tokenizer: PreTrainedTokenizer | null = null;
 let model: PreTrainedModel | null = null;
 let initPromise: Promise<void> | null = null;
