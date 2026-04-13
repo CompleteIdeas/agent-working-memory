@@ -225,6 +225,19 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('Memory type: episodic (events/incidents), semantic (facts/decisions), procedural (how-to/steps). Auto-classified if omitted.'),
     supersedes: z.string().optional()
       .describe('ID of an older memory this one replaces. The old memory is down-ranked, not deleted.'),
+    // --- Agent-provided metadata (stored as searchable tags) ---
+    project: z.string().optional()
+      .describe('Project context (e.g., "EquiHub", "AWM"). Becomes a searchable tag.'),
+    topic: z.string().optional()
+      .describe('Subject area (e.g., "database-migration", "auth-flow"). Becomes a searchable tag.'),
+    source: z.enum(['code-reading', 'debugging', 'discussion', 'research', 'testing', 'observation']).optional()
+      .describe('How this knowledge was acquired.'),
+    confidence_level: z.enum(['verified', 'observed', 'assumed']).optional()
+      .describe('Confidence: verified (tested), observed (read in code), assumed (reasoning).'),
+    session_id: z.string().optional()
+      .describe('Session/conversation grouping ID. Memories with same session_id are associated.'),
+    intent: z.enum(['decision', 'question', 'todo', 'finding', 'context']).optional()
+      .describe('What kind of memory this is.'),
   },
   async (params) => {
     // Check novelty with match info for reinforcement
@@ -292,9 +305,15 @@ The concept should be a short label (3-8 words). The content should be the full 
 
     const memoryType = params.memory_type ?? classifyMemoryType(params.content);
 
-    // Auto-tag: extract meta-tags from content for improved BM25 recall
+    // Assemble tags: user-provided + agent metadata (stored as searchable prefixed tags)
     const userTags = params.tags ?? [];
-    const metaTags = extractMetaTags(params.concept, params.content);
+    const metaTags: string[] = [];
+    if (params.project) metaTags.push(`proj=${params.project}`);
+    if (params.topic) metaTags.push(`topic=${params.topic}`);
+    if (params.source) metaTags.push(`src=${params.source}`);
+    if (params.confidence_level) metaTags.push(`conf=${params.confidence_level}`);
+    if (params.session_id) metaTags.push(`sid=${params.session_id}`);
+    if (params.intent) metaTags.push(`intent=${params.intent}`);
     const allTags = isLowSalience
       ? [...userTags, ...metaTags, 'low-salience']
       : [...userTags, ...metaTags];

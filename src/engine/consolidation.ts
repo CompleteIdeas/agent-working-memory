@@ -99,7 +99,11 @@ export interface ConsolidationResult {
   stagingPromoted: number;
   stagingDiscarded: number;
   engramsProcessed: number;
+  synthesesCreated: number;
 }
+
+const MAX_SYNTHESES_PER_CYCLE = 5;
+const MIN_CLUSTER_SIZE_FOR_SYNTHESIS = 3;
 
 export class ConsolidationEngine {
   private store: EngramStore;
@@ -136,6 +140,7 @@ export class ConsolidationEngine {
       stagingPromoted: 0,
       stagingDiscarded: 0,
       engramsProcessed: 0,
+      synthesesCreated: 0,
     };
 
     // --- Phase 1: Replay ---
@@ -206,6 +211,86 @@ export class ConsolidationEngine {
           }
         }
       }
+    }
+
+    // --- Phase 2.5: Synthesis — create higher-level summary memories from clusters ---
+    // For clusters of 3+ members, extract a deterministic synthesis that captures
+    // the combined understanding. No external LLM — uses keyword extraction only.
+    let synthCount = 0;
+    for (const cluster of clusters) {
+      if (cluster.length < MIN_CLUSTER_SIZE_FOR_SYNTHESIS) continue;
+      if (synthCount >= MAX_SYNTHESES_PER_CYCLE) break;
+
+      // Skip if any member is already a synthesis (prevent recursive synthesis)
+      if (cluster.some(e => e.tags.includes('synth=true'))) continue;
+
+      // Extract unique concepts and shared tags
+      const concepts = [...new Set(cluster.map(e => e.concept))].slice(0, 5);
+      const allClusterTags = cluster.flatMap(e => e.tags);
+      const tagCounts = new Map<string, number>();
+      for (const tag of allClusterTags) {
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
+      }
+      // Keep tags that appear in 2+ members (consensus)
+      const sharedTags = [...tagCounts.entries()]
+        .filter(([, count]) => count >= 2)
+        .map(([tag]) => tag);
+
+      // Extract key content terms (simple TF approach: most frequent non-trivial words)
+      const wordCounts = new Map<string, number>();
+      const stopwords = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'for', 'on', 'with', 'that', 'this', 'it', 'was', 'are', 'be', 'has', 'had', 'but', 'not', 'from', 'by', 'as', 'at', 'i', 'you', 'we', 'my', 'your', 'can', 'will', 'do', 'did', 'if']);
+      for (const e of cluster) {
+        const words = e.content.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/);
+        for (const w of words) {
+          if (w.length > 3 && !stopwords.has(w)) {
+            wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1);
+          }
+        }
+      }
+      const keyTerms = [...wordCounts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([word]) => word);
+
+      // Date range
+      const dates = cluster.map(e => e.createdAt).sort();
+      const dateRange = dates.length > 1
+        ? `${dates[0].toISOString().slice(0, 10)} to ${dates[dates.length - 1].toISOString().slice(0, 10)}`
+        : dates[0]?.toISOString().slice(0, 10) ?? 'unknown';
+
+      // Build synthesis content
+      const synthContent = [
+        `Synthesis of ${cluster.length} related memories (${dateRange}).`,
+        `Topics: ${concepts.join(', ')}.`,
+        `Key terms: ${keyTerms.join(', ')}.`,
+      ].join(' ');
+
+      const synthConcept = `synthesis: ${concepts.slice(0, 3).join(', ')}`;
+
+      // Create synthesis engram
+      const synthEngram = this.store.createEngram({
+        agentId,
+        concept: synthConcept,
+        content: synthContent,
+        tags: [...sharedTags, 'synth=true', `synth-size=${cluster.length}`],
+        salience: 0.7,
+        confidence: 0.6,
+        memoryType: 'semantic',
+      });
+
+      // Set embedding to cluster centroid
+      const centroid = this.computeCentroid(cluster);
+      if (centroid.length > 0) {
+        this.store.updateEmbedding(synthEngram.id, centroid);
+      }
+
+      // Create causal edges from synthesis to each source
+      for (const source of cluster) {
+        this.store.upsertAssociation(synthEngram.id, source.id, 0.5, 'causal');
+      }
+
+      synthCount++;
+      result.synthesesCreated++;
     }
 
     // --- Phase 3: Direct cross-cluster bridging ---

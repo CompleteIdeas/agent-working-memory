@@ -80,6 +80,13 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       causalDepth?: number;
       resolutionEffort?: number;
       confidence?: number;
+      // Agent-provided metadata (stored as searchable tags)
+      project?: string;
+      topic?: string;
+      source?: string;
+      confidenceLevel?: string;
+      sessionId?: string;
+      intent?: string;
     };
 
     if (!body.agentId || typeof body.agentId !== 'string' ||
@@ -106,9 +113,15 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       ? 0.25
       : body.confidence ?? (salience.disposition === 'staging' ? 0.40 : 0.50);
 
-    // Auto-tag for improved categorical recall
+    // Assemble tags: user-provided + agent metadata
     const userTags = body.tags ?? [];
-    const metaTags = extractMetaTags(body.concept, body.content);
+    const metaTags: string[] = [];
+    if (body.project) metaTags.push(`proj=${body.project}`);
+    if (body.topic) metaTags.push(`topic=${body.topic}`);
+    if (body.source) metaTags.push(`src=${body.source}`);
+    if (body.confidenceLevel) metaTags.push(`conf=${body.confidenceLevel}`);
+    if (body.sessionId) metaTags.push(`sid=${body.sessionId}`);
+    if (body.intent) metaTags.push(`intent=${body.intent}`);
     const allTags = isLowSalience
       ? [...userTags, ...metaTags, 'low-salience']
       : [...userTags, ...metaTags];
@@ -176,11 +189,13 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
   app.post('/memory/write-batch', async (req, reply) => {
     const body = req.body as {
       agentId: string;
+      sessionId?: string; // Shared session ID for all memories in this batch
       memories: Array<{
         concept: string;
         content: string;
         tags?: string[];
-        supersedes?: string; // ID of engram this one replaces
+        supersedes?: string;
+        sessionId?: string; // Per-memory session override
       }>;
     };
 
@@ -190,14 +205,17 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
     const results: Array<{ id: string; concept: string; disposition: string }> = [];
 
-    // Write all engrams with auto-tagging
     for (const mem of body.memories) {
-      const metaTags = extractMetaTags(mem.concept, mem.content);
+      // Add session ID tag if provided (batch-level or per-memory)
+      const sid = mem.sessionId ?? body.sessionId;
+      const memTags = [...(mem.tags ?? [])];
+      if (sid) memTags.push(`sid=${sid}`);
+
       const engram = store.createEngram({
         agentId: body.agentId,
         concept: mem.concept,
         content: mem.content,
-        tags: [...(mem.tags ?? []), ...metaTags],
+        tags: memTags,
         salience: 0.5,
         confidence: 0.5,
         supersedes: mem.supersedes ?? undefined,
