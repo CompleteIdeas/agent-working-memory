@@ -2,6 +2,63 @@
 
 ## [Unreleased]
 
+## 0.7.3 (2026-05-05)
+
+### Salience Filter — Production Tuning
+
+**Bug:** In a populated DB (>10K engrams), the novelty calculation pinned at the
+0.10 floor for almost every write. Root cause was the linear curve
+`novelty = max(0.10, 1 - topScore)` combined with BM25's `|rank|/(1+|rank|)`
+normalization, which puts even loosely-related matches at topScore ≥ 0.9.
+Result: most worker writes scored salience ~0.17 (below the 0.4 active threshold,
+above the 0.2 staging threshold), bunched 86% of all engrams at salience 0.5
+across the database, and made the salience signal effectively dead.
+
+**Fix** (`src/core/salience.ts`):
+- Quadratic dampening on the novelty curve: `novelty = max(0.05, 1 - topScore²)`.
+  Mid-range matches now produce mid-range novelty instead of collapsing to floor.
+- Concept-match penalty reduced from 0.4 to 0.3 and **scoped to last 30 days**.
+  Re-using a concept name for a different topic months later is no longer punished.
+- Floor lowered from 0.10 → 0.05 so true duplicates can clearly score below the
+  staging threshold (0.2) and discriminate.
+- Same fix applied to `computeNoveltyWithMatch` for consistency.
+
+Curve comparison (topScore → new novelty):
+- 0.30 → 0.91 (different topic — strong signal)
+- 0.60 → 0.64 (loosely related — partial credit)
+- 0.80 → 0.36 (related but distinct)
+- 0.95 → 0.10 (near-duplicate — still suppressed)
+
+### Maintenance Scripts (new)
+
+- **`scripts/prune-backups.cjs`** — keeps all backups from last 24h plus the most
+  recent N older snapshots (configurable via `AWM_BACKUP_KEEP`, default 6).
+  Manual snapshots (`memory-pre-*`, `memory-safety-*`) are preserved for human
+  curation. Supports `--dry-run`. Run hourly via cron / Task Scheduler.
+- **`scripts/evict-stale.cjs`** — drops working-class engrams that meet ALL of:
+  salience < 0.30, access_count < 2, last_accessed older than 90 days, not the
+  head of a supersession chain, agent not in protected list (default
+  `claude-code`). Uses cascading delete: associations first, then engrams, then
+  FTS rebuild. Supports `--dry-run`. Run weekly or monthly.
+- **`scripts/cleanup-2026-05-05.cjs`** — one-shot pruner used to reset the prod
+  DB on 2026-05-05 (38,446 engrams + 197,255 associations removed; 424 → 122 MB
+  after `VACUUM INTO`). Kept as a reference template for future bulk cleanups.
+
+### Tests
+
+- **6 new regression tests** for the novelty curve in `tests/core/salience.test.ts`
+  (`Novelty curve (production-tuned)`) covering: empty DB, near-dupe suppression,
+  mid-range novelty preservation, recent vs old concept-match penalty.
+- All 321 existing tests still pass.
+
+### Operational notes
+
+- Old backups deleted (kept latest 1) — freed ~2 GB.
+- `lme_*` LongMemEval and `bench_*` benchmark agent leftovers were pruned along
+  with low-salience non-claude-code memories. Going forward, evals should write
+  to a separate test DB to avoid polluting prod.
+- The salience filter fix takes effect after `npm run build && restart`.
+
 ## 0.7.1 (2026-04-13)
 
 ### Agent-Provided Metadata Tags

@@ -144,3 +144,68 @@ describe('Salience Filter', () => {
     expect(result.disposition).not.toBe('discard');
   });
 });
+
+// --- Novelty curve regression (2026-05-05 production fix) ---
+// Previous curve: novelty = max(0.1, 1 - topScore) — pinned at 0.1 for any
+// populated DB because BM25 normalization put almost every match in topScore≥0.9.
+// New curve: novelty = max(0.05, 1 - topScore²) — quadratic dampening preserves
+// signal across the mid-range so the salience filter still discriminates after
+// the DB has thousands of memories.
+import { computeNovelty } from '../../src/core/salience.js';
+
+interface FakeMatch { engram: { concept?: string; createdAt?: Date }; bm25Score: number; }
+
+function fakeStore(matches: FakeMatch[]) {
+  return {
+    searchBM25WithRank(_agentId: string, _q: string, _k: number) {
+      return matches;
+    },
+    // satisfy the EngramStore type at runtime — these are unused in computeNovelty
+  } as unknown as Parameters<typeof computeNovelty>[0];
+}
+
+describe('Novelty curve (production-tuned)', () => {
+  it('returns 1.0 when nothing similar exists', () => {
+    const n = computeNovelty(fakeStore([]), 'agent', 'concept', 'content');
+    expect(n).toBe(1.0);
+  });
+
+  it('topScore=0.95 → near-floor novelty (suppress true dupes)', () => {
+    const n = computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.95 }]), 'agent', 'concept', 'content');
+    expect(n).toBeGreaterThan(0.05);
+    expect(n).toBeLessThan(0.15);
+  });
+
+  it('topScore=0.60 → meaningful novelty (loose match)', () => {
+    const n = computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.6 }]), 'agent', 'concept', 'content');
+    expect(n).toBeGreaterThan(0.55);
+    expect(n).toBeLessThan(0.70);
+  });
+
+  it('topScore=0.30 → high novelty (different topic)', () => {
+    const n = computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.3 }]), 'agent', 'concept', 'content');
+    expect(n).toBeGreaterThan(0.85);
+  });
+
+  it('exact concept match within 30d → penalized', () => {
+    const recent = new Date();
+    const n = computeNovelty(
+      fakeStore([{ engram: { concept: 'My Concept', createdAt: recent }, bm25Score: 0.5 }]),
+      'agent', 'My Concept', 'content'
+    );
+    // Without penalty: 1 - 0.25 = 0.75. With 0.3 penalty: 0.45.
+    expect(n).toBeGreaterThan(0.40);
+    expect(n).toBeLessThan(0.50);
+  });
+
+  it('exact concept match older than 30d → not penalized', () => {
+    const old = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const n = computeNovelty(
+      fakeStore([{ engram: { concept: 'My Concept', createdAt: old }, bm25Score: 0.5 }]),
+      'agent', 'My Concept', 'content'
+    );
+    // 1 - 0.25 = 0.75, no penalty
+    expect(n).toBeGreaterThan(0.70);
+  });
+});
+

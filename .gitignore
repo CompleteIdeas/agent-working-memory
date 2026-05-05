@@ -5,6 +5,7 @@ models/
 *.db
 *.db-shm
 *.db-wal
+*.db.bak*
 *.sqlite
 .env
 .env.*

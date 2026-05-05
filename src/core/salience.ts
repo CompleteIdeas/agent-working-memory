@@ -150,17 +150,35 @@ export function computeNovelty(store: EngramStore, agentId: string, concept: str
     // Higher score = stronger match = less novel.
     const topScore = results[0].bm25Score;
 
-    // Penalize exact concept string duplicates — if any result has the same concept,
-    // heavily reduce novelty to prevent hub toxicity from repeated task_end summaries
-    const conceptLower = conceptStr.toLowerCase().trim();
-    const exactConceptMatch = results.some(r => r.engram?.concept?.toLowerCase().trim() === conceptLower);
-    const conceptPenalty = exactConceptMatch ? 0.4 : 0;
+    // Quadratic dampening (1 - topScore²) so mid-range matches don't kill novelty.
+    // Old curve was linear (1 - topScore) which floored at 0.1 for almost any match
+    // in a populated DB, killing the salience signal.
+    // Curve comparison (topScore → novelty):
+    //   0.30 → 0.91 (different topic — strong novelty)
+    //   0.60 → 0.64 (loosely related — partial credit)
+    //   0.80 → 0.36 (related but distinct — meaningful signal)
+    //   0.95 → 0.10 (near-dupe — still suppress)
+    const baseNovelty = 1.0 - topScore * topScore;
 
-    // Continuous novelty: inversely proportional to BM25 similarity
-    // Maps topScore (0..1) → novelty (0.1..0.95) using a smooth curve
-    // Floor at 0.1 (never zero — even duplicates might have new context)
-    // Ceiling at 0.95 (never 1.0 — always a tiny chance of overlap)
-    return Math.max(0.1, Math.min(0.95, 1.0 - topScore - conceptPenalty));
+    // Concept penalty scoped to recent matches only — re-using the same concept
+    // string for a NEW topic months later shouldn't be punished. Penalty was 0.4
+    // (too harsh); now 0.3 and only applies if any matched result is < 30 days old.
+    const conceptLower = conceptStr.toLowerCase().trim();
+    const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const exactConceptRecent = results.some(r => {
+      if (r.engram?.concept?.toLowerCase().trim() !== conceptLower) return false;
+      const created = r.engram?.createdAt as Date | string | number | undefined;
+      if (!created) return true; // No timestamp — treat as recent (conservative)
+      const createdMs = created instanceof Date
+        ? created.getTime()
+        : typeof created === 'number' ? created : Date.parse(created);
+      return Number.isFinite(createdMs) && createdMs >= cutoffMs;
+    });
+    const conceptPenalty = exactConceptRecent ? 0.3 : 0;
+
+    // Floor lowered to 0.05 (was 0.10) so true duplicates can score near-zero
+    // and clearly stay below stagingThreshold (0.2). Ceiling unchanged.
+    return Math.max(0.05, Math.min(0.95, baseNovelty - conceptPenalty));
   } catch {
     // If BM25 search fails (e.g., FTS not ready), assume novel
     return 0.8;
@@ -206,12 +224,25 @@ export function computeNoveltyWithMatch(
     const top = allResults[0];
     const topScore = top.bm25Score;
 
-    // Concept penalty for exact duplicates
-    const conceptLower = conceptStr.toLowerCase().trim();
-    const exactMatch = allResults.some(r => (r.engram as any)?.concept?.toLowerCase().trim() === conceptLower);
-    const conceptPenalty = exactMatch ? 0.4 : 0;
+    // Quadratic dampening — see computeNovelty for curve rationale
+    const baseNovelty = 1.0 - topScore * topScore;
 
-    const novelty = Math.max(0.1, Math.min(0.95, 1.0 - topScore - conceptPenalty));
+    // Recent-only concept penalty (30d window)
+    const conceptLower = conceptStr.toLowerCase().trim();
+    const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const exactConceptRecent = allResults.some(r => {
+      const eng = r.engram as { concept?: string; createdAt?: Date | string | number };
+      if (eng?.concept?.toLowerCase().trim() !== conceptLower) return false;
+      const created = eng?.createdAt;
+      if (!created) return true;
+      const createdMs = created instanceof Date
+        ? created.getTime()
+        : typeof created === 'number' ? created : Date.parse(created);
+      return Number.isFinite(createdMs) && createdMs >= cutoffMs;
+    });
+    const conceptPenalty = exactConceptRecent ? 0.3 : 0;
+
+    const novelty = Math.max(0.05, Math.min(0.95, baseNovelty - conceptPenalty));
     return { novelty, matchedEngramId: top.engram.id, matchScore: topScore };
   } catch {
     return { novelty: 0.8, matchedEngramId: null, matchScore: 0 };
