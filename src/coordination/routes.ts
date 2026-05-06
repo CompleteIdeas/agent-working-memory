@@ -34,6 +34,45 @@ function coordLog(msg: string): void {
 }
 
 /**
+ * In-process counters for channel push telemetry.
+ * Reset on coordinator restart — intended for short-window observability
+ * ("ship it, watch numbers for a day"). Persistent counters would need a
+ * coord_metrics table; deferred until we know what's worth keeping.
+ *
+ * Fields:
+ *   attempts            — every call to deliverToChannel (HTTP push to worker)
+ *   delivered           — fetch returned 2xx
+ *   failed_http         — fetch returned non-2xx (worker reachable but rejected)
+ *   failed_unreachable  — fetch threw (timeout, ECONNREFUSED, etc.)
+ *   no_session          — push intent existed but no connected session
+ *   fallback_mailbox    — push failed, message queued to mailbox instead
+ *   session_disconnects — session marked 'disconnected' after delivery failure
+ */
+interface ChannelMetrics {
+  attempts: number;
+  delivered: number;
+  failed_http: number;
+  failed_unreachable: number;
+  no_session: number;
+  fallback_mailbox: number;
+  session_disconnects: number;
+  started_at: number;
+}
+
+function createChannelMetrics(): ChannelMetrics {
+  return {
+    attempts: 0,
+    delivered: 0,
+    failed_http: 0,
+    failed_unreachable: 0,
+    no_session: 0,
+    fallback_mailbox: 0,
+    session_disconnects: 0,
+    started_at: Date.now(),
+  };
+}
+
+/**
  * Optional session-token check.
  * If X-Session-Token header is present and doesn't match the stored token → returns false (caller should 403).
  * If header is absent, or no token stored (old agent row) → returns true (pass through).
@@ -47,6 +86,9 @@ function sessionTokenOk(db: Database.Database, agentId: string, req: import('fas
 }
 
 export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Database, store?: EngramStore, eventBus?: import('./events.js').CoordinationEventBus): void {
+  // Channel push telemetry — process-scoped counters. See ChannelMetrics docs above.
+  const channelMetrics = createChannelMetrics();
+
 
   // Request logging — one line per request with method, url, status, response time
   app.addHook('onRequest', async (request) => {
@@ -544,6 +586,9 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
             `UPDATE coord_channel_sessions SET last_push_at = datetime('now'), push_count = push_count + 1 WHERE agent_id = ?`
           ).run(agentId);
         }
+      } else {
+        // Session disappeared between intent record and delivery — race or rapid disconnect
+        channelMetrics.no_session++;
       }
     }
 
@@ -1691,6 +1736,32 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     lines.push('# TYPE coord_uptime_seconds gauge');
     lines.push(`coord_uptime_seconds ${uptime}`);
 
+    // ─── Channel push telemetry (process-scoped, reset on restart) ───
+    lines.push('# HELP coord_channel_push_attempts_total Total channel push attempts since coordinator startup');
+    lines.push('# TYPE coord_channel_push_attempts_total counter');
+    lines.push(`coord_channel_push_attempts_total ${channelMetrics.attempts}`);
+
+    lines.push('# HELP coord_channel_push_delivered_total Successful channel deliveries');
+    lines.push('# TYPE coord_channel_push_delivered_total counter');
+    lines.push(`coord_channel_push_delivered_total ${channelMetrics.delivered}`);
+
+    lines.push('# HELP coord_channel_push_failed_total Failed channel deliveries by reason');
+    lines.push('# TYPE coord_channel_push_failed_total counter');
+    lines.push(`coord_channel_push_failed_total{reason="http"} ${channelMetrics.failed_http}`);
+    lines.push(`coord_channel_push_failed_total{reason="unreachable"} ${channelMetrics.failed_unreachable}`);
+
+    lines.push('# HELP coord_channel_no_session_total Push attempts where agent had no connected session');
+    lines.push('# TYPE coord_channel_no_session_total counter');
+    lines.push(`coord_channel_no_session_total ${channelMetrics.no_session}`);
+
+    lines.push('# HELP coord_channel_fallback_mailbox_total Pushes that fell back to mailbox after delivery failure');
+    lines.push('# TYPE coord_channel_fallback_mailbox_total counter');
+    lines.push(`coord_channel_fallback_mailbox_total ${channelMetrics.fallback_mailbox}`);
+
+    lines.push('# HELP coord_channel_session_disconnects_total Sessions marked disconnected after delivery failure');
+    lines.push('# TYPE coord_channel_session_disconnects_total counter');
+    lines.push(`coord_channel_session_disconnects_total ${channelMetrics.session_disconnects}`);
+
     return reply.type('text/plain; version=0.0.4; charset=utf-8').send(lines.join('\n') + '\n');
   });
 
@@ -1800,6 +1871,7 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
   async function deliverToChannel(
     agentId: string, channelUrl: string, content: string, meta?: Record<string, string>
   ): Promise<{ delivered: boolean; error?: string }> {
+    channelMetrics.attempts++;
     try {
       const res = await fetch(`${channelUrl}/push`, {
         method: 'POST',
@@ -1808,11 +1880,15 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) {
+        channelMetrics.failed_http++;
         return { delivered: false, error: `channel returned ${res.status}` };
       }
+      channelMetrics.delivered++;
       return { delivered: true };
     } catch (err) {
       // Connection refused / timeout → worker process is dead, mark session disconnected
+      channelMetrics.failed_unreachable++;
+      channelMetrics.session_disconnects++;
       db.prepare(
         `UPDATE coord_channel_sessions SET status = 'disconnected' WHERE agent_id = ?`
       ).run(agentId);
@@ -1822,11 +1898,40 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     }
   }
 
-  /** POST /channel/push — Push a message to an agent. Tries live delivery first, falls back to mailbox queue. */
+  /** POST /channel/push — Push a message to an agent. Tries live delivery first, falls back to mailbox queue.
+   *
+   * Two addressing modes:
+   *   - {agentId, message}                — direct UUID
+   *   - {role, workspace, message}        — server resolves to most-recently-seen alive agent
+   *                                          matching role+workspace. Used by workers to notify
+   *                                          coordinator (whose UUID changes across restarts).
+   */
   app.post('/channel/push', async (request, reply) => {
     const parsed = channelPushSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
-    const { agentId, message } = parsed.data;
+    const { message } = parsed.data;
+    let { agentId } = parsed.data;
+
+    // Role-based addressing — resolve to a concrete agentId
+    if (!agentId && parsed.data.role && parsed.data.workspace) {
+      const resolved = db.prepare(
+        `SELECT id FROM coord_agents
+         WHERE role = ? AND workspace = ? AND status != 'dead'
+         ORDER BY last_seen DESC
+         LIMIT 1`
+      ).get(parsed.data.role, parsed.data.workspace) as { id: string } | undefined;
+      if (!resolved) {
+        return reply.status(404).send({
+          error: `No alive agent found for role='${parsed.data.role}' workspace='${parsed.data.workspace}'`,
+        });
+      }
+      agentId = resolved.id;
+    }
+
+    // Type narrowing — Zod refine guarantees agentId is set by this point,
+    // but TypeScript can't see through the refine. This guard is unreachable
+    // in practice (would have 400'd earlier).
+    if (!agentId) return reply.status(400).send({ error: 'Internal: agentId resolution failed' });
 
     const agent = db.prepare(`SELECT name, workspace FROM coord_agents WHERE id = ?`).get(agentId) as { name: string; workspace: string | null } | undefined;
     if (!agent) return reply.status(404).send({ error: 'Agent not found' });
@@ -1853,6 +1958,10 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
         return reply.send({ ok: true, delivered: true, channelId: session.channel_id });
       }
       // Live delivery failed — fall through to mailbox
+      channelMetrics.fallback_mailbox++;
+    } else {
+      // No connected session — push went straight to mailbox
+      channelMetrics.no_session++;
     }
 
     // Queue to mailbox (delivered on next /next poll)
@@ -1913,5 +2022,49 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     if (dead > 0) coordLog(`channel/probe: ${alive} alive, ${dead} dead — dead sessions marked disconnected`);
 
     return reply.send({ probed: results.length, alive, dead, results });
+  });
+
+  /**
+   * GET /telemetry/channels — Channel push delivery telemetry.
+   *
+   * Counters reset on coordinator restart (in-process). Use this to answer:
+   *   "Are channels reliable enough to depend on, or do we need a polling fallback?"
+   *
+   * Response shape:
+   *   {
+   *     since: ISO timestamp of when counters started,
+   *     uptime_seconds: number,
+   *     attempts, delivered, failed_http, failed_unreachable,
+   *     no_session, fallback_mailbox, session_disconnects: number,
+   *     delivery_rate: 0..1 (delivered / attempts) or null if zero attempts,
+   *     per_agent: [{ agent_name, push_count, last_push_at, status }]
+   *   }
+   */
+  app.get('/telemetry/channels', async (_request, reply) => {
+    const perAgent = db.prepare(`
+      SELECT a.name AS agent_name, cs.push_count, cs.last_push_at, cs.status,
+             cs.connected_at
+      FROM coord_channel_sessions cs
+      JOIN coord_agents a ON a.id = cs.agent_id
+      ORDER BY cs.push_count DESC, cs.connected_at DESC
+    `).all();
+
+    const deliveryRate = channelMetrics.attempts > 0
+      ? channelMetrics.delivered / channelMetrics.attempts
+      : null;
+
+    return reply.send({
+      since: new Date(channelMetrics.started_at).toISOString(),
+      uptime_seconds: Math.round((Date.now() - channelMetrics.started_at) / 1000),
+      attempts: channelMetrics.attempts,
+      delivered: channelMetrics.delivered,
+      failed_http: channelMetrics.failed_http,
+      failed_unreachable: channelMetrics.failed_unreachable,
+      no_session: channelMetrics.no_session,
+      fallback_mailbox: channelMetrics.fallback_mailbox,
+      session_disconnects: channelMetrics.session_disconnects,
+      delivery_rate: deliveryRate,
+      per_agent: perAgent,
+    });
   });
 }

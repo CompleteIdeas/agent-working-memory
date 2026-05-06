@@ -210,10 +210,25 @@ export const channelDeregisterSchema = z.object({
   agentId: z.string().uuid(),
 });
 
+/**
+ * Push to an agent's channel session. Accepts either:
+ *   - agentId (direct addressing — caller knows the UUID)
+ *   - role + workspace (role-based addressing — server resolves to the most
+ *     recently-seen alive agent matching that role and workspace)
+ *
+ * Role-based addressing is the right choice when a worker wants to notify the
+ * coordinator: workers don't know the coordinator's UUID (it changes across
+ * coordinator restarts) but they do know the role and their own workspace.
+ */
 export const channelPushSchema = z.object({
-  agentId: z.string().uuid(),
+  agentId: z.string().uuid().optional(),
+  role: agentRoleEnum.optional(),
+  workspace: z.string().min(1).max(50).optional(),
   message: z.string().min(1).max(10000),
-});
+}).refine(
+  (d) => d.agentId !== undefined || (d.role !== undefined && d.workspace !== undefined),
+  { message: 'Must provide either agentId, or both role and workspace' }
+);
 
 // ─── Stats ─────────────────────────────────────────────────────
 

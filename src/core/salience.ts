@@ -13,7 +13,33 @@
 import type { SalienceFeatures, MemoryClass } from '../types/index.js';
 import type { EngramStore } from '../storage/sqlite.js';
 
-export type SalienceEventType = 'decision' | 'friction' | 'surprise' | 'causal' | 'observation';
+export type SalienceEventType = 'decision' | 'friction' | 'surprise' | 'causal' | 'observation' | 'user_feedback';
+
+/**
+ * Auto-detect user-feedback memories: content that begins with a known user's
+ * name + a feedback verb. These memories represent direct human decisions and
+ * must never be discarded. Examples:
+ *   "Robert verbatim: 'LMS programs-first like CRM'"
+ *   "Katherine said the CEC cycle resets on promotion"
+ *   "Nancy directed Tier 1 has no grace period"
+ *
+ * Why this exists: the BM25 novelty check collapses near-duplicates regardless
+ * of whether the content is a NEW decision or a repeat observation. User
+ * feedback often shares terminology with prior memories ("LMS", "ECP",
+ * "officials") and gets discarded at salience 0.14 (verified in activity log
+ * 2026-05-06T19:08:47). Detecting "Robert said X" → canonical class bypasses
+ * the salience filter entirely.
+ *
+ * Tune the name list as new staff join. Pattern requires word boundary at
+ * start so "Roberta" or "Hannahs" don't match.
+ */
+const USER_FEEDBACK_PATTERN = /^(Robert|Katherine|Catherine|Nancy|Brandy|Brandi|Hannah|Marilyn|Kaylee|Pete|Abby|Tom|Wendy|Sita|Nick|Rob|Joan|Jennifer|Cindy|Jason|Alex|Molly)\s+(said|verbatim|feedback|asked|wants|prefers|requested|requested|directed|decided|confirmed|clarified|chose|specified|explained)\b/i;
+
+/** Returns true if the content looks like direct user feedback that should auto-promote to canonical. */
+export function detectUserFeedback(content: string): boolean {
+  if (typeof content !== 'string' || content.length === 0) return false;
+  return USER_FEEDBACK_PATTERN.test(content.trim());
+}
 
 export interface SalienceInput {
   content: string;
@@ -56,15 +82,28 @@ export function evaluateSalience(
   activeThreshold: number = 0.4,
   stagingThreshold: number = 0.2
 ): SalienceResult {
+  // Auto-detect user feedback before scoring. If content matches the pattern,
+  // force eventType='user_feedback' and memoryClass='canonical'. This bypasses
+  // the BM25 novelty floor that was discarding pivotal user decisions at 0.14.
+  let resolvedEventType: SalienceEventType = input.eventType ?? 'observation';
+  let resolvedMemoryClass: MemoryClass = input.memoryClass ?? 'working';
+  let autoPromoted = false;
+  if (detectUserFeedback(input.content)) {
+    resolvedEventType = 'user_feedback';
+    resolvedMemoryClass = 'canonical';
+    autoPromoted = true;
+  }
+
   const features: SalienceFeatures = {
     surprise: input.surprise ?? 0,
     decisionMade: input.decisionMade ?? false,
     causalDepth: input.causalDepth ?? 0,
     resolutionEffort: input.resolutionEffort ?? 0,
-    eventType: input.eventType ?? 'observation',
+    eventType: resolvedEventType,
   };
 
   const reasonCodes: string[] = [];
+  if (autoPromoted) reasonCodes.push('auto:user_feedback');
 
   // Novelty: 1.0 = completely new info, 0 = exact duplicate exists
   // Default to 0.8 (assume mostly novel) when caller doesn't check
@@ -91,13 +130,14 @@ export function evaluateSalience(
     case 'friction': typeBonus = 0.2; reasonCodes.push('event:friction'); break;
     case 'surprise': typeBonus = 0.25; reasonCodes.push('event:surprise'); break;
     case 'causal': typeBonus = 0.2; reasonCodes.push('event:causal'); break;
+    case 'user_feedback': typeBonus = 0.3; reasonCodes.push('event:user_feedback'); break;
     case 'observation': break;
   }
 
   let score = Math.min(surpriseScore + decisionScore + causalScore + effortScore + noveltyScore + typeBonus, 1.0);
 
   // Memory class overrides
-  const memoryClass = input.memoryClass ?? 'working';
+  const memoryClass = resolvedMemoryClass;
 
   if (memoryClass === 'canonical') {
     // Canonical memories: salience floor of 0.7, never go to staging

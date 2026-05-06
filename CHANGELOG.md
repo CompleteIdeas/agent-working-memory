@@ -2,6 +2,110 @@
 
 ## [Unreleased]
 
+## 0.7.4 (2026-05-06)
+
+### Channel Push — Telemetry + Role-Based Addressing + Stale Cleanup
+
+**Why:** Production sessions reported "agents alive but not seeing each other for work."
+Cyber-investigation revealed three concrete failures:
+1. Channel push delivery had no observability — no way to measure failure rates.
+2. Workers can't notify the coordinator after a coordinator restart because the
+   coordinator's UUID changes (cleanSlate marks all agents dead, fresh agentId
+   on next checkin) — workers had no way to address "the coordinator" abstractly.
+3. `cleanupStale` existed but was only invoked manually; zombie agents
+   accumulated between coordinator sessions until /stale/cleanup was hit.
+
+### New: `GET /telemetry/channels` + Prometheus counters
+
+**`src/coordination/routes.ts`** — process-scoped counters around channel push:
+
+| Counter | What it tracks |
+|---|---|
+| `attempts` | Every call to `deliverToChannel` |
+| `delivered` | Fetch returned 2xx |
+| `failed_http` | Fetch returned non-2xx (worker reachable, rejected) |
+| `failed_unreachable` | Fetch threw (timeout, ECONNREFUSED) — session marked disconnected |
+| `no_session` | Push intent existed but no connected session for that agent |
+| `fallback_mailbox` | Live delivery failed, message queued to coord_mailbox |
+| `session_disconnects` | Sessions marked 'disconnected' after delivery failure |
+
+JSON endpoint `GET /telemetry/channels` returns counters + `delivery_rate` + per-agent
+`push_count`/`last_push_at`/`status`. Prometheus scrape `GET /metrics` exposes:
+`coord_channel_push_attempts_total`, `..._delivered_total`,
+`..._failed_total{reason="http|unreachable"}`, `..._no_session_total`,
+`..._fallback_mailbox_total`, `..._session_disconnects_total`.
+
+Counters reset on coordinator restart (process-scoped) — intended for short-window
+observability. Persistent counters require a `coord_metrics` table, deferred until
+we know which series are worth keeping.
+
+### New: Role-based addressing on `POST /channel/push`
+
+**`src/coordination/schemas.ts` + `src/coordination/routes.ts`** — `channelPushSchema`
+now accepts either `{agentId, message}` (existing) OR `{role, workspace, message}`
+(new). Server resolves role+workspace via:
+
+```sql
+SELECT id FROM coord_agents
+WHERE role = ? AND workspace = ? AND status != 'dead'
+ORDER BY last_seen DESC LIMIT 1
+```
+
+This lets workers notify the coordinator without hardcoding its UUID. Use case:
+worker pushes `COMPLETED <assignment_id>: result` to `role:"coordinator"` after
+finishing a task — coordinator wakes immediately and chains the next assignment.
+
+Returns 404 with descriptive error if no alive agent matches role+workspace:
+```
+{"error":"No alive agent found for role='coordinator' workspace='WORK'"}
+```
+
+Returns 400 (Zod) if neither `agentId` nor `role+workspace` provided.
+
+### New: `cleanupStale` runs on a 5-minute schedule
+
+**`src/coordination/index.ts`** — `cleanupStale(db, 600)` now fires every
+5 minutes via setInterval. 600s threshold is forgiving for long edits (workers
+should pulse every 60s during active work; 10 min silence means genuinely dead).
+Logs `[stale-cleanup] auto-cleaned N stale agent(s), M resource(s) released`
+when cleanup happens.
+
+Without this, only an explicit `POST /stale/cleanup?seconds=N` call (made by the
+coordinator agent on startup) ever fires cleanupStale, leaving zombie agents
+accumulating between coordinator sessions.
+
+### New: `user_feedback` salience event type + auto-detect
+
+**`src/core/salience.ts`** — direct user-stated content was getting
+discarded by the BM25 novelty floor when it shared terminology with prior
+memories ("LMS", "ECP", project terms). A pivotal user UX decision was lost
+this way.
+
+**Fix** — two-part:
+
+1. New `SalienceEventType` value `'user_feedback'` with bonus 0.3 (highest of
+   any event type — outranks decision/causal/friction).
+
+2. Auto-detect at the top of `evaluateSalience`:
+   ```typescript
+   const USER_FEEDBACK_PATTERN =
+     /^(Robert|Katherine|Catherine|Nancy|Brandy|Brandi|Hannah|Marilyn|Kaylee|
+        Pete|Abby|Tom|Wendy|Sita|Nick|Rob|Joan|Jennifer|Cindy|Jason|Alex|Molly)
+       \s+(said|verbatim|feedback|asked|wants|prefers|requested|directed|
+            decided|confirmed|clarified|chose|specified|explained)\b/i;
+   ```
+   When content matches, eventType is forced to `'user_feedback'` and
+   memoryClass to `'canonical'` (which provides salience floor 0.7).
+
+Reason code `auto:user_feedback` surfaces when the auto-promote fires.
+
+Pattern is intentionally conservative — anchored to start of content, requires
+both name and a feedback verb, word boundary on the verb. "Roberta said good
+morning" doesn't match (different name); "...as Robert said earlier..." doesn't
+match (not at start).
+
+Tunable: extend the staff name list as new staff join.
+
 ## 0.7.3 (2026-05-05)
 
 ### Salience Filter — Production Tuning

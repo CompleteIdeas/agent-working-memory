@@ -11,7 +11,7 @@ import type { EngramStore } from '../storage/sqlite.js';
 import { ZodError } from 'zod';
 import { initCoordinationTables } from './schema.js';
 import { registerCoordinationRoutes } from './routes.js';
-import { cleanSlate, pruneOldHeartbeats, purgeDeadAgents } from './stale.js';
+import { cleanSlate, pruneOldHeartbeats, purgeDeadAgents, cleanupStale } from './stale.js';
 import { createWriteMutex, needsWriteLock } from './write-mutex.js';
 import { createEventBus, type CoordinationEventBus } from './events.js';
 import { loadPlugins, teardownPlugins } from './plugin-loader.js';
@@ -104,6 +104,25 @@ export function initCoordination(app: FastifyInstance, db: Database.Database, st
     setInterval(() => {
       try { purgeDeadAgents(db, 24); } catch { /* db may be closed */ }
     }, 60 * 60 * 1000),
+  );
+
+  // Periodic stale-agent cleanup every 5 min with 600s threshold (10 min idle).
+  // Forgiving for long-running edits — workers should pulse every 60s during active
+  // work, so 10 min without a pulse is genuinely dead. This catches the
+  // "alive but not seeing each other" pattern where workers' processes persist
+  // but their heartbeats stop. Without this scheduled, only an explicit
+  // POST /stale/cleanup call (made by the coordinator agent on startup) ever
+  // fires cleanupStale, leaving zombie agents accumulating between coordinator
+  // sessions.
+  cleanupIntervals.push(
+    setInterval(() => {
+      try {
+        const result = cleanupStale(db, 600);
+        if (result.cleaned > 0) {
+          console.log(`  [stale-cleanup] auto-cleaned ${result.stale.length} stale agent(s), ${result.cleaned} resource(s) released`);
+        }
+      } catch { /* db may be closed */ }
+    }, 5 * 60 * 1000),
   );
 
   // Periodic channel liveness probe every 60s — mark unreachable sessions as disconnected
