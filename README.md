@@ -407,7 +407,25 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.7.1
+## What's New in v0.7.4
+
+- **Channel push telemetry** — new `GET /telemetry/channels` JSON endpoint and Prometheus counters (`coord_channel_push_attempts_total`, `..._delivered_total`, `..._failed_total{reason}`, `..._no_session_total`, `..._fallback_mailbox_total`, `..._session_disconnects_total`). Surfaces real delivery rate so coordination reliability can be measured rather than guessed.
+- **Role-based `/channel/push` addressing** — accepts `{role, workspace, message}` as alternative to `{agentId, message}`. Server resolves role+workspace to most-recently-seen alive agent. Lets workers notify the coordinator without hardcoding its UUID (which changes across coordinator restarts). Enables event-driven worker → coordinator hand-off in place of fragile coordinator self-polling.
+- **`/checkin` writes role on every call** — previously the UPDATE on existing rows preserved a stale role from initial registration; now agents can correct their own role via re-checkin.
+- **`/workers` JOINs channel sessions** — `alive` field is now `recent_pulse OR connected_channel_session`. Stops false-dead duplicate-spawn loops where a busy worker's `/pulse` went stale during long tool sequences while their channel-server stayed reachable.
+- **`cleanupStale` runs on a 5-minute schedule** — was only invoked manually; now zombie agents get marked dead automatically with a 600s threshold (forgiving for long edits).
+- **`user_feedback` salience event type** — new event type with bonus 0.3 (highest of any). Auto-detect heuristic on `memory_write` content matching `^(Robert|Katherine|Nancy|...) (said|verbatim|directed|decided|...)` forces `memoryClass='canonical'` so user-stated decisions can't be discarded by the BM25 novelty floor in populated DBs.
+
+### v0.7.3
+
+- **Salience filter production tuning** — fixed BM25 novelty floor that was discarding ~17% salience for most writes in 10K+ engram DBs. Quadratic dampening curve (`max(0.05, 1 - topScore²)`); concept-match penalty scoped to last 30 days; floor lowered 0.10 → 0.05.
+- Maintenance scripts for backup pruning + lme/bench database cleanup.
+
+### v0.7.2
+
+- Workspace recall fix (was returning UUIDs not names in v0.7.1 release).
+
+### v0.7.1
 
 - **Agent-provided metadata tags** — `memory_write` accepts `project`, `topic`, `source`, `confidence_level`, `session_id`, `intent`. Stored as searchable prefixed tags (`proj=X`, `sid=Z`). Session ID tags alone improved LongMemEval recall 3x.
 - **Dual synthesis** — consolidation creates two types of summary memories: session summaries (tag-based, for perfect recall) and pattern syntheses (cross-session, for novel recall/creative connections).
@@ -434,7 +452,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.0). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.4). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
