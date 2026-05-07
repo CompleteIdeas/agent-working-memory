@@ -174,9 +174,14 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       const sessionToken = wasDead ? randomUUID() : (
         (db.prepare(`SELECT session_token FROM coord_agents WHERE id = ?`).get(existing.id) as { session_token: string | null }).session_token ?? randomUUID()
       );
+      // role IS updated on every checkin — agents know their own role and
+      // re-registrations may correct stale role values (e.g., when an old
+      // coord_agents row was inserted with role='orchestrator' before the
+      // 'coordinator' role was canonical, or when the channel-server's
+      // hardcoded role='worker' overwrote a real role).
       db.prepare(
-        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace), session_token = ? WHERE id = ?`
-      ).run(pid ?? null, capsJson, workspace ?? null, sessionToken, existing.id);
+        `UPDATE coord_agents SET last_seen = datetime('now'), status = CASE WHEN status = 'dead' THEN 'idle' ELSE status END, role = ?, pid = COALESCE(?, pid), capabilities = COALESCE(?, capabilities), workspace = COALESCE(?, workspace), session_token = ? WHERE id = ?`
+      ).run(role, pid ?? null, capsJson, workspace ?? null, sessionToken, existing.id);
 
       const eventType = wasDead ? 'reconnected' : 'heartbeat';
       const detail = wasDead ? `${name} reconnected (was dead)` : `heartbeat from ${name}`;
@@ -1404,28 +1409,41 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const q = workersQuerySchema.safeParse(req.query);
     const { capability, status: filterStatus, workspace } = q.success ? q.data : { capability: undefined, status: undefined, workspace: undefined };
 
+    // Join with coord_channel_sessions so the coordinator agent can compute
+    // alive=true for workers that have a connected channel session even when
+    // their /pulse is stale. Without this, /workers under-reports liveness
+    // during long tool-call sequences where the worker is processing but
+    // hasn't called /pulse for >5min — leading to false-positive duplicate
+    // spawns. Channel sessions get probed every 60s (coordination/index.ts:111),
+    // so a stale channel-server.js gets status='disconnected' within 60-120s.
     let workers = workspace
       ? db.prepare(
-          `SELECT id, name, role, status, current_task, capabilities, workspace, last_seen,
-                  ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
-           FROM coord_agents
-           WHERE status != 'dead' AND role NOT IN ('orchestrator', 'coordinator') AND workspace = ?
-           ORDER BY name LIMIT 200`
+          `SELECT a.id, a.name, a.role, a.status, a.current_task, a.capabilities, a.workspace, a.last_seen,
+                  ROUND((julianday('now') - julianday(a.last_seen)) * 86400) AS seconds_since_seen,
+                  cs.status AS channel_status, cs.last_push_at AS channel_last_push
+           FROM coord_agents a
+           LEFT JOIN coord_channel_sessions cs ON cs.agent_id = a.id
+           WHERE a.status != 'dead' AND a.role NOT IN ('orchestrator', 'coordinator') AND a.workspace = ?
+           ORDER BY a.name LIMIT 200`
         ).all(workspace) as Array<{
           id: string; name: string; role: string; status: string;
           current_task: string | null; capabilities: string | null;
           workspace: string | null; last_seen: string; seconds_since_seen: number;
+          channel_status: string | null; channel_last_push: string | null;
         }>
       : db.prepare(
-          `SELECT id, name, role, status, current_task, capabilities, workspace, last_seen,
-                  ROUND((julianday('now') - julianday(last_seen)) * 86400) AS seconds_since_seen
-           FROM coord_agents
-           WHERE status != 'dead' AND role NOT IN ('orchestrator', 'coordinator')
-           ORDER BY name LIMIT 200`
+          `SELECT a.id, a.name, a.role, a.status, a.current_task, a.capabilities, a.workspace, a.last_seen,
+                  ROUND((julianday('now') - julianday(a.last_seen)) * 86400) AS seconds_since_seen,
+                  cs.status AS channel_status, cs.last_push_at AS channel_last_push
+           FROM coord_agents a
+           LEFT JOIN coord_channel_sessions cs ON cs.agent_id = a.id
+           WHERE a.status != 'dead' AND a.role NOT IN ('orchestrator', 'coordinator')
+           ORDER BY a.name LIMIT 200`
         ).all() as Array<{
           id: string; name: string; role: string; status: string;
           current_task: string | null; capabilities: string | null;
           workspace: string | null; last_seen: string; seconds_since_seen: number;
+          channel_status: string | null; channel_last_push: string | null;
         }>;
 
     if (capability) {
@@ -1454,7 +1472,14 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
       workspace: w.workspace,
       lastSeen: w.last_seen,
       secondsSinceSeen: w.seconds_since_seen,
-      alive: w.seconds_since_seen < 300,
+      // alive = recent /pulse OR connected channel session.
+      // Channel sessions get probed every 60s and marked 'disconnected'
+      // when unreachable, so a connected session is reliable proof of life
+      // even during long tool sequences where the worker hasn't pulsed.
+      // Prevents duplicate worker spawns when /pulse is stale but worker is busy.
+      alive: w.seconds_since_seen < 300 || w.channel_status === 'connected',
+      channelStatus: w.channel_status,
+      channelLastPush: w.channel_last_push,
     }));
 
     return reply.send({
