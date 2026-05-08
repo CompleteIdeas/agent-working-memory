@@ -293,10 +293,60 @@ export class ActivationEngine {
     // Floor stddev at 0.10 to prevent z-score inflation with small candidate pools
     const simStdDev = Math.max(rawStdDev, 0.10);
 
-    // Phase 3b: Score each candidate with per-phase breakdown
-    // Batch-fetch associations for all candidates at once (was N+1, now 1 query)
-    const associationsByEngram = this.store.getAssociationsForBatch(candidates.map(e => e.id));
-    const scored = candidates.map(engram => {
+    // Phase 3a': Cheap pre-filter — deep scoring (with associations + tokenize-content
+    // + Hebbian/centrality) only runs for candidates that have a non-trivial signal
+    // we can verify cheaply. Anything that fails this filter would score below the
+    // relevance gate (textMatch > 0.1) anyway and produce a near-zero composite.
+    //
+    // Why: phase-breakdown spike (2026-05-08) showed assocBatch over 10K candidates
+    // costs 1500ms and represents 68% of recall latency. Most candidates have zero
+    // BM25 hit, low cosine similarity, and no concept-jaccard match — so fetching
+    // their associations and tokenizing their full content is wasted work.
+    //
+    // Survival criteria (any one):
+    //   1. BM25 hit (bm25Score > 0)
+    //   2. Cosine z-score above the gate (would produce non-zero vectorMatch)
+    //   3. Concept-token overlap with query (cheap to compute — concept is short)
+    //
+    // Graph walk preserves correctness: it only boosts neighbors whose own textMatch
+    // already passes the relevance floor (0.05-0.1), and any candidate meeting that
+    // floor would also pass this filter (they'd have either BM25, cosine, or concept
+    // jaccard match). So no graph-walkable target is lost.
+    //
+    // Disable via AWM_DISABLE_POOL_FILTER=1 (for A/B testing or if a regression appears)
+    const poolFilterEnabled = process.env.AWM_DISABLE_POOL_FILTER !== '1';
+    let filteredCandidates: Engram[];
+    if (poolFilterEnabled) {
+      filteredCandidates = [];
+      for (const engram of candidates) {
+        const bm25 = bm25ScoreMap.get(engram.id) ?? 0;
+        if (bm25 > 0) {
+          filteredCandidates.push(engram);
+          continue;
+        }
+        const sim = rawCosineSims.get(engram.id);
+        if (sim !== undefined) {
+          const z = (sim - simMean) / simStdDev;
+          if (z > adaptive.zScoreGate) {
+            filteredCandidates.push(engram);
+            continue;
+          }
+        }
+        // Cheap concept jaccard — concepts are short (typically 3-8 tokens)
+        const conceptTokens = tokenize(engram.concept);
+        if (conceptTokens.size === 0) continue;
+        let conceptOverlap = 0;
+        for (const w of conceptTokens) if (queryTokens.has(w)) conceptOverlap++;
+        if (conceptOverlap > 0) filteredCandidates.push(engram);
+      }
+    } else {
+      filteredCandidates = candidates;
+    }
+
+    // Phase 3b: Score each filtered candidate with per-phase breakdown
+    // Batch-fetch associations only for survivors (was N+1 over 10K, now 1 query over ~200)
+    const associationsByEngram = this.store.getAssociationsForBatch(filteredCandidates.map(e => e.id));
+    const scored = filteredCandidates.map(engram => {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const associations = associationsByEngram.get(engram.id) ?? [];
 

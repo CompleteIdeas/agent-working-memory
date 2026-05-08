@@ -2,6 +2,64 @@
 
 ## [Unreleased]
 
+## 0.7.7 (2026-05-08)
+
+### Recall Latency Round 2 — 2.5s → 1.0s end-to-end (~50% on top of 0.7.6)
+
+**Why:** Phase-breakdown spike (`spike/phase-breakdown.ts`) showed that after the
+0.7.6 BM25 fix, the new dominant cost was `getAssociationsForBatch` over all
+~10K candidates: **1518ms / 2226ms total = 68% of recall latency**. Most of those
+candidates had zero text relevance and would score below the relevance gate
+(`textMatch > 0.1`) anyway — so fetching their associations and tokenizing their
+full content was wasted work.
+
+### Pool reduction — pre-filter before deep scoring
+
+**`src/engine/activation.ts`** — added a cheap pre-filter pass before the
+batch-association fetch. Candidates survive into deep scoring only if they have:
+
+1. **BM25 hit** (`bm25Score > 0`), OR
+2. **Cosine z-score above the gate** (would produce non-zero vectorMatch), OR
+3. **Concept-token overlap** with the query (cheap — concept is short)
+
+Anything else gets dropped before the expensive phase. From ~10K candidates
+down to typically 100-300 survivors. Graph walk preserves correctness because
+it only boosts neighbors whose own `textMatch >= 0.05` — and any candidate
+meeting that floor would also pass this filter.
+
+### End-to-end measurement
+
+| Query | 0.7.6 | 0.7.7 | Δ |
+|---|---|---|---|
+| "USEF results submission Staff Services" | 2683ms | **1143ms** | -57% |
+| "Education LMS architecture programs certifications" | 2801ms | **1554ms** | -45% |
+| "short query" | 2494ms | **884ms** | -65% |
+| "Stripe webhook handler transfer.paid Connect destination charges" | 2642ms | **1146ms** | -57% |
+| "sprint current work completed findings pending" | 2685ms | **1225ms** | -54% |
+
+**Cumulative since 0.7.4 baseline:** 11-23s → 0.9-1.6s (~10-15× faster).
+
+### Recall quality preserved
+
+A/B test (`spike/recall-quality.ts`) on 8 representative queries:
+- **8/8 top-1 results identical**
+- **avg 4.50/5 top-5 overlap** (90%)
+- **avg 9.38/10 top-10 overlap** (94%)
+
+The few reorderings happen at the bottom of top-K and swap between memories
+that are all relevant — typically a re-rank, not a recall miss.
+
+### Escape hatch
+
+Set `AWM_DISABLE_POOL_FILTER=1` to revert to the pre-0.7.7 path. For A/B
+testing or if a regression appears in production. Same recall semantics,
+just slower.
+
+### Tests
+
+All 334 tests pass. New `spike/phase-breakdown.ts` and `spike/recall-quality.ts`
+captured for future regression diagnosis.
+
 ## 0.7.6 (2026-05-08)
 
 ### Recall Latency — 11-23s → 2.5s end-to-end

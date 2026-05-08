@@ -407,6 +407,10 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.7.7
+
+- **Recall latency 2.5s → 1.0s end-to-end (~50% on top of 0.7.6)** — phase-breakdown spike showed that after the 0.7.6 BM25 fix, the new bottleneck was `getAssociationsForBatch` over all ~10K candidates (68% of recall latency). Added a cheap pre-filter before deep scoring: candidates survive only if they have a BM25 hit, a cosine z-score above the gate, or concept-token overlap with the query. From ~10K candidates → typically 100-300 survivors. Graph-walk correctness preserved (it only boosts neighbors with `textMatch >= 0.05`, which would also pass this filter). Recall quality A/B verified: 8/8 top-1 matches, 90% top-5 overlap, 94% top-10 overlap on diverse queries. Set `AWM_DISABLE_POOL_FILTER=1` to revert. **Cumulative since 0.7.4 baseline: 11-23s → 0.9-1.6s (~10-15× faster).**
+
 ## What's New in v0.7.6
 
 - **Recall latency 11-23s → 2.5s end-to-end (~5× faster)** — measurement spike found the slow path was a SQLite query-plan trap, not vector search. The BM25 query `JOIN engrams_fts ON e.rowid + WHERE MATCH + ORDER BY rank LIMIT N` materialized all matching rows (with 1.5KB embedding blobs) before the LIMIT applied. CTE prefilter forces FTS5 LIMIT first, then joins only the top-K rowids. Same SQLite, same data, same results — 567× faster for wide OR queries (3682ms → 6.5ms verified). Also added `getAssociationsForBatch` to replace the per-candidate N+1 in the activation scoring loop. Top-K results are byte-identical to the old query (verified by the equivalence test in `spike/`).
@@ -457,7 +461,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.6). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.7). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
