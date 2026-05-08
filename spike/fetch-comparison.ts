@@ -11,8 +11,9 @@ function ms(start: bigint): number { return Number(process.hrtime.bigint() - sta
 
 console.log(`db=${dbPath} agent=${agentId}\n`);
 
-// Warm
+// Warm both cache paths
 store.getEngramsByAgent(agentId, 'active');
+store.getEngramsByAgentSlim(agentId, 'active'); // populates slim cache
 
 // Full fetch
 const fullTimes: number[] = [];

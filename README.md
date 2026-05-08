@@ -391,6 +391,8 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | `AWM_INCOGNITO` | *(unset)* | Set to `1` to disable all tools |
 | `AWM_COORDINATION` | *(unset)* | Set to `true` to enable hive coordination endpoints |
 | `AWM_DISABLE_POOL_FILTER` | *(unset)* | Set to `1` to disable the candidate pool reduction (0.7.7+). Reverts recall to scoring all active candidates — slower but useful for A/B testing if a recall regression appears |
+| `AWM_DISABLE_SLIM_CACHE` | *(unset)* | Set to `1` to disable the in-memory slim cache (0.7.10+). Reverts to per-recall SQL fetch — slower but useful if cache invariants are suspected of drift |
+| `AWM_DISABLE_RERANK_SKIP` | *(unset)* | Set to `1` to disable the reranker skip on clear-winner queries (0.7.10+). Forces every recall through the cross-encoder |
 | `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
 
 ## Tech Stack
@@ -409,6 +411,14 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | Validation | Zod 4 |
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
+
+## What's New in v0.7.10
+
+- **Recall latency 1.4s → 0.9s median (~35% on top of 0.7.9)** — two more fixes after phase-breakdown showed the slim fetch was still 310ms (Buffer→Float32Array on every recall) and the reranker was 354ms (40% of remaining cost):
+  1. **In-memory slim cache** — `Map<id, SlimCacheEntry>` populated once per process, mutated in lock-step with engram writes/updates/retracts. Slim fetch 306ms → **5ms** with warm cache (~60×). Disable via `AWM_DISABLE_SLIM_CACHE=1`. Memory cost ~15MB at 10K engrams.
+  2. **Reranker skip on clear winners** — when BM25 has a clear top-1 (textMatch ≥ 0.8, ≥1.5× the next score, small pool), skip the cross-encoder. Saves ~300ms on confident queries. Disable via `AWM_DISABLE_RERANK_SKIP=1`.
+
+  Quality preserved: 8/8 top-1, 4.63/5 top-5, 9.75/10 top-10 on the A/B suite. **Cumulative since 0.7.4 baseline: 11s → 0.9s (~12-15× faster).**
 
 ## What's New in v0.7.9
 
@@ -472,7 +482,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.9). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.10). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**

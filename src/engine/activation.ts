@@ -577,7 +577,33 @@ export class ActivationEngine {
     // Widens the pool to find relevant results that keyword matching missed
     const rerankPool = pool.slice(0, Math.max(limit * 3, 30));
 
-    if (useReranker && rerankPool.length > 0) {
+    // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
+    // strong absolute score AND a meaningful gap to the runner-up, the cross-encoder
+    // is unlikely to change the top result. Skipping saves ~300ms of wall-clock per
+    // recall on simple queries (40% of post-0.7.9 floor was reranker).
+    //
+    // Conservative gate (only skip when very confident):
+    //   - top-1 textMatch >= 0.8 (high BM25 + jaccard agreement)
+    //   - top-1 score is at least 1.5× top-2 score (clear separation)
+    //   - rerankPool size <= limit*2 (small pool — reranker has less to do)
+    //
+    // Ambiguous queries (close BM25 scores, weak top-1, large pool) still go through
+    // the reranker. Disable this heuristic via AWM_DISABLE_RERANK_SKIP=1.
+    let rerankSkipped = false;
+    if (useReranker && rerankPool.length >= 2 && process.env.AWM_DISABLE_RERANK_SKIP !== '1') {
+      const top1 = rerankPool[0];
+      const top2 = rerankPool[1];
+      const t1Text = top1.phaseScores.textMatch;
+      const t1Score = top1.score;
+      const t2Score = top2.score;
+      const cleanWinner = t1Text >= 0.8 && t1Score >= 1.5 * Math.max(t2Score, 0.01);
+      const smallPool = rerankPool.length <= Math.max(limit * 2, 20);
+      if (cleanWinner && smallPool) {
+        rerankSkipped = true;
+      }
+    }
+
+    if (useReranker && !rerankSkipped && rerankPool.length > 0) {
       try {
         const passages = rerankPool.map(r =>
           `${r.engram.concept}: ${r.engram.content}`

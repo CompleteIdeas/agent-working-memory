@@ -2,6 +2,77 @@
 
 ## [Unreleased]
 
+## 0.7.10 (2026-05-08)
+
+### Recall Latency Round 4 — In-memory slim cache + reranker skip
+
+After 0.7.9, phase-breakdown showed the slim fetch was still 310ms cold per
+recall (Buffer→Float32Array conversion of 10K embeddings on every call) and
+the cross-encoder reranker was 354ms (40% of recall floor). Two more fixes.
+
+### Fix 1: In-memory slim cache (`src/storage/sqlite.ts`)
+
+**`EngramStore.slimCache`** — `Map<engramId, SlimCacheEntry>` populated lazily
+on first `getEngramsByAgentSlim()` call. Subsequent calls iterate the Map
+in-process, skipping SQL + Buffer conversion entirely.
+
+**Cache invariants:**
+- Lazy-populated on first slim fetch (one ~300-700ms cost at startup)
+- Updated on every mutation: `createEngram`, `updateStage`, `updateEmbedding`,
+  `retractEngram`, `deleteEngram`. Cache hooks live in the same methods that
+  run the SQL.
+- ~22 bytes overhead per entry plus the 1.5KB embedding → ~15MB at 10K engrams,
+  ~150MB at 100K. Acceptable for a long-running AWM coordinator.
+- Disable via `AWM_DISABLE_SLIM_CACHE=1` for A/B testing.
+
+**Measured:** slim fetch 306ms → **5ms** with warm cache (~60× faster).
+Two-pass total (slim + hydrate-200): 314ms → **29ms** (~11× faster).
+
+### Fix 2: Reranker skip on clear winners (`src/engine/activation.ts`)
+
+The cross-encoder is most useful when BM25 returns ambiguous matches. When
+BM25 already has a clear winner, the cross-encoder rarely changes the top
+result and burns ~300ms.
+
+**Skip heuristic (conservative):**
+- top-1 textMatch ≥ 0.8 (high BM25 + jaccard agreement), AND
+- top-1 score is ≥ 1.5× top-2 score (clear separation), AND
+- rerankPool size ≤ `max(limit*2, 20)` (small pool — reranker has less to do)
+
+When all three conditions hit, skip the reranker. Otherwise it still runs.
+Disable the heuristic via `AWM_DISABLE_RERANK_SKIP=1`.
+
+### Recall quality preserved
+
+A/B test on 8 representative queries:
+- **8/8 top-1 results identical** (was 8/8 in 0.7.9)
+- **avg 4.63/5 top-5 overlap** (was 4.75/5)
+- **avg 9.75/10 top-10 overlap** (unchanged)
+
+The slight top-5 reordering reflects cases where the cross-encoder would have
+reordered candidates that are all relevant. Top-1 stability is what matters
+for cognitive recall, and that's preserved.
+
+### Cumulative recall latency (0.7.4 → 0.7.10)
+
+| Version | Floor | Median |
+|---|---|---|
+| 0.7.4 (baseline) | 11s | 18s |
+| 0.7.6 (BM25 CTE) | 1.8s | 2.5s |
+| 0.7.7 (pool reduction) | 0.9s | 1.6s |
+| 0.7.9 (two-pass fetch) | 0.9s | 1.4s |
+| 0.7.10 (slim cache + rerank skip) | **0.7s** | **0.9s** |
+
+**Total: 11s → 0.9s, ~12-15× faster.** Recall is now sub-second on a 10K-engram
+corpus. Cold start for the cache is one ~600ms penalty per AWM coordinator
+process; all subsequent recalls hit the cache.
+
+### Tests
+
+All 334 tests pass. Build clean. Slim cache invariants are exercised by the
+existing engram CRUD test suite (createEngram, updateStage, etc. all flow
+through the cache hooks).
+
 ## 0.7.9 (2026-05-08)
 
 ### Recall Latency Round 3 — Two-pass fetch (slim → hydrate survivors)

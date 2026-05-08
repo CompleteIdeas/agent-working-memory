@@ -64,15 +64,15 @@ async function probe(store: EngramStore, agentId: string, q: string) {
     bm25Map.set(r.engram.id, Math.max(bm25Map.get(r.engram.id) ?? 0, r.bm25Score));
   }
 
-  // Phase 3: fetch all active
+  // Phase 3: SLIM fetch (cached in 0.7.10+)
   const tFetch = process.hrtime.bigint();
-  const allActive = store.getEngramsByAgent(agentId, 'active');
+  const slimActive = store.getEngramsByAgentSlim(agentId, 'active');
   phases.fetchAll = ms(tFetch);
 
-  // Phase 3a: cosine
+  // Phase 3a: cosine on slim entries
   const tCos = process.hrtime.bigint();
   const sims = new Map<string, number>();
-  for (const e of allActive) {
+  for (const e of slimActive) {
     if (e.embedding) sims.set(e.id, cosineSimilarity(queryEmbedding, e.embedding));
   }
   phases.cosine = ms(tCos);
@@ -83,29 +83,34 @@ async function probe(store: EngramStore, agentId: string, q: string) {
     ? Math.sqrt(simValues.reduce((s, x) => s + (x - simMean) ** 2, 0) / simValues.length)
     : 0.15, 0.10);
 
-  // Phase 3a': POOL FILTER (the new step)
+  // Phase 3a': POOL FILTER on slim entries
   const tFilter = process.hrtime.bigint();
   const queryTokens = tokenize(q);
-  const survivors = [];
-  for (const e of allActive) {
+  const survivorIds = new Set<string>();
+  for (const e of slimActive) {
     const bm25 = bm25Map.get(e.id) ?? 0;
-    if (bm25 > 0) { survivors.push(e); continue; }
+    if (bm25 > 0) { survivorIds.add(e.id); continue; }
     const s = sims.get(e.id);
-    if (s !== undefined && (s - simMean) / stdDev > 0.5) { survivors.push(e); continue; }
+    if (s !== undefined && (s - simMean) / stdDev > 0.5) { survivorIds.add(e.id); continue; }
     const ct = tokenize(e.concept);
     if (ct.size === 0) continue;
     let overlap = 0;
     for (const w of ct) if (queryTokens.has(w)) overlap++;
-    if (overlap > 0) survivors.push(e);
+    if (overlap > 0) survivorIds.add(e.id);
   }
   phases.poolFilter = ms(tFilter);
 
-  // Phase 3b: batch assoc on survivors (production path)
+  // Phase 3a'': hydrate survivors (full Engram rows)
+  const tHydrate = process.hrtime.bigint();
+  const survivors = store.getEngramsByIds(Array.from(survivorIds));
+  phases.hydrate = ms(tHydrate);
+
+  // Phase 3b: batch assoc on hydrated survivors
   const tAssoc = process.hrtime.bigint();
   const assocMap = store.getAssociationsForBatch(survivors.map(e => e.id));
   phases.assocBatch = ms(tAssoc);
 
-  // Phase 3c: deep score loop on survivors
+  // Phase 3c: deep score loop
   const tScore = process.hrtime.bigint();
   for (const e of survivors) {
     const ageDays = (Date.now() - e.createdAt.getTime()) / 86400000;
@@ -126,7 +131,7 @@ async function probe(store: EngramStore, agentId: string, q: string) {
   phases.rerank = ms(tRr);
 
   phases.total = ms(t0);
-  phases.candidates = allActive.length;
+  phases.candidates = slimActive.length;
   phases.survivors = survivors.length;
 
   return phases;
@@ -150,7 +155,7 @@ async function main() {
     console.log(`\n=== ${q} ===`);
     console.log(`candidates=${warm.candidates} survivors=${warm.survivors}`);
     console.log(`              cold      warm`);
-    for (const k of ['expand', 'embed', 'bm25', 'fetchAll', 'cosine', 'poolFilter', 'assocBatch', 'score', 'rerank', 'total']) {
+    for (const k of ['expand', 'embed', 'bm25', 'fetchAll', 'cosine', 'poolFilter', 'hydrate', 'assocBatch', 'score', 'rerank', 'total']) {
       console.log(`  ${k.padEnd(11)} ${(cold as any)[k].toFixed(0).padStart(6)}ms ${(warm as any)[k].toFixed(0).padStart(6)}ms`);
     }
   }

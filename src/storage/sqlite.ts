@@ -28,9 +28,32 @@ const DEFAULT_SALIENCE_FEATURES: SalienceFeatures = {
   surprise: 0, decisionMade: false, causalDepth: 0, resolutionEffort: 0, eventType: 'observation',
 };
 
+/**
+ * In-memory slim entry — the minimum data the activation pipeline's pre-filter
+ * pass reads. Lives in EngramStore.slimCache to skip the SQL fetch + Buffer→
+ * Float32Array conversion on every recall. ~22 bytes overhead per entry plus
+ * the embedding (~1.5KB), so ~15MB at 10K engrams.
+ */
+type SlimCacheEntry = {
+  id: string;
+  agentId: string;
+  concept: string;
+  embedding: number[] | null;
+  stage: EngramStage;
+  retracted: boolean;
+};
+
 export class EngramStore {
   private db: Database.Database;
   private walTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Slim cache for the activation pipeline pre-filter. Populated lazily on
+  // first call to getEngramsByAgentSlim(). Mutations to engrams keep this in
+  // sync via private cache* helpers. Disable via AWM_DISABLE_SLIM_CACHE=1
+  // (for A/B testing or if a regression appears).
+  private slimCache: Map<string, SlimCacheEntry> = new Map();
+  private slimCachePopulated: boolean = false;
+  private slimCacheEnabled: boolean = process.env.AWM_DISABLE_SLIM_CACHE !== '1';
 
   constructor(dbPath: string = 'memory.db') {
     this.db = new Database(dbPath);
@@ -41,6 +64,62 @@ export class EngramStore {
     this.db.pragma('wal_autocheckpoint = 1000');
     this.init();
     this.startWalCheckpointTimer();
+  }
+
+  // --- Slim cache management ---
+
+  /** Lazy-populate the slim cache from the engrams table. Called on first slim fetch. */
+  private ensureSlimCachePopulated(): void {
+    if (this.slimCachePopulated || !this.slimCacheEnabled) return;
+    const rows = this.db.prepare(
+      'SELECT id, agent_id, concept, embedding, stage, retracted FROM engrams'
+    ).all() as any[];
+    for (const r of rows) {
+      this.slimCache.set(r.id as string, {
+        id: r.id as string,
+        agentId: r.agent_id as string,
+        concept: r.concept as string,
+        embedding: r.embedding ? Array.from(bufferToFloat32Array(r.embedding)) : null,
+        stage: r.stage as EngramStage,
+        retracted: !!r.retracted,
+      });
+    }
+    this.slimCachePopulated = true;
+  }
+
+  /** Add a new engram to the slim cache. Called from createEngram. */
+  private cacheAdd(entry: SlimCacheEntry): void {
+    if (!this.slimCacheEnabled) return;
+    this.slimCache.set(entry.id, entry);
+  }
+
+  private cacheUpdateStage(id: string, stage: EngramStage): void {
+    if (!this.slimCacheEnabled) return;
+    const e = this.slimCache.get(id);
+    if (e) e.stage = stage;
+  }
+
+  private cacheUpdateEmbedding(id: string, embedding: number[]): void {
+    if (!this.slimCacheEnabled) return;
+    const e = this.slimCache.get(id);
+    if (e) e.embedding = embedding;
+  }
+
+  private cacheRetract(id: string): void {
+    if (!this.slimCacheEnabled) return;
+    const e = this.slimCache.get(id);
+    if (e) e.retracted = true;
+  }
+
+  private cacheRemove(id: string): void {
+    if (!this.slimCacheEnabled) return;
+    this.slimCache.delete(id);
+  }
+
+  /** Reset cache (used by tests + after timeWarp/bulk operations). */
+  resetSlimCache(): void {
+    this.slimCache.clear();
+    this.slimCachePopulated = false;
   }
 
   /** Expose the raw database handle for the coordination module. */
@@ -306,6 +385,18 @@ export class EngramStore {
       input.memoryType ?? 'unclassified',
     );
 
+    // Add to slim cache (skip if not yet populated — first slim fetch will load it)
+    if (this.slimCachePopulated) {
+      this.cacheAdd({
+        id,
+        agentId: input.agentId,
+        concept: input.concept,
+        embedding: input.embedding ?? null,
+        stage: 'active',
+        retracted: false,
+      });
+    }
+
     return this.getEngram(id)!;
   }
 
@@ -344,6 +435,18 @@ export class EngramStore {
     stage?: EngramStage,
     includeRetracted: boolean = false
   ): Array<{ id: string; concept: string; embedding: number[] | null }> {
+    if (this.slimCacheEnabled) {
+      this.ensureSlimCachePopulated();
+      const result: Array<{ id: string; concept: string; embedding: number[] | null }> = [];
+      for (const entry of this.slimCache.values()) {
+        if (entry.agentId !== agentId) continue;
+        if (stage && entry.stage !== stage) continue;
+        if (!includeRetracted && entry.retracted) continue;
+        result.push({ id: entry.id, concept: entry.concept, embedding: entry.embedding });
+      }
+      return result;
+    }
+    // Cache disabled — fall back to direct SQL
     let query = 'SELECT id, concept, embedding FROM engrams WHERE agent_id = ?';
     const params: any[] = [agentId];
 
@@ -370,6 +473,19 @@ export class EngramStore {
   ): Array<{ id: string; concept: string; embedding: number[] | null }> {
     if (agentIds.length === 0) return [];
     if (agentIds.length === 1) return this.getEngramsByAgentSlim(agentIds[0], stage, includeRetracted);
+
+    if (this.slimCacheEnabled) {
+      this.ensureSlimCachePopulated();
+      const agentSet = new Set(agentIds);
+      const result: Array<{ id: string; concept: string; embedding: number[] | null }> = [];
+      for (const entry of this.slimCache.values()) {
+        if (!agentSet.has(entry.agentId)) continue;
+        if (stage && entry.stage !== stage) continue;
+        if (!includeRetracted && entry.retracted) continue;
+        result.push({ id: entry.id, concept: entry.concept, embedding: entry.embedding });
+      }
+      return result;
+    }
 
     const placeholders = agentIds.map(() => '?').join(',');
     let query = `SELECT id, concept, embedding FROM engrams WHERE agent_id IN (${placeholders})`;
@@ -513,6 +629,7 @@ export class EngramStore {
 
   updateStage(id: string, stage: EngramStage): void {
     this.db.prepare('UPDATE engrams SET stage = ? WHERE id = ?').run(stage, id);
+    this.cacheUpdateStage(id, stage);
   }
 
   updateConfidence(id: string, confidence: number): void {
@@ -528,16 +645,19 @@ export class EngramStore {
     } else {
       this.db.prepare('UPDATE engrams SET embedding = ? WHERE id = ?').run(blob, id);
     }
+    this.cacheUpdateEmbedding(id, embedding);
   }
 
   retractEngram(id: string, retractedBy: string | null): void {
     this.db.prepare(`
       UPDATE engrams SET retracted = 1, retracted_by = ?, retracted_at = ? WHERE id = ?
     `).run(retractedBy, new Date().toISOString(), id);
+    this.cacheRetract(id);
   }
 
   deleteEngram(id: string): void {
     this.db.prepare('DELETE FROM engrams WHERE id = ?').run(id);
+    this.cacheRemove(id);
   }
 
   /**
