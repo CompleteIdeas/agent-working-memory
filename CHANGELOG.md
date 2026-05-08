@@ -2,6 +2,135 @@
 
 ## [Unreleased]
 
+## 0.7.6 (2026-05-08)
+
+### Recall Latency — 11-23s → 2.5s end-to-end
+
+**Why:** 24h telemetry showed activate() floor of 11-23s with p95 of 257s. Initial
+hypothesis was vector-search cost (cosine over 17K vectors). Measurement spike
+revealed the actual culprits:
+
+1. **BM25 JOIN materialized too early.** SQLite's planner ran FTS5 MATCH, then
+   joined ALL matching rows with engrams (including 1.5KB embedding blobs per
+   row), then sorted by rank, then applied LIMIT. With wide OR queries on a
+   17K-engram corpus, that's thousands of materializations before the LIMIT fires.
+   - Pure SQL test (better-sqlite3 12.6.2, SQLite 3.51.2):
+     - Original query: **3682ms** for `"USEF" OR "results" OR "submission" OR "Staff" OR "Services"`
+     - CTE-prefilter rewrite: **6.5ms** (567× faster)
+   - Same SQLite, same data — pure plan rewrite.
+   - Equivalence verified: top-30 results identical, ranks identical.
+2. **N+1 association lookups.** `getAssociationsFor` called once per candidate
+   (10K+ calls per recall) accumulated 1300ms of per-call overhead.
+
+### Fix 1: CTE-prefilter BM25
+
+**`src/storage/sqlite.ts`** — `searchBM25WithRank` and `searchBM25WithRankMultiAgent`
+now use a Common Table Expression to force FTS5 LIMIT before the engrams JOIN:
+
+```sql
+WITH top_fts AS (
+  SELECT rowid, rank FROM engrams_fts WHERE engrams_fts MATCH ? ORDER BY rank LIMIT ?
+)
+SELECT e.*, top_fts.rank FROM top_fts
+JOIN engrams e ON e.rowid = top_fts.rowid
+WHERE e.agent_id = ? AND e.retracted = 0
+ORDER BY top_fts.rank LIMIT ?
+```
+
+The inner LIMIT (5× outer LIMIT, min 50) over-fetches to give headroom for the
+agent + retracted filter applied after the CTE.
+
+### Fix 2: Batch association lookup
+
+**`src/storage/sqlite.ts`** — added `getAssociationsForBatch(engramIds[])` which
+chunks IDs into IN-clause queries (400 per chunk to stay under SQLite's
+SQLITE_LIMIT_VARIABLE_NUMBER) and returns a Map keyed by engram id.
+
+**`src/engine/activation.ts`** — Phase 3b scoring loop now batch-fetches
+associations once per recall instead of per-candidate.
+
+### End-to-end measurement
+
+`activate()` benchmarked on production memory.db (17K engrams, 133K associations):
+
+| Query | Before | After | Δ |
+|---|---|---|---|
+| "USEF results submission Staff Services" | ~5400ms | 2683ms | -50% |
+| "Education LMS architecture programs certifications" | ~3100ms | 2801ms | -10% |
+| "short query" | ~2400ms | 2494ms | flat |
+| Wide-OR floor (telemetry) | 11000-23000ms | 2500-2800ms | **~5× faster** |
+
+The remaining ~2.5s is dominated by query expansion (flan-t5-small) and the
+per-candidate scoring loop over 10K candidates. Pool reduction (filter to
+relevant subset before deep scoring) is a follow-up — it's a behavioral change
+and needs its own evaluation.
+
+### Tests
+
+All 334 existing tests pass. Equivalence test verifies top-30 BM25 results are
+identical between old and new queries (same IDs, same ranks).
+
+### Investigation artifacts
+
+`spike/` directory contains the measurement scripts used to localize the
+bottleneck:
+- `recall-phases.ts` — phase-instrumented activate()
+- `bm25-only.ts` — better-sqlite3 vs SQL plan isolation
+- `bm25-equivalence.ts` — top-K equivalence check
+- `activate-e2e.ts` — end-to-end production-path timing
+
+## 0.7.5 (2026-05-07)
+
+### Salience Filter — Auto-Promote Verified Operational Records
+
+**Why:** 24h telemetry review surfaced a salience filter gap: verified operational
+records (batch summaries, completion reconciliations, incident triages) were
+being discarded at 0.14 because they share terminology with prior session
+memories — BM25 novelty couldn't distinguish "useful new operational record"
+from "duplicate observation." Specific case: a 6-event USEF results submission
+summary 2026-05-07 was discarded at salience 0.14 despite naming concrete event
+IDs and dates that future-recall would care about. The procedural memory
+written 90 seconds later (same topic, "how to" framing) scored 0.70.
+
+### New: `detectVerifiedFinding(content)` auto-promoter
+
+**`src/core/salience.ts`** — pattern detector parallel to `detectUserFeedback()`.
+
+Pattern requires BOTH:
+1. An action-verb header — Submitted, Finalized, Completed, Reconciled, Triaged,
+   Posted, Resolved, Stamped, Pushed, Deployed, Migrated, Imported, Exported,
+   Backfilled.
+2. At least 2 concrete identifiers — absolute dates (YYYY-MM-DD) OR contextual
+   numeric IDs (event/ticket/comp/usef/usea/class/case/order/payment + digits).
+
+**Behavior on match:**
+- Bumps `eventType` from 'observation' to 'decision' (typeBonus +0.15)
+- Applies salience floor of 0.45 (active disposition)
+- Tags with reasonCode `auto:verified_finding`
+- Does NOT promote to canonical — operational records are verified, not source-of-truth
+
+**Distinction vs `detectUserFeedback`:**
+- User feedback (e.g., "Robert said X") → canonical, salience floor 0.7
+- Verified finding (e.g., "Submitted 6 events 2026-05-07 — IDs 18969, 18971...") → working, salience floor 0.45
+
+### Tests
+
+**`tests/core/salience.test.ts`** — 7 new test cases covering pattern matching
+(USEF batch, Freshdesk triage), pattern rejection (no verb, no IDs, empty input),
+end-to-end disposition (low-novelty operational record → active not discard),
+and confirms ordinary observations still discard.
+
+23 salience tests pass; full core suite (56 tests) green.
+
+### Known issue: recall latency
+
+Same telemetry review found activate() floor of 11-23s (warm) with outliers
+extending to 11+ minutes. Outliers correlate with multiple MCP server startups
+in rapid succession (5 startups in 13s on 2026-05-08 02:10 UTC). Root cause:
+SQLite WAL contention when concurrent Claude Code sessions all spawn MCP
+channel-server instances and hammer memory.db simultaneously. Not addressed
+in this release — needs a launcher-side fix to debounce MCP startups.
+
 ## 0.7.4 (2026-05-06)
 
 ### Channel Push — Telemetry + Role-Based Addressing + Stale Cleanup

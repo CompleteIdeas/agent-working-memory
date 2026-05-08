@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateSalience } from '../../src/core/salience.js';
+import { evaluateSalience, detectVerifiedFinding } from '../../src/core/salience.js';
 
 describe('Salience Filter', () => {
   it('high surprise + decision = active disposition', () => {
@@ -209,3 +209,48 @@ describe('Novelty curve (production-tuned)', () => {
   });
 });
 
+describe('detectVerifiedFinding', () => {
+  it('matches a USEF batch summary with verb + multiple IDs + dates', () => {
+    const content = 'Submitted 6 events to USEF API on 2026-05-07. Events: 18969, 18971, 18972 finalized.';
+    expect(detectVerifiedFinding(content)).toBe(true);
+  });
+
+  it('matches a Freshdesk triage record', () => {
+    const content = 'Triaged 22 tickets on 2026-05-07. Resolved tickets #18330, #18331, #18332.';
+    expect(detectVerifiedFinding(content)).toBe(true);
+  });
+
+  it('rejects content without an action verb', () => {
+    const content = 'Some thoughts on USEF results from 2026-05-07. Events 18969 and 18971 came up.';
+    expect(detectVerifiedFinding(content)).toBe(false);
+  });
+
+  it('rejects content with verb but no concrete identifiers', () => {
+    const content = 'Submitted some changes to the production system.';
+    expect(detectVerifiedFinding(content)).toBe(false);
+  });
+
+  it('rejects empty / non-string input', () => {
+    expect(detectVerifiedFinding('')).toBe(false);
+    expect(detectVerifiedFinding(null as unknown as string)).toBe(false);
+  });
+
+  it('low-novelty operational record gets active disposition (not discard)', () => {
+    const result = evaluateSalience({
+      content: 'Submitted 6 events to USEF on 2026-05-07. Events 18969, 18971, 18972, 18973 finalized.',
+      novelty: 0.1, // BM25 says it looks like a duplicate (terminology repeats)
+    });
+    // Without the verified-finding floor, this would discard at ~0.045
+    expect(result.disposition).toBe('active');
+    expect(result.score).toBeGreaterThanOrEqual(0.45);
+    expect(result.reasonCodes).toContain('auto:verified_finding');
+  });
+
+  it('ordinary low-novelty observation still discards', () => {
+    const result = evaluateSalience({
+      content: 'Looking at the events from earlier this week.',
+      novelty: 0.1,
+    });
+    expect(result.disposition).toBe('discard');
+  });
+});

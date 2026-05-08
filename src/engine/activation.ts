@@ -294,9 +294,11 @@ export class ActivationEngine {
     const simStdDev = Math.max(rawStdDev, 0.10);
 
     // Phase 3b: Score each candidate with per-phase breakdown
+    // Batch-fetch associations for all candidates at once (was N+1, now 1 query)
+    const associationsByEngram = this.store.getAssociationsForBatch(candidates.map(e => e.id));
     const scored = candidates.map(engram => {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      const associations = this.store.getAssociationsFor(engram.id);
+      const associations = associationsByEngram.get(engram.id) ?? [];
 
       // --- Text relevance (keyword signals) ---
 

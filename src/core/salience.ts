@@ -41,6 +41,41 @@ export function detectUserFeedback(content: string): boolean {
   return USER_FEEDBACK_PATTERN.test(content.trim());
 }
 
+/**
+ * Auto-detect verified operational findings: batch records, completion summaries,
+ * incident reconciliations. These have low BM25 novelty (terminology repeats across
+ * runs — "USEF results submission", "Freshdesk triage batch") but the SPECIFIC
+ * event/ticket IDs, dates, and counts make each one uniquely valuable for future
+ * recall.
+ *
+ * Why this exists: the salience filter discarded a 6-event USEF batch summary at
+ * 0.14 (verified in activity log 2026-05-07T18:44:14) because the topic words
+ * collided with the long-running USEF history. The procedural memory beside it
+ * scored 0.70 — same topic, different content shape. The novelty signal alone
+ * can't distinguish a useful operational record from a duplicate observation.
+ *
+ * Pattern requires BOTH:
+ *   1. An action-verb header (Submitted/Finalized/Completed/Reconciled/Triaged/Posted/Resolved/Stamped)
+ *   2. At least 2 concrete identifiers — absolute dates (YYYY-MM-DD) OR numeric IDs
+ *      with context (event \d+, ticket #\d+, USEF \d+, USEA \d+).
+ *
+ * Matched memories get a salience floor of 0.45 (active, but below canonical
+ * 0.7) — preserves the record without claiming source-of-truth status.
+ */
+const OPERATIONAL_VERB_PATTERN = /\b(Submitted|Finalized|Completed|Reconciled|Triaged|Posted|Resolved|Stamped|Pushed|Deployed|Migrated|Imported|Exported|Backfilled)\b/i;
+const ISO_DATE_PATTERN = /\b\d{4}-\d{2}-\d{2}\b/g;
+const CONCRETE_ID_PATTERN = /\b(?:events?|tickets?|comps?|comp_id|usef|usea|classes|class|cases?|orders?|payments?|member_id|horse_id|user_id|orgs?|#)\s*[#:]?\s*\d{3,}/gi;
+
+/** Returns true if the content looks like a verified operational/batch record that should auto-bump salience. */
+export function detectVerifiedFinding(content: string): boolean {
+  if (typeof content !== 'string' || content.length === 0) return false;
+  const text = content.trim();
+  if (!OPERATIONAL_VERB_PATTERN.test(text)) return false;
+  const dateCount = (text.match(ISO_DATE_PATTERN) || []).length;
+  const idCount = (text.match(CONCRETE_ID_PATTERN) || []).length;
+  return dateCount + idCount >= 2;
+}
+
 export interface SalienceInput {
   content: string;
   eventType?: SalienceEventType;
@@ -88,10 +123,19 @@ export function evaluateSalience(
   let resolvedEventType: SalienceEventType = input.eventType ?? 'observation';
   let resolvedMemoryClass: MemoryClass = input.memoryClass ?? 'working';
   let autoPromoted = false;
+  let verifiedFindingFloor = false;
   if (detectUserFeedback(input.content)) {
     resolvedEventType = 'user_feedback';
     resolvedMemoryClass = 'canonical';
     autoPromoted = true;
+  } else if (detectVerifiedFinding(input.content)) {
+    // Operational record: bump eventType to 'decision' (typeBonus +0.15) and
+    // remember to apply a 0.45 salience floor below. Do NOT promote to canonical
+    // — these records are verified, not source-of-truth.
+    if (resolvedEventType === 'observation') {
+      resolvedEventType = 'decision';
+    }
+    verifiedFindingFloor = true;
   }
 
   const features: SalienceFeatures = {
@@ -104,6 +148,7 @@ export function evaluateSalience(
 
   const reasonCodes: string[] = [];
   if (autoPromoted) reasonCodes.push('auto:user_feedback');
+  if (verifiedFindingFloor) reasonCodes.push('auto:verified_finding');
 
   // Novelty: 1.0 = completely new info, 0 = exact duplicate exists
   // Default to 0.8 (assume mostly novel) when caller doesn't check
@@ -145,6 +190,9 @@ export function evaluateSalience(
     reasonCodes.push('class:canonical');
   } else if (memoryClass === 'ephemeral') {
     reasonCodes.push('class:ephemeral');
+  } else if (verifiedFindingFloor) {
+    // Verified operational record: 0.45 floor — keeps it active without canonical promotion
+    score = Math.max(score, 0.45);
   }
 
   let disposition: 'active' | 'staging' | 'discard';

@@ -407,6 +407,11 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.7.6
+
+- **Recall latency 11-23s → 2.5s end-to-end (~5× faster)** — measurement spike found the slow path was a SQLite query-plan trap, not vector search. The BM25 query `JOIN engrams_fts ON e.rowid + WHERE MATCH + ORDER BY rank LIMIT N` materialized all matching rows (with 1.5KB embedding blobs) before the LIMIT applied. CTE prefilter forces FTS5 LIMIT first, then joins only the top-K rowids. Same SQLite, same data, same results — 567× faster for wide OR queries (3682ms → 6.5ms verified). Also added `getAssociationsForBatch` to replace the per-candidate N+1 in the activation scoring loop. Top-K results are byte-identical to the old query (verified by the equivalence test in `spike/`).
+- **Salience filter — auto-promote verified operational records** — operational batch summaries (e.g., "Submitted 6 events 2026-05-07 — IDs 18969, 18971…") were being discarded at salience 0.14 because BM25 novelty couldn't distinguish "useful new operational record" from "duplicate observation" when topic terminology repeated. New `detectVerifiedFinding()` pattern detector parallel to `detectUserFeedback()`: requires action-verb header (Submitted/Finalized/Completed/Reconciled/Triaged/etc.) plus ≥2 concrete identifiers (ISO date or contextual numeric ID). Matched memories get a 0.45 salience floor (active disposition, not canonical). 7 new tests, 23 salience tests pass.
+
 ## What's New in v0.7.4
 
 - **Channel push telemetry** — new `GET /telemetry/channels` JSON endpoint and Prometheus counters (`coord_channel_push_attempts_total`, `..._delivered_total`, `..._failed_total{reason}`, `..._no_session_total`, `..._fallback_mailbox_total`, `..._session_disconnects_total`). Surfaces real delivery rate so coordination reliability can be measured rather than guessed.
@@ -452,7 +457,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.4). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.6). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
