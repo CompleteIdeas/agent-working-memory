@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+## 0.7.11 (2026-05-08)
+
+### Recall Latency Round 5 — Query expansion skip + LRU cache
+
+After 0.7.10, query expansion (flan-t5-small) was 164ms per call (18% of recall
+floor). Two-pronged fix in `src/core/query-expander.ts`:
+
+1. **Skip heuristic** — long or specific queries (>50 chars OR ≥5 distinct
+   meaningful tokens) skip the expander entirely. Already-narrow queries
+   gain little from synonym expansion; flan-t5's general-vocabulary terms
+   add noise more than recall.
+
+2. **LRU expansion cache** — `Map<normalized_query, expanded_query>` with
+   500-entry capacity. Cache hit ≈ 0ms vs 164ms cold. Map insertion-order
+   gives free LRU semantics (re-set on hit moves to most-recent).
+
+Disable both via `AWM_DISABLE_EXPANSION_CACHE=1`.
+
+### Measured impact
+
+- ~30% of typical queries hit the skip heuristic (long/specific) → -164ms each
+- Repeated queries (same agent re-recalls same topic) hit cache → -164ms each
+- Average savings: -100 to -150ms per recall
+
+### Recall quality preserved
+
+A/B test (8 diverse queries):
+- **8/8 top-1 results identical**
+- 4.63/5 top-5 overlap, 9.63/10 top-10 overlap
+
+The slight top-10 dip vs 0.7.10 (9.75 → 9.63) is within noise — the queries
+that skip expansion still find the same canonical results via BM25 and cosine.
+
+### Tests
+
+All 334 tests pass. Build clean.
+
 ## 0.7.10 (2026-05-08)
 
 ### Recall Latency Round 4 — In-memory slim cache + reranker skip

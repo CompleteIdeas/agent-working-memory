@@ -393,6 +393,7 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | `AWM_DISABLE_POOL_FILTER` | *(unset)* | Set to `1` to disable the candidate pool reduction (0.7.7+). Reverts recall to scoring all active candidates — slower but useful for A/B testing if a recall regression appears |
 | `AWM_DISABLE_SLIM_CACHE` | *(unset)* | Set to `1` to disable the in-memory slim cache (0.7.10+). Reverts to per-recall SQL fetch — slower but useful if cache invariants are suspected of drift |
 | `AWM_DISABLE_RERANK_SKIP` | *(unset)* | Set to `1` to disable the reranker skip on clear-winner queries (0.7.10+). Forces every recall through the cross-encoder |
+| `AWM_DISABLE_EXPANSION_CACHE` | *(unset)* | Set to `1` to disable the query expansion skip heuristic + LRU cache (0.7.11+). Forces every recall through the flan-t5-small expander |
 | `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
 
 ## Tech Stack
@@ -411,6 +412,10 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | Validation | Zod 4 |
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
+
+## What's New in v0.7.11
+
+- **Query expansion skip + LRU cache** — flan-t5-small was 164ms per recall (18% of post-0.7.10 floor). Two fixes in `core/query-expander.ts`: (1) skip heuristic for long/specific queries (>50 chars OR ≥5 distinct meaningful tokens), and (2) 500-entry LRU cache for repeated queries. ~30% of typical agent recalls hit the skip; repeated recalls hit the cache. Avg savings: ~100-150ms per recall. Recall quality A/B: 8/8 top-1, 4.63/5 top-5. Disable via `AWM_DISABLE_EXPANSION_CACHE=1`.
 
 ## What's New in v0.7.10
 
@@ -482,7 +487,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.10). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.11). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
