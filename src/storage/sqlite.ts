@@ -330,6 +330,87 @@ export class EngramStore {
   }
 
   /**
+   * Slim variant that returns only (id, concept, embedding) — the minimum needed
+   * for the activation pipeline's pre-filter pass (cosine sim + concept-jaccard
+   * survival check). Avoids materializing the content blob, tag JSON, salience
+   * features JSON, etc. for ~10K rows when only ~200 will be deep-scored.
+   *
+   * Why: phase-breakdown spike (2026-05-08) showed the full SELECT * over 10K
+   * engrams costs 440ms on a 17K-engram corpus — 40% of recall latency. Most
+   * of that is row materialization of fields we don't read in the filter pass.
+   */
+  getEngramsByAgentSlim(
+    agentId: string,
+    stage?: EngramStage,
+    includeRetracted: boolean = false
+  ): Array<{ id: string; concept: string; embedding: number[] | null }> {
+    let query = 'SELECT id, concept, embedding FROM engrams WHERE agent_id = ?';
+    const params: any[] = [agentId];
+
+    if (stage) {
+      query += ' AND stage = ?';
+      params.push(stage);
+    }
+    if (!includeRetracted) {
+      query += ' AND retracted = 0';
+    }
+
+    return (this.db.prepare(query).all(...params) as any[]).map(r => ({
+      id: r.id as string,
+      concept: r.concept as string,
+      embedding: r.embedding ? Array.from(bufferToFloat32Array(r.embedding)) : null,
+    }));
+  }
+
+  /** Slim variant for multi-agent (workspace-scoped) pre-filter. */
+  getEngramsByAgentsSlim(
+    agentIds: string[],
+    stage?: EngramStage,
+    includeRetracted: boolean = false
+  ): Array<{ id: string; concept: string; embedding: number[] | null }> {
+    if (agentIds.length === 0) return [];
+    if (agentIds.length === 1) return this.getEngramsByAgentSlim(agentIds[0], stage, includeRetracted);
+
+    const placeholders = agentIds.map(() => '?').join(',');
+    let query = `SELECT id, concept, embedding FROM engrams WHERE agent_id IN (${placeholders})`;
+    const params: any[] = [...agentIds];
+
+    if (stage) {
+      query += ' AND stage = ?';
+      params.push(stage);
+    }
+    if (!includeRetracted) {
+      query += ' AND retracted = 0';
+    }
+
+    return (this.db.prepare(query).all(...params) as any[]).map(r => ({
+      id: r.id as string,
+      concept: r.concept as string,
+      embedding: r.embedding ? Array.from(bufferToFloat32Array(r.embedding)) : null,
+    }));
+  }
+
+  /**
+   * Fetch full Engram rows for a list of IDs. Used after the pre-filter to hydrate
+   * only the survivors that need deep scoring. Chunks IN-clause queries to stay
+   * under SQLITE_LIMIT_VARIABLE_NUMBER (default 999).
+   */
+  getEngramsByIds(ids: string[]): Engram[] {
+    if (ids.length === 0) return [];
+    const CHUNK = 800;
+    const result: Engram[] = [];
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = this.db.prepare(
+        `SELECT * FROM engrams WHERE id IN (${placeholders})`
+      ).all(...chunk) as any[];
+      for (const r of rows) result.push(this.rowToEngram(r));
+    }
+    return result;
+  }
+
+  /**
    * Get engrams across multiple agents (workspace-scoped recall).
    * Used when workspace mode is enabled for hive memory sharing.
    */

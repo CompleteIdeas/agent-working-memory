@@ -2,6 +2,64 @@
 
 ## [Unreleased]
 
+## 0.7.9 (2026-05-08)
+
+### Recall Latency Round 3 — Two-pass fetch (slim → hydrate survivors)
+
+**Why:** After 0.7.7's pool reduction, phase-breakdown showed `getEngramsByAgent`
+fetching all 10K active engrams was the new bottleneck (440ms = 40% of recall).
+Most of that cost was row materialization of `content`, `tags`, and JSON columns
+the pre-filter doesn't read. The pre-filter only needs `(id, concept, embedding)`.
+
+### Fix: two-pass fetch
+
+**`src/storage/sqlite.ts`** — three new methods:
+
+- `getEngramsByAgentSlim(agentId, stage, includeRetracted)` — returns
+  `{id, concept, embedding}` only. Avoids materializing content/tags/JSON for
+  rows that will be filtered out.
+- `getEngramsByAgentsSlim(agentIds, ...)` — multi-agent variant for workspace
+  recall.
+- `getEngramsByIds(ids[])` — chunked IN-clause hydration of full rows by ID.
+  Used to load the full Engram only for survivors that pass the pool filter.
+
+**`src/engine/activation.ts`** — Phase 3 refactored to:
+1. **Pass 1 (slim):** fetch all active engrams as slim rows, run cosine similarity
+   and pool filter on this minimal payload.
+2. **Pass 2 (hydrate):** fetch full Engram rows only for survivor IDs (typically
+   100-300, vs the 10K full rows fetched before).
+
+The pool filter logic itself is unchanged — same survival criteria, same
+`AWM_DISABLE_POOL_FILTER=1` escape hatch. Only the fetch strategy changed.
+
+### End-to-end measurement
+
+| Query | 0.7.7 | 0.7.9 | Δ |
+|---|---|---|---|
+| "USEF results submission Staff Services" | 1640ms | 1222ms | -25% |
+| "Education LMS architecture programs certifications" | 2160ms | 1502ms | -30% |
+| "short query" | 1413ms | 1017ms | -28% |
+| "Stripe webhook handler transfer.paid Connect destination charges" | 1791ms | 1144ms | -36% |
+| "sprint current work completed findings pending" | 1688ms | 1599ms | -5% |
+
+**Cumulative since 0.7.4 baseline:** 11-23s → ~1.0-1.6s (~10-20× faster).
+
+Recall floor for cheap queries is now ~1.0s.
+
+### Recall quality preserved (and slightly improved)
+
+A/B test on 8 representative queries:
+- **8/8 top-1 results identical**
+- **avg 4.75/5 top-5 overlap** (was 4.50)
+- **avg 9.75/10 top-10 overlap** (was 9.38)
+
+The slight improvement vs 0.7.7 is likely from more deterministic candidate
+ordering through the explicit ID-set + hydrate pipeline.
+
+### Tests
+
+All 334 tests pass.
+
 ## 0.7.8 (2026-05-08)
 
 ### Documentation + install template — settings & rules for the new behaviors

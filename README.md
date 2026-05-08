@@ -410,6 +410,10 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.7.9
+
+- **Recall latency 1.6s → 1.0s end-to-end (~30% on top of 0.7.7)** — phase-breakdown showed the fullSELECT-over-10K-engrams was the new bottleneck (440ms / 40% of recall) due to row materialization of content/tags/JSON for rows the pre-filter doesn't read. Two-pass fetch: slim `(id, concept, embedding)` for the cosine + filter pass, then hydrate only the survivors via `getEngramsByIds`. Recall quality A/B verified 8/8 top-1 identical, top-K overlap slightly improved (4.75/5 vs 4.50). **Cumulative since 0.7.4 baseline: 11-23s → 1.0-1.6s (~10-20× faster).**
+
 ## What's New in v0.7.8
 
 - **Install template updated for the 0.7.5/0.7.6/0.7.7 behaviors** — `awm setup` now writes a richer CLAUDE.md that teaches agents about memory classes (`canonical | working | ephemeral`), salience auto-promotion patterns (`detectUserFeedback` for stakeholder quotes, `detectVerifiedFinding` for operational records with action-verb + concrete IDs), and the new env-var escape hatches. Existing installs upgrade via `npm install -g agent-working-memory@latest && awm setup --global` then restart Claude Code. No functional code change in this release — version bumped solely so the new template ships.
@@ -468,7 +472,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.8). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.9). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**

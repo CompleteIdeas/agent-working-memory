@@ -334,7 +334,7 @@ async function exportMemories() {
   const agents = [...new Set(memories.map((m: any) => m.agent_id))];
 
   const exportData = {
-    version: '0.7.8',
+    version: '0.7.9',
     exported_at: new Date().toISOString(),
     source_db: dbPath,
     agent_filter: agentFilter,

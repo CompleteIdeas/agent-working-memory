@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.7.8",
+  "version": "0.7.9",
   "description": "Cognitive memory layer for AI agents — activation-based retrieval, salience filtering, associative connections",
   "type": "module",
   "main": "dist/index.js",

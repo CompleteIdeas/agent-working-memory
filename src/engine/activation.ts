@@ -252,34 +252,31 @@ export class ActivationEngine {
       engram, bm25Score: bm25ScoreMap.get(id) ?? 0,
     }));
 
-    const allActive = this.store.getEngramsByAgents(
+    // Phase 3 — Two-pass fetch (0.7.9+):
+    //   Pass 1: slim fetch (id, concept, embedding only) for ALL active engrams.
+    //           Used for cosine sim + adaptive z-score stats + cheap pool filter.
+    //   Pass 2: full fetch ONLY on the survivors that pass the filter.
+    //
+    // Why: phase-breakdown spike (2026-05-08, post-0.7.7) showed `SELECT * FROM
+    // engrams WHERE agent_id = ?` over 10K rows costs 440ms (40% of recall) due
+    // to row materialization of content/tags/JSON-blob columns the filter pass
+    // doesn't read. Slim fetch trims the per-row payload to the three fields
+    // the filter actually uses.
+    const slimActive = this.store.getEngramsByAgentsSlim(
       agentIds,
       query.includeStaging ? undefined : 'active',
       query.includeRetracted ?? false
     );
 
-    // Merge candidates (deduplicate)
-    const candidateMap = new Map<string, Engram>();
-    for (const r of bm25Ranked) candidateMap.set(r.engram.id, r.engram);
-    for (const e of allActive) candidateMap.set(e.id, e);
-    let candidates = Array.from(candidateMap.values());
-
-    // Filter by memory type if specified
-    if (query.memoryType) {
-      candidates = candidates.filter(e => e.memoryType === query.memoryType);
-    }
-
-    if (candidates.length === 0) return [];
-
-    // Tokenize query once
+    // Tokenize query once (used by filter + scoring)
     const queryTokens = tokenize(query.context);
 
-    // Phase 3a: Compute raw cosine similarities for adaptive normalization
+    // Phase 3a: Compute raw cosine similarities on slim pool for adaptive normalization
     const rawCosineSims = new Map<string, number>();
     if (queryEmbedding) {
-      for (const engram of candidates) {
-        if (engram.embedding) {
-          rawCosineSims.set(engram.id, cosineSimilarity(queryEmbedding, engram.embedding));
+      for (const e of slimActive) {
+        if (e.embedding) {
+          rawCosineSims.set(e.id, cosineSimilarity(queryEmbedding, e.embedding));
         }
       }
     }
@@ -293,60 +290,59 @@ export class ActivationEngine {
     // Floor stddev at 0.10 to prevent z-score inflation with small candidate pools
     const simStdDev = Math.max(rawStdDev, 0.10);
 
-    // Phase 3a': Cheap pre-filter — deep scoring (with associations + tokenize-content
-    // + Hebbian/centrality) only runs for candidates that have a non-trivial signal
-    // we can verify cheaply. Anything that fails this filter would score below the
-    // relevance gate (textMatch > 0.1) anyway and produce a near-zero composite.
-    //
-    // Why: phase-breakdown spike (2026-05-08) showed assocBatch over 10K candidates
-    // costs 1500ms and represents 68% of recall latency. Most candidates have zero
-    // BM25 hit, low cosine similarity, and no concept-jaccard match — so fetching
-    // their associations and tokenizing their full content is wasted work.
-    //
-    // Survival criteria (any one):
-    //   1. BM25 hit (bm25Score > 0)
-    //   2. Cosine z-score above the gate (would produce non-zero vectorMatch)
-    //   3. Concept-token overlap with query (cheap to compute — concept is short)
-    //
-    // Graph walk preserves correctness: it only boosts neighbors whose own textMatch
-    // already passes the relevance floor (0.05-0.1), and any candidate meeting that
-    // floor would also pass this filter (they'd have either BM25, cosine, or concept
-    // jaccard match). So no graph-walkable target is lost.
-    //
-    // Disable via AWM_DISABLE_POOL_FILTER=1 (for A/B testing or if a regression appears)
+    // Determine survivor IDs from the slim pool using the same survival criteria
+    // (BM25 hit / cosine z-score / concept-jaccard) plus all BM25-ranked candidates
+    // (which already came in fully-hydrated and may not be in slimActive's stage filter).
     const poolFilterEnabled = process.env.AWM_DISABLE_POOL_FILTER !== '1';
-    let filteredCandidates: Engram[];
+    const survivorIds = new Set<string>();
+    // Always include BM25-ranked engrams (they came pre-hydrated)
+    for (const r of bm25Ranked) survivorIds.add(r.engram.id);
+
     if (poolFilterEnabled) {
-      filteredCandidates = [];
-      for (const engram of candidates) {
-        const bm25 = bm25ScoreMap.get(engram.id) ?? 0;
-        if (bm25 > 0) {
-          filteredCandidates.push(engram);
-          continue;
-        }
-        const sim = rawCosineSims.get(engram.id);
+      for (const e of slimActive) {
+        if (survivorIds.has(e.id)) continue;
+        const bm25 = bm25ScoreMap.get(e.id) ?? 0;
+        if (bm25 > 0) { survivorIds.add(e.id); continue; }
+        const sim = rawCosineSims.get(e.id);
         if (sim !== undefined) {
           const z = (sim - simMean) / simStdDev;
-          if (z > adaptive.zScoreGate) {
-            filteredCandidates.push(engram);
-            continue;
-          }
+          if (z > adaptive.zScoreGate) { survivorIds.add(e.id); continue; }
         }
-        // Cheap concept jaccard — concepts are short (typically 3-8 tokens)
-        const conceptTokens = tokenize(engram.concept);
-        if (conceptTokens.size === 0) continue;
-        let conceptOverlap = 0;
-        for (const w of conceptTokens) if (queryTokens.has(w)) conceptOverlap++;
-        if (conceptOverlap > 0) filteredCandidates.push(engram);
+        // Cheap concept jaccard
+        const ct = tokenize(e.concept);
+        if (ct.size === 0) continue;
+        let overlap = 0;
+        for (const w of ct) if (queryTokens.has(w)) overlap++;
+        if (overlap > 0) survivorIds.add(e.id);
       }
     } else {
-      filteredCandidates = candidates;
+      // Filter disabled — include all slim active engrams
+      for (const e of slimActive) survivorIds.add(e.id);
     }
 
-    // Phase 3b: Score each filtered candidate with per-phase breakdown
-    // Batch-fetch associations only for survivors (was N+1 over 10K, now 1 query over ~200)
-    const associationsByEngram = this.store.getAssociationsForBatch(filteredCandidates.map(e => e.id));
-    const scored = filteredCandidates.map(engram => {
+    // Pass 2: hydrate full Engram rows ONLY for survivors that aren't already loaded
+    const candidateMap = new Map<string, Engram>();
+    for (const r of bm25Ranked) candidateMap.set(r.engram.id, r.engram);
+    const idsToHydrate = Array.from(survivorIds).filter(id => !candidateMap.has(id));
+    if (idsToHydrate.length > 0) {
+      for (const e of this.store.getEngramsByIds(idsToHydrate)) {
+        candidateMap.set(e.id, e);
+      }
+    }
+    let candidates = Array.from(candidateMap.values());
+
+    // Filter by memory type if specified
+    if (query.memoryType) {
+      candidates = candidates.filter(e => e.memoryType === query.memoryType);
+    }
+
+    if (candidates.length === 0) return [];
+
+    // Phase 3b: Score each candidate with per-phase breakdown
+    // Candidates are already filtered (the slim-pool filter ran before hydration).
+    // Batch-fetch associations only for hydrated survivors (typically 100-300, not 10K).
+    const associationsByEngram = this.store.getAssociationsForBatch(candidates.map(e => e.id));
+    const scored = candidates.map(engram => {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const associations = associationsByEngram.get(engram.id) ?? [];
 
