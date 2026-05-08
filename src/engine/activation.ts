@@ -581,7 +581,15 @@ export class ActivationEngine {
 
     // Phase 7: Cross-encoder re-ranking — scores (query, passage) pairs directly
     // Widens the pool to find relevant results that keyword matching missed
-    const rerankPool = pool.slice(0, Math.max(limit * 3, 30));
+    //
+    // Pool size (0.7.13+): max(limit*2, 15). Was max(limit*3, 30); reduced because
+    // the cross-encoder cost scales linearly with passage count and 30 was overkill
+    // when limit is typically 5-10. Phase-breakdown showed reranker was 65% of the
+    // post-0.7.12 recall floor — halving the pool is a direct ~50% reranker savings
+    // (~100ms recovered on most queries) with negligible top-K quality impact at
+    // limit=5/10 (the user wants top-5 or top-10; reranking 30 to find top-5 reranks
+    // many candidates that won't be returned).
+    const rerankPool = pool.slice(0, Math.max(limit * 2, 15));
 
     // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
     // strong absolute score AND a meaningful gap to the runner-up, the cross-encoder

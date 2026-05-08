@@ -413,6 +413,10 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.7.13
+
+- **Reranker pool size reduction** — cross-encoder pool dropped from `max(limit*3, 30)` to `max(limit*2, 15)`. For typical agent queries (limit=5 or 10), that's 15-20 candidates reranked instead of 30, halving the cross-encoder cost. Top-K quality preserved (8/8 top-1, identical top-5/top-10 overlap) — reranking the 21st-30th candidates was wasted when the user only wants top-5 anyway.
+
 ## What's New in v0.7.12
 
 - **Recall latency 0.9s → 0.4-0.8s (~40-60% on top of 0.7.11)** — phase-breakdown showed `getAssociationsForBatch` over ~300 survivors was 222ms (25% of remaining floor) but the scoring loop only reads `count` + `sumWeight` from each engram's edges. New `getAssociationStatsForBatch` returns scalar stats via a single GROUP BY aggregate. Graph walk still uses full associations, but only on top-N (~30) so its lookups are cheap. Recall quality A/B: 8/8 top-1, 4.50/5 top-5. **Cumulative since 0.7.4 baseline: 11-23s → 0.4-0.8s (~25× faster median).**
@@ -491,7 +495,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.12). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.13). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**

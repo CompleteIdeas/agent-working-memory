@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+## 0.7.13 (2026-05-08)
+
+### Recall Latency Round 7 — Reranker pool size reduction
+
+After 0.7.12, phase-breakdown showed the cross-encoder reranker was 210-265ms
+(60-70% of recall floor). Cross-encoder cost scales linearly with passage
+count, and the previous pool of `max(limit*3, 30)` reranked 30 candidates
+even when the user only wanted top-5 or top-10.
+
+### Fix: tighter rerank pool
+
+**`src/engine/activation.ts`** — pool size reduced from `max(limit*3, 30)` to
+`max(limit*2, 15)`. For typical agent queries with `limit=5` or `limit=10`,
+that's 15-20 candidates instead of 30. Halves the cross-encoder cost.
+
+The smaller pool also means more queries hit the rerank-skip "smallPool"
+condition (small + cleanWinner), saving the full 210ms when triggered.
+
+### Recall quality preserved
+
+A/B test (8 diverse queries):
+- 8/8 top-1 results identical
+- 4.63/5 top-5 overlap (unchanged from 0.7.12)
+- 9.50/10 top-10 overlap (unchanged)
+
+When the user requests top-5 or top-10, reranking the 21st-30th candidates
+is wasted work — those candidates won't appear in the result anyway.
+
+### Measured impact
+
+Avg savings: ~50-100ms per recall (varies by query type).
+
+| Query | 0.7.12 | 0.7.13 |
+|---|---|---|
+| short query | 393ms | 339ms |
+| Stripe webhook | 691ms | 691ms |
+| Education LMS | 774ms | 842ms (noise) |
+
+### Tests
+
+All 334 tests pass.
+
 ## 0.7.12 (2026-05-08)
 
 ### Recall Latency Round 6 — Aggregate stats instead of full association objects

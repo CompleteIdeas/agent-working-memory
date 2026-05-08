@@ -105,21 +105,21 @@ async function probe(store: EngramStore, agentId: string, q: string) {
   const survivors = store.getEngramsByIds(Array.from(survivorIds));
   phases.hydrate = ms(tHydrate);
 
-  // Phase 3b: batch assoc on hydrated survivors
+  // Phase 3b: aggregate assoc stats on hydrated survivors (0.7.12+)
   const tAssoc = process.hrtime.bigint();
-  const assocMap = store.getAssociationsForBatch(survivors.map(e => e.id));
+  const assocStats = store.getAssociationStatsForBatch(survivors.map(e => e.id));
   phases.assocBatch = ms(tAssoc);
 
-  // Phase 3c: deep score loop
+  // Phase 3c: deep score loop using stats
   const tScore = process.hrtime.bigint();
   for (const e of survivors) {
     const ageDays = (Date.now() - e.createdAt.getTime()) / 86400000;
-    const a = assocMap.get(e.id) ?? [];
+    const stats = assocStats.get(e.id) ?? { count: 0, sumWeight: 0 };
     const ct = tokenize(e.concept);
     const cct = tokenize(e.content);
     const _j = 0.6 * jaccard(queryTokens, ct) + 0.4 * jaccard(queryTokens, cct);
     const _d = baseLevelActivation(e.accessCount, ageDays);
-    const _h = a.length > 0 ? a.reduce((s, x) => s + x.weight, 0) / a.length : 0;
+    const _h = stats.count > 0 ? stats.sumWeight / stats.count : 0;
     void _j; void _d; void _h;
   }
   phases.score = ms(tScore);
