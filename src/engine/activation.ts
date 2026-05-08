@@ -340,11 +340,19 @@ export class ActivationEngine {
 
     // Phase 3b: Score each candidate with per-phase breakdown
     // Candidates are already filtered (the slim-pool filter ran before hydration).
-    // Batch-fetch associations only for hydrated survivors (typically 100-300, not 10K).
-    const associationsByEngram = this.store.getAssociationsForBatch(candidates.map(e => e.id));
+    //
+    // Optimization (0.7.12+): the scoring loop only reads `count` and `sumWeight`
+    // from associations. Use a SQL aggregate (GROUP BY) to fetch scalar stats
+    // instead of materializing thousands of Association objects. Phase-breakdown
+    // (post-0.7.10) showed this saves ~200ms (222ms → ~20ms).
+    //
+    // Graph walk still needs full Association objects, but it operates on the
+    // top-N (~30 candidates) — its on-demand `getAssociationsFor` lookups are
+    // cheap (<5ms total).
+    const assocStats = this.store.getAssociationStatsForBatch(candidates.map(e => e.id));
     const scored = candidates.map(engram => {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      const associations = associationsByEngram.get(engram.id) ?? [];
+      const stats = assocStats.get(engram.id) ?? { count: 0, sumWeight: 0 };
 
       // --- Text relevance (keyword signals) ---
 
@@ -397,17 +405,14 @@ export class ActivationEngine {
 
       // Hebbian boost from associations — capped to prevent popular memories
       // from dominating regardless of query relevance
-      const rawHebbian = associations.length > 0
-        ? associations.reduce((sum, a) => sum + a.weight, 0) / associations.length
-        : 0;
+      const rawHebbian = stats.count > 0 ? stats.sumWeight / stats.count : 0;
       const hebbianBoost = Math.min(rawHebbian, 0.5);
 
       // Centrality signal — well-connected memories (high weighted degree)
       // get a small boost. This makes consolidation edges matter for retrieval.
       // Log-scaled to prevent hub domination: 10 edges ≈ 0.05 boost, 50 ≈ 0.08
-      const weightedDegree = associations.reduce((sum, a) => sum + a.weight, 0);
-      const centralityBoost = associations.length > 0
-        ? Math.min(0.1, 0.03 * Math.log1p(weightedDegree))
+      const centralityBoost = stats.count > 0
+        ? Math.min(0.1, 0.03 * Math.log1p(stats.sumWeight))
         : 0;
 
       // Confidence gate — multiplicative quality signal
@@ -438,7 +443,8 @@ export class ActivationEngine {
         rerankerScore: 0, // Filled in phase 7
       };
 
-      return { engram, score: composite, phaseScores, associations };
+      // associations: empty in 0.7.12+ — graph walk lazy-fetches per engram on demand
+      return { engram, score: composite, phaseScores, associations: [] as Association[] };
     });
 
     // Phase 3.5: Rocchio pseudo-relevance feedback — expand query with top result terms

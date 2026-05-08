@@ -2,6 +2,68 @@
 
 ## [Unreleased]
 
+## 0.7.12 (2026-05-08)
+
+### Recall Latency Round 6 — Aggregate stats instead of full association objects
+
+After 0.7.11, phase-breakdown showed `getAssociationsForBatch` over ~300 survivors
+took 222ms (25% of recall floor). The scoring loop only reads `count` and
+`sumWeight` from the associations — never any other field. Materializing
+thousands of full Association objects is wasted work.
+
+### Fix: `getAssociationStatsForBatch`
+
+**`src/storage/sqlite.ts`** — new method that returns scalar stats per engram:
+
+```typescript
+getAssociationStatsForBatch(engramIds: string[]):
+  Map<string, { count: number; sumWeight: number }>
+```
+
+Single SQL aggregate via `GROUP BY` over a `UNION ALL` of from + to endpoints.
+Same semantics as the prior bucketed approach (each association contributes to
+both endpoints' stats), 10× cheaper.
+
+**`src/engine/activation.ts`** — Phase 3b uses stats instead of full assocs:
+
+```typescript
+const stats = assocStats.get(engram.id) ?? { count: 0, sumWeight: 0 };
+const rawHebbian = stats.count > 0 ? stats.sumWeight / stats.count : 0;
+const centralityBoost = stats.count > 0 ? Math.min(0.1, 0.03 * Math.log1p(stats.sumWeight)) : 0;
+```
+
+Graph walk still needs full associations, but it operates on top-N (~30
+candidates) — its on-demand `getAssociationsFor` lookups total ~5ms.
+
+### End-to-end measurement
+
+Floor dropped to ~400ms (short query); median ~750ms.
+
+| Query | 0.7.11 | 0.7.12 | Δ |
+|---|---|---|---|
+| "USEF results submission Staff Services" | 1352ms | 785ms | -42% |
+| "Education LMS architecture programs certifications" | 1437ms | 774ms | -46% |
+| "short query" | 976ms | 393ms | -60% |
+| "Stripe webhook handler..." | 1362ms | 691ms | -49% |
+| "sprint current work completed findings pending" | 1967ms | 836ms | -57% |
+
+**Cumulative since 0.7.4 baseline:** 11-23s → ~400-850ms (~25× faster median).
+
+### Recall quality preserved
+
+A/B test (8 diverse queries):
+- **8/8 top-1 results identical**
+- 4.50/5 top-5 overlap (vs 4.63 in 0.7.11 — within noise)
+- 9.50/10 top-10 overlap (vs 9.63 in 0.7.11)
+
+Identical hebbian/centrality scoring (same formulas, same data, just
+aggregated in SQL instead of JS). Top-K differences come from rerank-skip /
+expansion-skip interactions, not the assoc-stats change.
+
+### Tests
+
+All 334 tests pass.
+
 ## 0.7.11 (2026-05-08)
 
 ### Recall Latency Round 5 — Query expansion skip + LRU cache

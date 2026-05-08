@@ -921,6 +921,55 @@ export class EngramStore {
   }
 
   /**
+   * Aggregate association stats per engram — count of edges and sum of weights.
+   *
+   * Why: the activation scoring loop only uses `associations.length` (Hebbian gate)
+   * and `sum of weights` (Hebbian mean + centrality). It doesn't read individual
+   * association fields. Returning scalar stats avoids materializing thousands of
+   * Association objects.
+   *
+   * Phase-breakdown spike (2026-05-08, post-0.7.10) showed
+   * `getAssociationsForBatch` over ~300 survivors took 222ms (25% of recall floor).
+   * Stats-only aggregate via a single GROUP BY drops this to ~20ms.
+   *
+   * Graph walk still needs full Association rows, but it operates on top-N
+   * (~30 candidates) — its per-call `getAssociationsFor` is cheap.
+   */
+  getAssociationStatsForBatch(engramIds: string[]): Map<string, { count: number; sumWeight: number }> {
+    const result = new Map<string, { count: number; sumWeight: number }>();
+    if (engramIds.length === 0) return result;
+
+    const CHUNK = 400;
+    for (let i = 0; i < engramIds.length; i += CHUNK) {
+      const chunk = engramIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => '?').join(',');
+      // UNION ALL counts each association once per endpoint that's in the candidate
+      // set — same semantics as the existing getAssociationsForBatch which buckets
+      // associations under both their from and to engram. Self-loops would be
+      // double-counted, but they're rare in practice and the prior code handled them
+      // identically.
+      const rows = this.db.prepare(
+        `SELECT id, SUM(cnt) AS count, SUM(sw) AS sum_weight FROM (
+           SELECT from_engram_id AS id, 1 AS cnt, weight AS sw FROM associations WHERE from_engram_id IN (${placeholders})
+           UNION ALL
+           SELECT to_engram_id AS id, 1 AS cnt, weight AS sw FROM associations WHERE to_engram_id IN (${placeholders})
+         )
+         WHERE id IN (${placeholders})
+         GROUP BY id`
+      ).all(...chunk, ...chunk, ...chunk) as Array<{ id: string; count: number; sum_weight: number }>;
+
+      for (const r of rows) {
+        result.set(r.id, { count: r.count, sumWeight: r.sum_weight });
+      }
+    }
+    // Ensure every requested id has an entry (even zero-edge engrams)
+    for (const id of engramIds) {
+      if (!result.has(id)) result.set(id, { count: 0, sumWeight: 0 });
+    }
+    return result;
+  }
+
+  /**
    * Batch variant of getAssociationsFor — fetches associations for many engrams
    * in a single query, returning a Map keyed by engram id.
    *
