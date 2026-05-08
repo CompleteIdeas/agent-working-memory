@@ -122,6 +122,24 @@ export class EngramStore {
     this.slimCachePopulated = false;
   }
 
+  /**
+   * Eager slim-cache populate — public entry point so process startup can warm
+   * the cache before the first user recall. Otherwise the first recall pays
+   * a ~600ms one-time SQL fetch + embedding deserialization.
+   */
+  warmSlimCache(): void {
+    this.ensureSlimCachePopulated();
+  }
+
+  /** Inspect cache state — used for diagnostics + tests. */
+  getSlimCacheStats(): { populated: boolean; size: number; enabled: boolean } {
+    return {
+      populated: this.slimCachePopulated,
+      size: this.slimCache.size,
+      enabled: this.slimCacheEnabled,
+    };
+  }
+
   /** Expose the raw database handle for the coordination module. */
   getDb(): Database.Database {
     return this.db;

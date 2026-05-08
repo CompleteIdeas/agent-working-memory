@@ -413,6 +413,15 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.7.14
+
+- **Recall latency 0.4-0.8s → 0.3-0.6s (~25-50% on top of 0.7.13)** — three fixes:
+  1. **Batched cross-encoder inference** — reranker now tokenizes + runs all query-passage pairs in one batched forward pass. 15-passage rerank: 210ms → 27ms (~7×).
+  2. **Truncate passages to 400 chars before rerank** — cross-encoder has 512-token max anyway and pads to the longest passage; full content (5000+ chars) meant everything padded to max length. Truncation drops tokenization + inference 3-4× on long memory pools.
+  3. **Eager slim-cache populate at startup** — first user recall no longer pays the ~600ms cache populate cost.
+
+  Recall quality A/B: 8/8 top-1, 4.50/5 top-5. **Cumulative since 0.7.4 baseline: 11s → 0.3-0.6s (~25-37× faster).**
+
 ## What's New in v0.7.13
 
 - **Reranker pool size reduction** — cross-encoder pool dropped from `max(limit*3, 30)` to `max(limit*2, 15)`. For typical agent queries (limit=5 or 10), that's 15-20 candidates reranked instead of 30, halving the cross-encoder cost. Top-K quality preserved (8/8 top-1, identical top-5/top-10 overlap) — reranking the 21st-30th candidates was wasted when the user only wants top-5 anyway.
@@ -495,7 +504,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.13). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.14). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**

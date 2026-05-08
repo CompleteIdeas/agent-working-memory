@@ -619,9 +619,19 @@ export class ActivationEngine {
 
     if (useReranker && !rerankSkipped && rerankPool.length > 0) {
       try {
-        const passages = rerankPool.map(r =>
-          `${r.engram.concept}: ${r.engram.content}`
-        );
+        // Truncate content to ~400 chars before rerank (0.7.14+). Cross-encoders
+        // have a 512-token max anyway and pad to the longest passage in the batch;
+        // sending full content (some 5000+ chars) means everything pads to ~512
+        // tokens. Truncation drops tokenization + inference cost ~3-4× on long
+        // memory pools without losing rerank signal — the concept + first 400
+        // chars carry the core meaning.
+        const passages = rerankPool.map(r => {
+          const concept = r.engram.concept;
+          const content = r.engram.content.length > 400
+            ? r.engram.content.slice(0, 400)
+            : r.engram.content;
+          return `${concept}: ${content}`;
+        });
         let rerankTimer: ReturnType<typeof setTimeout> | undefined;
         const rerankResults = await Promise.race([
           rerank(query.context, passages),

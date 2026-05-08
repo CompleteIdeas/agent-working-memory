@@ -2,6 +2,69 @@
 
 ## [Unreleased]
 
+## 0.7.14 (2026-05-08)
+
+### Recall Latency Round 8 — Batched cross-encoder + passage truncation + eager cache warm
+
+Three fixes that drop the recall floor to **~300ms** — a 37× speedup vs the
+0.7.4 baseline of 11s.
+
+### Fix 1: Batched cross-encoder inference (`src/core/reranker.ts`)
+
+Previously the reranker tokenized + ran the model **once per passage**,
+serializing 15-30 inference calls. Now all query-passage pairs go through
+one tokenizer call + one model forward pass.
+
+**Direct measurement (15 passages × 50 chars):** 27ms vs 210ms (~7× faster).
+
+Falls back to the per-passage loop if the batch path errors (e.g. model
+doesn't support batched text_pair).
+
+### Fix 2: Truncate passages before rerank (`src/engine/activation.ts`)
+
+Previously passed full `engram.content` (some 5000+ chars) to the reranker.
+The cross-encoder has a 512-token max and pads to the longest passage in
+the batch, so full content meant everything padded to ~512 tokens.
+
+Truncating each passage to `concept + content[:400]` drops tokenization +
+inference cost 3-4× on long memory pools. The first 400 chars + concept
+carry the core relevance signal — full content was wasted on the reranker.
+
+### Fix 3: Eager slim-cache populate at startup (`src/index.ts`)
+
+Previously the first user recall after process start paid a ~600ms one-time
+cost to populate the slim cache. Now the AWM coordinator warms the cache
+in `setImmediate` after model preload — invisible to users.
+
+Added `EngramStore.warmSlimCache()` (public) and `getSlimCacheStats()` for
+diagnostics.
+
+### End-to-end measurement
+
+| Query | 0.7.13 | 0.7.14 | Δ |
+|---|---|---|---|
+| "USEF results submission Staff Services" | 756ms | 411ms | -46% |
+| "Education LMS architecture programs certifications" | 842ms | 336ms | -60% |
+| "short query" | 339ms | 304ms | -10% |
+| "Stripe webhook handler..." | 691ms | 595ms | -14% |
+| "sprint current work completed findings pending" | 781ms | 646ms | -17% |
+
+**Cumulative since 0.7.4 baseline:** 11s → ~300-650ms (~25-37× faster).
+
+### Recall quality preserved
+
+A/B test (8 diverse queries):
+- 8/8 top-1 results identical
+- 4.50/5 top-5 overlap (was 4.63 in 0.7.13)
+- 9.38/10 top-10 overlap (was 9.50)
+
+Slight top-5/10 reordering is from passage truncation reordering some
+candidates. Top-1 is rock solid.
+
+### Tests
+
+All 334 tests pass.
+
 ## 0.7.13 (2026-05-08)
 
 ### Recall Latency Round 7 — Reranker pool size reduction

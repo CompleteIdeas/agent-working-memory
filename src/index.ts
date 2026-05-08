@@ -175,9 +175,22 @@ async function main() {
   getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
   getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));
 
+  // Eager slim-cache populate — pays the ~600ms first-fetch cost at startup
+  // instead of charging it to the first user recall (0.7.14+).
+  setImmediate(() => {
+    try {
+      const t0 = Date.now();
+      store.warmSlimCache();
+      const stats = store.getSlimCacheStats();
+      console.log(`  Slim cache warmed: ${stats.size} entries in ${Date.now() - t0}ms`);
+    } catch (err) {
+      console.warn(`  Slim cache warm failed: ${(err as Error).message}`);
+    }
+  });
+
   // Start server
   await app.listen({ port: PORT, host: '0.0.0.0' });
-  console.log(`AgentWorkingMemory v0.7.13 listening on port ${PORT}`);
+  console.log(`AgentWorkingMemory v0.7.14 listening on port ${PORT}`);
 
   // Graceful shutdown
   const shutdown = async () => {
