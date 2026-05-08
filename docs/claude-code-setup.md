@@ -476,7 +476,7 @@ Write accept rate (7d): 23% (healthy: 15-40%)
 Avg salience (active): 0.61
 Recall precision (7d): 78% useful (from feedback)
 Abstention rate (7d): 5%
-Avg recall latency: 180ms
+Avg recall latency: 400ms (warm), ~3s on first recall after process start (model load + cache warm)
 
 --- Consolidation ---
 Last run: 2h ago

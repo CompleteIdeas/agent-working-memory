@@ -2,6 +2,53 @@
 
 ## [Unreleased]
 
+## 0.7.15 (2026-05-08)
+
+### Documentation refresh — full coverage of 0.7.6→0.7.14 perf work
+
+Documentation-only release that ships the updated CLAUDE.md install template
+to every install via `awm setup --global`. No functional code change.
+
+### What changed
+
+**`src/adapters/common.ts` — `AWM_INSTRUCTION_CONTENT`** — the diagnostics /
+escape-hatches section now lists all four perf-related env-vars instead of
+just `AWM_DISABLE_POOL_FILTER`:
+
+- `AWM_DISABLE_POOL_FILTER` (0.7.7+)
+- `AWM_DISABLE_SLIM_CACHE` (0.7.10+)
+- `AWM_DISABLE_RERANK_SKIP` (0.7.10+)
+- `AWM_DISABLE_EXPANSION_CACHE` (0.7.11+)
+
+Also adds context: agents see "in production, leave these all unset; use only
+when diagnosing a suspected recall-quality regression."
+
+**`docs/troubleshooting.md`** — "Very slow activation queries" rewritten for
+the 0.7.14 reality (floor ~300ms, typical 400-700ms warm). Adds a section
+clarifying that `memory_stats` reports a 24h rolling avg that lags upgrades.
+
+**`docs/quickstart.md`** — "first conversation will be slower" reworded to
+distinguish the one-time model download (~30s, once per machine) from the
+~3s cold-start cost paid on the first recall after each process start.
+
+**`docs/user-guide.md`** — example `/health` response updated from `v0.3.0`
+to current 0.7.x output.
+
+**`docs/claude-code-setup.md`** — `Avg recall latency` example updated from
+180ms to 400ms warm + ~3s cold.
+
+### Upgrade path for existing installs
+
+```bash
+npm install -g agent-working-memory@latest
+awm setup --global   # rewrites CLAUDE.md with the updated env-var doc
+# restart Claude Code
+```
+
+### Tests
+
+All 334 tests pass.
+
 ## 0.7.14 (2026-05-08)
 
 ### Recall Latency Round 8 — Batched cross-encoder + passage truncation + eager cache warm

@@ -217,7 +217,19 @@ Recall is fast (~1s typical). Use it freely.
   memory, every other agent can recall it immediately.
 
 ### Diagnostics / escape hatches (env vars, only if you know why)
-- \`AWM_DISABLE_POOL_FILTER=1\` — disables the candidate pool reduction in recall (added
-  in 0.7.7 for ~50% speedup). Reverts to scoring all candidates. Use only if you suspect
-  a recall regression and want to A/B test against the pre-0.7.7 path.
+The 0.7.6→0.7.14 work cut recall latency from 11s to ~300ms. Each optimization
+is gated by an env-var so it can be disabled for A/B testing if a regression
+appears in your workload:
+
+- \`AWM_DISABLE_POOL_FILTER=1\` (0.7.7+) — disables the candidate pool reduction
+  pre-filter in recall. Reverts to scoring all active candidates.
+- \`AWM_DISABLE_SLIM_CACHE=1\` (0.7.10+) — disables the in-memory slim cache.
+  Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
+- \`AWM_DISABLE_RERANK_SKIP=1\` (0.7.10+) — disables the cross-encoder skip on
+  clear-winner queries. Forces every recall through the reranker.
+- \`AWM_DISABLE_EXPANSION_CACHE=1\` (0.7.11+) — disables the query expansion
+  skip heuristic + LRU cache. Forces every recall through flan-t5-small.
+
+In production, leave these all unset. Use only when diagnosing a suspected
+recall-quality regression.
 `.trimStart();
