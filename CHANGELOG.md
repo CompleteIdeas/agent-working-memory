@@ -2,6 +2,58 @@
 
 ## [Unreleased]
 
+## 0.7.8 (2026-05-08)
+
+### Documentation + install template — settings & rules for the new behaviors
+
+This release ships only documentation/install changes — no functional code change.
+A version bump is needed so `awm setup --global` reaches existing installs with
+the updated CLAUDE.md template that teaches agents about the 0.7.5/0.7.6/0.7.7
+behaviors.
+
+### `AWM_INSTRUCTION_CONTENT` extended (the template `awm setup` writes to CLAUDE.md)
+
+**`src/adapters/common.ts`** — added three sections to the agent instructions:
+
+- **Memory classes** — `canonical | working | ephemeral`, when to use each, and the
+  hive-multi-agent rule that cross-agent writes must use `canonical`.
+- **Salience auto-promotion** — explains the two patterns the salience filter
+  auto-promotes (`detectUserFeedback` for stakeholder quotes, `detectVerifiedFinding`
+  for operational records with action-verb + concrete IDs). Defense in depth — agents
+  shouldn't rely on it for important writes.
+- **Diagnostics / escape hatches** — `AWM_DISABLE_POOL_FILTER=1` documented as an
+  A/B testing hatch if a recall regression is suspected.
+
+Also added a "before stating any fact, recall first" guidance and a note that recall
+is fast (~1s) so agents shouldn't ration recalls.
+
+### Env var table extended
+
+**`README.md`** — added `AWM_COORDINATION`, `AWM_DISABLE_POOL_FILTER`, `AWM_WORKSPACE`
+to the environment variables table.
+
+### Troubleshooting guide
+
+**`docs/troubleshooting.md`** — added "very slow recall on 0.7.7+" and "recall returning
+slightly different top-K than before 0.7.7" entries with the disable hatch.
+
+### Hive agent rules (in this repo only — not shipped via npm)
+
+`.claude/agents/coordinator.md`, `dev-lead.md`, `worker.md` — added auto-promotion
+backstop note and the latency claim update so hive agents know:
+1. Always set `memory_class: canonical` explicitly for shared writes
+2. The auto-promote patterns are a backstop, not the primary mechanism
+3. Recall is now ~1s (so don't avoid it for perceived cost)
+
+### Upgrade path
+
+For existing installs:
+```
+npm install -g agent-working-memory@latest
+awm setup --global   # rewrites CLAUDE.md with the new instructions
+```
+Restart Claude Code to pick up the new CLAUDE.md.
+
 ## 0.7.7 (2026-05-08)
 
 ### Recall Latency Round 2 — 2.5s → 1.0s end-to-end (~50% on top of 0.7.6)

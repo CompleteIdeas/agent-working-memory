@@ -166,15 +166,58 @@ You have persistent memory via the agent-working-memory MCP server.
 - \`confidence_level\`: verified (tested), observed (read in code), assumed (reasoning)
 - \`intent\`: decision, finding, todo, question, or context
 
+### Memory classes (controls how strictly the salience filter gates the write)
+- \`memory_class: canonical\` — source-of-truth memories. Floor 0.7 salience, never staged.
+  Use for: user-stated decisions, project requirements, verified architectural facts,
+  cross-agent shared context. **In a hive (multi-agent) setup, always use \`canonical\`
+  for writes that other agents must be able to recall** — the default \`working\` class
+  may get filtered.
+- \`memory_class: working\` (default) — observations and findings. Salience-gated.
+- \`memory_class: ephemeral\` — short-lived context that should decay quickly.
+
+### Salience auto-promotion (defense in depth)
+The salience filter automatically promotes certain content patterns even if you forget
+to set \`memory_class\` explicitly:
+- **User feedback** — content starting with "Robert said…", "Katherine directed…",
+  "Nancy decided…" etc. auto-promotes to canonical. So quoting the user verbatim
+  always preserves the decision.
+- **Verified operational records** — content with an action verb (Submitted, Finalized,
+  Completed, Reconciled, Triaged, Posted, Resolved, Stamped, Pushed, Deployed, Migrated,
+  Imported, Exported, Backfilled) plus 2+ concrete identifiers (ISO date \`YYYY-MM-DD\`,
+  or contextual numeric IDs like "event 18969", "ticket #18330", "USEF 341980") gets
+  a 0.45 salience floor. So batch summaries with real IDs survive even when topic
+  terms repeat.
+
+If neither pattern applies and you want a memory to definitely survive, set
+\`memory_class: canonical\` explicitly. Don't rely on auto-promotion for important writes.
+
 ### Recall memory when:
+- **BEFORE stating ANY fact about how a system works** — recall first; if AWM doesn't
+  have it, read the code. Never guess and present it as fact.
+- **BEFORE searching the filesystem** — recall first; AWM is faster and has cross-session
+  knowledge that file search doesn't.
 - Starting work on a new task or subsystem
 - Re-entering code you haven't touched recently
 - After a failed attempt — check if there's prior knowledge
 - Before refactoring or making architectural changes
 - When a topic comes up that you might have prior context on
 
+Recall is fast (~1s typical). Use it freely.
+
+### Keep memory fresh
+- After recalling a memory, if you observe the real state is different → call
+  \`memory_supersede\` immediately with the corrected version.
+- After using a recalled memory: call \`memory_feedback\` (useful/not-useful) so the
+  activation engine learns what's valuable.
+- If you discover a memory is factually wrong: \`memory_retract\` to remove it.
+
 ### Also:
-- After using a recalled memory: call memory_feedback (useful/not-useful) — strengthens useful associations
-- To correct wrong info: call memory_retract or memory_supersede
 - To track work items: memory_task_add, memory_task_update, memory_task_list, memory_task_next
+- AWM is shared across all agents in real time. When any agent writes or supersedes a
+  memory, every other agent can recall it immediately.
+
+### Diagnostics / escape hatches (env vars, only if you know why)
+- \`AWM_DISABLE_POOL_FILTER=1\` — disables the candidate pool reduction in recall (added
+  in 0.7.7 for ~50% speedup). Reverts to scoring all candidates. Use only if you suspect
+  a recall regression and want to A/B test against the pre-0.7.7 path.
 `.trimStart();

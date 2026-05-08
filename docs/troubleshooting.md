@@ -35,9 +35,13 @@ Check the `phaseScores` breakdown:
 - Check if retracted: the engram's `retracted` field
 
 ### Very slow activation queries
-- Normal with ML models: 200-300ms
+- Normal with ML models: 200-300ms (small DBs); ~1s typical (10K+ engrams) on AWM 0.7.7+
 - Disable for speed: `"useReranker": false, "useExpansion": false` (~5-20ms)
 - First query after restart is slower (model warmup)
+- **If recall feels slow (multi-second floor) on 0.7.7+**: the candidate pool reduction filter may be silently disabled. Check `AWM_DISABLE_POOL_FILTER` is not set to `1` in the AWM process env.
+
+### Recall returning slightly different top-K than before 0.7.7
+The 0.7.7 candidate pool reduction filters out near-zero-relevance candidates before deep scoring. Recall quality A/B verified 8/8 top-1 matches and 90% top-5 overlap on diverse queries — but you may see reorderings near the bottom of top-K. If you suspect a regression for a specific query class, set `AWM_DISABLE_POOL_FILTER=1` in the AWM coordinator env to revert to the pre-0.7.7 path and compare. File an issue with the query and the diff if you find a real recall miss.
 
 ## MCP issues
 

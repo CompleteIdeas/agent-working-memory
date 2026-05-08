@@ -389,6 +389,9 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | `AWM_HOOK_SECRET` | *(none)* | Bearer token for hook auth |
 | `AWM_API_KEY` | *(none)* | Bearer token for HTTP API auth |
 | `AWM_INCOGNITO` | *(unset)* | Set to `1` to disable all tools |
+| `AWM_COORDINATION` | *(unset)* | Set to `true` to enable hive coordination endpoints |
+| `AWM_DISABLE_POOL_FILTER` | *(unset)* | Set to `1` to disable the candidate pool reduction (0.7.7+). Reverts recall to scoring all active candidates — slower but useful for A/B testing if a recall regression appears |
+| `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
 
 ## Tech Stack
 
@@ -406,6 +409,10 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | Validation | Zod 4 |
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
+
+## What's New in v0.7.8
+
+- **Install template updated for the 0.7.5/0.7.6/0.7.7 behaviors** — `awm setup` now writes a richer CLAUDE.md that teaches agents about memory classes (`canonical | working | ephemeral`), salience auto-promotion patterns (`detectUserFeedback` for stakeholder quotes, `detectVerifiedFinding` for operational records with action-verb + concrete IDs), and the new env-var escape hatches. Existing installs upgrade via `npm install -g agent-working-memory@latest && awm setup --global` then restart Claude Code. No functional code change in this release — version bumped solely so the new template ships.
 
 ## What's New in v0.7.7
 
@@ -461,7 +468,7 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.7). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.7.8). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
