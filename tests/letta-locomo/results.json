@@ -1,0 +1,92 @@
+{
+  "per_turn_raw": {
+    "overall": {
+      "correct": 752,
+      "total": 1540,
+      "pct": 48.8
+    },
+    "grade_dist": {
+      "A": 752,
+      "B": 416,
+      "C": 372
+    },
+    "per_category": {
+      "multi-hop": {
+        "correct": 170,
+        "total": 321,
+        "pct": 53.0,
+        "avg_recalls": 1.99
+      },
+      "open-domain": {
+        "correct": 481,
+        "total": 841,
+        "pct": 57.2,
+        "avg_recalls": 1.8
+      },
+      "single-hop": {
+        "correct": 68,
+        "total": 282,
+        "pct": 24.1,
+        "avg_recalls": 2.07
+      },
+      "temporal": {
+        "correct": 33,
+        "total": 96,
+        "pct": 34.4,
+        "avg_recalls": 2.2
+      }
+    }
+  },
+  "llm_writer": {
+    "overall": {
+      "correct": 722,
+      "total": 1540,
+      "pct": 46.9
+    },
+    "grade_dist": {
+      "B": 505,
+      "A": 722,
+      "C": 313
+    },
+    "per_category": {
+      "multi-hop": {
+        "correct": 149,
+        "total": 321,
+        "pct": 46.4,
+        "avg_recalls": 1.53
+      },
+      "open-domain": {
+        "correct": 461,
+        "total": 841,
+        "pct": 54.8,
+        "avg_recalls": 1.66
+      },
+      "single-hop": {
+        "correct": 74,
+        "total": 282,
+        "pct": 26.2,
+        "avg_recalls": 1.48
+      },
+      "temporal": {
+        "correct": 38,
+        "total": 96,
+        "pct": 39.6,
+        "avg_recalls": 1.84
+      }
+    }
+  },
+  "published_baselines": {
+    "Letta_file_based": 74.0,
+    "Mem0": 68.5,
+    "note": "LoCoMo non-adversarial, gpt-4o-mini reader, gpt-4.1 judge"
+  },
+  "config": {
+    "reader_model": "gpt-4o-mini",
+    "judge_model": "gpt-4.1",
+    "awm_version": "0.7.16",
+    "exclude_category": 5,
+    "exclude_reason": "adversarial \u2014 Letta excludes; AWM scored 86.8% separately on prior 0.7.15 LoCoMo run",
+    "n_questions": 1540,
+    "n_conversations": 10
+  }
+}
