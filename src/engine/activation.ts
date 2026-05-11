@@ -580,15 +580,8 @@ export class ActivationEngine {
       .sort((a, b) => b.score - a.score);
 
     // Phase 7: Cross-encoder re-ranking — scores (query, passage) pairs directly
-    // Widens the pool to find relevant results that keyword matching missed
-    //
-    // Pool size (0.7.13+): max(limit*2, 15). Was max(limit*3, 30); reduced because
-    // the cross-encoder cost scales linearly with passage count and 30 was overkill
-    // when limit is typically 5-10. Phase-breakdown showed reranker was 65% of the
-    // post-0.7.12 recall floor — halving the pool is a direct ~50% reranker savings
-    // (~100ms recovered on most queries) with negligible top-K quality impact at
-    // limit=5/10 (the user wants top-5 or top-10; reranking 30 to find top-5 reranks
-    // many candidates that won't be returned).
+    // Widens the pool to find relevant results that keyword matching missed.
+    // 0.7.13: max(limit*2, 15) — halved the cross-encoder cost (was max(limit*3, 30))
     const rerankPool = pool.slice(0, Math.max(limit * 2, 15));
 
     // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
@@ -679,7 +672,9 @@ export class ActivationEngine {
         ? Math.max(...simValues)
         : 1.0;
 
-      // Stricter gate when caller explicitly requests abstention (e.g., noise filter queries)
+      // Required-channels for hard abstention:
+      //   abstention-explicit (caller passed abstentionThreshold > 0): 3 of 3
+      //   default: 2 of 3 — precision-first
       const requiredChannels = abstentionThreshold > 0 ? 3 : 2;
 
       // Hard abstention: fewer than required channels agree AND semantic drift is high
@@ -689,7 +684,6 @@ export class ActivationEngine {
 
       // Soft penalty: only 1 channel agrees or margin is thin
       if (channelsAgreeing < 2 || margin < 0.05) {
-        // If caller explicitly requested abstention, honor it when agreement is weak
         if (abstentionThreshold > 0) {
           return [];
         }

@@ -32,7 +32,7 @@ Verify the server is running:
 
 ```bash
 curl http://localhost:8400/health
-# {"status":"ok","timestamp":"...","version":"0.7.14","coordination":false,"agents_alive":0,...}
+# {"status":"ok","timestamp":"...","version":"0.7.16","coordination":false,"agents_alive":0,...}
 ```
 
 ### 3. Write Your First Memory

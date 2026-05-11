@@ -413,6 +413,22 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.7.16
+
+- **`awm setup --global` template now teaches *write quality*.** Two new sections in `AWM_INSTRUCTION_CONTENT`:
+  - **Writing for recall** — explicit guidance that recall quality is determined at write time. Lead with the rule/fact, pick the most specific topic, include 2+ retrievable identifiers (file paths, function names, IDs), write in the vocabulary of the future query, reserve canonical for stable invariants, include the *why* for feedback memories.
+  - **Recall strategy** — formalizes the multi-query reformulation pattern observed in practice. When one query returns nothing, agents reformulate (synonyms, more specific nouns, exact identifiers). Recall is ~300ms — two-three reformulations cost less than one filesystem search. Cap at three to prevent loops.
+
+  These document the writer + reader behaviors AWM was always designed around but were previously implicit. No retriever change — pure system-prompt improvement. Run `npm install -g agent-working-memory@latest && awm setup --global` to apply.
+
+- **LongMemEval headline number updated.** Re-running the benchmark on 0.7.16 (single-session-user, 50 questions, same adapter as the original 0.7.1 baseline): **68% accuracy with gpt-4o-mini**, up from the original 40-50%. Recall latency 0.12s avg (was 7-11s on 0.7.2). Multi-tier reader sweep on the same memory inputs:
+  - gpt-4o-mini (cheap, non-thinking): 68%
+  - gpt-4o (strong, non-thinking): 68%
+  - o4-mini (cheap, thinking): 78%
+  - gpt-5-mini (mid, thinking): 80%
+
+  Non-thinking models cap at 68% on this category — the bottleneck is reasoning over recalled context, not raw scale. Thinking models add 10-12pp. Memory quality is fixed; reader determines the ceiling.
+
 ## What's New in v0.7.15
 
 - **Documentation refresh** — `awm setup --global` now writes a CLAUDE.md template that documents all four perf env-var escape hatches (`AWM_DISABLE_POOL_FILTER`, `AWM_DISABLE_SLIM_CACHE`, `AWM_DISABLE_RERANK_SKIP`, `AWM_DISABLE_EXPANSION_CACHE`) instead of just the first one. Troubleshooting / quickstart / user-guide docs updated to reflect the current ~300ms recall floor. No code change — version bumped solely so the new template ships via `npm install -g agent-working-memory@latest`.

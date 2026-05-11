@@ -158,6 +158,37 @@ You have persistent memory via the agent-working-memory MCP server.
 - A prior assumption is found to be wrong
 - A significant piece of work is completed
 
+### Writing for recall (the highest-leverage section)
+A memory's recall quality is set the moment you write it. AWM is fast at
+finding what's findable — but if the write is shaped wrong, no retriever
+can rescue it. Be slightly more verbose at the front than feels natural:
+the first 1-2 sentences are what BM25, the embedding model, and concept
+extraction all see most strongly.
+
+- **Lead with the rule or fact.** Don't open with context or backstory.
+  "Don't mock the database in integration tests." comes first; the reason
+  comes second. Recall scans the head of the body, not the tail.
+- **Pick the most specific topic.** Not \`auth\` — \`auth-magic-link-rate-limit\`.
+  Topic is a hard filter at recall time. Generic topics hide the memory in
+  a noisy bucket where it competes with everything else in the area.
+- **Include 2+ retrievable identifiers.** File paths, function names, table
+  columns, ticket IDs, exact error strings, the literal terms a future query
+  will use. \`AccountingService.closePeriod()\` beats "the accounting code."
+  \`tblMemberDetails.activation_date\` beats "the activation column."
+  \`schema/072-period-close.sql\` beats "the migration."
+- **Write in the vocabulary of the future question.** When you imagine asking
+  this in three months, what nouns will you use? Use those nouns. Don't
+  paraphrase the user's domain language into your own neutral summary.
+- **Reserve canonical for stable invariants.** Decisions, requirements,
+  hard facts, cross-agent shared context. Working class (default) is correct
+  for findings, observations, and progress notes. The canonical floor is
+  0.7 salience — overusing it pollutes the canonical layer and the floor
+  loses meaning.
+- **Include the why for feedback memories.** A rule without a reason can't
+  be applied to edge cases. "Don't mock the database" is brittle. "Don't
+  mock the database — last quarter mocked tests masked a broken migration"
+  is portable to new situations.
+
 ### When writing, include metadata for better recall:
 - \`project\`: current project name (e.g., "EquiHub", "AWM")
 - \`topic\`: subject area (e.g., "database-migration", "auth-flow")
@@ -202,7 +233,25 @@ If neither pattern applies and you want a memory to definitely survive, set
 - Before refactoring or making architectural changes
 - When a topic comes up that you might have prior context on
 
-Recall is fast (~1s typical). Use it freely.
+Recall is fast (~300ms typical). Use it freely.
+
+### Recall strategy (when one query isn't enough)
+AWM's adaptive retrieval handles most query variations natively — synonym
+expansion, multi-channel scoring, embedding + BM25 + reranker agreement.
+A single recall is usually enough.
+
+When it isn't:
+- **If the first recall returns nothing or returns the wrong things, reformulate.**
+  Try a second query with different phrasing — synonyms, more specific nouns,
+  the exact identifier from the code rather than the conceptual name. Two or
+  three recalls cost less than one filesystem search.
+- **Use the words a domain expert would use, not generic English.** "Period
+  close lock" not "accounting feature"; "magic link rate limit" not "auth issue."
+- **For broad exploration, pass \`mode: "exploratory"\`** — wider candidate
+  pool, lower precision floor. For specific lookups, leave mode unset (auto).
+- **Don't ensemble more than 3 reformulations.** If three different phrasings
+  return nothing, the memory probably isn't there — read the code instead of
+  burning more recalls.
 
 ### Keep memory fresh
 - After recalling a memory, if you observe the real state is different → call

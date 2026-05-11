@@ -2,6 +2,46 @@
 
 ## [Unreleased]
 
+## 0.7.16 (2026-05-10) — doc release
+
+### Instruction content updates (no retriever change)
+
+`AWM_INSTRUCTION_CONTENT` (the system prompt installed by `awm setup --global`)
+gets two new sections aimed at agents that consume AWM:
+
+1. **Writing for recall** — explicit guidance that a memory's recall quality
+   is determined at write time. Lead with the rule/fact, pick the most specific
+   topic, include 2+ retrievable identifiers (file paths, function names, IDs),
+   write in the vocabulary of the future query, reserve canonical for stable
+   invariants, include the why for feedback memories.
+2. **Recall strategy** — formalizes the multi-query reformulation behavior
+   observed in practice. When one query returns nothing, agents should
+   reformulate (synonyms, more specific nouns, exact identifiers). Recall is
+   ~300ms — two-three reformulations cost less than one filesystem search.
+   Cap at three reformulations to prevent loops.
+
+These document the writer + reader behaviors AWM was always designed around
+but were previously implicit. Encoding them in the system prompt materially
+improves recall quality without any retriever change.
+
+### What was tried and reverted
+
+This release originally included two mode-aware retriever changes (wider
+candidate pool for exploratory queries, relaxed agreement gate). LoCoMo
+benchmarking showed these regressed adversarial precision 86.8% → 78.7%
+without meaningful open-domain gain (26.2% → 23.1% overall). Both changes
+reverted in this release; retriever is identical to 0.7.15.
+
+The decision: AWM's existing speed/precision profile (~300ms recall, 86.8%
+adversarial) is the right corner for the cheap-LLM force-multiplier use case.
+Chasing benchmark recall at the cost of precision is the wrong optimization
+target — single-query benchmarks like LoCoMo don't measure what AWM actually
+does in production (multi-query reader strategy + writer cooperation).
+
+### Tests
+
+All 334 tests pass.
+
 ## 0.7.15 (2026-05-08)
 
 ### Documentation refresh — full coverage of 0.7.6→0.7.14 perf work
