@@ -140,15 +140,96 @@ export function homedir(): string {
  * Core AWM instruction snippet — shared across all adapters.
  * Each adapter wraps this in the appropriate file format.
  */
-export const AWM_INSTRUCTION_CONTENT = `
-## Memory (AWM)
-You have persistent memory via the agent-working-memory MCP server.
+/**
+ * Upsert the AWM section into an instruction file (CLAUDE.md, AGENTS.md, .cursorrules).
+ *
+ * Behavior:
+ *   - File doesn't exist  -> create with title + AWM_INSTRUCTION_CONTENT
+ *   - Section absent      -> append
+ *   - Section present + identical  -> skip
+ *   - Section present + stale      -> REPLACE in place, preserve content above/below
+ *
+ * Section is bounded by `## Memory (AWM)` (with optional trailing modifier) at the
+ * start, and the next `## ` heading or EOF at the end.
+ *
+ * Returns a short human-readable status string for the setup command output.
+ */
+export function upsertAwmSection(
+  filePath: string,
+  newContent: string,
+  options: { titleIfNew?: string; suffix?: string } = {},
+): string {
+  const fname = basename(filePath);
+  const suffix = options.suffix ?? '';
 
-### Lifecycle (always do these)
-- Session start: call memory_restore to recover previous context
-- Starting a task: call memory_task_begin (checkpoints + recalls relevant memories)
-- Finishing a task: call memory_task_end with a summary
-- Auto-checkpoint: hooks handle compaction, session end, and 15-min timer (no action needed)
+  if (!existsSync(filePath)) {
+    const title = options.titleIfNew ?? `# ${basename(dirname(filePath))}`;
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, `${title}\n\n${newContent}${suffix}`);
+    return `${fname}: created with AWM workflow section`;
+  }
+
+  const existing = readFileSync(filePath, 'utf-8');
+
+  // Find section bounds: `## Memory (AWM)` (possibly with ` — MANDATORY` etc.) until next `## ` or EOF
+  const startRegex = /^## Memory \(AWM\)[^\n]*$/m;
+  const startMatch = startRegex.exec(existing);
+
+  if (!startMatch) {
+    // Section not present — append
+    writeFileSync(filePath, existing.trimEnd() + '\n\n' + newContent + suffix);
+    return `${fname}: appended AWM workflow section`;
+  }
+
+  // Find end: next `## ` heading after the section start, or EOF
+  const afterStart = startMatch.index + startMatch[0].length;
+  const nextHeadingRegex = /^## (?!Memory \(AWM\))/m;
+  nextHeadingRegex.lastIndex = afterStart;
+  const tail = existing.slice(afterStart);
+  const nextMatch = nextHeadingRegex.exec(tail);
+  const sectionEnd = nextMatch ? afterStart + nextMatch.index : existing.length;
+
+  const currentSection = existing.slice(startMatch.index, sectionEnd).trimEnd();
+  const desiredSection = (newContent + suffix).trimEnd();
+
+  if (currentSection === desiredSection) {
+    return `${fname}: AWM section already up-to-date (skipped)`;
+  }
+
+  const before = existing.slice(0, startMatch.index).trimEnd();
+  const after = existing.slice(sectionEnd).replace(/^\s*\n/, '');
+  const rebuilt =
+    (before ? before + '\n\n' : '') +
+    desiredSection +
+    (after ? '\n\n' + after : '\n');
+  writeFileSync(filePath, rebuilt);
+  return `${fname}: AWM section updated (preserved surrounding content)`;
+}
+
+export const AWM_INSTRUCTION_CONTENT = `
+## Memory (AWM) — MANDATORY
+
+**AWM is THE memory system.** Use it via the \`agent-working-memory\` MCP server
+(preferred) or HTTP at \`http://127.0.0.1:8400\` (fallback). The file-based
+auto-memory at \`~/.claude/projects/.../memory/*.md\` is a LEGACY bootstrap path —
+**do not write new memories to it.** All persistent knowledge goes through AWM.
+
+If MCP tools aren't loaded at session start, use ToolSearch with
+\`select:mcp__agent-working-memory__memory_recall,mcp__agent-working-memory__memory_write\`
+to load them. If the MCP server isn't responsive, restart with \`/mcp\` or use
+the HTTP endpoints (\`POST /memory/write-batch\`, \`POST /memory/activate\`)
+directly — but **DO NOT fall back to markdown files**. Files drift the moment
+you write them; AWM stays current because every agent reads + writes the same store.
+
+### Lifecycle (always do these, in this order)
+1. **Session start**: call \`memory_restore\` to recover previous context.
+2. **Starting a task**: call \`memory_task_begin\` (checkpoints + recalls relevant memories).
+3. **During work**: call \`memory_recall\` BEFORE stating any fact, BEFORE searching
+   the filesystem, BEFORE making architectural decisions. Recall is ~300ms — cheaper
+   than one filesystem search.
+4. **As you learn things**: call \`memory_write\` proactively. Don't batch.
+5. **Finishing a task**: call \`memory_task_end\` with a summary.
+6. **Auto-checkpoint** is handled by hooks (compaction, session-end, 15-min timer). No action needed.
 
 ### Write memory when:
 - A project decision is made or changed
@@ -189,13 +270,31 @@ extraction all see most strongly.
   mock the database — last quarter mocked tests masked a broken migration"
   is portable to new situations.
 
-### When writing, include metadata for better recall:
-- \`project\`: current project name (e.g., "EquiHub", "AWM")
-- \`topic\`: subject area (e.g., "database-migration", "auth-flow")
-- \`session_id\`: conversation grouping ID — associates related memories
-- \`source\`: how acquired (code-reading, debugging, discussion, research, testing, observation)
-- \`confidence_level\`: verified (tested), observed (read in code), assumed (reasoning)
-- \`intent\`: decision, finding, todo, question, or context
+### Tagging rules (REQUIRED — AWM's prefix-tag retrieval boost depends on these)
+
+Every \`memory_write\` should pass these structured fields. AWM stores each as a
+prefix-tag like \`proj=\`, \`topic=\`, \`intent=\`, etc. and uses them for BM25
+and entity-bridge boosts at recall time.
+
+| Field | Required? | Format | Example |
+|---|---|---|---|
+| \`project\` | **YES** | one short word matching the current project | \`"EquiHub"\`, \`"AWM"\`, \`"USEA-Agent"\` |
+| \`topic\` | **YES** | one or more lowercase area words | \`"database-migration"\`, \`"benchmarks"\` |
+| \`intent\` | **YES** | one of: \`decision\` / \`finding\` / \`todo\` / \`question\` / \`context\` | \`"finding"\` |
+| \`confidence_level\` | **YES** | \`verified\` (tested) / \`observed\` (read in code) / \`assumed\` (reasoning) | \`"verified"\` |
+| \`source\` | recommended | \`code-reading\` / \`debugging\` / \`discussion\` / \`research\` / \`testing\` / \`observation\` | \`"testing"\` |
+| \`memory_class\` | when stable | \`canonical\` (source-of-truth, 0.7 floor, never staged) / \`working\` (default) / \`ephemeral\` | \`"canonical"\` |
+| \`session_id\` | recommended | current conversation ID for entity-bridge boost | autogenerated |
+| \`tags\` | when applicable | extra prefix-tags for IDs and dates | \`["ticket=18360", "date=2026-05-11"]\` |
+
+**Always add identifier tags when present in the content:**
+- \`ticket=<id>\` for Freshdesk tickets
+- \`member=<id>\` for member IDs
+- \`horse=<id>\` for horse_member_id
+- \`usef=<id>\` for USEF lookups
+- \`date=YYYY-MM-DD\` for temporal anchoring (ISO format)
+- \`person=<Name>\` for stakeholder quotes / decisions
+- \`version=<X.Y.Z>\` for release-specific findings
 
 ### Memory classes (controls how strictly the salience filter gates the write)
 - \`memory_class: canonical\` — source-of-truth memories. Floor 0.7 salience, never staged.
@@ -259,6 +358,34 @@ When it isn't:
 - After using a recalled memory: call \`memory_feedback\` (useful/not-useful) so the
   activation engine learns what's valuable.
 - If you discover a memory is factually wrong: \`memory_retract\` to remove it.
+- **If you bypass AWM (file-memory, in-context notes, "I'll just remember"), the memory
+  drifts out of date. The system relies on you to keep it current. This is the #1
+  failure mode.**
+
+### Example — good vs bad memory_write
+
+**BAD** (no prefix tags, vague concept, can't be recalled by future queries):
+\`\`\`
+memory_write(
+  concept="found a bug",
+  content="The thing I was looking at was broken so I fixed it."
+)
+\`\`\`
+
+**GOOD** (rich identifiers, structured metadata, prefix tags):
+\`\`\`
+memory_write(
+  concept="EquiHub period-close BLOCKED check missing server-side",
+  content="apps/web/app/(accounting)/accounting/period-close/page.tsx had client-only BLOCKED enforcement. Fixed by adding server-side check in AccountingService.closePeriod() per schema/072-period-close.sql. Without server-side check a malicious request could bypass via direct API call.",
+  project="EquiHub",
+  topic="accounting",
+  intent="finding",
+  confidence_level="verified",
+  source="debugging",
+  memory_class="canonical",
+  tags=["ticket=18360", "person=Robert", "date=2026-05-11", "topic=period-close", "topic=security"]
+)
+\`\`\`
 
 ### Also:
 - To track work items: memory_task_add, memory_task_update, memory_task_list, memory_task_next

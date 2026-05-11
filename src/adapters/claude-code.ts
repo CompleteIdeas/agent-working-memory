@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
-import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT } from './common.js';
+import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection } from './common.js';
 
 const adapter: CLIAdapter = {
   id: 'claude-code',
@@ -56,24 +56,8 @@ const adapter: CLIAdapter = {
 
     if (skip) return 'CLAUDE.md: skipped (--no-instructions)';
 
-    // Ensure parent directory exists
-    const dir = dirname(claudeMdPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    if (existsSync(claudeMdPath)) {
-      const content = readFileSync(claudeMdPath, 'utf-8');
-      if (content.includes('## Memory (AWM)')) {
-        return 'CLAUDE.md: already has AWM section (skipped)';
-      }
-      writeFileSync(claudeMdPath, content.trimEnd() + '\n\n' + AWM_INSTRUCTION_CONTENT);
-      return 'CLAUDE.md: appended AWM workflow section';
-    }
-
     const title = ctx.isGlobal ? '# Global Instructions' : `# ${basename(ctx.cwd)}`;
-    writeFileSync(claudeMdPath, `${title}\n\n${AWM_INSTRUCTION_CONTENT}`);
-    return 'CLAUDE.md: created with AWM workflow section';
+    return upsertAwmSection(claudeMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title });
   },
 
   writeHooks(ctx: SetupContext, skip: boolean): string {

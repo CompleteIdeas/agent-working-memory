@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
-import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT } from './common.js';
+import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection } from './common.js';
 
 // ─── Minimal TOML read/write ──────────────────────────
 // Only handles the flat structure Codex uses: [section.name] with key = "value" or key = ["array"]
@@ -165,18 +165,8 @@ const adapter: CLIAdapter = {
 
     if (skip) return 'AGENTS.md: skipped (--no-instructions)';
 
-    if (existsSync(agentsMdPath)) {
-      const content = readFileSync(agentsMdPath, 'utf-8');
-      if (content.includes('## Memory (AWM)')) {
-        return 'AGENTS.md: already has AWM section (skipped)';
-      }
-      writeFileSync(agentsMdPath, content.trimEnd() + '\n\n' + AWM_INSTRUCTION_CONTENT);
-      return 'AGENTS.md: appended AWM workflow section';
-    }
-
     const title = `# ${basename(ctx.cwd)} — Agent Instructions`;
-    writeFileSync(agentsMdPath, `${title}\n\n${AWM_INSTRUCTION_CONTENT}`);
-    return 'AGENTS.md: created with AWM workflow section';
+    return upsertAwmSection(agentsMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title });
   },
 
   writeHooks(_ctx: SetupContext, _skip: boolean): string {

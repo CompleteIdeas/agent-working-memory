@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
-import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT } from './common.js';
+import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection } from './common.js';
 
 const adapter: CLIAdapter = {
   id: 'cursor',
@@ -54,22 +54,7 @@ const adapter: CLIAdapter = {
 
     if (skip) return '.cursorrules: skipped (--no-instructions)';
 
-    const dir = dirname(rulesPath);
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    if (existsSync(rulesPath)) {
-      const content = readFileSync(rulesPath, 'utf-8');
-      if (content.includes('## Memory (AWM)')) {
-        return '.cursorrules: already has AWM section (skipped)';
-      }
-      writeFileSync(rulesPath, content.trimEnd() + '\n\n' + AWM_INSTRUCTION_CONTENT);
-      return '.cursorrules: appended AWM workflow section';
-    }
-
-    writeFileSync(rulesPath, AWM_INSTRUCTION_CONTENT);
-    return '.cursorrules: created with AWM workflow section';
+    return upsertAwmSection(rulesPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: '# Agent Working Memory' });
   },
 
   writeHooks(_ctx: SetupContext, _skip: boolean): string {

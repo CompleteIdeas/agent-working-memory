@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
-import { AWM_INSTRUCTION_CONTENT } from './common.js';
+import { AWM_INSTRUCTION_CONTENT, upsertAwmSection } from './common.js';
 
 const HTTP_ADDENDUM = `
 ### HTTP API (for tools without MCP support)
@@ -53,17 +53,10 @@ const adapter: CLIAdapter = {
 
     if (skip) return 'AWM-INSTRUCTIONS.md: skipped (--no-instructions)';
 
-    if (existsSync(instrPath)) {
-      const content = readFileSync(instrPath, 'utf-8');
-      if (content.includes('## Memory (AWM)')) {
-        return 'AWM-INSTRUCTIONS.md: already has AWM section (skipped)';
-      }
-      writeFileSync(instrPath, content.trimEnd() + '\n\n' + AWM_INSTRUCTION_CONTENT + HTTP_ADDENDUM);
-      return 'AWM-INSTRUCTIONS.md: appended AWM + HTTP API section';
-    }
-
-    writeFileSync(instrPath, `# Agent Working Memory\n\n${AWM_INSTRUCTION_CONTENT}${HTTP_ADDENDUM}`);
-    return 'AWM-INSTRUCTIONS.md: created with AWM + HTTP API section';
+    return upsertAwmSection(instrPath, AWM_INSTRUCTION_CONTENT, {
+      titleIfNew: '# Agent Working Memory',
+      suffix: HTTP_ADDENDUM,
+    });
   },
 
   writeHooks(_ctx: SetupContext, _skip: boolean): string {
