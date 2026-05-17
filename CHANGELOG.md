@@ -2,6 +2,52 @@
 
 ## [Unreleased]
 
+### 0.8 Cluster C — materialized-view + atomic-counter endpoints
+
+Four new HTTP endpoints that consolidate substrate-style reductions
+previously done client-side. Fully additive — no existing endpoint changes.
+
+- **`POST /memory/latest-by-tag`** — for each distinct value of `tagKey`
+  (e.g. `"character="`), return the most recent active engram. Optional
+  `scopeTagsAll` narrowing, `sortBy: "createdAt" | "sequence"`, `limit`.
+  With `sortBy: "sequence"`, engrams without a sequence are excluded.
+
+  Replaces NovelForge's `_gather_latest_emotional_states` /
+  `_gather_latest_motif_phases` Python reductions (1 call instead of
+  list-all + reduce).
+
+- **`POST /memory/top-by`** — filter by `filterTagsAll` /
+  `filterTagsAny` / `filterTagsNone`, sort by numeric value extracted from
+  a tag prefix (`sortField: "weight="`), return top N. NaN values sort last.
+
+  Replaces NovelForge's `_gather_active_promises` (1 call instead of
+  list-all + filter + sort + slice).
+
+- **`POST /memory/resolve`** — compute the effective state of an engram
+  from referenced events. Returns
+  `{ engram, effectiveState, resolvingEvents }`. States:
+  - `superseded` if `supersededBy` is set
+  - `resolved` / `subverted` / `abandoned` if a reference with that
+    relation type points at this engram (latest by `createdAt` wins)
+  - `active` otherwise
+
+  Two targeting modes: `targetEngramId` or `matchConcept` (+ optional
+  `matchTags`). Same concept-match semantics as Form B's
+  `findActiveMatchByConcept`. Replaces NovelForge's Option-C client-side
+  cross-reference filter.
+
+- **`GET /memory/sequence/:agentId/next`** — race-free next-sequence
+  allocator. Returns `{ agentId, next }`. Caller writes the engram with
+  the returned value. Atomic via `BEGIN IMMEDIATE` transaction; concurrent
+  callers serialize without conflict.
+
+- **New `EngramStore` methods:** `getLatestByTag`, `getTopBy`,
+  `resolveEffectiveState`, `allocateNextSequence`, plus a private
+  `extractTagValue` helper for tag-prefix→value extraction.
+
+- 15 new tests in `tests/core/cluster-c-endpoints.test.ts`. Full suite:
+  384/384 passing (was 369 in Cluster D).
+
 ### 0.8 Cluster D — supersede Form B + references[] on /memory/write
 
 Atomic single-call write-and-supersede by concept match, plus typed

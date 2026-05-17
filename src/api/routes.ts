@@ -513,6 +513,120 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     return reply.send({ results, count: results.length });
   });
 
+  // ============================================================
+  // 0.8 Cluster C — materialized-view + atomic-counter endpoints
+  // ============================================================
+
+  /**
+   * For each distinct value of `tagKey`, return the most recent active
+   * engram. Used by NovelForge for "latest emotional state per character",
+   * "latest motif phase per motif", etc.
+   */
+  app.post('/memory/latest-by-tag', async (req, reply) => {
+    const body = req.body as {
+      agentId: string;
+      tagKey: string;                // e.g. "character=", "motif="
+      scopeTagsAll?: string[];       // optional narrowing
+      retracted?: boolean;
+      sortBy?: 'createdAt' | 'sequence';
+      limit?: number;
+    };
+    if (!body.agentId || !body.tagKey) {
+      return reply.code(400).send({ error: 'agentId and tagKey are required' });
+    }
+    const results = store.getLatestByTag({
+      agentId: body.agentId,
+      tagKeyPrefix: body.tagKey,
+      scopeTagsAll: body.scopeTagsAll,
+      retracted: body.retracted ?? false,
+      sortBy: body.sortBy,
+      limit: body.limit,
+    });
+    return reply.send({ results, count: results.length });
+  });
+
+  /**
+   * Filter by tag-set operators, sort by numeric value extracted from a
+   * tag prefix, return top N. Used by NovelForge for "top N active
+   * promises by weight".
+   */
+  app.post('/memory/top-by', async (req, reply) => {
+    const body = req.body as {
+      agentId: string;
+      sortField: string;             // tag prefix, e.g. "weight="
+      order?: 'asc' | 'desc';        // default desc
+      filterTagsAll?: string[];
+      filterTagsAny?: string[];
+      filterTagsNone?: string[];
+      retracted?: boolean;
+      limit?: number;
+    };
+    if (!body.agentId || !body.sortField) {
+      return reply.code(400).send({ error: 'agentId and sortField are required' });
+    }
+    const results = store.getTopBy({
+      agentId: body.agentId,
+      sortField: body.sortField,
+      order: body.order ?? 'desc',
+      filterTagsAll: body.filterTagsAll,
+      filterTagsAny: body.filterTagsAny,
+      filterTagsNone: body.filterTagsNone,
+      retracted: body.retracted ?? false,
+      limit: body.limit,
+    });
+    return reply.send({ results, count: results.length });
+  });
+
+  /**
+   * Compute effective state of an engram from referenced events. Two
+   * targeting modes: by ID, or by concept match (same semantics as Form B's
+   * findActiveMatchByConcept).
+   */
+  app.post('/memory/resolve', async (req, reply) => {
+    const body = req.body as {
+      agentId: string;
+      targetEngramId?: string;
+      matchConcept?: string;
+      matchTags?: string[];
+    };
+    if (!body.agentId) {
+      return reply.code(400).send({ error: 'agentId is required' });
+    }
+
+    let targetId = body.targetEngramId;
+    if (!targetId && body.matchConcept) {
+      const matched = store.findActiveMatchByConcept(
+        body.agentId, body.matchConcept, body.matchTags,
+      );
+      if (!matched) {
+        return reply.code(404).send({
+          error: `No active engram matches concept "${body.matchConcept}"`,
+        });
+      }
+      targetId = matched.id;
+    }
+    if (!targetId) {
+      return reply.code(400).send({
+        error: 'Provide either targetEngramId or matchConcept',
+      });
+    }
+
+    const result = store.resolveEffectiveState(targetId);
+    if (!result) return reply.code(404).send({ error: `Engram ${targetId} not found` });
+    return reply.send(result);
+  });
+
+  /**
+   * Race-free next-sequence allocator. Caller writes the engram with the
+   * returned value in `sequence`. Doesn't reserve — concurrent allocations
+   * always serialize via BEGIN IMMEDIATE.
+   */
+  app.get('/memory/sequence/:agentId/next', async (req, reply) => {
+    const { agentId } = req.params as { agentId: string };
+    const next = store.allocateNextSequence(agentId);
+    return reply.send({ agentId, next });
+  });
+
   app.get('/memory/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
     const engram = store.getEngram(id);

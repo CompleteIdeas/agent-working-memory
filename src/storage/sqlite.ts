@@ -1567,4 +1567,224 @@ export class EngramStore {
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
   }
+
+  // ============================================================
+  // 0.8 Cluster C — materialized-view + atomic-counter primitives
+  // ============================================================
+
+  /**
+   * For each distinct value of the tag whose key prefix is `tagKeyPrefix`
+   * (e.g. `"character="`), return the most-recent active engram. Used by
+   * NovelForge's "latest emotional state per character", "latest motif
+   * phase per motif", "recent chapter summaries".
+   *
+   * `sortBy` defaults to `createdAt`. With `"sequence"`, engrams without a
+   * sequence are excluded (they have no story-time anchor).
+   */
+  getLatestByTag(opts: {
+    agentId: string;
+    tagKeyPrefix: string;          // e.g. "character=", "motif=", "chapter="
+    scopeTagsAll?: string[];       // optional narrowing (e.g. ["topic=motif-use"])
+    retracted?: boolean;
+    sortBy?: 'createdAt' | 'sequence';
+    limit?: number;
+  }): Engram[] {
+    let sql = `SELECT * FROM engrams
+               WHERE agent_id = ?
+               AND retracted = ?
+               AND stage = 'active'
+               AND tags LIKE ?`;
+    const params: any[] = [
+      opts.agentId,
+      opts.retracted ? 1 : 0,
+      `%"${opts.tagKeyPrefix}%`,
+    ];
+    if (opts.scopeTagsAll && opts.scopeTagsAll.length > 0) {
+      for (const t of opts.scopeTagsAll) {
+        sql += ' AND tags LIKE ?';
+        params.push(`%"${t}"%`);
+      }
+    }
+    if (opts.sortBy === 'sequence') {
+      sql += ' AND sequence IS NOT NULL';
+    }
+    sql += ' ORDER BY ' + (opts.sortBy === 'sequence' ? 'sequence DESC, created_at DESC' : 'created_at DESC');
+
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    const engrams = rows.map(r => this.rowToEngram(r));
+
+    // Group by extracted tag value, take first (already sorted newest first).
+    const seen = new Map<string, Engram>();
+    for (const e of engrams) {
+      const value = this.extractTagValue(e.tags, opts.tagKeyPrefix);
+      if (value == null) continue;
+      if (!seen.has(value)) seen.set(value, e);
+    }
+    const out = Array.from(seen.values());
+    return opts.limit ? out.slice(0, opts.limit) : out;
+  }
+
+  /**
+   * Filter engrams by tag-set operators and sort by numeric value extracted
+   * from a tag prefix (e.g. `"weight="` → numeric value of `weight=8`).
+   * Used by NovelForge's "top 40 active promises by weight".
+   *
+   * Missing or unparseable numeric values sort last.
+   */
+  getTopBy(opts: {
+    agentId: string;
+    sortField: string;             // tag prefix, e.g. "weight="
+    order: 'asc' | 'desc';
+    filterTagsAll?: string[];
+    filterTagsAny?: string[];
+    filterTagsNone?: string[];
+    limit?: number;
+    retracted?: boolean;
+  }): Engram[] {
+    // Build the base query inline (mirrors search() but adds the topBy sort).
+    let sql = `SELECT * FROM engrams
+               WHERE agent_id = ?
+               AND retracted = ?
+               AND stage = 'active'
+               AND tags LIKE ?`;
+    const params: any[] = [
+      opts.agentId,
+      opts.retracted ? 1 : 0,
+      `%"${opts.sortField}%`,        // must have a tag with this prefix
+    ];
+
+    if (opts.filterTagsAll && opts.filterTagsAll.length > 0) {
+      for (const tag of opts.filterTagsAll) {
+        sql += ' AND tags LIKE ?';
+        params.push(`%"${tag}"%`);
+      }
+    }
+    if (opts.filterTagsAny && opts.filterTagsAny.length > 0) {
+      const ors = opts.filterTagsAny.map(() => 'tags LIKE ?').join(' OR ');
+      sql += ` AND (${ors})`;
+      for (const tag of opts.filterTagsAny) params.push(`%"${tag}"%`);
+    }
+    if (opts.filterTagsNone && opts.filterTagsNone.length > 0) {
+      const ors = opts.filterTagsNone.map(() => 'tags LIKE ?').join(' OR ');
+      sql += ` AND NOT (${ors})`;
+      for (const tag of opts.filterTagsNone) params.push(`%"${tag}"%`);
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    const engrams = rows.map(r => this.rowToEngram(r));
+
+    // Extract numeric value from the sortField tag; missing or NaN sorts last.
+    const valued = engrams.map(e => {
+      const raw = this.extractTagValue(e.tags, opts.sortField);
+      const n = raw == null ? NaN : Number(raw);
+      return { e, n };
+    });
+    valued.sort((a, b) => {
+      const aNaN = Number.isNaN(a.n);
+      const bNaN = Number.isNaN(b.n);
+      if (aNaN && bNaN) return 0;
+      if (aNaN) return 1;   // NaN last
+      if (bNaN) return -1;
+      return opts.order === 'asc' ? a.n - b.n : b.n - a.n;
+    });
+    const sorted = valued.map(v => v.e);
+    return opts.limit ? sorted.slice(0, opts.limit) : sorted;
+  }
+
+  /**
+   * Compute the effective state of an engram from referenced events.
+   *
+   *   - 'superseded' if engram.supersededBy is set
+   *   - else: scan engrams whose references_json names this engram with a
+   *     terminal relation type (resolves / subverts / abandons). Take the
+   *     latest by createdAt. effectiveState = that type.
+   *   - else: 'active'
+   *
+   * Returns `null` if target engram not found.
+   */
+  resolveEffectiveState(targetEngramId: string): {
+    engram: Engram;
+    effectiveState: 'active' | 'resolved' | 'subverted' | 'abandoned' | 'superseded';
+    resolvingEvents: Array<{ id: string; type: string; createdAt: string }>;
+  } | null {
+    const target = this.getEngram(targetEngramId);
+    if (!target) return null;
+
+    if (target.supersededBy) {
+      return { engram: target, effectiveState: 'superseded', resolvingEvents: [] };
+    }
+
+    // Find candidate referencing engrams. LIKE-filter first to narrow,
+    // then JSON.parse each candidate's references_json to verify the
+    // matchEngramId and type. Cheap enough at NovelForge's scale.
+    const candidates = this.db.prepare(
+      `SELECT id, references_json, created_at FROM engrams
+       WHERE agent_id = ?
+       AND retracted = 0
+       AND stage = 'active'
+       AND references_json IS NOT NULL
+       AND references_json LIKE ?`
+    ).all(target.agentId, `%"${targetEngramId}"%`) as Array<{
+      id: string;
+      references_json: string;
+      created_at: string;
+    }>;
+
+    const terminalTypes = new Set(['resolves', 'subverts', 'abandons']);
+    const resolvingEvents: Array<{ id: string; type: string; createdAt: string }> = [];
+    for (const c of candidates) {
+      try {
+        const refs = JSON.parse(c.references_json) as Array<{ type: string; matchEngramId?: string }>;
+        for (const ref of refs) {
+          if (ref.matchEngramId === targetEngramId && terminalTypes.has(ref.type)) {
+            resolvingEvents.push({ id: c.id, type: ref.type, createdAt: c.created_at });
+          }
+        }
+      } catch { /* malformed references_json — skip */ }
+    }
+
+    if (resolvingEvents.length === 0) {
+      return { engram: target, effectiveState: 'active', resolvingEvents: [] };
+    }
+
+    // Latest event wins.
+    resolvingEvents.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const latestType = resolvingEvents[0]!.type as 'resolves' | 'subverts' | 'abandons';
+    const effectiveState = (
+      latestType === 'resolves' ? 'resolved'
+        : latestType === 'subverts' ? 'subverted'
+          : 'abandoned'
+    );
+    return { engram: target, effectiveState, resolvingEvents };
+  }
+
+  /**
+   * Atomically allocate the next sequence number for an agent.
+   *
+   * Uses BEGIN IMMEDIATE to serialize concurrent callers — better-sqlite3's
+   * transaction() acquires a RESERVED lock which prevents other writers
+   * from racing. Returns MAX(sequence)+1 for the agent, or 1 if no engrams
+   * have a sequence yet.
+   */
+  allocateNextSequence(agentId: string): number {
+    return this.transaction(() => {
+      const row = this.db.prepare(
+        'SELECT MAX(sequence) AS max_seq FROM engrams WHERE agent_id = ?'
+      ).get(agentId) as { max_seq: number | null };
+      return (row?.max_seq ?? 0) + 1;
+    });
+  }
+
+  /**
+   * Extract the value following a tag prefix, e.g. `["weight=8"]` + `"weight="`
+   * → `"8"`. Returns null if no tag with that prefix is present.
+   */
+  private extractTagValue(tags: string[], tagKeyPrefix: string): string | null {
+    for (const t of tags) {
+      if (t.startsWith(tagKeyPrefix)) {
+        return t.slice(tagKeyPrefix.length);
+      }
+    }
+    return null;
+  }
 }
