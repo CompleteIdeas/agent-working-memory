@@ -813,14 +813,48 @@ export class EngramStore {
       sql += ' AND retracted = ?';
       params.push(query.retracted ? 1 : 0);
     }
-    if (query.tags && query.tags.length > 0) {
-      for (const tag of query.tags) {
+
+    // ── Tag filters (0.8 Cluster B) ──
+    // AND-set: merge legacy `tags` + new `tagsAll`. Both apply (intersection).
+    const allTags = [...(query.tags ?? []), ...(query.tagsAll ?? [])];
+    if (allTags.length > 0) {
+      for (const tag of allTags) {
         sql += ' AND tags LIKE ?';
         params.push(`%"${tag}"%`);
       }
     }
+    // OR-set: at least one must match.
+    if (query.tagsAny && query.tagsAny.length > 0) {
+      const ors = query.tagsAny.map(() => 'tags LIKE ?').join(' OR ');
+      sql += ` AND (${ors})`;
+      for (const tag of query.tagsAny) params.push(`%"${tag}"%`);
+    }
+    // NOT-set: none may match.
+    if (query.tagsNone && query.tagsNone.length > 0) {
+      const ors = query.tagsNone.map(() => 'tags LIKE ?').join(' OR ');
+      sql += ` AND NOT (${ors})`;
+      for (const tag of query.tagsNone) params.push(`%"${tag}"%`);
+    }
 
-    sql += ' ORDER BY last_accessed DESC';
+    // ── Sort (0.8 Cluster B) ──
+    // Default preserves legacy behavior (last_accessed DESC). Map TS camelCase
+    // to SQL snake_case. `sequence` puts NULLs last via (col IS NULL) trick.
+    const sortCol = ({
+      createdAt: 'created_at',
+      sequence: 'sequence',
+      salience: 'salience',
+      confidence: 'confidence',
+      lastAccessed: 'last_accessed',
+    } as const)[query.sortBy ?? 'lastAccessed'];
+    const dir = query.sortOrder === 'asc' ? 'ASC' : 'DESC';
+    if (query.sortBy === 'sequence') {
+      // NULLs last regardless of direction so engrams without a story-time
+      // value don't shuffle into the middle of sequenced results.
+      sql += ` ORDER BY (sequence IS NULL), sequence ${dir}`;
+    } else {
+      sql += ` ORDER BY ${sortCol} ${dir}`;
+    }
+
     sql += ` LIMIT ? OFFSET ?`;
     params.push(query.limit ?? 50, query.offset ?? 0);
 

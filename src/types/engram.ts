@@ -243,11 +243,25 @@ export interface SearchQuery {
   agentId: string;
   text?: string;          // Exact or partial text match
   concept?: string;       // Exact concept match
-  tags?: string[];        // Tag filter (AND)
+  /** Tag filter — AND semantics. Existing field kept for compat; equivalent to `tagsAll`.
+   *  If both `tags` and `tagsAll` are passed, results match tags from both arrays
+   *  (intersection of both AND-filters). */
+  tags?: string[];
+  /** AND-filter: engram must have ALL of these tags. Alias for legacy `tags`. (0.8 Cluster B) */
+  tagsAll?: string[];
+  /** OR-filter: engram must have AT LEAST ONE of these tags. (0.8 Cluster B) */
+  tagsAny?: string[];
+  /** NOT-filter: engram must have NONE of these tags. (0.8 Cluster B) */
+  tagsNone?: string[];
   stage?: EngramStage;
   retracted?: boolean;
   limit?: number;
   offset?: number;
+  /** Sort field. Defaults to `lastAccessed` (existing behavior preserved when
+   *  unspecified). `sequence` sorts NULL last. (0.8 Cluster B) */
+  sortBy?: 'createdAt' | 'sequence' | 'salience' | 'confidence' | 'lastAccessed';
+  /** Sort direction. Default `desc`. (0.8 Cluster B) */
+  sortOrder?: 'asc' | 'desc';
 }
 
 /**

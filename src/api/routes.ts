@@ -385,11 +385,16 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       agentId: string;
       text?: string;
       concept?: string;
-      tags?: string[];
+      tags?: string[];          // legacy AND-filter — preserved, equivalent to tagsAll
+      tagsAll?: string[];       // 0.8 Cluster B — explicit AND
+      tagsAny?: string[];       // 0.8 Cluster B — OR (at least one)
+      tagsNone?: string[];      // 0.8 Cluster B — NOT (exclude all)
       stage?: string;
       retracted?: boolean;
       limit?: number;
       offset?: number;
+      sortBy?: 'createdAt' | 'sequence' | 'salience' | 'confidence' | 'lastAccessed';
+      sortOrder?: 'asc' | 'desc';
     };
 
     const results = store.search({
@@ -397,10 +402,15 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       text: body.text,
       concept: body.concept,
       tags: body.tags,
+      tagsAll: body.tagsAll,
+      tagsAny: body.tagsAny,
+      tagsNone: body.tagsNone,
       stage: body.stage as any,
       retracted: body.retracted,
       limit: body.limit,
       offset: body.offset,
+      sortBy: body.sortBy,
+      sortOrder: body.sortOrder,
     });
 
     return reply.send({ results, count: results.length });

@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+### 0.8 Cluster B — set-theoretic tag operators + sortBy on /memory/search
+
+Extends `/memory/search` and `store.search()` with composable tag set
+operators and explicit sort control. Fully additive — existing callers
+using `tags: string[]` continue to work unchanged.
+
+- **`tagsAll: string[]`** — explicit AND. Alias for legacy `tags`. If both
+  are passed, both apply (intersection of intersections).
+
+- **`tagsAny: string[]`** — OR. Engram must have at least one of these tags.
+
+- **`tagsNone: string[]`** — NOT. Engram must have none of these tags.
+
+- Composition: `result = tagsAll ∧ (tagsAny[0] ∨ ...) ∧ ¬(tagsNone[0] ∨ ...)`.
+  Empty arrays skip the clause (vacuous truth).
+
+- **`sortBy: 'createdAt' | 'sequence' | 'salience' | 'confidence' | 'lastAccessed'`**
+  with **`sortOrder: 'asc' | 'desc'`**. Default behavior preserved
+  (`lastAccessed DESC` when sortBy is unspecified).
+
+- `sortBy: "sequence"` puts NULL last regardless of direction so engrams
+  without a story-time value don't shuffle into the middle.
+
+- 14 new tests in `tests/storage/search-operators.test.ts`. Full suite:
+  362/362 passing (was 348 in Cluster A).
+
 ### 0.8 Cluster A — schema + structural memory_class
 
 Foundation work for the 0.8 substrate primitives spec
