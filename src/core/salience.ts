@@ -188,6 +188,15 @@ export function evaluateSalience(
     // Canonical memories: salience floor of 0.7, never go to staging
     score = Math.max(score, 0.7);
     reasonCodes.push('class:canonical');
+  } else if (memoryClass === 'structural') {
+    // Structural memories (0.8): system-written event-log records — chapter
+    // analyses, promise advancements, materialized-view feeds. Floor 0.7 like
+    // canonical (always preserved by construction) but distinct reasonCode
+    // so retrieval paths can filter them out of cognitive `/activate` by
+    // default. Caller controls embedding + temporal-edge skipping in the
+    // write pipeline.
+    score = Math.max(score, 0.7);
+    reasonCodes.push('class:structural');
   } else if (memoryClass === 'ephemeral') {
     reasonCodes.push('class:ephemeral');
   } else if (verifiedFindingFloor) {
@@ -196,8 +205,9 @@ export function evaluateSalience(
   }
 
   let disposition: 'active' | 'staging' | 'discard';
-  if (memoryClass === 'canonical') {
-    // Canonical always goes active — they represent current truth
+  if (memoryClass === 'canonical' || memoryClass === 'structural') {
+    // Canonical = source-of-truth; structural = system-written record.
+    // Both always go active — they represent intentional permanent state.
     disposition = 'active';
     reasonCodes.push('disposition:active');
   } else if (score >= activeThreshold) {

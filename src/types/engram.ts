@@ -46,6 +46,15 @@ export interface Engram {
   // Memory type (content classification)
   memoryType: MemoryType;
 
+  // Optional story-time / sequence ordering (0.8 Cluster A). NULL for engrams
+  // without a caller-supplied sequence. Used by `sortBy: "sequence"` on search
+  // and by /memory/latest-by-tag (0.8 Cluster C).
+  sequence: number | null;
+
+  // Typed references to other engrams (0.8 Cluster A schema; wired to HTTP
+  // in Cluster D). Stored as JSON in references_json column.
+  references: EngramReference[] | null;
+
   // Supersession — "this replaces that" (not retraction — original wasn't wrong, just outdated)
   supersededBy: string | null;   // ID of the engram that replaced this one
   supersedes: string | null;     // ID of the engram this one replaces
@@ -71,7 +80,39 @@ export type TaskPriority = 'urgent' | 'high' | 'medium' | 'low';
  * ephemeral:  Temporary context (debugging traces, session-specific notes).
  *             Stronger time decay, lower recall priority.
  */
-export type MemoryClass = 'canonical' | 'working' | 'ephemeral';
+/**
+ * Memory class — write-time classification controlling salience behavior
+ * and downstream retrieval semantics.
+ *
+ * canonical:  Source-of-truth memories. Salience floor 0.7, never stage.
+ *             Surfaced via cognitive `/activate` and deterministic queries.
+ *
+ * working:    Default. Observations, findings, progress notes. Standard
+ *             salience rules apply. Surfaced via all retrieval paths.
+ *
+ * ephemeral:  Temporary context. Stronger time decay, lower recall priority.
+ *
+ * structural: (0.8+) System-written event-log records — chapter analyses,
+ *             promise advancements, materialized-view feeds. Salience floor
+ *             0.7 like canonical, but EXCLUDED from cognitive `/activate`
+ *             by default (callers opt in via `includeStructural: true`),
+ *             skip temporal-adjacency edges, skip default embedding. Used
+ *             for high-volume deterministic substrate where cognitive
+ *             retrieval would just add noise.
+ */
+export type MemoryClass = 'canonical' | 'working' | 'ephemeral' | 'structural';
+
+/**
+ * Typed cross-record link stored alongside an engram in references_json.
+ * Wired through HTTP in 0.8 Cluster D; schema slot added in Cluster A.
+ */
+export interface EngramReference {
+  type: 'advances' | 'resolves' | 'subverts' | 'abandons' | 'extends' | 'supersedes';
+  /** ID of the referenced engram. Either this or matchConcept must be set. */
+  matchEngramId?: string;
+  /** Concept of the referenced engram (resolved at write time in 0.8 D). */
+  matchConcept?: string;
+}
 
 /**
  * Memory type — content classification for retrieval routing.
@@ -113,6 +154,10 @@ export interface EngramCreate {
   taskStatus?: TaskStatus;
   taskPriority?: TaskPriority;
   blockedBy?: string;
+  /** Optional story-time / sequence ordering (0.8 Cluster A). */
+  sequence?: number;
+  /** Typed cross-record links (0.8 Cluster A schema; HTTP in Cluster D). */
+  references?: EngramReference[];
 }
 
 /**

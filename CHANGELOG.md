@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+### 0.8 Cluster A — schema + structural memory_class
+
+Foundation work for the 0.8 substrate primitives spec
+(`docs/0.8-substrate-primitives-spec.md`). Fully additive — no breaking
+changes for 0.7.x callers.
+
+- **New `memory_class: "structural"`** — system-written event-log records.
+  Behaves like `canonical` for salience (0.7 floor, always active) but is
+  **excluded from cognitive `/activate` by default**, **skips temporal-
+  adjacency edges**, **skips episode assignment**, and **skips default
+  embedding** (opt in with `embed: true`). Reason code `class:structural`.
+
+- **`sequence INTEGER NULL` column on `engrams`** — optional story-time /
+  chronology ordering. Partial index `idx_engrams_agent_sequence` keeps
+  cost low. Surfaced through `/memory/write` body `sequence?: number`.
+  Used by Cluster B `sortBy: "sequence"` and Cluster C `/memory/latest-by-tag`.
+
+- **`references_json TEXT NULL` column on `engrams`** — schema slot for
+  typed cross-record links. `EngramReference[]` type with relations
+  `advances | resolves | subverts | abandons | extends | supersedes`.
+  Wired through `performWrite` and `createEngram`; HTTP body surface comes
+  in Cluster D.
+
+- **`performWrite` accepts `sequence`, `references`, `embed` parameters**
+  — caller controls story-time, typed links, and embedding opt-in.
+
+- Migrations are additive `ALTER TABLE ADD COLUMN` with NULL defaults.
+  Existing engrams untouched. Auto-migrate runs on `EngramStore`
+  construction.
+
+- 7 new tests in `tests/core/structural-class.test.ts`. Full suite: 348/348
+  passing (was 341/341 in 0.7.17).
+
+
 ## 0.7.17 (2026-05-12) — unified write pipeline
 
 Introduces a shared write-time pipeline that implements three rules

@@ -89,6 +89,14 @@ export interface WriteInput {
   workspace?: string | null;
   /** Set to false to skip the reinforce/supersede branching and always create. */
   enableReinforcement?: boolean;
+  /** Optional story-time / sequence ordering (0.8 Cluster A). */
+  sequence?: number;
+  /** Typed cross-record links — stored alongside the engram (0.8 Cluster A). */
+  references?: import('../types/engram.js').EngramReference[];
+  /** Force embedding for structural-class writes. structural skips by default
+   *  because it's deterministically retrieved; opt in if a caller wants
+   *  cognitive recall over a structural engram. (0.8 Cluster A) */
+  embed?: boolean;
 }
 
 export interface WriteResult {
@@ -303,6 +311,8 @@ function createNewEngram(
     memoryType: input.memoryType,
     ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
     supersedes: meta.supersedesId,
+    sequence: input.sequence,
+    references: input.references,
   });
 
   if (salience.disposition === 'staging') {
@@ -320,17 +330,25 @@ function createNewEngram(
     } catch { /* supersession is best-effort */ }
   }
 
-  // Connection discovery — only for non-staged writes (active or low-salience)
-  if (salience.disposition === 'active' || isLowSalience) {
+  // Connection discovery — only for non-staged writes (active or low-salience).
+  // Structural engrams skip connection discovery: they're event-log records,
+  // not observations the agent needs to think about (0.8 Cluster A).
+  const isStructural = meta.effectiveMemoryClass === 'structural';
+  if ((salience.disposition === 'active' || isLowSalience) && !isStructural) {
     try { connectionEngine.enqueue(engram.id); } catch { /* non-fatal */ }
   }
 
-  // Async embed — never blocks the response, failure non-fatal
-  embed(`${input.concept} ${input.content}`)
-    .then(vec => {
-      try { store.updateEmbedding(engram.id, vec); } catch { /* engram may be evicted */ }
-    })
-    .catch(() => { /* embed failure tolerated */ });
+  // Async embed — never blocks the response, failure non-fatal.
+  // Structural engrams skip embedding by default (deterministic retrieval only).
+  // Caller can override by passing `embed: true` on the write input.
+  const shouldEmbed = !isStructural || input.embed === true;
+  if (shouldEmbed) {
+    embed(`${input.concept} ${input.content}`)
+      .then(vec => {
+        try { store.updateEmbedding(engram.id, vec); } catch { /* engram may be evicted */ }
+      })
+      .catch(() => { /* embed failure tolerated */ });
+  }
 
   const action: WriteAction = meta.supersedesId ? 'supersede' : 'create';
   return {

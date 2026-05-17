@@ -86,7 +86,15 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       // the 0.7.x refactor — core/salience.ts:88-89,124,187 and
       // core/write-pipeline.ts:77 still expect and honor it, so HTTP
       // callers were silently losing the canonical-bypass signal.
-      memory_class?: 'canonical' | 'working' | 'ephemeral';
+      memory_class?: 'canonical' | 'working' | 'ephemeral' | 'structural';
+      // Optional story-time / sequence ordering (0.8 Cluster A). NULL by
+      // default. Used by sortBy: "sequence" on /memory/search and by
+      // /memory/latest-by-tag (0.8 Cluster C).
+      sequence?: number;
+      // Force embedding for structural-class writes. Defaults to false for
+      // structural (deterministic retrieval only) — opt in here when cognitive
+      // recall over a structural engram is desired. (0.8 Cluster A)
+      embed?: boolean;
       // Agent-provided metadata (stored as searchable tags)
       project?: string;
       topic?: string;
@@ -124,6 +132,8 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       causalDepth: body.causalDepth,
       resolutionEffort: body.resolutionEffort,
       confidence: body.confidence,
+      sequence: body.sequence,
+      embed: body.embed,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
@@ -141,22 +151,28 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     }
 
     // create / supersede paths follow legacy temporal-edge + episode logic.
-    try {
-      const prev = store.getLatestEngram(body.agentId, result.engram.id);
-      if (prev) {
-        store.upsertAssociation(prev.id, result.engram.id, 0.3, 'temporal', 0.8);
-      }
-    } catch { /* Temporal edge creation is non-fatal */ }
-
-    if (result.salience
-        && (result.salience.disposition === 'active' || result.salience.disposition === 'discard')) {
+    // Structural-class writes (0.8 Cluster A) skip these: they're system-written
+    // event-log records, not conversational beats, so keeping them out of the
+    // temporal graph + episode index keeps cognitive retrieval clean.
+    const isStructural = body.memory_class === 'structural';
+    if (!isStructural) {
       try {
-        let episode = store.getActiveEpisode(body.agentId, 3600_000);
-        if (!episode) {
-          episode = store.createEpisode({ agentId: body.agentId, label: body.concept });
+        const prev = store.getLatestEngram(body.agentId, result.engram.id);
+        if (prev) {
+          store.upsertAssociation(prev.id, result.engram.id, 0.3, 'temporal', 0.8);
         }
-        store.addEngramToEpisode(result.engram.id, episode.id);
-      } catch { /* Episode assignment is non-fatal */ }
+      } catch { /* Temporal edge creation is non-fatal */ }
+
+      if (result.salience
+          && (result.salience.disposition === 'active' || result.salience.disposition === 'discard')) {
+        try {
+          let episode = store.getActiveEpisode(body.agentId, 3600_000);
+          if (!episode) {
+            episode = store.createEpisode({ agentId: body.agentId, label: body.concept });
+          }
+          store.addEngramToEpisode(result.engram.id, episode.id);
+        } catch { /* Episode assignment is non-fatal */ }
+      }
     }
 
     const isLowSalience = result.salience?.disposition === 'discard';

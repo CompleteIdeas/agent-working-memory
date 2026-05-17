@@ -369,6 +369,26 @@ export class EngramStore {
     } catch {
       this.db.exec(`ALTER TABLE engrams ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'unclassified'`);
     }
+
+    // Migration (0.8 Cluster A): sequence column for story-time / chronology.
+    // Nullable — existing engrams stay NULL. Partial index keeps the cost low.
+    try {
+      this.db.prepare('SELECT sequence FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN sequence INTEGER`);
+      this.db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_engrams_agent_sequence
+         ON engrams(agent_id, sequence) WHERE sequence IS NOT NULL`
+      );
+    }
+
+    // Migration (0.8 Cluster A): references_json column for typed cross-record
+    // links. Wired through HTTP in Cluster D — schema slot only here.
+    try {
+      this.db.prepare('SELECT references_json FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN references_json TEXT`);
+    }
   }
 
   // --- Engram CRUD ---
@@ -383,8 +403,9 @@ export class EngramStore {
     this.db.prepare(`
       INSERT INTO engrams (id, agent_id, concept, content, embedding, confidence, salience,
         access_count, last_accessed, created_at, salience_features, reason_codes, stage, tags, episode_id,
-        ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type,
+        sequence, references_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.agentId, input.concept, input.content, embeddingBlob,
       input.confidence ?? 0.5,
@@ -401,6 +422,9 @@ export class EngramStore {
       input.taskPriority ?? null,
       input.blockedBy ?? null,
       input.memoryType ?? 'unclassified',
+      input.sequence ?? null,
+      input.references && input.references.length > 0
+        ? JSON.stringify(input.references) : null,
     );
 
     // Add to slim cache (skip if not yet populated — first slim fetch will load it)
@@ -1223,6 +1247,8 @@ export class EngramStore {
       taskStatus: row.task_status ?? null,
       taskPriority: row.task_priority ?? null,
       blockedBy: row.blocked_by ?? null,
+      sequence: row.sequence == null ? null : Number(row.sequence),
+      references: row.references_json ? JSON.parse(row.references_json) : null,
     };
   }
 
