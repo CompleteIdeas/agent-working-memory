@@ -44,6 +44,7 @@ import type { ConsolidationEngine } from '../engine/consolidation.js';
 import type { ConsolidationScheduler } from '../engine/consolidation-scheduler.js';
 import { evaluateSalience, computeNovelty } from '../core/salience.js';
 import type { SalienceEventType } from '../core/salience.js';
+import { performWrite } from '../core/write-pipeline.js';
 import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
@@ -79,6 +80,13 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       causalDepth?: number;
       resolutionEffort?: number;
       confidence?: number;
+      // Memory class — canonical bypasses salience filter; structural is
+      // for system-written event-log records (see 0.8 spec). Restored in
+      // 0.7.17 after the field was dropped from the HTTP body schema during
+      // the 0.7.x refactor — core/salience.ts:88-89,124,187 and
+      // core/write-pipeline.ts:77 still expect and honor it, so HTTP
+      // callers were silently losing the canonical-bypass signal.
+      memory_class?: 'canonical' | 'working' | 'ephemeral';
       // Agent-provided metadata (stored as searchable tags)
       project?: string;
       topic?: string;
@@ -94,24 +102,6 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       return reply.status(400).send({ error: 'agentId, concept, and content are required strings' });
     }
 
-    const novelty = computeNovelty(store, body.agentId, body.concept, body.content);
-
-    const salience = evaluateSalience({
-      content: body.content,
-      eventType: body.eventType,
-      surprise: body.surprise,
-      decisionMade: body.decisionMade,
-      causalDepth: body.causalDepth,
-      resolutionEffort: body.resolutionEffort,
-      novelty,
-    });
-
-    // v0.5.4: No longer discard — store with low confidence for ranking.
-    const isLowSalience = salience.disposition === 'discard';
-    const confidence = isLowSalience
-      ? 0.25
-      : body.confidence ?? (salience.disposition === 'staging' ? 0.40 : 0.50);
-
     // Assemble tags: user-provided + agent metadata
     const userTags = body.tags ?? [];
     const metaTags: string[] = [];
@@ -121,62 +111,63 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     if (body.confidenceLevel) metaTags.push(`conf=${body.confidenceLevel}`);
     if (body.sessionId) metaTags.push(`sid=${body.sessionId}`);
     if (body.intent) metaTags.push(`intent=${body.intent}`);
-    const allTags = isLowSalience
-      ? [...userTags, ...metaTags, 'low-salience']
-      : [...userTags, ...metaTags];
 
-    const engram = store.createEngram({
+    const result = performWrite({ store, connectionEngine }, {
       agentId: body.agentId,
       concept: body.concept,
       content: body.content,
-      tags: allTags,
-      salience: salience.score,
-      confidence,
-      salienceFeatures: salience.features,
-      reasonCodes: salience.reasonCodes,
-      ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
+      tags: [...userTags, ...metaTags],
+      memoryClass: body.memory_class,
+      eventType: body.eventType,
+      surprise: body.surprise,
+      decisionMade: body.decisionMade,
+      causalDepth: body.causalDepth,
+      resolutionEffort: body.resolutionEffort,
+      confidence: body.confidence,
     });
 
-    if (salience.disposition === 'staging') {
-      store.updateStage(engram.id, 'staging');
+    // Auto-checkpoint always (covers create, reinforce, and supersede).
+    try { store.updateAutoCheckpointWrite(body.agentId, result.engram.id); } catch { /* non-fatal */ }
+
+    if (result.action === 'reinforce') {
+      return reply.code(200).send({
+        stored: false,
+        action: 'reinforce',
+        disposition: 'reinforced',
+        engram: result.engram,
+        reinforce: result.reinforce,
+        novelty: result.noveltyResult.novelty,
+      });
     }
 
-    // Create temporal adjacency edge to previous memory (conversation thread graph)
-    // This enables multi-hop graph walk through conversation sequences
+    // create / supersede paths follow legacy temporal-edge + episode logic.
     try {
-      const prev = store.getLatestEngram(body.agentId, engram.id);
+      const prev = store.getLatestEngram(body.agentId, result.engram.id);
       if (prev) {
-        store.upsertAssociation(prev.id, engram.id, 0.3, 'temporal', 0.8);
+        store.upsertAssociation(prev.id, result.engram.id, 0.3, 'temporal', 0.8);
       }
     } catch { /* Temporal edge creation is non-fatal */ }
 
-    if (salience.disposition === 'active' || isLowSalience) {
-      connectionEngine.enqueue(engram.id);
-
-      // Auto-assign to episode (1-hour window per agent)
+    if (result.salience
+        && (result.salience.disposition === 'active' || result.salience.disposition === 'discard')) {
       try {
         let episode = store.getActiveEpisode(body.agentId, 3600_000);
         if (!episode) {
           episode = store.createEpisode({ agentId: body.agentId, label: body.concept });
         }
-        store.addEngramToEpisode(engram.id, episode.id);
+        store.addEngramToEpisode(result.engram.id, episode.id);
       } catch { /* Episode assignment is non-fatal */ }
     }
 
-    // Generate embedding asynchronously (don't block response)
-    embed(`${body.concept} ${body.content}`).then(vec => {
-      store.updateEmbedding(engram.id, vec);
-    }).catch(() => {}); // Embedding failure is non-fatal
-
-    // Auto-checkpoint: track write for consolidation scheduling
-    try { store.updateAutoCheckpointWrite(body.agentId, engram.id); } catch { /* non-fatal */ }
-
+    const isLowSalience = result.salience?.disposition === 'discard';
     return reply.code(201).send({
       stored: true,
-      disposition: isLowSalience ? 'low-salience' : salience.disposition,
-      salience: salience.score,
-      reasonCodes: salience.reasonCodes,
-      engram,
+      action: result.action,
+      disposition: isLowSalience ? 'low-salience' : (result.salience?.disposition ?? 'active'),
+      salience: result.salience?.score ?? 0,
+      reasonCodes: result.salience?.reasonCodes ?? [],
+      engram: result.engram,
+      supersedeOf: result.supersedeOf,
     });
   });
 
@@ -705,7 +696,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     const base: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '0.7.16',
+      version: '0.7.17',
       coordination: coordEnabled,
     };
     if (coordEnabled) {

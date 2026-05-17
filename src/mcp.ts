@@ -61,6 +61,7 @@ import { EvalEngine } from './engine/eval.js';
 import { ConsolidationEngine } from './engine/consolidation.js';
 import { ConsolidationScheduler } from './engine/consolidation-scheduler.js';
 import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './core/salience.js';
+import { performWrite } from './core/write-pipeline.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority } from './types/engram.js';
@@ -78,7 +79,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.7.16' });
+  const server = new McpServer({ name: 'agent-working-memory', version: '0.7.17' });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -115,7 +116,7 @@ let coordDb: import('better-sqlite3').Database | null = null;
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.7.16',
+  version: '0.7.17',
 });
 
 server.registerResource(
@@ -239,71 +240,6 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('What kind of memory this is.'),
   },
   async (params) => {
-    // Check novelty with match info for reinforcement
-    const noveltyResult = computeNoveltyWithMatch(store, AGENT_ID, params.concept, params.content);
-    const novelty = noveltyResult.novelty;
-
-    // --- Reinforce-on-Duplicate check ---
-    // Tightened thresholds: require near-exact match (novelty < 0.3, BM25 > 0.85, 60% content overlap)
-    if (novelty < 0.3
-        && noveltyResult.matchScore > 0.85
-        && noveltyResult.matchedEngramId) {
-      const matchedEngram = store.getEngram(noveltyResult.matchedEngramId);
-      if (matchedEngram) {
-        const existingTokens = new Set(matchedEngram.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-        const newTokens = new Set(params.content.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-        let overlap = 0;
-        for (const t of newTokens) { if (existingTokens.has(t)) overlap++; }
-        const contentOverlap = newTokens.size > 0 ? overlap / newTokens.size : 0;
-
-        if (contentOverlap > 0.6) {
-          // True duplicate — reinforce existing and skip creation
-          store.touchEngram(noveltyResult.matchedEngramId);
-          try { store.updateAutoCheckpointWrite(AGENT_ID, noveltyResult.matchedEngramId); } catch { /* non-fatal */ }
-          log(AGENT_ID, 'write:reinforce', `"${params.concept}" → reinforced "${matchedEngram.concept}" (overlap=${contentOverlap.toFixed(2)})`);
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `Reinforced existing memory "${matchedEngram.concept}" (overlap ${(contentOverlap * 100).toFixed(0)}%)`,
-            }],
-          };
-        }
-        // Partial match — continue to create new memory
-        log(AGENT_ID, 'write:partial-match', `"${params.concept}" partially matched "${matchedEngram.concept}" (overlap=${contentOverlap.toFixed(2)}), creating new memory`);
-      }
-    }
-
-    const salience = evaluateSalience({
-      content: params.content,
-      eventType: params.event_type as SalienceEventType,
-      surprise: params.surprise,
-      decisionMade: params.decision_made,
-      causalDepth: params.causal_depth,
-      resolutionEffort: params.resolution_effort,
-      novelty,
-      memoryClass: params.memory_class,
-    });
-
-    // v0.5.4: No longer discard — store everything, use salience for ranking.
-    // Low-salience memories get low confidence so they rank below high-salience
-    // in retrieval, but remain available for recall when needed.
-    const isLowSalience = salience.disposition === 'discard';
-
-    const CONFIDENCE_PRIORS: Record<string, number> = {
-      decision: 0.65,
-      friction: 0.60,
-      causal:   0.60,
-      surprise: 0.55,
-      observation: 0.45,
-    };
-    const confidencePrior = isLowSalience
-      ? 0.25
-      : salience.disposition === 'staging'
-      ? 0.40
-      : CONFIDENCE_PRIORS[params.event_type ?? 'observation'] ?? 0.45;
-
-    const memoryType = params.memory_type ?? classifyMemoryType(params.content);
-
     // Assemble tags: user-provided + agent metadata (stored as searchable prefixed tags)
     const userTags = params.tags ?? [];
     const metaTags: string[] = [];
@@ -313,48 +249,41 @@ The concept should be a short label (3-8 words). The content should be the full 
     if (params.confidence_level) metaTags.push(`conf=${params.confidence_level}`);
     if (params.session_id) metaTags.push(`sid=${params.session_id}`);
     if (params.intent) metaTags.push(`intent=${params.intent}`);
-    const allTags = isLowSalience
-      ? [...userTags, ...metaTags, 'low-salience']
-      : [...userTags, ...metaTags];
 
-    const engram = store.createEngram({
+    const memoryType = params.memory_type ?? classifyMemoryType(params.content);
+
+    const result = performWrite({ store, connectionEngine }, {
       agentId: AGENT_ID,
       concept: params.concept,
       content: params.content,
-      tags: allTags,
-      salience: salience.score,
-      confidence: confidencePrior,
-      salienceFeatures: salience.features,
-      reasonCodes: salience.reasonCodes,
-      ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
+      tags: [...userTags, ...metaTags],
+      eventType: params.event_type as SalienceEventType,
+      surprise: params.surprise,
+      decisionMade: params.decision_made,
+      causalDepth: params.causal_depth,
+      resolutionEffort: params.resolution_effort,
       memoryClass: params.memory_class,
       memoryType,
       supersedes: params.supersedes,
     });
 
-    if (salience.disposition === 'staging') {
-      store.updateStage(engram.id, 'staging');
-    } else {
-      connectionEngine.enqueue(engram.id);
+    // Auto-checkpoint — covers create/reinforce/supersede uniformly
+    try { store.updateAutoCheckpointWrite(AGENT_ID, result.engram.id); } catch { /* non-fatal */ }
+
+    if (result.action === 'reinforce') {
+      log(AGENT_ID, 'write:reinforce', `"${params.concept}" → reinforced "${result.engram.concept}" (conf ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)}, novelty=${result.noveltyResult.novelty.toFixed(2)})`);
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Reinforced existing memory "${result.engram.concept}" (confidence ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)})`,
+        }],
+      };
     }
 
-    // Handle supersession: mark old memory as superseded
-    if (params.supersedes) {
-      const oldEngram = store.getEngram(params.supersedes);
-      if (oldEngram) {
-        store.supersedeEngram(params.supersedes, engram.id);
-        // Create supersession association
-        store.upsertAssociation(engram.id, oldEngram.id, 0.8, 'causal', 0.9);
-      }
-    }
-
-    // Generate embedding asynchronously (don't block response)
-    embed(`${params.concept} ${params.content}`).then(vec => {
-      store.updateEmbedding(engram.id, vec);
-    }).catch(() => {}); // Embedding failure is non-fatal
-
-    // Auto-checkpoint: track write
-    try { store.updateAutoCheckpointWrite(AGENT_ID, engram.id); } catch { /* non-fatal */ }
+    const engram = result.engram;
+    const salience = result.salience!; // create/supersede always have salience
+    const novelty = result.noveltyResult.novelty;
+    const isLowSalience = salience.disposition === 'discard';
 
     // Decision propagation: when decision_made=true and coordination is enabled,
     // broadcast to coord_decisions so other agents can discover it

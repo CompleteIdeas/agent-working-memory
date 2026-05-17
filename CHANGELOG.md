@@ -2,6 +2,91 @@
 
 ## [Unreleased]
 
+## 0.7.17 (2026-05-12) — unified write pipeline
+
+Introduces a shared write-time pipeline that implements three rules
+distinguishing AWM as a "memory" system (selective retention) rather than
+"storage" (retrieve-all). Both the HTTP `POST /memory/write` route and the
+MCP `memory_write` tool now delegate to the same implementation.
+
+### The three rules
+
+  - **R1 — Reinforce on duplicate.** Repeat = stronger memory. When a new
+    write shares the EXACT same concept as an existing engram, boost that
+    engram's confidence (+0.05, capped at 0.95) and increment its
+    access_count instead of creating a near-duplicate.
+
+  - **R2 — Pick the RIGHT match.** Skip the matched engram if it's
+    already superseded, in non-active stage, or has unhealthy confidence
+    (<0.3). If it was superseded, reinforce the *superseder* instead so
+    corrections strengthen over time rather than the original wrong fact.
+
+  - **R3 — Corrections override.** When the write has `eventType` in
+    `['surprise', 'friction']` AND matches the same concept as an existing
+    engram, the new write supersedes the matched engram (rather than
+    reinforcing it). Fresh truth beats old habit.
+
+### Critical implementation detail
+
+The match-vs-create pivot is **concept equality**, not raw novelty.
+A draft of this change used `novelty < 0.65` and collapsed 419
+conversation turns into 7 engrams during LoCoMo testing because turn
+content all shares session/speaker prefix language ("[session_3] Caroline:
+...") and BM25 over-matched. Recall coverage dropped 0.342 → 0.168.
+Switching the gate to case-insensitive concept equality restored coverage
+to 0.342 with zero false reinforces, while still firing correctly for
+agent-summary writes that legitimately repeat the same concept (schema
+discoveries, correction writes, working-query patterns).
+
+### MCP bug fixed in passing
+
+The MCP path previously had a partial reinforce-on-duplicate
+implementation gated on `matchScore > 0.85`, but `matchScore` is the
+raw BM25 score (typically ~0.0001 in this implementation, not normalized
+to 0..1). That gate was unreachable — the reinforce branch never fired
+in practice. The unified pipeline replaces it with a working
+concept-equality gate that respects all three rules.
+
+### Public API additions
+
+  - `core/write-pipeline.ts` exports `performWrite(engines, input)` for
+    downstream embedded users. Engines `{ store, connectionEngine }` and
+    `WriteInput` (agentId, concept, content, tags, eventType, etc.).
+    Returns `WriteResult` with `action: 'create' | 'reinforce' | 'supersede'`,
+    the resulting engram, salience result (null for reinforce), novelty
+    info, and reinforce/supersede metadata.
+
+  - HTTP `POST /memory/write` response now includes an `action` field
+    matching the three action values. Action `'reinforce'` returns HTTP
+    200 (not 201) with `stored: false` and reinforcement detail.
+
+### Environment knobs
+
+  - `AWM_WRITE_PIPELINE=off` — disable reinforce/supersede branching at
+    the pipeline level. Reverts to always-create behavior. One-knob
+    revert for regression isolation.
+
+### Tests
+
+  - `tests/core/write-pipeline.test.ts` covers all four branches:
+    create / reinforce / supersede / chain-walk-to-superseder, plus the
+    flag-off revert and the user_feedback auto-canonical path. 7 tests
+    green. Full regression suite (331 tests) still passes.
+
+### Fix: `memory_class` HTTP route regression
+
+`POST /memory/write` lost the `memory_class` field from its body schema
+during the 0.7.x refactor, even though `core/salience.ts` and
+`core/write-pipeline.ts` (line 77) still expect and honor it. HTTP callers
+passing `memory_class: 'canonical'` were silently downgraded to the
+default `working` class — losing the salience-floor bypass that canonical
+memories rely on. The MCP path and the storage layer were unaffected.
+
+Restored the field in the route's body type and pass it through to
+`performWrite()` as `memoryClass`. NovelForge, the first known
+high-volume HTTP caller writing structured substrate engrams, depends on
+this for its ~270 canonical writes per 18-chapter book.
+
 ## 0.7.16 (2026-05-10) — doc release
 
 ### Instruction content updates (no retriever change)
