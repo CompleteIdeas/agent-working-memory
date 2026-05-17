@@ -948,6 +948,37 @@ export class EngramStore {
   }
 
   /**
+   * Find the most recent active engram matching `concept` (case-insensitive,
+   * trimmed) and all of `requiredTags`. Excludes superseded and retracted
+   * engrams. Used by /memory/supersede Form B (0.8 Cluster D) and by
+   * /memory/write's references[] resolution.
+   *
+   * Returns null if no match.
+   */
+  findActiveMatchByConcept(
+    agentId: string,
+    concept: string,
+    requiredTags?: string[],
+  ): Engram | null {
+    let sql = `SELECT * FROM engrams
+               WHERE agent_id = ?
+               AND LOWER(TRIM(concept)) = LOWER(TRIM(?))
+               AND stage = 'active'
+               AND retracted = 0
+               AND superseded_by IS NULL`;
+    const params: any[] = [agentId, concept];
+    if (requiredTags && requiredTags.length > 0) {
+      for (const tag of requiredTags) {
+        sql += ' AND tags LIKE ?';
+        params.push(`%"${tag}"%`);
+      }
+    }
+    sql += ' ORDER BY created_at DESC LIMIT 1';
+    const row = this.db.prepare(sql).get(...params) as any;
+    return row ? this.rowToEngram(row) : null;
+  }
+
+  /**
    * Check if an engram has been superseded.
    */
   isSuperseded(id: string): boolean {
@@ -1522,5 +1553,18 @@ export class EngramStore {
     this.stopWalCheckpointTimer();
     this.walCheckpoint();
     this.db.close();
+  }
+
+  /**
+   * Run `fn` in a SQL transaction. All writes succeed atomically or roll back
+   * on throw. Synchronous (matches better-sqlite3 semantics).
+   *
+   * Used by 0.8 Cluster D's `/memory/supersede` Form B to wrap find-match +
+   * performWrite + supersede + causal-edge + confidence-decay so callers
+   * never observe an intermediate state where new engram exists but old
+   * isn't yet superseded.
+   */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
   }
 }

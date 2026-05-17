@@ -2,6 +2,57 @@
 
 ## [Unreleased]
 
+### 0.8 Cluster D — supersede Form B + references[] on /memory/write
+
+Atomic single-call write-and-supersede by concept match, plus typed
+cross-record links on the standard write path. Fully additive — Form A
+(by engram IDs) unchanged.
+
+- **`POST /memory/supersede` Form B** — atomic alternative form:
+  ```json
+  {
+    "agentId": "string",
+    "matchConcept": "string",
+    "matchTags": ["topic=promise"],
+    "newEngram": {
+      "concept": "string", "content": "string",
+      "tags": [...], "memory_class": "structural"
+    },
+    "reason": "..."
+  }
+  ```
+  Single SQL transaction: find most recent active match by case-insensitive
+  trimmed concept equality (+ optional tag intersection), write new engram
+  via `performWrite`, link via causal association + 20% confidence decay
+  on the old + `supersedeEngram`. If no match found: write new engram
+  anyway, return `{ superseded: null }`. Returns `{ newEngram, superseded,
+  supersededBy, reason }`.
+
+- **Form A vs Form B detection** by field presence: `oldEngramId`+`newEngramId`
+  → Form A; `agentId`+`matchConcept`+`newEngram` → Form B; both → 400.
+
+- **`references[]` body field on `/memory/write` and `/memory/write-batch`**
+  — `Array<{ type, matchEngramId?, matchConcept?, matchTags? }>` with relation
+  types `advances | resolves | subverts | abandons | extends | supersedes`.
+  When `matchConcept` is given without `matchEngramId`, AWM resolves it to
+  the most recent active engram at write time and stores both — gives a
+  stable link that survives concept renames. No match found → stores just
+  `matchConcept`, preserving the writer's intent.
+
+- **Distinct from 0.7.17 R3** (corrections override on surprise/friction +
+  same-concept). R3 fires on same-concept self-correction; Form B fires on
+  different-concept supersession by reference. Both supported.
+
+- **`EngramStore.transaction<T>(fn)`** helper exposed for callers needing
+  multi-write atomicity (used by Form B route handler).
+
+- **`EngramStore.findActiveMatchByConcept(agentId, concept, requiredTags?)`**
+  new helper — case-insensitive trimmed concept match, excludes superseded
+  + retracted + non-active stage. Used by Form B and reference resolution.
+
+- 7 new tests in `tests/core/supersede-form-b.test.ts`. Full suite:
+  369/369 passing (was 362 in Cluster B).
+
 ### 0.8 Cluster B — set-theoretic tag operators + sortBy on /memory/search
 
 Extends `/memory/search` and `store.search()` with composable tag set

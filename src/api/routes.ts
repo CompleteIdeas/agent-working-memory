@@ -95,6 +95,19 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       // structural (deterministic retrieval only) — opt in here when cognitive
       // recall over a structural engram is desired. (0.8 Cluster A)
       embed?: boolean;
+      // Typed cross-record links (0.8 Cluster D). Each reference is
+      // {type, matchEngramId?, matchConcept?}. If matchConcept is given
+      // without matchEngramId, AWM resolves it to the most recent active
+      // engram at write time and stores BOTH on the reference (stable link).
+      // If no match found, stores just matchConcept (caller may be linking
+      // to a future or deleted engram). Types: advances | resolves |
+      // subverts | abandons | extends | supersedes.
+      references?: Array<{
+        type: 'advances' | 'resolves' | 'subverts' | 'abandons' | 'extends' | 'supersedes';
+        matchEngramId?: string;
+        matchConcept?: string;
+        matchTags?: string[];
+      }>;
       // Agent-provided metadata (stored as searchable tags)
       project?: string;
       topic?: string;
@@ -120,6 +133,23 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     if (body.sessionId) metaTags.push(`sid=${body.sessionId}`);
     if (body.intent) metaTags.push(`intent=${body.intent}`);
 
+    // Resolve references (0.8 Cluster D): if matchConcept is given without
+    // matchEngramId, look up the most recent active engram with that concept
+    // (+ optional matchTags) and store both. Stable link survives concept
+    // edits. No match found → store just matchConcept so the intent
+    // (link-to-future or link-to-deleted) is preserved.
+    const resolvedRefs = (body.references ?? []).map(ref => {
+      if (!ref.matchEngramId && ref.matchConcept) {
+        const matched = store.findActiveMatchByConcept(
+          body.agentId, ref.matchConcept, ref.matchTags,
+        );
+        if (matched) {
+          return { type: ref.type, matchEngramId: matched.id, matchConcept: ref.matchConcept };
+        }
+      }
+      return { type: ref.type, matchEngramId: ref.matchEngramId, matchConcept: ref.matchConcept };
+    });
+
     const result = performWrite({ store, connectionEngine }, {
       agentId: body.agentId,
       concept: body.concept,
@@ -134,6 +164,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       confidence: body.confidence,
       sequence: body.sequence,
       embed: body.embed,
+      references: resolvedRefs.length > 0 ? resolvedRefs : undefined,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
@@ -348,31 +379,97 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
   app.post('/memory/supersede', async (req, reply) => {
     const body = req.body as {
-      oldEngramId: string;
-      newEngramId: string;
+      // ── Form A — supersede by existing engram IDs (pre-0.8 behavior) ──
+      oldEngramId?: string;
+      newEngramId?: string;
+      // ── Form B — atomic write-and-supersede by concept match (0.8 Cluster D) ──
+      agentId?: string;
+      matchConcept?: string;
+      matchTags?: string[];
+      newEngram?: {
+        concept: string;
+        content: string;
+        tags?: string[];
+        memory_class?: 'canonical' | 'working' | 'ephemeral' | 'structural';
+        sequence?: number;
+        eventType?: SalienceEventType;
+      };
+      // Common
       reason?: string;
     };
 
-    const oldEngram = store.getEngram(body.oldEngramId);
-    const newEngram = store.getEngram(body.newEngramId);
-    if (!oldEngram) return reply.code(404).send({ error: `Old engram ${body.oldEngramId} not found` });
-    if (!newEngram) return reply.code(404).send({ error: `New engram ${body.newEngramId} not found` });
+    const isFormA = !!(body.oldEngramId && body.newEngramId);
+    const isFormB = !!(body.matchConcept && body.newEngram && body.agentId);
 
-    // Create causal association (new → old)
-    store.upsertAssociation(body.newEngramId, body.oldEngramId, 0.8, 'causal', 1.0);
+    if (isFormA && isFormB) {
+      return reply.code(400).send({
+        error: 'Pass either {oldEngramId, newEngramId} (Form A) OR ' +
+               '{agentId, matchConcept, newEngram} (Form B), not both.',
+      });
+    }
+    if (!isFormA && !isFormB) {
+      return reply.code(400).send({
+        error: 'Missing required fields. Form A: {oldEngramId, newEngramId}. ' +
+               'Form B: {agentId, matchConcept, newEngram}.',
+      });
+    }
 
-    // Reduce old engram confidence to 20% (keep for historical reference)
-    store.updateConfidence(body.oldEngramId, oldEngram.confidence * 0.2);
+    // ── Form A — by IDs ──
+    if (isFormA) {
+      const oldEngram = store.getEngram(body.oldEngramId!);
+      const newEngram = store.getEngram(body.newEngramId!);
+      if (!oldEngram) return reply.code(404).send({ error: `Old engram ${body.oldEngramId} not found` });
+      if (!newEngram) return reply.code(404).send({ error: `New engram ${body.newEngramId} not found` });
 
-    // Mark supersession via store method
-    store.supersedeEngram(body.oldEngramId, body.newEngramId);
+      store.upsertAssociation(body.newEngramId!, body.oldEngramId!, 0.8, 'causal', 1.0);
+      store.updateConfidence(body.oldEngramId!, oldEngram.confidence * 0.2);
+      store.supersedeEngram(body.oldEngramId!, body.newEngramId!);
+      try { store.touchActivity(oldEngram.agentId); } catch { /* non-fatal */ }
 
-    try { store.touchActivity(oldEngram.agentId); } catch { /* non-fatal */ }
+      return reply.send({
+        superseded: body.oldEngramId,
+        supersededBy: body.newEngramId,
+        reason: body.reason ?? 'outdated',
+      });
+    }
 
-    return reply.send({
-      superseded: body.oldEngramId,
-      supersededBy: body.newEngramId,
-      reason: body.reason ?? 'outdated',
+    // ── Form B — atomic write-and-supersede by concept match ──
+    // Find old (most recent active match by concept + optional tags), write
+    // new engram via performWrite, link them — all in one SQL transaction.
+    // If no match: write new anyway, return { superseded: null }.
+    const result = store.transaction(() => {
+      const matched = store.findActiveMatchByConcept(
+        body.agentId!, body.matchConcept!, body.matchTags,
+      );
+
+      const writeRes = performWrite({ store, connectionEngine }, {
+        agentId: body.agentId!,
+        concept: body.newEngram!.concept,
+        content: body.newEngram!.content,
+        tags: body.newEngram!.tags ?? [],
+        memoryClass: body.newEngram!.memory_class,
+        sequence: body.newEngram!.sequence,
+        eventType: body.newEngram!.eventType,
+        // Form B's whole point is atomicity — disable reinforce/supersede
+        // branching to avoid double-supersede or no-op-reinforce paths.
+        enableReinforcement: false,
+      });
+
+      if (matched) {
+        store.upsertAssociation(writeRes.engram.id, matched.id, 0.8, 'causal', 1.0);
+        store.updateConfidence(matched.id, matched.confidence * 0.2);
+        store.supersedeEngram(matched.id, writeRes.engram.id);
+      }
+      return { writeRes, matched };
+    });
+
+    try { store.touchActivity(body.agentId!); } catch { /* non-fatal */ }
+
+    return reply.code(201).send({
+      newEngram: result.writeRes.engram,
+      superseded: result.matched ? result.matched.id : null,
+      supersededBy: result.writeRes.engram.id,
+      reason: body.reason ?? 'resolved by concept match',
     });
   });
 
