@@ -79,7 +79,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.7.17' });
+  const server = new McpServer({ name: 'agent-working-memory', version: '0.8.0' });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -116,7 +116,7 @@ let coordDb: import('better-sqlite3').Database | null = null;
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.7.17',
+  version: '0.8.0',
 });
 
 server.registerResource(

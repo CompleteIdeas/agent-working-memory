@@ -82,7 +82,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       confidence?: number;
       // Memory class — canonical bypasses salience filter; structural is
       // for system-written event-log records (see 0.8 spec). Restored in
-      // 0.7.17 after the field was dropped from the HTTP body schema during
+      // 0.8.0 after the field was dropped from the HTTP body schema during
       // the 0.7.x refactor — core/salience.ts:88-89,124,187 and
       // core/write-pipeline.ts:77 still expect and honor it, so HTTP
       // callers were silently losing the canonical-bypass signal.
@@ -933,7 +933,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     const base: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '0.7.17',
+      version: '0.8.0',
       coordination: coordEnabled,
     };
     if (coordEnabled) {

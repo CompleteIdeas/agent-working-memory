@@ -190,7 +190,7 @@ async function main() {
 
   // Start server
   await app.listen({ port: PORT, host: '0.0.0.0' });
-  console.log(`AgentWorkingMemory v0.7.17 listening on port ${PORT}`);
+  console.log(`AgentWorkingMemory v0.8.0 listening on port ${PORT}`);
 
   // Graceful shutdown
   const shutdown = async () => {

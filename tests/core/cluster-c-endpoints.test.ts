@@ -74,6 +74,10 @@ describe('Cluster C: latest-by-tag, top-by, resolve, sequence (0.8)', () => {
         agentId: AGENT,
         tagKeyPrefix: 'character=',
         scopeTagsAll: ['topic=emotional-state'],
+        // Use sequence ordering — engrams created in rapid succession can
+        // share createdAt to ms resolution and produce non-deterministic
+        // ORDER BY. Sequence is monotonic per chapter, deterministic.
+        sortBy: 'sequence',
       });
 
       expect(results.length).toBe(2);
