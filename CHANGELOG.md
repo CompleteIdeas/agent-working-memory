@@ -2,6 +2,115 @@
 
 ## [Unreleased]
 
+## 0.8.0 (2026-05-17) — substrate primitives for long-form structured memory
+
+AWM 0.8 introduces five new HTTP endpoints, three query operators, a fourth
+`memory_class` value, and two optional engram columns — all of which enable
+substrate-grade structured memory for long-running creative and technical
+projects. Every change is **fully additive**: 0.5.x and 0.7.x clients
+continue to work without modification.
+
+The work was developed against [NovelForge](https://github.com/CompleteIdeas/novelforge),
+a novel-writing platform whose 36,000-word "Drawdown" test bed proved out
+the substrate pattern — chapter summaries, narrative promises, emotional
+state per character, and motif phases tracked across 18 chapters with no
+LLM-side drift. The substrate primitives generalize beyond fiction to any
+long-running structured project (codebase state, design docs, ops incidents).
+
+**Full eval-suite validation (2026-05-17):**
+- `test:run` — 384/384 unit tests pass (43 new for 0.8 across clusters)
+- `test:self` — 91.4% composite, EXCELLENT grade
+- `test:stress` — 52/52 across 6 phases (100%)
+- `test:ab` — AWM 20/24 = Baseline 20/24 (matches; beats baseline on architecture)
+- `test:pilot` — matches March-25 baseline exactly
+- `test:sleep` — healthy consolidation curve (71.4% → 78.6%)
+- Zero regressions across every comparable benchmark.
+
+### What's new
+
+**Four new HTTP endpoints** consolidate substrate-style reductions that
+previously had to be done client-side:
+
+  - `POST /memory/latest-by-tag` — for each distinct value of a tag key,
+    return the most-recent active engram. Single SQL `GROUP BY` instead of
+    list-all + Python reduce. Used for "latest emotional state per
+    character", "latest motif phase per motif", "latest commit per branch".
+
+  - `POST /memory/top-by` — filter by tag-set operators, sort by numeric
+    value extracted from a tag prefix, return top N. Used for "top 40
+    active promises by weight excluding advancements", "highest-severity
+    open bugs", etc.
+
+  - `POST /memory/resolve` — compute effective state of an engram from
+    referenced events. Returns `active | resolved | subverted | abandoned
+    | superseded` plus the resolving event chain. Used for "did this
+    requirement get addressed?", "is this promise still open?".
+
+  - `GET /memory/sequence/:agentId/next` — race-free atomic increment via
+    `BEGIN IMMEDIATE`. Used for story-time / chronology assignment.
+
+**One extended endpoint:**
+
+  - `POST /memory/supersede` Form B — new alternative shape that performs
+    a single atomic `{matchConcept, newEngram}` write-and-supersede in one
+    SQL transaction. Form A (by engram IDs) unchanged. Distinct from R3
+    corrections-override: Form B fires on different-concept supersession
+    by reference, R3 on same-concept self-correction.
+
+**Three query operator extensions** on `POST /memory/search`:
+
+  - `tagsAll: string[]` — explicit AND (alias for legacy `tags`)
+  - `tagsAny: string[]` — OR (at least one)
+  - `tagsNone: string[]` — NOT (exclude all)
+  - Composition: `result = tagsAll ∧ (tagsAny[0] ∨ ...) ∧ ¬(tagsNone[0] ∨ ...)`.
+    Empty arrays skip the clause.
+  - New `sortBy: "createdAt" | "sequence" | "salience" | "confidence" |
+    "lastAccessed"` with `sortOrder: "asc" | "desc"`. Default behavior
+    preserved when `sortBy` is unspecified (`lastAccessed DESC`).
+
+**New `memory_class: "structural"`** — system-written event-log records:
+  - Salience floor 0.7 like `canonical` (bypass filter, never staged)
+  - **Excluded from cognitive `/activate` by default** (opt in via
+    `includeStructural: true`); excluded from temporal-adjacency graph;
+    no embedding by default (opt in via `embed: true` on write)
+  - For high-volume deterministic substrate where cognitive retrieval is
+    noise rather than signal — e.g. one engram per chapter per character
+    per motif. The salience bypass keeps every record; the cognitive
+    exclusion keeps `/activate` clean for canonical authoritative facts.
+
+**Two new optional engram columns:**
+
+  - `sequence INTEGER NULL` — story-time / chronology field, separate
+    from `createdAt`. Indexed via partial index (only non-NULL rows).
+    NULL by default; existing engrams unaffected.
+  - `references_json TEXT NULL` — typed cross-record links
+    (`advances | resolves | subverts | abandons | extends | supersedes`),
+    stored as JSON. Wired through `POST /memory/write` body's
+    `references: Array<{ type, matchEngramId?, matchConcept?, matchTags? }>`.
+    AWM resolves `matchConcept → matchEngramId` at write time when
+    possible, giving a stable link that survives concept renames.
+
+**New `EngramStore` methods** for embedded users:
+
+  - `findActiveMatchByConcept(agentId, concept, requiredTags?)` —
+    case-insensitive trimmed concept match, excludes superseded /
+    retracted / non-active.
+  - `transaction<T>(fn)` — wrap arbitrary multi-write logic atomically.
+  - `getLatestByTag(opts)`, `getTopBy(opts)`, `resolveEffectiveState(id)`,
+    `allocateNextSequence(agentId)` — backing the new HTTP endpoints.
+
+### Migration notes
+
+- All schema additions are `ALTER TABLE ... ADD COLUMN ... NULL` —
+  non-destructive. Existing engrams continue to load with `sequence:
+  NULL` and `references: null`.
+- The new `structural` enum is opt-in. Existing `canonical`, `working`,
+  `ephemeral` writes are unchanged.
+- New endpoints are NEW paths; existing endpoints' bodies grew with
+  optional fields only.
+- NPM consumers of 0.7.x upgrade with `npm install agent-working-memory@0.8.0`
+  without code changes.
+
 ### 0.8 Cluster C — materialized-view + atomic-counter endpoints
 
 Four new HTTP endpoints that consolidate substrate-style reductions

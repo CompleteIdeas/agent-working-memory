@@ -277,6 +277,46 @@ curl -X POST http://localhost:8400/memory/activate \
   }'
 ```
 
+### Substrate primitives (new in 0.8)
+
+For long-running structured projects — novels, codebases, investigations,
+design docs — where the agent needs to track typed state across hundreds
+of writes without polluting cognitive retrieval. Full reference at
+[`docs/reference.md`](docs/reference.md).
+
+```bash
+# "Latest emotional state per character" — one round trip
+curl -X POST http://localhost:8400/memory/latest-by-tag -d '{
+  "agentId": "novel-x", "tagKey": "character=",
+  "scopeTagsAll": ["topic=emotional-state"], "sortBy": "sequence"
+}'
+
+# "Top 40 active promises by weight, excluding resolved" — filter + sort native
+curl -X POST http://localhost:8400/memory/top-by -d '{
+  "agentId": "novel-x", "sortField": "weight=", "order": "desc",
+  "filterTagsAll": ["topic=promise", "state=active"],
+  "filterTagsNone": ["kind=advancement"], "limit": 40
+}'
+
+# Atomic write-and-supersede by concept match (Form B)
+curl -X POST http://localhost:8400/memory/supersede -d '{
+  "agentId": "novel-x",
+  "matchConcept": "Mara's deferred disclosure",
+  "newEngram": {
+    "concept": "Mara's disclosure — RESOLVED in Ch 3",
+    "content": "...", "memory_class": "structural"
+  }
+}'
+
+# Race-free chronology
+curl http://localhost:8400/memory/sequence/novel-x/next
+```
+
+New `memory_class: "structural"` keeps high-volume system-written records
+(chapter analyses, promise advancements, commit logs) out of cognitive
+`/activate` while preserving them with canonical-level salience. See the
+[CHANGELOG entry for 0.8.0](CHANGELOG.md) for the full design.
+
 ---
 
 ## How It Works

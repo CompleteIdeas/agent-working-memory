@@ -16,17 +16,39 @@
   "decisionMade": true/false,
   "causalDepth": 0.0-1.0,
   "resolutionEffort": 0.0-1.0,
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "memory_class": "canonical | working | ephemeral | structural",
+  "sequence": 5,                                            // 0.8 — optional story-time
+  "embed": true,                                            // 0.8 — force embed for structural
+  "references": [                                           // 0.8 — typed cross-record links
+    { "type": "advances", "matchEngramId": "uuid" },
+    { "type": "resolves", "matchConcept": "Promise X", "matchTags": ["topic=promise"] }
+  ]
 }
 ```
+
+**Memory class semantics (0.8):**
+- `canonical` — source-of-truth facts. Salience floor 0.7, surfaced via `/activate`.
+- `working` (default) — observations, findings. Standard salience rules apply.
+- `ephemeral` — temporary context. Stronger time decay.
+- `structural` *(new in 0.8)* — system-written event-log records. Salience
+  bypass like canonical, **excluded from `/activate` by default**, no temporal-
+  adjacency edges, no embedding by default. Use for high-volume deterministic
+  substrate (chapter analyses, promise advancements, motif phases).
+
+**References (0.8):** When `matchConcept` is provided without `matchEngramId`,
+AWM resolves it to the most-recent active engram at write time and stores
+both — stable link survives concept renames. No match found → stores just
+`matchConcept`, preserving the writer's intent.
 
 **Response (201 if stored, 200 if discarded):**
 ```json
 {
   "stored": true,
-  "disposition": "active | staging | discard",
+  "action": "create | reinforce | supersede",      // 0.7.17 — write-pipeline action
+  "disposition": "active | staging | low-salience",
   "salience": 0.62,
-  "reasonCodes": ["causal_insight", "event:causal", "disposition:active"],
+  "reasonCodes": ["causal_insight", "event:causal", "class:structural", "disposition:active"],
   "engram": { ... }
 }
 ```
@@ -112,15 +134,161 @@
   "agentId": "string (required)",
   "text": "string (optional) — keyword search",
   "concept": "string (optional) — exact concept match",
-  "tags": ["string"] ,
+  "tags": ["string"],                                       // legacy AND-filter
+  "tagsAll": ["string"],                                    // 0.8 — explicit AND (alias for tags)
+  "tagsAny": ["string"],                                    // 0.8 — OR (at least one)
+  "tagsNone": ["string"],                                   // 0.8 — NOT (exclude all)
   "stage": "active | staging | archived | consolidated",
   "retracted": false,
   "limit": 20,
-  "offset": 0
+  "offset": 0,
+  "sortBy": "createdAt | sequence | salience | confidence | lastAccessed",
+  "sortOrder": "asc | desc"
 }
 ```
 
+**Tag-operator composition (0.8):** `result = tagsAll ∧ (tagsAny[0] ∨ ...) ∧
+¬(tagsNone[0] ∨ ...)`. Empty arrays skip the clause (vacuous truth). If both
+`tags` and `tagsAll` are passed, both apply as intersection of intersections.
+
+**Sort defaults:** When `sortBy` is unspecified, behavior is unchanged
+(`lastAccessed DESC`). `sortBy: "sequence"` puts NULL last regardless of
+direction.
+
 **Response:** `{ "results": [...], "count": 5 }`
+
+### POST /memory/supersede
+
+Mark an old engram as superseded by a new one (the original wasn't wrong,
+just outdated — confidence decays to 20%, BM25 retrieval filters it out).
+Two body shapes are supported.
+
+**Form A — by existing engram IDs** (pre-0.8 behavior, unchanged):
+```json
+{
+  "oldEngramId": "uuid (required)",
+  "newEngramId": "uuid (required)",
+  "reason": "string (optional)"
+}
+```
+**Response:** `{ "superseded": "...", "supersededBy": "...", "reason": "..." }`
+
+**Form B — atomic write-and-supersede by concept match (0.8 — new):**
+```json
+{
+  "agentId": "string (required)",
+  "matchConcept": "string (required) — case-insensitive, trimmed",
+  "matchTags": ["string"],                                  // optional narrowing
+  "newEngram": {
+    "concept": "string", "content": "string",
+    "tags": ["string"], "memory_class": "structural",
+    "sequence": 7, "eventType": "decision"
+  },
+  "reason": "string (optional)"
+}
+```
+Single SQL transaction: find most-recent active match → write new → link
+via causal association + 20% confidence decay + supersede. If no match
+found: write new anyway, return `{ superseded: null }`.
+
+**Response (201):**
+```json
+{
+  "newEngram": { ... },
+  "superseded": "old-uuid | null",
+  "supersededBy": "new-uuid",
+  "reason": "..."
+}
+```
+
+Form discrimination: presence of `oldEngramId+newEngramId` → Form A;
+presence of `agentId+matchConcept+newEngram` → Form B; both → 400.
+
+### POST /memory/latest-by-tag *(new in 0.8)*
+
+For each distinct value of `tagKey`, return the most recent active engram.
+Used for "latest emotional state per character", "latest commit per branch",
+"latest decision per topic".
+
+**Request:**
+```json
+{
+  "agentId": "string (required)",
+  "tagKey": "string (required) — tag prefix, e.g. \"character=\"",
+  "scopeTagsAll": ["topic=emotional-state"],                // optional narrowing
+  "retracted": false,
+  "sortBy": "createdAt | sequence",                         // default createdAt
+  "limit": 100
+}
+```
+
+With `sortBy: "sequence"`, engrams without a `sequence` value are excluded
+(they have no story-time anchor).
+
+**Response:** `{ "results": [Engram, ...], "count": N }`
+— one engram per distinct `tagKey` value (the most recent).
+
+### POST /memory/top-by *(new in 0.8)*
+
+Filter by tag-set operators, sort by numeric value extracted from a tag
+prefix, return top N. Missing/non-numeric values sort last.
+
+**Request:**
+```json
+{
+  "agentId": "string (required)",
+  "sortField": "string (required) — tag prefix, e.g. \"weight=\"",
+  "order": "asc | desc",                                    // default desc
+  "filterTagsAll": ["topic=promise", "state=active"],
+  "filterTagsAny": ["weight=8", "weight=9", "weight=10"],
+  "filterTagsNone": ["kind=advancement"],
+  "retracted": false,
+  "limit": 40
+}
+```
+
+**Response:** `{ "results": [Engram, ...], "count": N }`
+
+### POST /memory/resolve *(new in 0.8)*
+
+Compute the effective state of an engram from referenced events:
+- `superseded` if `supersededBy` is set
+- `resolved | subverted | abandoned` if a reference with that relation
+  type points at this engram (latest by `createdAt` wins)
+- `active` otherwise
+
+**Request (two targeting modes):**
+```json
+{ "agentId": "string", "targetEngramId": "uuid" }
+```
+OR
+```json
+{
+  "agentId": "string",
+  "matchConcept": "Mara's deferred disclosure",
+  "matchTags": ["topic=promise"]
+}
+```
+
+**Response:**
+```json
+{
+  "engram": { ... },
+  "effectiveState": "active | resolved | subverted | abandoned | superseded",
+  "resolvingEvents": [
+    { "id": "uuid", "type": "resolves", "createdAt": "..." }
+  ]
+}
+```
+
+### GET /memory/sequence/:agentId/next *(new in 0.8)*
+
+Race-free next-sequence allocator. Caller writes the engram with the
+returned value in `sequence`. Atomic via `BEGIN IMMEDIATE`; concurrent
+callers serialize without conflict. Doesn't reserve — caller is expected
+to write between calls.
+
+**Response:** `{ "agentId": "...", "next": 19 }`
 
 ### GET /memory/:id
 
