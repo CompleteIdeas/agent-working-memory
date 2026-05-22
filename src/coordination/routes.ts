@@ -21,7 +21,9 @@ import {
   agentIdParamSchema, timelineQuerySchema,
   channelRegisterSchema, channelDeregisterSchema, channelPushSchema,
 } from './schemas.js';
-import { detectStale, cleanupStale } from './stale.js';
+import { detectStale, cleanupStale, retryOrFailAssignment } from './stale.js';
+import { classifyFailure, FailureMode } from './failure-modes.js';
+import { recordSuccess, recordFailure as circuitRecordFailure, isAvailable } from './circuit-breaker.js';
 
 /** Pretty timestamp for coordination logs. */
 function ts(): string {
@@ -444,6 +446,11 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
             `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id IS NULL ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
           ).get() as { id: string } | undefined);
 
+      // Circuit breaker: refuse assignment if worker is in open state
+      if (pending && !isAvailable(db, agentId)) {
+        return reply.code(423).send({ status: 'idle', assignment: null, circuit_open: true, reason: 'circuit_open' });
+      }
+
       if (pending) {
         const claimed = db.prepare(
           `UPDATE coord_assignments SET agent_id = ?, status = 'assigned', started_at = datetime('now') WHERE id = ? AND status = 'pending'`
@@ -724,6 +731,11 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
           `SELECT * FROM coord_assignments WHERE status = 'pending' AND agent_id IS NULL ${blockedFilter} ORDER BY priority DESC, created_at ASC LIMIT 1`
         ).get() as { id: string } | undefined);
 
+    // Circuit breaker: refuse assignment if worker is in open state
+    if (pending && !isAvailable(db, agentId)) {
+      return reply.code(423).send({ assignment: null, circuit_open: true, reason: 'circuit_open' });
+    }
+
     if (pending) {
       const claimed = db.prepare(
         `UPDATE coord_assignments SET agent_id = ?, status = 'assigned', started_at = datetime('now') WHERE id = ? AND status = 'pending'`
@@ -845,6 +857,12 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     ).get(id) as { agent_id: string | null; task: string; agent_name: string | null } | undefined;
     if (['completed', 'failed'].includes(status)) {
       coordLog(`${assignInfo?.agent_name ?? 'unknown'} ${status}: ${assignInfo?.task?.slice(0, 80) ?? id}`);
+    }
+
+    // Circuit breaker: track success/failure per worker
+    if (assignInfo?.agent_id) {
+      if (status === 'completed') recordSuccess(db, assignInfo.agent_id);
+      else if (status === 'failed') circuitRecordFailure(db, assignInfo.agent_id);
     }
 
     // Emit events
@@ -1009,6 +1027,38 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
     const gate = handleAssignmentUpdate(id, parsed.data.status, parsed.data.result, parsed.data.commit_sha);
     if (gate.error) return reply.code(400).send({ error: gate.error });
     return reply.send({ ok: true });
+  });
+
+  /** POST /assignment/:id/fail — Worker voluntarily fails an assignment with retry logic.
+   *  Body: { result: string, mode?: FailureMode }
+   *  Returns: { outcome: 'retried' | 'failed', attempt_count, last_failure_mode }
+   */
+  app.post('/assignment/:id/fail', async (req, reply) => {
+    const { id } = assignmentIdParamSchema.parse(req.params);
+    const body = req.body as { result?: string; mode?: string } | undefined;
+    const result = body?.result ?? 'worker-initiated failure';
+    const mode = body?.mode as FailureMode | undefined;
+
+    const row = db.prepare(
+      `SELECT id, agent_id, status FROM coord_assignments WHERE id = ?`
+    ).get(id) as { id: string; agent_id: string | null; status: string } | undefined;
+
+    if (!row) return reply.code(404).send({ error: 'assignment not found' });
+    if (['completed', 'failed'].includes(row.status)) {
+      return reply.code(400).send({ error: `cannot fail a ${row.status} assignment` });
+    }
+
+    const agentId = row.agent_id ?? 'unknown';
+    const outcome = retryOrFailAssignment(db, id, agentId, result, mode);
+
+    // Circuit breaker: record failure on voluntary fail
+    if (agentId !== 'unknown') circuitRecordFailure(db, agentId);
+
+    const updated = db.prepare(
+      `SELECT attempt_count, last_failure_mode FROM coord_assignments WHERE id = ?`
+    ).get(id) as { attempt_count: number; last_failure_mode: string | null } | undefined;
+
+    return reply.send({ ok: true, outcome, attempt_count: updated?.attempt_count ?? 0, last_failure_mode: updated?.last_failure_mode ?? null });
   });
 
   app.put('/assignment/:id', async (req, reply) => {
@@ -1960,6 +2010,11 @@ export function registerCoordinationRoutes(app: FastifyInstance, db: Database.Da
 
     const agent = db.prepare(`SELECT name, workspace FROM coord_agents WHERE id = ?`).get(agentId) as { name: string; workspace: string | null } | undefined;
     if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+
+    // Circuit breaker: refuse push to open-circuit workers
+    if (!isAvailable(db, agentId)) {
+      return reply.status(423).send({ error: 'circuit_open', reason: 'Worker circuit is open — too many consecutive failures. Try again after 30s or after a successful assignment.' });
+    }
 
     // Try live channel delivery first
     const session = db.prepare(

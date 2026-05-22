@@ -101,7 +101,8 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  // Clean all coordination tables between tests
+  // Clean all coordination tables between tests — child tables first (FK order)
+  db.exec(`DELETE FROM coord_circuit_state`);
   db.exec(`DELETE FROM coord_events`);
   db.exec(`DELETE FROM coord_locks`);
   db.exec(`DELETE FROM coord_assignments`);
@@ -169,14 +170,17 @@ describe('cleanupStale', () => {
 
   it('fails active assignments of stale agents', () => {
     const agentId = insertAgent('Stale-Assigned', 'working', '300 seconds');
-    insertAssignment(agentId, 'in_progress');
-    insertAssignment(agentId, 'assigned');
+    const id1 = insertAssignment(agentId, 'in_progress');
+    const id2 = insertAssignment(agentId, 'assigned');
 
     cleanupStale(db, 120);
 
-    expect(countAssignments(agentId, 'failed')).toBe(2);
+    // Assignments are re-queued for retry on first stale (attempt_count 0→1)
     expect(countAssignments(agentId, 'in_progress')).toBe(0);
     expect(countAssignments(agentId, 'assigned')).toBe(0);
+    const getStatus = (id: string) => (db.prepare(`SELECT status FROM coord_assignments WHERE id = ?`).get(id) as any).status;
+    expect(getStatus(id1)).toBe('pending');
+    expect(getStatus(id2)).toBe('pending');
   });
 
   it('does not fail already-completed assignments', () => {
@@ -473,7 +477,9 @@ describe('dead agent reconnection', () => {
     cleanupStale(db, 120);
 
     expect(agentRow(agentId).status).toBe('dead');
-    expect(countAssignments(agentId, 'failed')).toBe(1);
+    // Assignment is re-queued for retry on first stale (agent_id set to NULL, status pending)
+    const assignRow = db.prepare(`SELECT status FROM coord_assignments WHERE id = ?`).get(assignId) as any;
+    expect(assignRow.status).toBe('pending');
     expect(countLocks(agentId)).toBe(0);
 
     // Reconnect — should get idle status, no lingering assignments
@@ -583,14 +589,15 @@ describe('registration dedup', () => {
 
 describe('edge cases', () => {
   it('cleanupStale with multiple stale agents cleans all', () => {
-    const ids = [
+    const agentIds = [
       insertAgent('Multi-A', 'working', '300 seconds'),
       insertAgent('Multi-B', 'idle', '400 seconds'),
       insertAgent('Multi-C', 'working', '500 seconds'),
     ];
-    ids.forEach(id => {
-      insertAssignment(id, 'in_progress');
+    const assignIds = agentIds.map(id => {
+      const aid = insertAssignment(id, 'in_progress');
       insertLock(id, `src/${id.slice(0, 4)}.ts`);
+      return aid;
     });
 
     const result = cleanupStale(db, 120);
@@ -598,16 +605,22 @@ describe('edge cases', () => {
     // 3 assignments + 3 locks = 6
     expect(result.cleaned).toBe(6);
 
-    ids.forEach(id => {
+    agentIds.forEach(id => {
       expect(agentRow(id).status).toBe('dead');
       expect(countLocks(id)).toBe(0);
-      expect(countAssignments(id, 'failed')).toBe(1);
+    });
+    // Assignments re-queued for retry (agent_id NULL, status pending)
+    assignIds.forEach(aid => {
+      const row = db.prepare(`SELECT status FROM coord_assignments WHERE id = ?`).get(aid) as any;
+      expect(row.status).toBe('pending');
     });
   });
 
-  it('cleanupStale sets result text on failed assignments', () => {
+  it('cleanupStale sets result text on permanently failed assignments', () => {
     const agentId = insertAgent('Result-Agent', 'working', '300 seconds');
     const assignId = insertAssignment(agentId, 'in_progress');
+    // Exhaust retries so next stale permanently fails it
+    db.prepare(`UPDATE coord_assignments SET attempt_count = 3 WHERE id = ?`).run(assignId);
 
     cleanupStale(db, 120);
 
@@ -615,9 +628,11 @@ describe('edge cases', () => {
     expect(assignment.result).toContain('agent disconnected');
   });
 
-  it('cleanupStale sets completed_at on failed assignments', () => {
+  it('cleanupStale sets completed_at on permanently failed assignments', () => {
     const agentId = insertAgent('Time-Agent', 'working', '300 seconds');
     const assignId = insertAssignment(agentId, 'in_progress');
+    // Exhaust retries so next stale permanently fails it
+    db.prepare(`UPDATE coord_assignments SET attempt_count = 3 WHERE id = ?`).run(assignId);
 
     cleanupStale(db, 120);
 

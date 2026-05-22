@@ -60,6 +60,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   db.exec(`DELETE FROM coord_events`);
+  db.exec(`DELETE FROM coord_circuit_state`);
   db.exec(`DELETE FROM coord_decisions`);
   db.exec(`DELETE FROM coord_findings`);
   db.exec(`DELETE FROM coord_locks`);

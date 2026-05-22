@@ -67,6 +67,7 @@ beforeEach(() => {
   // Clear in FK-safe order: dependents first, then referenced tables
   db.exec(`DELETE FROM coord_events`);
   db.exec(`DELETE FROM coord_locks`);
+  db.exec(`DELETE FROM coord_circuit_state`);
   db.exec(`DELETE FROM coord_channel_sessions`);
   db.exec(`DELETE FROM coord_findings`);
   db.exec(`DELETE FROM coord_decisions`);

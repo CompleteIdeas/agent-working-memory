@@ -130,6 +130,15 @@ CREATE TABLE IF NOT EXISTS coord_events (
   detail       TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Coordination: per-worker circuit breaker state (AWM 0.8.1)
+CREATE TABLE IF NOT EXISTS coord_circuit_state (
+  agent_id             TEXT PRIMARY KEY REFERENCES coord_agents(id),
+  state                TEXT NOT NULL DEFAULT 'closed',
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
+  opened_at            TEXT NULL,
+  last_transition_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `;
 
 /**
@@ -170,4 +179,8 @@ export function initCoordinationTables(db: Database.Database): void {
 
   // Migration: session token for hijack prevention (added 2026-03-26)
   try { db.exec(`ALTER TABLE coord_agents ADD COLUMN session_token TEXT`); } catch { /* exists */ }
+
+  // Migrations: control-layer columns for retry tracking (AWM 0.8.1)
+  try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
+  try { db.exec(`ALTER TABLE coord_assignments ADD COLUMN last_failure_mode TEXT`); } catch { /* exists */ }
 }

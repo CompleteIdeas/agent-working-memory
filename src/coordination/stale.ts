@@ -5,6 +5,8 @@
  */
 
 import type Database from 'better-sqlite3';
+import { classifyFailure, FailureMode, MUTATION_HINTS } from './failure-modes.js';
+import { recordFailure as circuitRecordFailure } from './circuit-breaker.js';
 
 interface StaleAgent {
   id: string;
@@ -26,22 +28,89 @@ export function detectStale(db: Database.Database, thresholdSeconds: number): St
   ).all(thresholdSeconds) as StaleAgent[];
 }
 
-/** Clean up stale agents: fail assignments, release locks, mark dead. */
+/** Maximum retry attempts before an assignment is permanently failed. */
+const MAX_RETRY_ATTEMPTS = 3;
+
+/**
+ * Retry or permanently fail a single assignment.
+ * Called from cleanupStale (stale path) and POST /assignment/:id/fail (voluntary path).
+ *
+ * @returns 'retried' | 'failed'
+ */
+export function retryOrFailAssignment(
+  db: Database.Database,
+  assignmentId: string,
+  agentId: string,
+  failureResult: string,
+  mode?: FailureMode,
+): 'retried' | 'failed' {
+  const row = db.prepare(
+    `SELECT attempt_count, description FROM coord_assignments WHERE id = ?`
+  ).get(assignmentId) as { attempt_count: number; description: string | null } | undefined;
+
+  const attemptCount = row?.attempt_count ?? 0;
+  const failureMode = mode ?? classifyFailure(failureResult);
+
+  if (attemptCount < MAX_RETRY_ATTEMPTS) {
+    const hint = MUTATION_HINTS[failureMode];
+    const nextAttempt = attemptCount + 1;
+    const hintBlock = `\n\n--- RETRY HINT (attempt ${nextAttempt}) ---\n${hint}`;
+    const newDescription = (row?.description ?? '') + hintBlock;
+
+    db.prepare(
+      `UPDATE coord_assignments
+       SET status = 'pending', agent_id = NULL, started_at = NULL, result = NULL,
+           attempt_count = ?, last_failure_mode = ?, description = ?
+       WHERE id = ?`
+    ).run(nextAttempt, failureMode, newDescription, assignmentId);
+
+    db.prepare(
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_retry', ?)`
+    ).run(agentId, `attempt ${nextAttempt}: ${failureMode} — ${failureResult.slice(0, 200)}`);
+
+    return 'retried';
+  } else {
+    db.prepare(
+      `UPDATE coord_assignments
+       SET status = 'failed', result = ?, last_failure_mode = ?, completed_at = datetime('now')
+       WHERE id = ?`
+    ).run(failureResult, failureMode, assignmentId);
+
+    db.prepare(
+      `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_failed', ?)`
+    ).run(agentId, `permanently failed after ${attemptCount} attempt(s): ${failureResult.slice(0, 200)}`);
+
+    return 'failed';
+  }
+}
+
+/** Clean up stale agents: retry or fail assignments, release locks, mark dead. */
 export function cleanupStale(db: Database.Database, thresholdSeconds: number): { stale: StaleAgent[]; cleaned: number } {
   const stale = detectStale(db, thresholdSeconds);
   let cleaned = 0;
 
   for (const agent of stale) {
-    // Fail active assignments
-    const orphaned = db.prepare(
-      `UPDATE coord_assignments SET status = 'failed', result = 'agent disconnected (stale)', completed_at = datetime('now')
-       WHERE agent_id = ? AND status IN ('assigned', 'in_progress')`
-    ).run(agent.id);
+    // Handle each orphaned assignment with retry logic
+    const orphanedRows = db.prepare(
+      `SELECT id FROM coord_assignments WHERE agent_id = ? AND status IN ('assigned', 'in_progress')`
+    ).all(agent.id) as Array<{ id: string }>;
 
-    if (orphaned.changes > 0) {
+    let retried = 0;
+    let failed = 0;
+
+    for (const row of orphanedRows) {
+      const outcome = retryOrFailAssignment(db, row.id, agent.id, 'agent disconnected (stale)');
+      if (outcome === 'retried') retried++;
+      else failed++;
+    }
+
+    if (orphanedRows.length > 0) {
       db.prepare(
         `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'assignment_failed', ?)`
-      ).run(agent.id, `auto-failed ${orphaned.changes} orphaned assignment(s) — agent stale`);
+      ).run(agent.id, `stale cleanup: retried ${retried}, permanently failed ${failed}`);
+
+      // Record failure in circuit breaker for each orphaned assignment
+      circuitRecordFailure(db, agent.id);
     }
 
     // Release locks
@@ -50,12 +119,12 @@ export function cleanupStale(db: Database.Database, thresholdSeconds: number): {
     // Mark dead
     db.prepare(`UPDATE coord_agents SET status = 'dead', current_task = NULL WHERE id = ?`).run(agent.id);
 
-    cleaned += orphaned.changes + locks.changes;
+    cleaned += orphanedRows.length + locks.changes;
 
-    if (orphaned.changes > 0 || locks.changes > 0) {
+    if (orphanedRows.length > 0 || locks.changes > 0) {
       db.prepare(
         `INSERT INTO coord_events (agent_id, event_type, detail) VALUES (?, 'stale_cleanup', ?)`
-      ).run(agent.id, `failed ${orphaned.changes} assignment(s), released ${locks.changes} lock(s)`);
+      ).run(agent.id, `failed ${orphanedRows.length} assignment(s), released ${locks.changes} lock(s)`);
     }
   }
 

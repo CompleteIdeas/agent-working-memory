@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+## 0.8.1 (2026-05-22) — control-layer for worker outputs
+
+AWM 0.8.1 adds three production primitives to the coordination layer to reduce
+the 11.5% failure-with-no-retry rate (81/703 assignments lost). All changes are
+**fully additive**: 0.5.x, 0.7.x, and 0.8.0 clients continue to work without
+modification.
+
+### What's new
+
+- **FailureMode taxonomy** (`src/coordination/failure-modes.ts`) — seven-category
+  enum (`agent_stale`, `timeout`, `output_invalid`, `test_fail`, `lint_fail`,
+  `merge_conflict`, `unknown`) with a `classifyFailure(result)` classifier and a
+  `MUTATION_HINTS` map of corrective guidance injected into retried task descriptions.
+
+- **Mutation-hint retry in `cleanupStale`** — orphaned assignments now retry up to
+  3 times before being permanently failed. Each retry appends a mode-specific hint
+  block to the task description so the next worker has corrective context. New helper
+  `retryOrFailAssignment()` is also callable from the voluntary-fail endpoint.
+
+- **`POST /assignment/:id/fail`** — workers can voluntarily fail an assignment
+  (with a result string and optional mode override) to trigger the same retry logic
+  without waiting to go stale.
+
+- **Per-worker CircuitBreaker** (`src/coordination/circuit-breaker.ts`) — tracks
+  consecutive failures per worker in the new `coord_circuit_state` table. Opens at 5
+  consecutive failures; auto-transitions to `half_open` after 30 s; resets to `closed`
+  on any successful completion. Both `/next` and `/channel/push` refuse to dispatch to
+  open-circuit workers (HTTP 423).
+
+### Schema changes (additive)
+
+- `coord_assignments` — two new columns: `attempt_count INTEGER DEFAULT 0`,
+  `last_failure_mode TEXT NULL`. Added via `try/catch` ALTER TABLE migration.
+- `coord_circuit_state` — new table (CREATE IF NOT EXISTS).
+
 ## 0.8.0 (2026-05-17) — substrate primitives for long-form structured memory
 
 AWM 0.8 introduces five new HTTP endpoints, three query operators, a fourth
