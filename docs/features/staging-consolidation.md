@@ -1,5 +1,21 @@
 # Feature: Staging Buffer & Consolidation
 
+## Lifecycle Overview (v0.8.5)
+
+```
+write → [staging] ─resonate→ active ─stale→ fading ─age→ archived ─isolation→ deleted
+              │
+              └─no-resonance→ deleted
+```
+
+| Stage | When | Visible in recall? |
+|---|---|---|
+| `staging` | Salience 0.2–0.4 at write time | Only with `includeStaging: true` |
+| `active` | Promoted from staging or written above salience floor | **Yes** (default) |
+| `fading` (v0.8.5) | Stale active engram, content trimmed | **Yes** — still surfaces by concept + tags + embedding |
+| `archived` | Never-retrieved, old; or no longer accessed | Only via `/memory/search` |
+| `consolidated` | Synthesized cluster summary | Yes — surfaces as `synth=true` engrams |
+
 ## When It Activates
 
 Automatically, in the background. Memories with salience between 0.2 and 0.4 are placed in **staging** — a buffer for uncertain observations. Every 60 seconds, the staging buffer sweeps for expired entries.
@@ -37,6 +53,34 @@ Not every observation deserves immediate storage. The staging buffer implements 
 Staging memories are excluded from activation by default. To include them:
 - HTTP: `"includeStaging": true` in activate request
 - MCP: `include_staging: true` in memory_recall
+
+### Content Fade Phase (v0.8.5)
+
+A new consolidation phase (Phase 5.5, between homeostasis and forgetting)
+that coarsens the *content* of stale-but-accessed engrams without removing
+them. Models Paper 1 (PLOS Comp Biology on storage degradation): human
+memory loses surface detail while retaining cue-association pathways.
+
+Fade criteria (all must hold):
+
+| Criterion | Default | Env knob |
+|---|---|---|
+| `accessCount >= 1` (engram was actually retrieved) | — | — |
+| `daysSinceAccess > 45` | 45 | `AWM_FADE_DAYS_SINCE_ACCESS` |
+| `content.length > 250` | 250 | `AWM_FADE_MIN_CONTENT_LEN` |
+| `accessCount < 10` (not heavily used) | 10 | — |
+| `memoryClass` not in `{canonical, structural}` | — | — |
+| Not retracted | — | — |
+
+When triggered, the engram's content is trimmed to 150 chars (`AWM_FADE_KEEP_CHARS`)
+plus a `… [faded]` marker, and `stage` transitions to `'fading'`. **Concept,
+tags, and embedding are preserved** — the faded engram still surfaces in BM25
+recall (via concept + tags + truncated content) and in vector recall (the
+embedding is unchanged). At most `AWM_FADE_MAX_PER_CYCLE` (25) engrams fade
+per consolidation cycle.
+
+Faded engrams can still be archived later via the standard forget path
+(Phase 6). The lifecycle is: `active → fading → archived → deleted`.
 
 ### Monitoring
 

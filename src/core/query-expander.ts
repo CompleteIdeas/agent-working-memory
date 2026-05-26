@@ -1,65 +1,73 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Query Expander — rewrites queries with synonyms and related terms.
+ * Query Expander - rewrites queries with synonyms and related terms.
  *
- * Uses Xenova/flan-t5-small (~80MB ONNX) to expand search queries
- * with related terms that improve BM25 recall.
+ * Uses Xenova/flan-t5-small (~80MB ONNX) to expand search queries with
+ * related terms that improve BM25 recall.
  *
- * Example: "What is Caroline's identity?" →
- *   "What is Caroline's identity? Caroline personal gender transgender self"
+ * AWM 0.8.x: inference dispatches through ml-worker.ts (currently in-process
+ * — worker_threads reverted because onnxruntime-node bindings cross isolate
+ * boundaries unsafely; see ml-worker.ts). The dispatch abstraction is
+ * preserved for a future child_process / HTTP sidecar pool.
  *
- * Singleton pattern — call getExpander() to get the shared instance.
+ * The LRU cache + skip heuristic stay on the main thread — they're pure
+ * filter/lookup logic that shouldn't pay IPC cost.
  */
 
 import { pipeline, type Text2TextGenerationPipeline } from '@huggingface/transformers';
+import { dispatchExpand, registerInProcessHandlers } from './ml-worker.js';
 
 const MODEL_ID = 'Xenova/flan-t5-small';
-let instance: Text2TextGenerationPipeline | null = null;
-let initPromise: Promise<Text2TextGenerationPipeline> | null = null;
 
-/**
- * Get or initialize the text generation pipeline (singleton).
- * First call downloads the model (~80MB), subsequent calls are instant.
- */
-export async function getExpander(): Promise<Text2TextGenerationPipeline> {
-  if (instance) return instance;
-  if (initPromise) return initPromise;
+// --- In-process fallback ---
 
-  initPromise = pipeline('text2text-generation', MODEL_ID, {
-    dtype: 'fp32',
-  }).then(pipe => {
-    instance = pipe as Text2TextGenerationPipeline;
-    console.log(`Query expander loaded: ${MODEL_ID}`);
-    return instance;
+let inProcessInstance: Text2TextGenerationPipeline | null = null;
+let inProcessInitPromise: Promise<Text2TextGenerationPipeline> | null = null;
+
+async function loadInProcess(): Promise<Text2TextGenerationPipeline> {
+  if (inProcessInstance) return inProcessInstance;
+  if (inProcessInitPromise) return inProcessInitPromise;
+  inProcessInitPromise = pipeline('text2text-generation', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
+    inProcessInstance = pipe as Text2TextGenerationPipeline;
+    console.log(`Query expander loaded in-process: ${MODEL_ID}`);
+    return inProcessInstance;
   });
+  return inProcessInitPromise;
+}
 
-  return initPromise;
+async function inProcessExpand(args: { prompt: string; maxNewTokens: number; noRepeatNgramSize: number }): Promise<string> {
+  const expander = await loadInProcess();
+  const result = await expander(args.prompt, {
+    max_new_tokens: args.maxNewTokens,
+    no_repeat_ngram_size: args.noRepeatNgramSize,
+  });
+  const text = Array.isArray(result) ? (result[0] as any)?.generated_text ?? '' : '';
+  return String(text).trim();
+}
+
+registerInProcessHandlers({ expand: inProcessExpand });
+
+// --- Public API ---
+
+/** Kept for backwards compat. */
+export async function getExpander(): Promise<Text2TextGenerationPipeline> {
+  return loadInProcess();
 }
 
 /**
  * LRU cache of normalized-query → expanded-query mappings.
- * Map preserves insertion order — re-set on hit moves entry to the end (most-recent),
- * delete-first when over capacity drops the least-recent. ~500 entries × ~200 chars
- * each ≈ 100KB, negligible memory cost.
- *
- * Why: phase-breakdown spike (2026-05-08) showed expandQuery at ~164ms per call.
- * Agent recall patterns repeat — cache hits are common.
+ * Lives on the main thread — cache hits skip the worker IPC entirely.
  */
 const expansionCache = new Map<string, string>();
 const EXPANSION_CACHE_LIMIT = 500;
 
 /**
- * Heuristic: skip expansion when the query is already specific.
- * Long, multi-token queries don't benefit from synonyms — they're already
- * narrow enough that flan-t5's general-vocabulary expansion adds noise more
- * than recall. Exact thresholds are conservative; false-skips would only
- * affect candidates that BM25 catches anyway.
+ * Skip expansion when the query is already specific (long or many tokens).
  */
 function shouldSkipExpansion(normalized: string): boolean {
   if (normalized.length === 0) return true;
   if (normalized.length > 50) return true;
-  // ≥5 distinct meaningful tokens = already specific
   const tokens = new Set(normalized.split(/\s+/).filter(t => t.length > 2));
   return tokens.size >= 5;
 }
@@ -69,22 +77,18 @@ function shouldSkipExpansion(normalized: string): boolean {
  * Returns the original query + generated expansion terms.
  * Falls back to the original query on any error.
  *
- * Optimization (0.7.11+):
- * - Skip heuristic for long/specific queries (~30% of typical agent recalls)
- * - LRU cache for repeated queries (cache hit ≈ 0ms vs 164ms cold)
- * - Disable both via AWM_DISABLE_EXPANSION_CACHE=1
+ * Dispatches inference to the worker pool. Cache + skip heuristic stay
+ * on the main thread.
  */
 export async function expandQuery(originalQuery: string): Promise<string> {
   const normalized = originalQuery.toLowerCase().trim();
   const optimizationsEnabled = process.env.AWM_DISABLE_EXPANSION_CACHE !== '1';
 
   if (optimizationsEnabled) {
-    if (shouldSkipExpansion(normalized)) {
-      return originalQuery;
-    }
+    if (shouldSkipExpansion(normalized)) return originalQuery;
     const cached = expansionCache.get(normalized);
     if (cached !== undefined) {
-      // Move to end (most-recent) for LRU semantics
+      // LRU touch
       expansionCache.delete(normalized);
       expansionCache.set(normalized, cached);
       return cached;
@@ -92,22 +96,12 @@ export async function expandQuery(originalQuery: string): Promise<string> {
   }
 
   try {
-    const expander = await getExpander();
     const prompt = `Expand this search query with synonyms and related terms. Only output the additional terms, not the original query. Query: ${originalQuery}. Additional terms:`;
-
-    const result = await expander(prompt, {
-      max_new_tokens: 25,
-      no_repeat_ngram_size: 2,
-    });
-
-    const expanded = Array.isArray(result) ? (result[0] as any)?.generated_text ?? '' : '';
-    const cleanExpanded = expanded.trim();
-
-    const finalQuery = cleanExpanded && cleanExpanded.length > 2
-      ? `${originalQuery} ${cleanExpanded}`
+    const expansion = await dispatchExpand({ prompt, maxNewTokens: 25, noRepeatNgramSize: 2 });
+    const finalQuery = expansion && expansion.length > 2
+      ? `${originalQuery} ${expansion}`
       : originalQuery;
 
-    // Cache the result (LRU eviction when over capacity)
     if (optimizationsEnabled) {
       if (expansionCache.size >= EXPANSION_CACHE_LIMIT) {
         const oldestKey = expansionCache.keys().next().value;
@@ -122,7 +116,7 @@ export async function expandQuery(originalQuery: string): Promise<string> {
   }
 }
 
-/** Clear the expansion cache (used by tests + cache invalidation if needed). */
+/** Clear the expansion cache (used by tests + cache invalidation). */
 export function clearExpansionCache(): void {
   expansionCache.clear();
 }

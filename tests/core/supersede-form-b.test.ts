@@ -43,11 +43,12 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
     try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
   });
 
-  // Helper that mirrors the route's Form B logic.
-  function formB(matchConcept: string, newConcept: string, newContent: string, matchTags?: string[]) {
-    return store.transaction(() => {
-      const matched = store.findActiveMatchByConcept(AGENT, matchConcept, matchTags);
-      const writeRes = performWrite({ store, connectionEngine }, {
+  // Helper that mirrors the route's Form B logic — wrapped in withTransaction
+  // for atomicity across the async write + supersede pair.
+  async function formB(matchConcept: string, newConcept: string, newContent: string, matchTags?: string[]) {
+    return store.withTransaction(async () => {
+      const matched = await store.findActiveMatchByConcept(AGENT, matchConcept, matchTags);
+      const writeRes = await performWrite({ store, connectionEngine }, {
         agentId: AGENT,
         concept: newConcept,
         content: newContent,
@@ -55,9 +56,9 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
         enableReinforcement: false,
       });
       if (matched) {
-        store.upsertAssociation(writeRes.engram.id, matched.id, 0.8, 'causal', 1.0);
-        store.updateConfidence(matched.id, matched.confidence * 0.2);
-        store.supersedeEngram(matched.id, writeRes.engram.id);
+        await store.upsertAssociation(writeRes.engram.id, matched.id, 0.8, 'causal', 1.0);
+        await store.updateConfidence(matched.id, matched.confidence * 0.2);
+        await store.supersedeEngram(matched.id, writeRes.engram.id);
       }
       return { newEngram: writeRes.engram, supersededId: matched?.id ?? null };
     });
@@ -109,7 +110,7 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
 
   // ── Form B happy path ──
 
-  it('Form B with match: writes new engram + supersedes old atomically', () => {
+  it('Form B with match: writes new engram + supersedes old atomically', async () => {
     const oldE = store.createEngram({
       agentId: AGENT,
       concept: "Mara's deferred disclosure",
@@ -117,7 +118,7 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
       tags: ['topic=promise', 'state=active'],
     });
 
-    const result = formB(
+    const result = await formB(
       "Mara's deferred disclosure",
       "Mara's deferred disclosure — RESOLVED in Ch 3",
       'Resolved when Mara talked at the kitchen table',
@@ -142,8 +143,8 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
     expect(followUp).toBeNull();
   });
 
-  it('Form B with no match: writes new engram, returns supersededId=null', () => {
-    const result = formB(
+  it('Form B with no match: writes new engram, returns supersededId=null', async () => {
+    const result = await formB(
       'Nonexistent promise',
       'Resolution of nonexistent thing',
       'But we wrote the record anyway',
@@ -154,17 +155,17 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
     expect(store.getEngramsByAgent(AGENT).length).toBe(1);
   });
 
-  it('Form B is atomic: if supersede fails, write rolls back', () => {
+  it('Form B is atomic: if supersede fails, write rolls back', async () => {
     const oldE = store.createEngram({
       agentId: AGENT, concept: 'Promise X', content: 'original',
     });
 
     // Force a failure mid-transaction by throwing after performWrite but
     // before supersede. The transaction should roll back the write.
-    expect(() => {
-      store.transaction(() => {
-        const matched = store.findActiveMatchByConcept(AGENT, 'Promise X');
-        performWrite({ store, connectionEngine }, {
+    await expect(async () => {
+      await store.withTransaction(async () => {
+        const matched = await store.findActiveMatchByConcept(AGENT, 'Promise X');
+        await performWrite({ store, connectionEngine }, {
           agentId: AGENT,
           concept: 'Resolution',
           content: 'new',
@@ -175,7 +176,7 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
           throw new Error('simulated failure between write and supersede');
         }
       });
-    }).toThrow('simulated failure');
+    }).rejects.toThrow('simulated failure');
 
     // Only the original engram remains; the would-be-new engram was rolled back.
     const all = store.getEngramsByAgent(AGENT);
@@ -186,7 +187,7 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
 
   // ── references[] persistence + resolution ──
 
-  it('writes engram with resolved references (matchConcept → matchEngramId)', () => {
+  it('writes engram with resolved references (matchConcept → matchEngramId)', async () => {
     const target = store.createEngram({
       agentId: AGENT,
       concept: 'Daniel notebooks measurements',
@@ -200,7 +201,7 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
     );
     expect(matched).not.toBeNull();
 
-    const writeRes = performWrite({ store, connectionEngine }, {
+    const writeRes = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Advancement: Hannah finds the transect',
       content: 'She walked the stake line in Ch 2',

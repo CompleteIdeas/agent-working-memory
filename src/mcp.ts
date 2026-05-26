@@ -52,6 +52,8 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 
 import { EngramStore } from './storage/sqlite.js';
+import { openStore, getConfiguredBackend, type StoreBackend } from './storage/factory.js';
+import type { IEngramStore } from './storage/store.js';
 import { ActivationEngine } from './engine/activation.js';
 import { ConnectionEngine } from './engine/connections.js';
 import { StagingBuffer } from './engine/staging.js';
@@ -79,7 +81,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.8.0' });
+  const server = new McpServer({ name: 'agent-working-memory', version: '0.8.5' });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -90,22 +92,27 @@ if (INCOGNITO) {
 
 // --- Setup ---
 
-const DB_PATH = process.env.AWM_DB_PATH ?? 'memory.db';
+const BACKEND: StoreBackend = getConfiguredBackend();
+const DB_PATH = process.env.AWM_DB_PATH ?? (BACKEND === 'pglite' ? 'memory-pglite' : 'memory.db');
 const AGENT_ID = process.env.AWM_AGENT_ID ?? process.env.WORKER_NAME ?? 'claude-code';
 const HOOK_PORT = parseInt(process.env.AWM_HOOK_PORT ?? '8401', 10);
 const HOOK_SECRET = process.env.AWM_HOOK_SECRET ?? null;
 
 initLogger(DB_PATH);
-log(AGENT_ID, 'startup', `MCP server starting (db: ${DB_PATH}, hooks: ${HOOK_PORT})`);
+log(AGENT_ID, 'startup', `MCP server starting (backend: ${BACKEND}, db: ${DB_PATH}, hooks: ${HOOK_PORT})`);
 
-const store = new EngramStore(DB_PATH);
+// AWM 0.8.x: openStore() returns either SQLite (sync) or PGlite (async) store.
+// Engines accept either via IEngramStore (MaybePromise<T> contract).
+const { store: storeAny } = await openStore();
+// Engines accept the async contract; SQLite-only call sites must guard on BACKEND.
+const store = storeAny as unknown as IEngramStore & Partial<EngramStore>;
 const activationEngine = new ActivationEngine(store);
 const connectionEngine = new ConnectionEngine(store, activationEngine);
 const stagingBuffer = new StagingBuffer(store, activationEngine);
 const evictionEngine = new EvictionEngine(store);
 const retractionEngine = new RetractionEngine(store);
 const evalEngine = new EvalEngine(store);
-const consolidationEngine = new ConsolidationEngine(store);
+const consolidationEngine = new ConsolidationEngine(store, connectionEngine);
 const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine);
 
 stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
@@ -116,7 +123,7 @@ let coordDb: import('better-sqlite3').Database | null = null;
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.8.0',
+  version: '0.8.5',
 });
 
 server.registerResource(
@@ -252,7 +259,7 @@ The concept should be a short label (3-8 words). The content should be the full 
 
     const memoryType = params.memory_type ?? classifyMemoryType(params.content);
 
-    const result = performWrite({ store, connectionEngine }, {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT_ID,
       concept: params.concept,
       content: params.content,
@@ -268,7 +275,7 @@ The concept should be a short label (3-8 words). The content should be the full 
     });
 
     // Auto-checkpoint — covers create/reinforce/supersede uniformly
-    try { store.updateAutoCheckpointWrite(AGENT_ID, result.engram.id); } catch { /* non-fatal */ }
+    try { await store.updateAutoCheckpointWrite(AGENT_ID, result.engram.id); } catch { /* non-fatal */ }
 
     if (result.action === 'reinforce') {
       log(AGENT_ID, 'write:reinforce', `"${params.concept}" → reinforced "${result.engram.concept}" (conf ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)}, novelty=${result.noveltyResult.novelty.toFixed(2)})`);
@@ -334,6 +341,8 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     use_expansion: z.boolean().optional().default(true).describe('Expand query with synonyms for better recall (default true)'),
     memory_type: z.enum(['episodic', 'semantic', 'procedural']).optional().describe('Filter by memory type (omit to search all types)'),
     workspace: z.string().optional().describe('Search across all agents in this workspace (hive mode). Omit for agent-scoped recall only.'),
+    require_confidence: z.number().optional().describe('Opt-in: abstain (return []) when recall confidence is below this threshold. Typical values: 0.10 (strict), 0.25 (balanced), 0.40 (aggressive). Confidence is the shape of the result-score distribution; low confidence indicates a noisy or best-of-bad-bunch recall.'),
+    granularity: z.enum(['full', 'compact', 'auto']).optional().describe('Output granularity (Paper 3: cognitive teaming). "full" (default): no change. "compact": every result carries a short summary field. "auto": confidence-adaptive — top result gets a longer summary when there is a clear winner, otherwise everything is compact for scanning.'),
   },
   async (params) => {
     const queryText = params.query ?? params.context;
@@ -357,12 +366,14 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       useExpansion: params.use_expansion,
       memoryType: params.memory_type,
       workspace,
+      requireConfidence: params.require_confidence,
+      granularity: params.granularity,
     });
 
     // Auto-checkpoint: track recall
     try {
       const ids = results.map(r => r.engram.id);
-      store.updateAutoCheckpointRecall(AGENT_ID, queryText, ids);
+      await store.updateAutoCheckpointRecall(AGENT_ID, queryText, ids);
     } catch { /* non-fatal */ }
 
     log(AGENT_ID, 'recall', `"${queryText.slice(0, 80)}" → ${results.length} results`);
@@ -382,7 +393,11 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     }
 
     const lines = results.map((r, i) => {
-      return `${i + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}): ${r.engram.content}`;
+      // Confidence-adaptive output (Paper 3: cognitive teaming). When the caller
+      // requested 'compact' or 'auto' granularity, surface the engine-computed
+      // summary instead of the full content — same engram, less to read.
+      const body = r.summary ?? r.engram.content;
+      return `${i + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}): ${body}`;
     });
 
     return {
@@ -405,18 +420,18 @@ Always call this after using a recalled memory so the system learns what's valua
     context: z.string().optional().describe('Brief note on why it was/wasn\'t useful'),
   },
   async (params) => {
-    store.logRetrievalFeedback(null, params.engram_id, params.useful, params.context ?? '');
+    await store.logRetrievalFeedback(null, params.engram_id, params.useful, params.context ?? '');
 
-    const engram = store.getEngram(params.engram_id);
+    const engram = await store.getEngram(params.engram_id);
     if (engram) {
       const delta = params.useful
         ? DEFAULT_AGENT_CONFIG.feedbackPositiveBoost
         : -DEFAULT_AGENT_CONFIG.feedbackNegativePenalty;
-      store.updateConfidence(engram.id, engram.confidence + delta);
+      await store.updateConfidence(engram.id, engram.confidence + delta);
     }
 
     // Validation-gated Hebbian: resolve pending co-activation pairs for this engram
-    const hebbianUpdated = activationEngine.resolveHebbianFeedback(params.engram_id, params.useful);
+    const hebbianUpdated = await activationEngine.resolveHebbianFeedback(params.engram_id, params.useful);
 
     return {
       content: [{
@@ -438,7 +453,7 @@ Use this when you discover a memory contains incorrect information.`,
     correction: z.string().optional().describe('What is the correct information? (creates a new memory)'),
   },
   async (params) => {
-    const result = retractionEngine.retract({
+    const result = await retractionEngine.retract({
       agentId: AGENT_ID,
       targetEngramId: params.engram_id,
       reason: params.reason,
@@ -476,22 +491,22 @@ The old memory stays in the database (searchable for history) but is heavily dow
     reason: z.string().optional().describe('Why the old memory is outdated'),
   },
   async (params) => {
-    const oldEngram = store.getEngram(params.old_engram_id);
+    const oldEngram = await store.getEngram(params.old_engram_id);
     if (!oldEngram) {
       return { content: [{ type: 'text' as const, text: `Old memory not found: ${params.old_engram_id}` }] };
     }
-    const newEngram = store.getEngram(params.new_engram_id);
+    const newEngram = await store.getEngram(params.new_engram_id);
     if (!newEngram) {
       return { content: [{ type: 'text' as const, text: `New memory not found: ${params.new_engram_id}` }] };
     }
 
-    store.supersedeEngram(params.old_engram_id, params.new_engram_id);
+    await store.supersedeEngram(params.old_engram_id, params.new_engram_id);
 
     // Create supersession association (new → old)
-    store.upsertAssociation(params.new_engram_id, params.old_engram_id, 0.8, 'causal', 0.9);
+    await store.upsertAssociation(params.new_engram_id, params.old_engram_id, 0.8, 'causal', 0.9);
 
     // Reduce old memory's confidence (not to zero — it's historical, not wrong)
-    store.updateConfidence(params.old_engram_id, Math.max(0.2, oldEngram.confidence * 0.4));
+    await store.updateConfidence(params.old_engram_id, Math.max(0.2, oldEngram.confidence * 0.4));
 
     log(AGENT_ID, 'supersede', `"${oldEngram.concept}" → "${newEngram.concept}"${params.reason ? ` (${params.reason})` : ''}`);
 
@@ -510,8 +525,8 @@ server.tool(
 Also shows the activity log path so the user can tail it to see what's happening.`,
   {},
   async () => {
-    const metrics = evalEngine.computeMetrics(AGENT_ID);
-    const checkpoint = store.getCheckpoint(AGENT_ID);
+    const metrics = await evalEngine.computeMetrics(AGENT_ID);
+    const checkpoint = await store.getCheckpoint(AGENT_ID);
     const lines = [
       `Agent: ${AGENT_ID}`,
       `Active memories: ${metrics.activeEngramCount}`,
@@ -579,7 +594,7 @@ Also call periodically during long sessions to avoid losing state. The state is 
       episodeId: params.episode_id ?? null,
     };
 
-    store.saveCheckpoint(AGENT_ID, state);
+    await store.saveCheckpoint(AGENT_ID, state);
     log(AGENT_ID, 'checkpoint', `"${params.current_task}" decisions=${params.decisions.length} files=${params.active_files.length}`);
 
     return {
@@ -604,7 +619,7 @@ Returns:
 Use this at the start of every session or after compaction to pick up where you left off.`,
   {},
   async () => {
-    const checkpoint = store.getCheckpoint(AGENT_ID);
+    const checkpoint = await store.getCheckpoint(AGENT_ID);
 
     const now = Date.now();
     const idleMs = checkpoint
@@ -614,7 +629,7 @@ Use this at the start of every session or after compaction to pick up where you 
     // Get last written engram
     let lastWrite: { id: string; concept: string; content: string } | null = null;
     if (checkpoint?.auto.lastWriteId) {
-      const engram = store.getEngram(checkpoint.auto.lastWriteId);
+      const engram = await store.getEngram(checkpoint.auto.lastWriteId);
       if (engram) {
         lastWrite = { id: engram.id, concept: engram.concept, content: engram.content };
       }
@@ -664,7 +679,7 @@ Use this at the start of every session or after compaction to pick up where you 
         fullConsolidationTriggered = true;
         try {
           const result = await consolidationEngine.consolidate(AGENT_ID);
-          store.markConsolidation(AGENT_ID, false);
+          await store.markConsolidation(AGENT_ID, false);
           log(AGENT_ID, 'consolidation', `full sleep cycle on restore (no graceful exit, idle ${Math.round(idleMs / 60_000)}min, last consolidation ${Math.round(sinceLastConsolidation / 60_000)}min ago) — ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
         } catch { /* consolidation failure is non-fatal */ }
       } else {
@@ -762,7 +777,7 @@ Tasks automatically get high salience so they won't be discarded.`,
     blocked_by: z.string().optional().describe('ID of a task that must finish first'),
   },
   async (params) => {
-    const engram = store.createEngram({
+    const engram = await store.createEngram({
       agentId: AGENT_ID,
       concept: params.concept,
       content: params.content,
@@ -785,8 +800,8 @@ Tasks automatically get high salience so they won't be discarded.`,
     connectionEngine.enqueue(engram.id);
 
     // Generate embedding asynchronously
-    embed(`${params.concept} ${params.content}`).then(vec => {
-      store.updateEmbedding(engram.id, vec);
+    embed(`${params.concept} ${params.content}`).then(async vec => {
+      await store.updateEmbedding(engram.id, vec);
     }).catch(() => {});
 
     return {
@@ -815,22 +830,22 @@ server.tool(
     blocked_by: z.string().optional().describe('ID of blocking task (set to empty string to unblock)'),
   },
   async (params) => {
-    const engram = store.getEngram(params.task_id);
+    const engram = await store.getEngram(params.task_id);
     if (!engram || !engram.taskStatus) {
       return { content: [{ type: 'text' as const, text: `Task not found: ${params.task_id}` }] };
     }
 
     if (params.blocked_by !== undefined) {
-      store.updateBlockedBy(params.task_id, params.blocked_by || null);
+      await store.updateBlockedBy(params.task_id, params.blocked_by || null);
     }
     if (params.status) {
-      store.updateTaskStatus(params.task_id, params.status as TaskStatus);
+      await store.updateTaskStatus(params.task_id, params.status as TaskStatus);
     }
     if (params.priority) {
-      store.updateTaskPriority(params.task_id, params.priority as TaskPriority);
+      await store.updateTaskPriority(params.task_id, params.priority as TaskPriority);
     }
 
-    const updated = store.getEngram(params.task_id)!;
+    const updated = (await store.getEngram(params.task_id))!;
     return {
       content: [{
         type: 'text' as const,
@@ -852,7 +867,7 @@ Use at the start of a session to see what's pending, or to check blocked/done ta
       .describe('Include completed tasks?'),
   },
   async (params) => {
-    let tasks = store.getTasks(AGENT_ID, params.status as TaskStatus | undefined);
+    let tasks = await store.getTasks(AGENT_ID, params.status as TaskStatus | undefined);
     if (!params.include_done && !params.status) {
       tasks = tasks.filter(t => t.taskStatus !== 'done');
     }
@@ -885,7 +900,7 @@ Prioritizes: in_progress tasks first (finish what you started), then by priority
 Use this when you finish a task or need to decide what to do next.`,
   {},
   async () => {
-    const next = store.getNextTask(AGENT_ID);
+    const next = await store.getNextTask(AGENT_ID);
     if (!next) {
       return { content: [{ type: 'text' as const, text: 'No actionable tasks. All clear!' }] };
     }
@@ -923,10 +938,10 @@ This ensures your state is saved before you start, and primes recall with releva
   },
   async (params) => {
     // 1. Checkpoint current state
-    const checkpoint = store.getCheckpoint(AGENT_ID);
+    const checkpoint = await store.getCheckpoint(AGENT_ID);
     const prevTask = checkpoint?.executionState?.currentTask ?? 'None';
 
-    store.saveCheckpoint(AGENT_ID, {
+    await store.saveCheckpoint(AGENT_ID, {
       currentTask: params.topic,
       decisions: [],
       activeFiles: params.files,
@@ -957,7 +972,7 @@ This ensures your state is saved before you start, and primes recall with releva
         recalledSummary = `\n\n**Recalled memories (${results.length}):**\n${lines.join('\n')}`;
 
         // Track recall
-        store.updateAutoCheckpointRecall(AGENT_ID, params.topic, results.map(r => r.engram.id));
+        await store.updateAutoCheckpointRecall(AGENT_ID, params.topic, results.map(r => r.engram.id));
       }
     } catch { /* recall failure is non-fatal */ }
 
@@ -1001,7 +1016,7 @@ This captures what was accomplished so future sessions can recall it.`,
     });
 
     // Determine the real task name for the summary engram
-    const checkpoint = store.getCheckpoint(AGENT_ID);
+    const checkpoint = await store.getCheckpoint(AGENT_ID);
     const rawTask = checkpoint?.executionState?.currentTask ?? 'Unknown task';
     // Strip any "Completed: " prefixes to avoid cascading
     const cleanedTask = rawTask.replace(/^(Completed: )+/, '');
@@ -1011,7 +1026,7 @@ This captures what was accomplished so future sessions can recall it.`,
       ? cleanedTask
       : params.summary.slice(0, 60).replace(/\n/g, ' ');
 
-    const engram = store.createEngram({
+    const engram = await store.createEngram({
       agentId: AGENT_ID,
       concept: completedTask.slice(0, 80),
       content: params.summary,
@@ -1027,22 +1042,22 @@ This captures what was accomplished so future sessions can recall it.`,
     // 2. Handle supersessions — mark old memories as outdated
     let supersededCount = 0;
     for (const oldId of params.supersedes) {
-      const oldEngram = store.getEngram(oldId);
+      const oldEngram = await store.getEngram(oldId);
       if (oldEngram) {
-        store.supersedeEngram(oldId, engram.id);
-        store.upsertAssociation(engram.id, oldId, 0.8, 'causal', 0.9);
-        store.updateConfidence(oldId, Math.max(0.2, oldEngram.confidence * 0.4));
+        await store.supersedeEngram(oldId, engram.id);
+        await store.upsertAssociation(engram.id, oldId, 0.8, 'causal', 0.9);
+        await store.updateConfidence(oldId, Math.max(0.2, oldEngram.confidence * 0.4));
         supersededCount++;
       }
     }
 
     // Generate embedding asynchronously
-    embed(`Task completed: ${params.summary}`).then(vec => {
-      store.updateEmbedding(engram.id, vec);
+    embed(`Task completed: ${params.summary}`).then(async vec => {
+      await store.updateEmbedding(engram.id, vec);
     }).catch(() => {});
 
     // 2. Update checkpoint to reflect completion
-    store.saveCheckpoint(AGENT_ID, {
+    await store.saveCheckpoint(AGENT_ID, {
       currentTask: `Completed: ${completedTask}`,
       decisions: checkpoint?.executionState?.decisions ?? [],
       activeFiles: [],
@@ -1052,7 +1067,7 @@ This captures what was accomplished so future sessions can recall it.`,
       episodeId: null,
     });
 
-    store.updateAutoCheckpointWrite(AGENT_ID, engram.id);
+    await store.updateAutoCheckpointWrite(AGENT_ID, engram.id);
     log(AGENT_ID, 'task:end', `"${completedTask}" summary=${engram.id} salience=${salience.score.toFixed(2)} superseded=${supersededCount}`);
 
     const supersededNote = supersededCount > 0 ? ` (${supersededCount} old memories superseded)` : '';
@@ -1080,19 +1095,26 @@ async function main() {
     onConsolidate: async (agentId, reason) => {
       console.error(`[mcp] consolidation triggered: ${reason}`);
       const result = await consolidationEngine.consolidate(agentId);
-      store.markConsolidation(agentId, false);
+      await store.markConsolidation(agentId, false);
       console.error(`[mcp] consolidation done: ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
     },
   });
 
   // Coordination MCP tools (opt-in via AWM_COORDINATION=true)
-  const coordEnabled = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
+  // AWM 0.8.x: coordination requires SQLite (uses store.getDb()). On PGlite,
+  // coordination is auto-disabled with a warning; re-enable when coordination
+  // is ported to async/PGlite.
+  const coordRequested = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
+  const coordEnabled = coordRequested && BACKEND === 'sqlite';
   if (coordEnabled) {
     const { initCoordinationTables } = await import('./coordination/schema.js');
     const { registerCoordinationTools } = await import('./coordination/mcp-tools.js');
-    initCoordinationTables(store.getDb());
-    registerCoordinationTools(server, store.getDb());
-    coordDb = store.getDb();
+    const sqliteStore = store as unknown as EngramStore;
+    initCoordinationTables(sqliteStore.getDb());
+    registerCoordinationTools(server, sqliteStore.getDb());
+    coordDb = sqliteStore.getDb();
+  } else if (coordRequested && BACKEND === 'pglite') {
+    console.error('AWM: coordination requested but disabled — coordination plugin requires SQLite backend');
   } else {
     console.error('AWM: coordination tools disabled (set AWM_COORDINATION=true to enable)');
   }
@@ -1102,15 +1124,17 @@ async function main() {
   console.error(`Hook sidecar on 127.0.0.1:${HOOK_PORT}${HOOK_SECRET ? ' (auth enabled)' : ' (no auth — set AWM_HOOK_SECRET)'}`);
 
   // Clean shutdown
-  const cleanup = () => {
+  const cleanup = async () => {
     sidecar.close();
     consolidationScheduler.stop();
     stagingBuffer.stop();
-    try { store.walCheckpoint(); } catch { /* non-fatal */ }
-    store.close();
+    if (BACKEND === 'sqlite') {
+      try { (store as Partial<EngramStore>).walCheckpoint?.(); } catch { /* non-fatal */ }
+    }
+    try { await (store as any).close?.(); } catch { /* best-effort */ }
   };
-  process.on('SIGINT', () => { cleanup(); process.exit(0); });
-  process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+  process.on('SIGINT', () => { void cleanup().finally(() => process.exit(0)); });
+  process.on('SIGTERM', () => { void cleanup().finally(() => process.exit(0)); });
 }
 
 main().catch(err => {

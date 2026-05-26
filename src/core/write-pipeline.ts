@@ -35,7 +35,7 @@
  * the new engram (typically active because corrections are high-salience).
  */
 
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConnectionEngine } from '../engine/connections.js';
 import type { Engram, MemoryClass, MemoryType } from '../types/engram.js';
 import {
@@ -151,17 +151,47 @@ export interface WritePipelineEngines {
  * Set process.env.AWM_WRITE_PIPELINE=off to revert to legacy create-only
  * behavior (the same write inputs but every write creates a new engram).
  */
-export function performWrite(
+export async function performWrite(
   engines: WritePipelineEngines,
   input: WriteInput,
-): WriteResult {
+): Promise<WriteResult> {
   const { store, connectionEngine } = engines;
   const enableReinforcement = input.enableReinforcement !== false
     && process.env.AWM_WRITE_PIPELINE !== 'off';
 
-  const noveltyResult = computeNoveltyWithMatch(
-    store, input.agentId, input.concept, input.content, input.workspace ?? null,
+  // Profiling: AWM_PROFILE_WRITE=1 logs ms-per-phase to stderr (v0.8.2).
+  // Off by default; zero cost when unset.
+  const profile = process.env.AWM_PROFILE_WRITE === '1';
+  const startTotal = profile ? performance.now() : 0;
+  let tNovelty = 0, tCreate = 0, tEmbed = 0;
+
+  // Pre-embed once (v0.8.5): the embedding is needed for cosine-based novelty
+  // and is also the embedding we'll store on the engram. Computing it once
+  // here costs ~50-100ms but saves the post-write async embed pass (which
+  // used to run after createEngram). Net cost is the same; we just pay it
+  // synchronously up front in exchange for a backend-agnostic novelty signal.
+  //
+  // If embed fails (model not loaded, hardware issue), we silently fall back
+  // to BM25-only novelty and write without an embedding (the async embed
+  // hook below will retry).
+  // Disable via AWM_NOVELTY_EMBED=0 to keep writes ultra-fast at the cost
+  // of cross-backend novelty consistency.
+  const tStartEmbed = profile ? performance.now() : 0;
+  let prewriteEmbedding: number[] | null = null;
+  if (process.env.AWM_NOVELTY_EMBED !== '0') {
+    try {
+      prewriteEmbedding = await embed(`${input.concept} ${input.content}`);
+    } catch { /* fall through — async embed will retry later */ }
+  }
+  if (profile) tEmbed = performance.now() - tStartEmbed;
+
+  const tStartNovelty = profile ? performance.now() : 0;
+  const noveltyResult = await computeNoveltyWithMatch(
+    store, input.agentId, input.concept, input.content,
+    input.workspace ?? null,
+    prewriteEmbedding,
   );
+  if (profile) tNovelty = performance.now() - tStartNovelty;
 
   // Effective event type — auto-promote user-feedback content.
   const effectiveEventType: SalienceEventType =
@@ -185,8 +215,10 @@ export function performWrite(
   });
 
   // -- Reinforce / Supersede branching --
+  const tStartCreate = profile ? performance.now() : 0;
+  let result: WriteResult | null = null;
   if (enableReinforcement && noveltyResult.matchedEngramId) {
-    const matched = store.getEngram(noveltyResult.matchedEngramId);
+    const matched = await store.getEngram(noveltyResult.matchedEngramId);
     if (matched) {
       const newConcept = (input.concept ?? '').toLowerCase().trim();
       const matchedConcept = (matched.concept ?? '').toLowerCase().trim();
@@ -197,66 +229,177 @@ export function performWrite(
           || effectiveEventType === 'friction';
 
         if (isCorrectionSignal) {
-          // R3 — supersede the matched engram with the new write
-          return createNewEngram(engines, input, salience, noveltyResult, {
+          // R3 — supersede the matched engram with the new write.
+          // Force `active` disposition (v0.8.5): the user explicitly flagged
+          // this write as a correction (eventType=surprise/friction). Without
+          // this override, cosine-based novelty (which correctly recognizes
+          // the correction's semantic similarity to the engram it's
+          // correcting) would push salience low and the correction would
+          // land in 'staging'. That broke the R2 superseder-reinforce chain
+          // for later writes (the chain requires stage='active'). The user's
+          // explicit correction intent must win over the duplicate-detection
+          // signal. R3 corrections always go active.
+          const correctionSalience: SalienceResult = {
+            ...salience,
+            disposition: 'active' as const,
+            reasonCodes: [...salience.reasonCodes, 'correction:override-active'],
+          };
+          result = await createNewEngram(engines, input, correctionSalience, noveltyResult, {
             effectiveEventType,
             effectiveMemoryClass,
             supersedesId: matched.id,
-          });
-        }
+          }, prewriteEmbedding);
+        } else {
+          // R2 — health check on the matched engram
+          const isHealthy = matched.stage === 'active'
+            && matched.confidence >= HEALTHY_CONFIDENCE_FLOOR
+            && matched.supersededBy == null;
 
-        // R2 — health check on the matched engram
-        const isHealthy = matched.stage === 'active'
-          && matched.confidence >= HEALTHY_CONFIDENCE_FLOOR
-          && matched.supersededBy == null;
-
-        if (isHealthy) {
-          // R1 — reinforce
-          return reinforceMatched(store, matched, noveltyResult, salience);
-        }
-
-        // Unhealthy match but it was superseded — try to reinforce the superseder
-        if (matched.supersededBy) {
-          const superseder = store.getEngram(matched.supersededBy);
-          if (superseder && superseder.stage === 'active'
-              && superseder.confidence >= HEALTHY_CONFIDENCE_FLOOR
-              && superseder.supersededBy == null) {
-            return reinforceMatched(store, superseder, noveltyResult, salience);
+          if (isHealthy) {
+            // R1 — reinforce (and merge new content into matched engram, v0.8.5)
+            result = await reinforceMatched(store, matched, noveltyResult, salience, input.content, input.concept);
+          } else if (matched.supersededBy) {
+            // Unhealthy match but it was superseded — try to reinforce the superseder
+            const superseder = await store.getEngram(matched.supersededBy);
+            if (superseder && superseder.stage === 'active'
+                && superseder.confidence >= HEALTHY_CONFIDENCE_FLOOR
+                && superseder.supersededBy == null) {
+              result = await reinforceMatched(store, superseder, noveltyResult, salience, input.content, input.concept);
+            }
           }
         }
-
-        // Otherwise fall through to create new
       }
     }
   }
 
-  // -- Default: create new engram --
-  return createNewEngram(engines, input, salience, noveltyResult, {
-    effectiveEventType,
-    effectiveMemoryClass,
-    supersedesId: input.supersedes,
-  });
+  // -- Default: create new engram (if no reinforce/supersede branch fired) --
+  if (!result) {
+    result = await createNewEngram(engines, input, salience, noveltyResult, {
+      effectiveEventType,
+      effectiveMemoryClass,
+      supersedesId: input.supersedes,
+    }, prewriteEmbedding);
+  }
+  if (profile) tCreate = performance.now() - tStartCreate;
+
+  if (profile) {
+    const total = performance.now() - startTotal;
+    // Single-line stderr log; cheap to grep, easy to disable.
+    // Format: [write] action=create novelty=42.1ms create=18.3ms total=60.4ms agent=x id=y
+    // eslint-disable-next-line no-console
+    console.error(
+      `[awm-write] action=${result.action} embed=${tEmbed.toFixed(1)}ms novelty=${tNovelty.toFixed(1)}ms create=${tCreate.toFixed(1)}ms total=${total.toFixed(1)}ms agent=${input.agentId} id=${result.engram.id}`,
+    );
+  }
+
+  return result;
 }
 
-function reinforceMatched(
+/**
+ * Reinforce-merge upper bound on content length (chars). When an engram's
+ * merged content would exceed this, we drop the OLDEST reinforced segment(s)
+ * to make room for the new one. Recency wins because later reinforces
+ * usually elaborate on the topic with more specific keywords. Configurable
+ * via `AWM_REINFORCE_MAX_CONTENT_LEN`.
+ *
+ * Default lowered to 1500 chars (~375 tokens) in v0.8.5 follow-up after
+ * test:tokens showed 4000-char cap produced 3.5× baseline AWM context size
+ * on concept-collision corpora (e.g. concept="${task} conversation"). 1500
+ * is large enough to hold ~3–4 reinforced segments without blowing token
+ * budget on recall.
+ */
+const REINFORCE_MAX_CONTENT_LEN = Number(process.env.AWM_REINFORCE_MAX_CONTENT_LEN ?? 1500);
+const REINFORCE_SEPARATOR = '\n\n--- reinforced ---\n';
+
+/**
+ * Merge new content into an existing engram on reinforce (v0.8.5).
+ *
+ * Prior behavior: reinforce-on-duplicate kept ONLY the first write's
+ * content. Subsequent same-concept writes bumped confidence + accessCount
+ * but their content was discarded. When the new content carried valuable
+ * keyword detail (later writes elaborating on the topic), that information
+ * was lost — confirmed via scripts/trace-recall-divergence.ts on
+ * test:tokens, where multi-turn auth-assistant content (HS256, refresh
+ * tokens, 15 min, 7 day) consolidated into the FIRST auth-assistant turn's
+ * content (just "I'll set up JWT auth with jsonwebtoken...") losing all
+ * keyword info.
+ *
+ * Behavior: append the new content with a separator, unless it's already a
+ * substring of the existing content (true repeat — no info gain). When the
+ * projected length exceeds REINFORCE_MAX_CONTENT_LEN, drop the OLDEST
+ * reinforced segment(s) until it fits. The first segment (original write)
+ * is also evictable if subsequent reinforces have replaced it with more
+ * specific content.
+ *
+ * Returns `{ merged, appended }` so callers can skip the re-embed + DB
+ * update when nothing changed.
+ */
+function mergeReinforcedContent(existing: string, addition: string): { merged: string; appended: boolean } {
+  const trimmed = (addition ?? '').trim();
+  if (!trimmed) return { merged: existing, appended: false };
+  // Already-covered: new content is a substring of existing — true repeat.
+  if (existing.includes(trimmed)) return { merged: existing, appended: false };
+
+  // Split into segments on the separator so we can drop oldest on overflow.
+  const segments = existing.split(REINFORCE_SEPARATOR);
+  segments.push(trimmed);
+  let projected = segments.join(REINFORCE_SEPARATOR);
+
+  // Drop oldest segments until the projected content fits the cap. Always
+  // keep the new content (segments[last]) — if even the new addition alone
+  // exceeds the cap, we keep it anyway since recency drives value.
+  while (projected.length > REINFORCE_MAX_CONTENT_LEN && segments.length > 1) {
+    segments.shift();
+    projected = segments.join(REINFORCE_SEPARATOR);
+  }
+  return { merged: projected, appended: true };
+}
+
+async function reinforceMatched(
   store: EngramStore,
   matched: Engram,
   noveltyResult: NoveltyResult,
   salience: SalienceResult,
-): WriteResult {
+  /** The new write's content, so we can merge it into the matched engram (v0.8.5). */
+  newContent: string = '',
+  /** The new write's concept, used for re-embed text when content changes. */
+  newConceptHint: string = '',
+): Promise<WriteResult> {
   const previousConfidence = matched.confidence;
   const previousAccessCount = matched.accessCount;
   const newConfidence = Math.min(
     REINFORCE_CONFIDENCE_CEIL,
     previousConfidence + REINFORCE_CONFIDENCE_DELTA,
   );
-  store.updateConfidence(matched.id, newConfidence);
-  store.touchEngram(matched.id);
+  await store.updateConfidence(matched.id, newConfidence);
+  await store.touchEngram(matched.id);
+
+  // v0.8.5: merge new content into existing engram so reinforce-on-duplicate
+  // doesn't throw away later writes' information. Re-embed the merged
+  // content so semantic recall reflects the accumulated knowledge.
+  let mergedContent = matched.content;
+  if (newContent && process.env.AWM_REINFORCE_MERGE_CONTENT !== '0') {
+    const result = mergeReinforcedContent(matched.content, newContent);
+    if (result.appended) {
+      mergedContent = result.merged;
+      try {
+        await store.updateContent(matched.id, mergedContent);
+        // Re-embed the merged content so cosine recall surfaces the new
+        // info. Use concept + merged-content; embedding model truncates
+        // beyond 512 tokens but the topic anchor (early content) drives
+        // the vector for retrieval purposes.
+        const conceptForEmbed = newConceptHint || matched.concept;
+        const newVec = await embed(`${conceptForEmbed} ${mergedContent}`);
+        await store.updateEmbedding(matched.id, newVec);
+      } catch { /* merge is best-effort — confidence bump already landed */ }
+    }
+  }
 
   // Return the engram with the updated values reflected (the DB write
   // happened above; the in-memory object is one snapshot behind).
   const refreshed: Engram = {
     ...matched,
+    content: mergedContent,
     confidence: newConfidence,
     accessCount: previousAccessCount + 1,
     lastAccessed: new Date(),
@@ -271,7 +414,7 @@ function reinforceMatched(
   };
 }
 
-function createNewEngram(
+async function createNewEngram(
   engines: WritePipelineEngines,
   input: WriteInput,
   salience: SalienceResult,
@@ -281,7 +424,10 @@ function createNewEngram(
     effectiveMemoryClass: MemoryClass | undefined;
     supersedesId: string | undefined;
   },
-): WriteResult {
+  /** Pre-computed embedding from performWrite (v0.8.5). If non-null, used
+   *  directly + skips the post-create async embed pass. */
+  prewriteEmbedding: number[] | null = null,
+): Promise<WriteResult> {
   const { store, connectionEngine } = engines;
 
   const isLowSalience = salience.disposition === 'discard';
@@ -298,7 +444,7 @@ function createNewEngram(
   const tags = [...(input.tags ?? [])];
   if (isLowSalience && !tags.includes('low-salience')) tags.push('low-salience');
 
-  const engram = store.createEngram({
+  const engram = await store.createEngram({
     agentId: input.agentId,
     concept: input.concept,
     content: input.content,
@@ -313,19 +459,22 @@ function createNewEngram(
     supersedes: meta.supersedesId,
     sequence: input.sequence,
     references: input.references,
+    embedding: prewriteEmbedding && prewriteEmbedding.length > 0
+      ? prewriteEmbedding
+      : undefined,
   });
 
   if (salience.disposition === 'staging') {
-    store.updateStage(engram.id, 'staging');
+    await store.updateStage(engram.id, 'staging');
   }
 
   // Supersession side-effects: mark the old engram, add causal edge.
   if (meta.supersedesId) {
     try {
-      const oldEngram = store.getEngram(meta.supersedesId);
+      const oldEngram = await store.getEngram(meta.supersedesId);
       if (oldEngram) {
-        store.supersedeEngram(meta.supersedesId, engram.id);
-        store.upsertAssociation(engram.id, oldEngram.id, 0.8, 'causal', 0.9);
+        await store.supersedeEngram(meta.supersedesId, engram.id);
+        await store.upsertAssociation(engram.id, oldEngram.id, 0.8, 'causal', 0.9);
       }
     } catch { /* supersession is best-effort */ }
   }
@@ -333,19 +482,30 @@ function createNewEngram(
   // Connection discovery — only for non-staged writes (active or low-salience).
   // Structural engrams skip connection discovery: they're event-log records,
   // not observations the agent needs to think about (0.8 Cluster A).
+  //
+  // v0.8.2: enqueueAndMaybeFlush queues for the next consolidation cycle
+  // (cheap, no event-loop blocking). For cold-start agents (fewer than
+  // AWM_CONNECTION_COLD_START_THRESHOLD active engrams, default 10), the
+  // queue drains inline as a background task so the first few writes still
+  // build a useful association graph before the next consolidation fires.
   const isStructural = meta.effectiveMemoryClass === 'structural';
   if ((salience.disposition === 'active' || isLowSalience) && !isStructural) {
-    try { connectionEngine.enqueue(engram.id); } catch { /* non-fatal */ }
+    try { connectionEngine.enqueueAndMaybeFlush(engram.id, input.agentId); } catch { /* non-fatal */ }
   }
 
   // Async embed — never blocks the response, failure non-fatal.
   // Structural engrams skip embedding by default (deterministic retrieval only).
   // Caller can override by passing `embed: true` on the write input.
-  const shouldEmbed = !isStructural || input.embed === true;
+  //
+  // v0.8.5: skip the async embed entirely when performWrite already
+  // pre-computed the embedding for cosine-based novelty. The embedding
+  // was passed to createEngram above; no re-embed needed.
+  const alreadyEmbedded = prewriteEmbedding != null && prewriteEmbedding.length > 0;
+  const shouldEmbed = (!isStructural || input.embed === true) && !alreadyEmbedded;
   if (shouldEmbed) {
     embed(`${input.concept} ${input.content}`)
-      .then(vec => {
-        try { store.updateEmbedding(engram.id, vec); } catch { /* engram may be evicted */ }
+      .then(async vec => {
+        try { await store.updateEmbedding(engram.id, vec); } catch { /* engram may be evicted */ }
       })
       .catch(() => { /* embed failure tolerated */ });
   }

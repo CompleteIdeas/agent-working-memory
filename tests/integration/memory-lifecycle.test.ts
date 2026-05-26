@@ -175,7 +175,7 @@ describe('Hebbian association formation (validation-gated)', () => {
     });
 
     // Provide positive feedback — this triggers validation-gated Hebbian strengthening
-    const updated = activation.resolveHebbianFeedback(e1.id, true);
+    const updated = await activation.resolveHebbianFeedback(e1.id, true);
 
     // After feedback: associations should exist
     const assocs = store.getAssociationsFor(e1.id);
@@ -197,7 +197,7 @@ describe('Retraction (negative memory)', () => {
       confidence: 0.7,
     });
 
-    const result = retraction.retract({
+    const result = await retraction.retract({
       agentId: AGENT_ID,
       targetEngramId: wrong.id,
       reason: 'Incorrect — 418 is I\'m a Teapot',
@@ -233,7 +233,7 @@ describe('Retraction (negative memory)', () => {
 });
 
 describe('Eviction', () => {
-  it('evicts lowest-value engrams when over capacity', () => {
+  it('evicts lowest-value engrams when over capacity', async () => {
     const config = { ...DEFAULT_AGENT_CONFIG, maxActiveEngrams: 3 };
 
     // Create 5 engrams
@@ -249,7 +249,7 @@ describe('Eviction', () => {
 
     expect(store.getActiveCount(AGENT_ID)).toBe(5);
 
-    const result = eviction.enforceCapacity(AGENT_ID, config);
+    const result = await eviction.enforceCapacity(AGENT_ID, config);
     expect(result.evicted).toBe(2); // 5 - 3 = 2 to remove
     expect(store.getActiveCount(AGENT_ID)).toBe(3);
   });
@@ -289,8 +289,8 @@ describe('Feedback and confidence updates', () => {
 });
 
 describe('Eval metrics', () => {
-  it('computes metrics without errors on empty agent', () => {
-    const metrics = evalEngine.computeMetrics(AGENT_ID);
+  it('computes metrics without errors on empty agent', async () => {
+    const metrics = await evalEngine.computeMetrics(AGENT_ID);
     expect(metrics.agentId).toBe(AGENT_ID);
     expect(metrics.activeEngramCount).toBe(0);
     expect(metrics.avgConfidence).toBe(0);
@@ -302,7 +302,7 @@ describe('Eval metrics', () => {
 
     await activation.activate({ agentId: AGENT_ID, context: 'hello world', useReranker: false, useExpansion: false });
 
-    const metrics = evalEngine.computeMetrics(AGENT_ID);
+    const metrics = await evalEngine.computeMetrics(AGENT_ID);
     expect(metrics.activeEngramCount).toBe(2);
     expect(metrics.avgConfidence).toBeGreaterThan(0);
     expect(metrics.activationCount).toBe(1);

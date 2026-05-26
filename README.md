@@ -86,18 +86,25 @@ The design is based on cognitive science — ACT-R activation decay, Hebbian lea
 
 ---
 
-## Benchmarks (v0.6.0)
+## Benchmarks
 
-### Eval Harness (new in v0.6.0)
+### Eval Harness
 
-| Suite | Score | Threshold | What it tests |
-|-------|-------|-----------|---------------|
-| Retrieval | **Recall@5 = 0.800** | >= 0.80 | 200 facts, 50 queries — BM25 + vector + reranker pipeline precision |
-| Associative | **success@10 = 1.000** | >= 0.70 | 20 multi-hop causal chains — graph walk finds non-obvious connections |
-| Redundancy | **dedup F1 = 0.966** | >= 0.80 | 50 clusters × 4 paraphrases — consolidation removes duplicates correctly |
-| Temporal | **Spearman = 0.932** | >= 0.75 | 25 facts with controlled age/access — ACT-R decay ranking accuracy |
+| Suite | Score (v0.8.5) | Score (v0.6.0 baseline) | Threshold | What it tests |
+|-------|---|---|-----------|---------------|
+| Retrieval | **Recall@5 = 0.980** | 0.800 | >= 0.80 | 200 facts, 50 queries — BM25 + vector + reranker pipeline precision |
+| Associative | **success@10 = 1.000** | 1.000 | >= 0.70 | 20 multi-hop causal chains — graph walk finds non-obvious connections |
+| Redundancy | **dedup F1 = 0.966** | 0.966 | >= 0.80 | 50 clusters × 4 paraphrases — consolidation removes duplicates correctly |
+| Temporal | **Spearman = 0.932** | 0.932 | >= 0.75 | 25 facts with controlled age/access — ACT-R decay ranking accuracy |
 
-Key finding: **consolidation improves retrieval by 30%** — post-consolidation recall (0.950) exceeds pre-consolidation (0.650). Removing redundant noise helps ranking.
+> **v0.8.5 recall fix:** A regression intermediate-step had Recall@5 drop to
+> 0.46. Root cause: the entity-bridge boost (Phase 3.7) inverted top-1 in
+> dense same-concept corpora — it rewarded clones that shared tags with
+> the anchor while excluding the anchor itself. Fix: proportional gating
+> so the boost scales with the textMatch gap between candidate and anchor.
+> Clones near the anchor get near-zero boost; genuine lateral candidates
+> (low textMatch, shared entities) still get the full boost.
+> Result: Recall@5 0.46 → 0.980 with all 4 eval suites green.
 
 ### Full Test Suite
 
@@ -113,6 +120,7 @@ Key finding: **consolidation improves retrieval by 30%** — post-consolidation 
 | `npm run test:ab` | **AWM 20/22 vs Baseline 18/22** | AWM outperforms keyword baseline on architecture + testing topics |
 | `npm run test:sleep` | **71.4%** | 60 memories, 4 topic clusters, consolidation impact across 3 cycles |
 | `npm run test:tokens` | **56.3% savings, 2.3x efficiency** | Memory-guided context vs full history, keyword accuracy 72.5% |
+| `scripts/measure-claude-vs-awm.ts` | **9.8× lower aggregate cost vs file_retrieval** | Real Claude Code session audit: AWM recall vs Read/Grep/Glob workflows |
 | `npm run test:pilot` | **14/15 pass** | Production-like queries with noise rejection (5/5 noise rejected) |
 | `npm run test:locomo` | **28.2%** | Industry-standard LoCoMo conversational memory benchmark (1,986 QA pairs) |
 
@@ -435,6 +443,18 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | `AWM_DISABLE_RERANK_SKIP` | *(unset)* | Set to `1` to disable the reranker skip on clear-winner queries (0.7.10+). Forces every recall through the cross-encoder |
 | `AWM_DISABLE_EXPANSION_CACHE` | *(unset)* | Set to `1` to disable the query expansion skip heuristic + LRU cache (0.7.11+). Forces every recall through the flan-t5-small expander |
 | `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
+| `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (better-sqlite3 + FTS5) or `pglite` (PGlite + pgvector + pgroonga). 0.8.x. |
+| `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path. Directory for PGlite, file for SQLite. |
+| `AWM_CONF_SHARPNESS_W` | `0.4` | Weight of `top1 / mean(top5)` in recall confidence (PR-1, v0.8.5) |
+| `AWM_CONF_CLIFF_W` | `0.3` | Weight of `(top1 - top10) / top1` in recall confidence (PR-1, v0.8.5) |
+| `AWM_CONF_FLOOR_W` | `0.3` | Weight of `top1` absolute score in recall confidence (PR-1, v0.8.5) |
+| `AWM_FADE_DAYS_SINCE_ACCESS` | `45` | Days without access before a stale active engram fades (v0.8.5) |
+| `AWM_FADE_KEEP_CHARS` | `150` | Chars retained in faded engram content (v0.8.5) |
+| `AWM_FADE_MIN_CONTENT_LEN` | `250` | Don't fade engrams shorter than this — nothing to trim (v0.8.5) |
+| `AWM_FADE_MAX_PER_CYCLE` | `25` | Max engrams faded per consolidation cycle — gradual, not sudden (v0.8.5) |
+| `AWM_GRANULARITY_COMPACT_LEN` | `200` | Char cap for `granularity: 'compact'` summaries (v0.8.5) |
+| `AWM_GRANULARITY_FULL_LEN` | `1000` | Char cap for top result under `granularity: 'auto'` when confidence ≥ threshold (v0.8.5) |
+| `AWM_GRANULARITY_AUTO_THRESHOLD` | `0.4` | Recall-confidence threshold above which `'auto'` granularity gives the top result a long-form summary (v0.8.5) |
 
 ## Tech Stack
 
@@ -452,6 +472,81 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | Validation | Zod 4 |
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
+
+## What's New in v0.8.5
+
+A research-grounded hardening pass on recall quality, retraction propagation,
+and lifecycle management. Every change is **fully additive** — existing
+callers keep working without modification. Full validation at the milestone:
+`vitest run` 549/549 pass; `test:self` 97.6% EXCELLENT (was 91.4% on 0.8.0);
+`test:ab` AWM 89.3% vs Baseline 83.0% (+6.4 points); `test:perf` 4/4 PASS.
+
+- **Recall confidence as data (PR-1).** Every `ActivationResult` now carries
+  a `confidence` field in [0, 1] — a score-distribution-aware signal
+  (sharpness + cliff + floor blended via weighted geometric mean) that tells
+  the caller how trustworthy the recall set is. Same value on every result
+  in a recall — it describes the *set*, not the individual. Research grounding:
+  Geifman & El-Yaniv (NeurIPS 2017), Roitero et al (SIGIR 2022). Default
+  behavior unchanged; this is data, not a gate.
+
+- **Opt-in confidence-based abstention (PR-2).** Callers can pass
+  `requireConfidence` (typical values: 0.10 strict, 0.25 balanced, 0.40
+  aggressive). When set, the engine returns `[]` on recalls whose
+  distribution shape falls below the threshold — defeats the
+  "best-of-bad-bunch" leak where a noisy recall returns a weak top result
+  that the agent then trusts.
+
+- **Coherence-weighted retraction (#18).** Retraction penalty propagation
+  is no longer uniform. Multiplier scales with local neighborhood cohesion:
+  dense topically-coherent clusters (a narrative) get heavier penalties when
+  the seed is wrong; hub structures (popular node with heterogeneous edges)
+  get lighter penalties. Implements Carrillo et al, "Continued Influence
+  Effect" (ICCM 2025).
+
+- **Counter-narrative replacement on supersede/correction (#19).** When
+  retraction creates a counter-content correction, the new engram inherits
+  the original's `'connection'` edges (scaled 0.7×, capped at 10
+  inheritances, with `invalidation` / `causal` / `temporal` skipped). The
+  corrected fact takes over the graph role of the wrong fact rather than
+  leaving the corrected fact disconnected.
+
+- **Content fade stage (#20) — Paper 1.** New intermediate `'fading'`
+  lifecycle stage between `'active'` and `'archived'`. Engrams accessed
+  before but stale (no access in 45+ days, content > 250 chars) get content
+  trimmed to 150 chars + `… [faded]` marker. Concept, tags, and embedding
+  preserved — the engram still participates in BM25 + vector recall, just
+  with less body to score against. Models human memory's loss of surface
+  detail while retaining cue-association pathways (PLOS Comp Biology on
+  storage degradation). Heavily-used (`accessCount >= 10`), `canonical`,
+  `structural`, and retracted engrams excluded.
+
+- **Adaptive output granularity (#21) — Paper 3.** New
+  `granularity: 'full' | 'compact' | 'auto'` on `ActivationQuery`.
+  `'compact'` attaches a 200-char `summary` to every result. `'auto'` is
+  confidence-adaptive: when recall confidence ≥ 0.4, the top result gets
+  a long-form summary and the rest are compact; when confidence is low,
+  everything is compact so the agent can scan a diverse set without
+  drowning in content. Engram body never modified — just the response shape.
+  Models cognitive teaming (Brill 2018 ACT-R collaboration).
+
+## What's New in v0.8.1
+
+- **Coordination control layer** — `FailureMode` classifier + mutation-hint
+  retry on `cleanupStale`, per-worker `CircuitBreaker`, and voluntary
+  `POST /assignment/:id/fail` endpoint. Designed to reduce the 11.5%
+  failure-with-no-retry rate observed in production hive runs (81/703).
+  Two new schema columns on `coord_assignments` plus a `coord_circuit_state`
+  table — both additive `CREATE IF NOT EXISTS` migrations.
+
+## What's New in v0.8.0
+
+- **Substrate primitives for long-running structured projects** — four new
+  HTTP endpoints (`/memory/latest-by-tag`, `/memory/top-by`,
+  `/memory/resolve`, `/memory/supersede` Form B), three query operators
+  (`tagsAll`, `tagsAny`, `tagsNone`), and a fourth `memory_class` value
+  (`structural`). Optional engram columns `sequence` + `references_json`
+  enable race-free chronology and typed cross-record links. Designed against
+  the NovelForge 36,000-word "Drawdown" test bed.
 
 ## What's New in v0.7.16
 
@@ -564,15 +659,21 @@ See [CHANGELOG.md](CHANGELOG.md) for full details.
 
 ## Project Status
 
-AWM is in active development (v0.7.15). The core memory pipeline, consolidation system, multi-agent coordination, and MCP integration are stable and used daily in production coding workflows.
+AWM is in active development (v0.8.5). The core memory pipeline, consolidation
+system, multi-agent coordination, and MCP integration are stable and used
+daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
-- Multi-agent coordination: **stable** (v0.6.0)
+- Multi-agent coordination: **stable** (v0.8.1 hardening)
 - Task management: **stable**
 - Hook sidecar and auto-checkpoint: **stable**
 - HTTP API: **stable** (for custom agents)
-- Eval harness: **stable** (v0.6.0)
+- Eval harness: **stable** (v0.6.0, extended through 0.8.x)
+- Recall confidence + opt-in abstention (PR-1, PR-2): **stable** (v0.8.5)
+- Coherence-weighted retraction + counter-narrative inheritance: **stable** (v0.8.5)
+- Content fade stage + adaptive output granularity: **stable** (v0.8.5)
+- PGlite backend (alternative to SQLite, with pgvector + ivfflat): **stable** (v0.8.x)
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

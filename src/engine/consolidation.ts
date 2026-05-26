@@ -23,7 +23,8 @@
 import { cosineSimilarity } from '../core/embeddings.js';
 import { strengthenAssociation, decayAssociation } from '../core/hebbian.js';
 import type { Engram } from '../types/index.js';
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
+import type { ConnectionEngine } from './connections.js';
 
 /** Cosine similarity for initial candidate detection (single-link entry gate) */
 const SIMILARITY_THRESHOLD = 0.65;
@@ -81,6 +82,36 @@ const MAX_REDUNDANCY_PRUNE_PER_CYCLE = 25;
 /** Max confidence drift per consolidation cycle (prevents runaway) */
 const CONFIDENCE_DRIFT_CAP = 0.03;
 
+/**
+ * Content fade — Paper 1 (PLOS Comp Biology, storage degradation).
+ * Memories whose content has not been recalled in a long time get coarsened:
+ * the content string is trimmed to FADE_KEEP_CHARS with a "[faded]" marker,
+ * while concept, tags, and embedding are preserved.
+ *
+ * Rationale: human memory degrades the detailed surface but retains the gist
+ * and the cue-association pathway. The faded engram still surfaces by tag/concept
+ * BM25 and by vector similarity (embedding preserved), but the full content body
+ * is gone — which is the correct behavior for a memory that has not been useful
+ * enough to rehearse in a long time.
+ *
+ * Fade comes BEFORE archive in the lifecycle (active → fading → archived → deleted),
+ * applied only to engrams that have been accessed at least once. Engrams that have
+ * never been accessed go straight to archive via the standard forgetting path —
+ * they have no surface worth preserving.
+ *
+ * Env: AWM_FADE_DAYS_SINCE_ACCESS (default 45),
+ *      AWM_FADE_KEEP_CHARS (default 150),
+ *      AWM_FADE_MIN_CONTENT_LEN (default 250),
+ *      AWM_FADE_MAX_PER_CYCLE (default 25).
+ */
+const FADE_DAYS_SINCE_ACCESS = Number(process.env.AWM_FADE_DAYS_SINCE_ACCESS ?? 45);
+const FADE_KEEP_CHARS = Number(process.env.AWM_FADE_KEEP_CHARS ?? 150);
+const FADE_MIN_CONTENT_LEN = Number(process.env.AWM_FADE_MIN_CONTENT_LEN ?? 250);
+const FADE_MAX_PER_CYCLE = Number(process.env.AWM_FADE_MAX_PER_CYCLE ?? 25);
+const FADE_PROTECTED_ACCESS_COUNT = 10;
+const FADE_MARKER = '… [faded]';
+const FADE_PROTECTED_CLASSES = new Set(['canonical', 'structural']);
+
 /** Days without recall before confidence starts drifting down */
 const CONFIDENCE_NEGLECT_DAYS = 30;
 
@@ -94,6 +125,7 @@ export interface ConsolidationResult {
   edgesNormalized: number;
   memoriesForgotten: number;
   memoriesArchived: number;
+  memoriesFaded: number;
   redundancyPruned: number;
   confidenceAdjusted: number;
   stagingPromoted: number;
@@ -114,24 +146,45 @@ const SYNTH_STOPWORDS = new Set(['the', 'is', 'a', 'an', 'and', 'or', 'of', 'to'
 
 export class ConsolidationEngine {
   private store: EngramStore;
+  private connectionEngine: ConnectionEngine | null;
 
-  constructor(store: EngramStore) {
+  /**
+   * Optional `connectionEngine` is drained at the start of each
+   * consolidation pass (v0.8.2). Connection discovery is no longer
+   * triggered per write — the work batches into the existing sleep cycle
+   * so writes return in ~50 ms instead of being pegged by an inline
+   * embed + rerank cycle (~200-500 ms/write under load).
+   */
+  constructor(store: EngramStore, connectionEngine?: ConnectionEngine) {
     this.store = store;
+    this.connectionEngine = connectionEngine ?? null;
   }
 
   /**
    * Run a full sleep cycle for an agent.
    *
+   * Phase 0: Connection drain — discover associations for engrams enqueued
+   *           by writes since the last consolidation (v0.8.2)
    * Phase 1: Replay — find clusters of semantically similar memories
    * Phase 2: Strengthen — reinforce edges within clusters (access-weighted)
    * Phase 3: Bridge — create cross-cluster shortcuts
    * Phase 4: Decay — weaken unused edges, prune dead ones
    * Phase 5: Homeostasis — normalize outgoing edge weights per node
+   * Phase 5.5: Content fade — coarsen un-recalled engrams (Paper 1)
    * Phase 6: Forget — archive/delete memories never retrieved (age-gated)
+   * Phase 6.5: Redundancy prune
    * Phase 6.7: Confidence drift — adjust confidence based on structural signals
    * Phase 7: Sweep — check staging buffer for resonance
    */
   async consolidate(agentId: string): Promise<ConsolidationResult> {
+    // --- Phase 0: Connection drain ---
+    // Discover associations for engrams enqueued by writes since the last
+    // consolidation. Per-write inline discovery was removed in v0.8.2
+    // because each findConnections() call runs a full activation cycle
+    // (embed + rerank, ~200-500 ms event-loop block per write).
+    if (this.connectionEngine) {
+      try { await this.connectionEngine.processQueue(); } catch { /* best-effort */ }
+    }
     const result: ConsolidationResult = {
       clustersFound: 0,
       edgesStrengthened: 0,
@@ -142,6 +195,7 @@ export class ConsolidationEngine {
       edgesNormalized: 0,
       memoriesForgotten: 0,
       memoriesArchived: 0,
+      memoriesFaded: 0,
       redundancyPruned: 0,
       confidenceAdjusted: 0,
       stagingPromoted: 0,
@@ -152,7 +206,7 @@ export class ConsolidationEngine {
 
     // --- Phase 1: Replay ---
     // Get all active engrams, backfill missing embeddings
-    const allActive = this.store.getEngramsByAgent(agentId, 'active');
+    const allActive = await this.store.getEngramsByAgent(agentId, 'active');
     const needsEmbedding = allActive.filter(e => !e.embedding || e.embedding.length === 0);
     if (needsEmbedding.length > 0) {
       try {
@@ -165,7 +219,7 @@ export class ConsolidationEngine {
             const texts = batch.map(e => `${e.concept} ${e.content}`);
             const vecs = await embedBatch(texts);
             for (let j = 0; j < batch.length; j++) {
-              this.store.updateEmbedding(batch[j].id, vecs[j], modelId);
+              await this.store.updateEmbedding(batch[j].id, vecs[j], modelId);
               batch[j].embedding = vecs[j];
             }
           } catch { /* batch failed, skip — non-fatal */ }
@@ -178,10 +232,10 @@ export class ConsolidationEngine {
     const engrams = allActive.filter(e => e.embedding && e.embedding.length > 0);
 
     result.engramsProcessed = engrams.length;
-    if (engrams.length < 2) return result;
-
-    // Find clusters of related memories
-    const clusters = this.findClusters(engrams);
+    // Clustering requires at least two engrams to form pairs. Per-engram phases
+    // (fade, forget, confidence drift, staging sweep) still run for singletons —
+    // they don't need a graph.
+    const clusters = engrams.length >= 2 ? this.findClusters(engrams) : [];
     result.clustersFound = clusters.length;
 
     // --- Phase 2: Strengthen (access-weighted) ---
@@ -200,17 +254,17 @@ export class ConsolidationEngine {
             0.3 + 0.7 * Math.log1p(a.accessCount + b.accessCount) / Math.log1p(20),
           );
 
-          const existing = this.store.getAssociation(a.id, b.id);
+          const existing = await this.store.getAssociation(a.id, b.id);
           if (existing) {
             const newWeight = strengthenAssociation(
               existing.weight, CONSOLIDATION_SIGNAL * accessFactor, 0.25,
             );
-            this.store.upsertAssociation(
+            await this.store.upsertAssociation(
               a.id, b.id, newWeight, existing.type, existing.confidence,
             );
             result.edgesStrengthened++;
           } else if (newEdges < MAX_NEW_EDGES_PER_CYCLE) {
-            this.store.upsertAssociation(
+            await this.store.upsertAssociation(
               a.id, b.id, INITIAL_EDGE_WEIGHT * accessFactor, 'connection',
             );
             newEdges++;
@@ -283,7 +337,7 @@ export class ConsolidationEngine {
         `Discussed: ${keyTerms.slice(8).join(', ')}.`,
       ].join(' ');
 
-      const synthEngram = this.store.createEngram({
+      const synthEngram = await this.store.createEngram({
         agentId,
         concept: `session: ${tag} (${keyTerms.slice(0, 3).join(', ')})`,
         content: synthContent,
@@ -296,12 +350,12 @@ export class ConsolidationEngine {
       // Set embedding to group centroid
       const centroid = this.computeCentroid(group);
       if (centroid.length > 0) {
-        this.store.updateEmbedding(synthEngram.id, centroid);
+        await this.store.updateEmbedding(synthEngram.id, centroid);
       }
 
       // Link to sources
       for (const source of group.slice(0, 10)) { // Cap links to prevent explosion
-        this.store.upsertAssociation(synthEngram.id, source.id, 0.4, 'causal');
+        await this.store.upsertAssociation(synthEngram.id, source.id, 0.4, 'causal');
       }
 
       synthCount++;
@@ -344,7 +398,7 @@ export class ConsolidationEngine {
         `Common themes: ${keyTerms.join(', ')}.`,
       ].join(' ');
 
-      const synthEngram = this.store.createEngram({
+      const synthEngram = await this.store.createEngram({
         agentId,
         concept: `pattern: ${keyTerms.slice(0, 3).join(', ')}`,
         content: synthContent,
@@ -356,11 +410,11 @@ export class ConsolidationEngine {
 
       const centroid = this.computeCentroid(cluster);
       if (centroid.length > 0) {
-        this.store.updateEmbedding(synthEngram.id, centroid);
+        await this.store.updateEmbedding(synthEngram.id, centroid);
       }
 
       for (const source of cluster.slice(0, 8)) {
-        this.store.upsertAssociation(synthEngram.id, source.id, 0.3, 'bridge');
+        await this.store.upsertAssociation(synthEngram.id, source.id, 0.3, 'bridge');
       }
 
       synthCount++;
@@ -386,10 +440,10 @@ export class ConsolidationEngine {
             }
           }
           if (bestA && bestB && bestSim > MIN_BRIDGE_SIM) {
-            const existing = this.store.getAssociation(bestA.id, bestB.id);
+            const existing = await this.store.getAssociation(bestA.id, bestB.id);
             if (!existing) {
-              this.store.upsertAssociation(bestA.id, bestB.id, bestSim, 'bridge');
-              this.store.upsertAssociation(bestB.id, bestA.id, bestSim, 'bridge');
+              await this.store.upsertAssociation(bestA.id, bestB.id, bestSim, 'bridge');
+              await this.store.upsertAssociation(bestB.id, bestA.id, bestSim, 'bridge');
               bridges++;
               result.bridgesCreated++;
             }
@@ -404,7 +458,7 @@ export class ConsolidationEngine {
     // practiced memories are more resistant to forgetting in the brain.
     // Base half-life: 7 days. High-confidence (0.8+) gets up to 30 days.
     const engramMap = new Map(engrams.map(e => [e.id, e]));
-    const associations = this.store.getAllAssociations(agentId);
+    const associations = await this.store.getAllAssociations(agentId);
     for (const assoc of associations) {
       const daysSince =
         (Date.now() - assoc.lastActivated.getTime()) / (1000 * 60 * 60 * 24);
@@ -424,10 +478,10 @@ export class ConsolidationEngine {
 
       const newWeight = decayAssociation(assoc.weight, daysSince, halfLifeDays);
       if (newWeight < PRUNE_THRESHOLD) {
-        this.store.deleteAssociation(assoc.id);
+        await this.store.deleteAssociation(assoc.id);
         result.edgesPruned++;
       } else if (Math.abs(newWeight - assoc.weight) > 0.001) {
-        this.store.upsertAssociation(
+        await this.store.upsertAssociation(
           assoc.fromEngramId, assoc.toEngramId,
           newWeight, assoc.type, assoc.confidence,
         );
@@ -440,17 +494,17 @@ export class ConsolidationEngine {
     // Nodes with many strong edges get scaled down so relative weights stay meaningful.
     const engramIds = new Set(engrams.map(e => e.id));
     for (const id of engramIds) {
-      const outgoing = this.store.getOutgoingAssociations(id);
+      const outgoing = await this.store.getOutgoingAssociations(id);
       const totalWeight = outgoing.reduce((sum, a) => sum + a.weight, 0);
       if (totalWeight > HOMEOSTASIS_TARGET) {
         const scale = HOMEOSTASIS_TARGET / totalWeight;
         for (const edge of outgoing) {
           const newWeight = edge.weight * scale;
           if (newWeight < PRUNE_THRESHOLD) {
-            this.store.deleteAssociation(edge.id);
+            await this.store.deleteAssociation(edge.id);
             result.edgesPruned++;
           } else {
-            this.store.upsertAssociation(
+            await this.store.upsertAssociation(
               edge.fromEngramId, edge.toEngramId,
               newWeight, edge.type, edge.confidence,
             );
@@ -458,6 +512,37 @@ export class ConsolidationEngine {
         }
         result.edgesNormalized++;
       }
+    }
+
+    // --- Phase 5.5: Content fade (Paper 1: storage degradation) ---
+    // Coarsens engrams that have been accessed before but have gone stale.
+    // Trims content surface area while preserving concept, tags, and embedding so
+    // the engram still participates in BM25 + vector recall — just with less
+    // body to score against. This models how human memory loses surface detail
+    // while retaining cue-association pathways.
+    //
+    // Fade applies only to accessed engrams (the never-accessed ones go straight
+    // to archive via Phase 6). Heavily-used (accessCount >= FADE_PROTECTED_ACCESS_COUNT),
+    // canonical, structural, and short-content engrams are excluded.
+    let fadeCount = 0;
+    for (const engram of engrams) {
+      if (fadeCount >= FADE_MAX_PER_CYCLE) break;
+      if (engram.accessCount === 0) continue;
+      if (engram.accessCount >= FADE_PROTECTED_ACCESS_COUNT) continue;
+      if (FADE_PROTECTED_CLASSES.has(engram.memoryClass)) continue;
+      if (engram.retracted) continue;
+      if (engram.content.length < FADE_MIN_CONTENT_LEN) continue;
+      if (engram.content.endsWith(FADE_MARKER)) continue; // Already faded
+      const daysSinceAccess = (Date.now() - engram.lastAccessed.getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceAccess < FADE_DAYS_SINCE_ACCESS) continue;
+
+      const trimmed = engram.content.slice(0, FADE_KEEP_CHARS).trimEnd() + FADE_MARKER;
+      await this.store.updateContent(engram.id, trimmed);
+      await this.store.updateStage(engram.id, 'fading');
+      engram.content = trimmed;
+      engram.stage = 'fading';
+      result.memoriesFaded++;
+      fadeCount++;
     }
 
     // --- Phase 6: Forgetting (age-gated) ---
@@ -474,19 +559,27 @@ export class ConsolidationEngine {
     // Compute edge count percentile for relative protection threshold.
     // With avg 12 edges/node, an absolute threshold of 3 protects everything.
     // Use 25th percentile so "weakly connected" is relative to actual graph density.
-    const edgeCounts = engrams.map(e => this.store.countAssociationsFor(e.id));
+    const edgeCounts = await Promise.all(engrams.map(async e => await this.store.countAssociationsFor(e.id)));
     edgeCounts.sort((a, b) => a - b);
     const percentileIdx = Math.floor(edgeCounts.length * EDGE_PROTECTION_PERCENTILE);
     const baseEdgeThreshold = edgeCounts.length > 0 ? edgeCounts[percentileIdx] : 3;
 
     // Get consolidation cycle count for cycle-based archiving
-    const cycleCount = this.store.getConsolidationCycleCount(agentId);
+    const cycleCount = await this.store.getConsolidationCycleCount(agentId);
 
     for (const engram of engrams) {
+      // Skip engrams that just transitioned to 'fading' in Phase 5.5 this cycle.
+      // Fade is intended as an intermediate stage between active and archived —
+      // the engram should live in 'fading' for at least one more recall window
+      // before being eligible for archival. Without this guard, a same-cycle
+      // fade-then-archive sequence collapses the active pool to zero (observed
+      // in the stress test scale phase around cycle 90).
+      if (engram.stage !== 'active') continue;
+
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       if (ageDays < FORGET_GRACE_DAYS) continue; // Grace period — too new to judge
 
-      const edgeCount = this.store.countAssociationsFor(engram.id);
+      const edgeCount = await this.store.countAssociationsFor(engram.id);
 
       // Use relative threshold (percentile-based) instead of absolute.
       // High-confidence memories need fewer edges to survive.
@@ -499,7 +592,7 @@ export class ConsolidationEngine {
       // Cycle-based archive: 0-access memories archived after N cycles
       // regardless of age. Handles small pools where time thresholds are too generous.
       if (engram.accessCount === 0 && cycleCount >= FORGET_CYCLE_THRESHOLD) {
-        this.store.updateStage(engram.id, 'archived');
+        await this.store.updateStage(engram.id, 'archived');
         result.memoriesArchived++;
         continue;
       }
@@ -522,24 +615,24 @@ export class ConsolidationEngine {
 
       if (engram.accessCount === 0 && ageDays > FORGET_ARCHIVE_DAYS) {
         // Never retrieved, old, weakly connected → archive
-        this.store.updateStage(engram.id, 'archived');
+        await this.store.updateStage(engram.id, 'archived');
         result.memoriesArchived++;
       } else if (engram.accessCount > 0 && daysSinceAccess > effectiveArchiveDays) {
         // Accessed before but not recently enough given its strength — archive
-        this.store.updateStage(engram.id, 'archived');
+        await this.store.updateStage(engram.id, 'archived');
         result.memoriesArchived++;
       }
     }
 
     // Check archived memories for deletion — only truly orphaned ancient ones
-    const archived = this.store.getEngramsByAgent(agentId, 'archived');
+    const archived = await this.store.getEngramsByAgent(agentId, 'archived');
     for (const engram of archived) {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      const edgeCount = this.store.countAssociationsFor(engram.id);
+      const edgeCount = await this.store.countAssociationsFor(engram.id);
 
       if (engram.accessCount === 0 && ageDays > FORGET_DELETE_DAYS && edgeCount === 0) {
         // Very old, never accessed, completely isolated → truly forgotten
-        this.store.deleteEngram(engram.id);
+        await this.store.deleteEngram(engram.id);
         result.memoriesForgotten++;
       }
       // Otherwise: stay archived — still searchable, just not in active recall
@@ -577,11 +670,11 @@ export class ConsolidationEngine {
           const prunedId = sortedLow[j].id;
 
           // Transfer associations from pruned memory to survivor
-          const prunedEdges = this.store.getAssociationsFor(prunedId);
+          const prunedEdges = await this.store.getAssociationsFor(prunedId);
           for (const edge of prunedEdges) {
             const peerId = edge.fromEngramId === prunedId ? edge.toEngramId : edge.fromEngramId;
             if (peerId === survivorId) continue; // Skip self-loops
-            this.store.upsertAssociation(survivorId, peerId, edge.weight, edge.type, edge.confidence);
+            await this.store.upsertAssociation(survivorId, peerId, edge.weight, edge.type, edge.confidence);
           }
 
           // Merge tags from pruned to survivor
@@ -589,11 +682,11 @@ export class ConsolidationEngine {
           const prunedMem = sortedLow[j];
           const mergedTags = [...new Set([...survivor.tags, ...prunedMem.tags])];
           if (mergedTags.length > survivor.tags.length) {
-            this.store.updateTags(survivorId, mergedTags);
+            await this.store.updateTags(survivorId, mergedTags);
           }
 
           // Archive the lower-quality duplicate
-          this.store.updateStage(prunedId, 'archived');
+          await this.store.updateStage(prunedId, 'archived');
           pruned.add(prunedId);
           redundancyCount++;
         }
@@ -623,7 +716,7 @@ export class ConsolidationEngine {
 
     for (const engram of engrams) {
       let drift = 0;
-      const edgeCount = this.store.countAssociationsFor(engram.id);
+      const edgeCount = await this.store.countAssociationsFor(engram.id);
       const daysSinceAccess = (Date.now() - engram.lastAccessed.getTime()) / (1000 * 60 * 60 * 24);
 
       // Signal 1: Cluster membership → small boost
@@ -646,14 +739,14 @@ export class ConsolidationEngine {
         drift = Math.max(-CONFIDENCE_DRIFT_CAP, Math.min(CONFIDENCE_DRIFT_CAP, drift));
         const newConf = Math.max(0.15, Math.min(0.85, engram.confidence + drift));
         if (Math.abs(newConf - engram.confidence) > 0.001) {
-          this.store.updateConfidence(engram.id, newConf);
+          await this.store.updateConfidence(engram.id, newConf);
           result.confidenceAdjusted++;
         }
       }
     }
 
     // --- Phase 7: Sweep staging ---
-    const staging = this.store.getEngramsByAgent(agentId, 'staging')
+    const staging = (await this.store.getEngramsByAgent(agentId, 'staging'))
       .filter(e => e.embedding && e.embedding.length > 0);
 
     for (const staged of staging) {
@@ -669,12 +762,12 @@ export class ConsolidationEngine {
 
       if (maxSim >= 0.6) {
         // Resonates — promote to active with low confidence (barely made it)
-        this.store.updateStage(staged.id, 'active');
-        this.store.updateConfidence(staged.id, 0.40);
+        await this.store.updateStage(staged.id, 'active');
+        await this.store.updateConfidence(staged.id, 0.40);
         result.stagingPromoted++;
       } else if (ageMs > 24 * 60 * 60 * 1000) {
         // Over 24h and no resonance — discard
-        this.store.deleteEngram(staged.id);
+        await this.store.deleteEngram(staged.id);
         result.stagingDiscarded++;
       }
       // Otherwise: leave in staging, maybe next cycle

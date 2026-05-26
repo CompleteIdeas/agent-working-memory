@@ -1,78 +1,95 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Embedding Engine — local vector embeddings via transformers.js
+ * Embedding Engine - vector embeddings via the ML worker pool.
  *
- * Default: bge-small-en-v1.5 (384 dimensions, ~90MB, MTEB retrieval-optimized).
- * Better short-text similarity than MiniLM for agent memory concepts.
+ * Default model: bge-small-en-v1.5 (384 dimensions, ~90MB, MTEB retrieval-optimized).
  * Configurable via AWM_EMBED_MODEL env var.
- * Model is downloaded once on first use and cached locally.
  *
- * Singleton pattern — call getEmbedder() to get the shared instance.
+ * AWM 0.8.x: inference dispatches through ml-worker.ts. The worker_threads
+ * path was planned but reverted to in-process because onnxruntime-node's
+ * native bindings store V8 handles that don't cross isolate boundaries
+ * safely — see ml-worker.ts for the full status. The dispatch abstraction
+ * is preserved for a future child_process or HTTP sidecar pool.
+ * `AWM_ML_INPROCESS=1` is honored as a no-op (in-process is now the default).
  *
  * NOTE: Changing the model invalidates existing embeddings.
  * Set AWM_EMBED_MODEL=Xenova/all-MiniLM-L6-v2 for backward compatibility.
  */
 
 import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { dispatchEmbed, registerInProcessHandlers } from './ml-worker.js';
 
 const MODEL_ID = process.env.AWM_EMBED_MODEL ?? 'Xenova/bge-small-en-v1.5';
 const DIMENSIONS = parseInt(process.env.AWM_EMBED_DIMS ?? '384', 10);
 const POOLING = (process.env.AWM_EMBED_POOLING ?? 'mean') as 'cls' | 'mean';
 
-let instance: FeatureExtractionPipeline | null = null;
-let initPromise: Promise<FeatureExtractionPipeline> | null = null;
+// --- In-process fallback (used by tests and crash recovery) ---
+
+let inProcessInstance: FeatureExtractionPipeline | null = null;
+let inProcessInitPromise: Promise<FeatureExtractionPipeline> | null = null;
+
+async function loadInProcess(): Promise<FeatureExtractionPipeline> {
+  if (inProcessInstance) return inProcessInstance;
+  if (inProcessInitPromise) return inProcessInitPromise;
+  inProcessInitPromise = pipeline('feature-extraction', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
+    inProcessInstance = pipe;
+    console.log(`Embedding model loaded in-process: ${MODEL_ID} (${DIMENSIONS}d)`);
+    return pipe;
+  });
+  return inProcessInitPromise;
+}
+
+async function inProcessEmbed(args: { texts: string[]; pooling: 'cls' | 'mean'; dimensions: number }): Promise<number[][]> {
+  const { texts, pooling, dimensions } = args;
+  if (texts.length === 0) return [];
+  const embedder = await loadInProcess();
+  const result = await embedder(texts, { pooling, normalize: true });
+  const data = result.data as Float32Array;
+  const vectors: number[][] = [];
+  for (let i = 0; i < texts.length; i++) {
+    vectors.push(Array.from(data.slice(i * dimensions, (i + 1) * dimensions)));
+  }
+  return vectors;
+}
+
+// Register the in-process handler with the pool (used in test mode and as fallback)
+registerInProcessHandlers({ embed: inProcessEmbed });
+
+// --- Public API ---
 
 /**
  * Get or initialize the embedding pipeline (singleton).
- * First call downloads the model (~22MB), subsequent calls are instant.
+ * Kept for backwards compat — returns the in-process pipeline only.
+ * Most consumers should use embed() / embedBatch() which dispatch
+ * to the worker pool by default.
  */
 export async function getEmbedder(): Promise<FeatureExtractionPipeline> {
-  if (instance) return instance;
-  if (initPromise) return initPromise;
-
-  initPromise = pipeline('feature-extraction', MODEL_ID, {
-    dtype: 'fp32',
-  }).then(pipe => {
-    instance = pipe;
-    console.log(`Embedding model loaded: ${MODEL_ID} (${DIMENSIONS}d)`);
-    return pipe;
-  });
-
-  return initPromise;
+  return loadInProcess();
 }
 
 /**
  * Generate an embedding vector for a text string.
- * Returns a normalized float32 array of length DIMENSIONS.
+ * Dispatches to the worker pool (or in-process fallback).
  */
 export async function embed(text: string): Promise<number[]> {
-  const embedder = await getEmbedder();
-  const result = await embedder(text, { pooling: POOLING, normalize: true });
-  // result is a Tensor — extract the data
-  return Array.from(result.data as Float32Array).slice(0, DIMENSIONS);
+  const vectors = await dispatchEmbed({ texts: [text], pooling: POOLING, dimensions: DIMENSIONS });
+  return vectors[0] ?? new Array(DIMENSIONS).fill(0);
+}
+
+/**
+ * Generate embeddings for multiple texts in a batch.
+ * More efficient than calling embed() in a loop — the worker batches the
+ * tokenization + forward pass.
+ */
+export async function embedBatch(texts: string[]): Promise<number[][]> {
+  if (texts.length === 0) return [];
+  return dispatchEmbed({ texts, pooling: POOLING, dimensions: DIMENSIONS });
 }
 
 /** Get the current embedding model ID (for version tracking in stored embeddings) */
 export function getModelId(): string {
   return MODEL_ID;
-}
-
-/**
- * Generate embeddings for multiple texts in a batch.
- * More efficient than calling embed() in a loop.
- */
-export async function embedBatch(texts: string[]): Promise<number[][]> {
-  if (texts.length === 0) return [];
-  const embedder = await getEmbedder();
-  const result = await embedder(texts, { pooling: POOLING, normalize: true });
-  const data = result.data as Float32Array;
-
-  const vectors: number[][] = [];
-  for (let i = 0; i < texts.length; i++) {
-    vectors.push(Array.from(data.slice(i * DIMENSIONS, (i + 1) * DIMENSIONS)));
-  }
-  return vectors;
 }
 
 /**

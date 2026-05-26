@@ -18,7 +18,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { log, getLogPath } from '../core/logger.js';
 
@@ -211,7 +211,7 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
           episodeId: null,
         };
 
-        store.saveCheckpoint(agentId, state);
+        await store.saveCheckpoint(agentId, state);
         log(agentId, `hook:${event}`, `auto-checkpoint files=${state.activeFiles.length} task="${state.currentTask.slice(0, 80)}"`);
 
         // On SessionEnd: run full consolidation (sleep cycle) before process dies
@@ -255,9 +255,9 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
   });
 
   // --- Silent auto-checkpoint every 15 minutes ---
-  const autoCheckpointTimer = setInterval(() => {
+  const autoCheckpointTimer = setInterval(async () => {
     try {
-      const checkpoint = store.getCheckpoint(agentId);
+      const checkpoint = await store.getCheckpoint(agentId);
       if (!checkpoint) return; // No state to save yet
 
       // Only checkpoint if there's been activity since last auto-checkpoint
@@ -275,7 +275,7 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
         episodeId: checkpoint.executionState?.episodeId ?? null,
       };
 
-      store.saveCheckpoint(agentId, state);
+      await store.saveCheckpoint(agentId, state);
       log(agentId, 'hook:timer', `auto-checkpoint (${Math.round(sinceActivity / 60_000)}min since activity)`);
     } catch { /* timer failure is non-fatal */ }
   }, AUTO_CHECKPOINT_INTERVAL_MS);

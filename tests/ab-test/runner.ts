@@ -251,6 +251,12 @@ async function main() {
     else factTotal++;
 
     // AWM query
+    // AWM_REQUIRE_CONFIDENCE: opt-in confidence-based abstention (PR-2).
+    // When set, AWM abstains on noisy queries (no clear winner in score
+    // distribution). Default unset → backward-compatible behavior.
+    const requireConfidence = process.env.AWM_REQUIRE_CONFIDENCE
+      ? parseFloat(process.env.AWM_REQUIRE_CONFIDENCE)
+      : undefined;
     const awmStart = performance.now();
     const awmRes = await api('POST', '/memory/activate', {
       agentId,
@@ -259,6 +265,7 @@ async function main() {
       includeStaging: true,
       useReranker: true,
       useExpansion: true,
+      ...(requireConfidence !== undefined ? { requireConfidence } : {}),
     });
     const awmTimeMs = Math.round(performance.now() - awmStart);
     const awmTexts = (awmRes.results ?? []).map((r: any) => r.engram?.content ?? '');

@@ -25,8 +25,8 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
   });
 
-  it('R0: novel write creates a new engram', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('R0: novel write creates a new engram', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Backdate member 12345 ticket #18269',
       content: 'Member 12345 activation_date backdated to 2026-03-01 per dummy-check transfer.',
@@ -40,8 +40,8 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     expect(all.length).toBe(1);
   });
 
-  it('R1: same-concept duplicate reinforces existing engram (no new engram)', () => {
-    const first = performWrite({ store, connectionEngine }, {
+  it('R1: same-concept duplicate reinforces existing engram (no new engram)', async () => {
+    const first = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Schema: tblMemberDetails columns',
       content: 'Discovered columns for tblMemberDetails: member_id, activation_date, expiry_date',
@@ -51,7 +51,7 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     const beforeConf = first.engram.confidence;
     const beforeAccess = first.engram.accessCount;
 
-    const second = performWrite({ store, connectionEngine }, {
+    const second = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Schema: tblMemberDetails columns',
       content: 'Discovered columns for tblMemberDetails: member_id, activation_date, expiry_date. (rewrite)',
@@ -69,8 +69,8 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     expect(store.getEngramsByAgent(AGENT).length).toBe(1);
   });
 
-  it('R3: correction-eventType supersedes existing engram with same concept', () => {
-    const original = performWrite({ store, connectionEngine }, {
+  it('R3: correction-eventType supersedes existing engram with same concept', async () => {
+    const original = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Use sp_helptext for schema discovery',
       content: 'For schema discovery, use sp_helptext on the table name.',
@@ -78,7 +78,7 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     });
     expect(original.action).toBe('create');
 
-    const correction = performWrite({ store, connectionEngine }, {
+    const correction = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Use sp_helptext for schema discovery',
       content: 'CORRECTION: sp_helptext is denied. Use INFORMATION_SCHEMA.COLUMNS instead.',
@@ -98,15 +98,15 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     expect(refreshed?.supersededBy).toBe(correction.engram.id);
   });
 
-  it('R2: different concept with similar content creates new engram (no reinforce)', () => {
-    performWrite({ store, connectionEngine }, {
+  it('R2: different concept with similar content creates new engram (no reinforce)', async () => {
+    await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Working queries for: triage #18247',
       content: 'These SQL queries produced useful results: SELECT TOP 1 member_id FROM tblMemberDetails WHERE ...',
       eventType: 'observation',
     });
 
-    const second = performWrite({ store, connectionEngine }, {
+    const second = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Working queries for: triage #18301',  // Different ticket → different concept
       content: 'These SQL queries produced useful results: SELECT TOP 1 member_id FROM tblMemberDetails WHERE ...',
@@ -118,15 +118,15 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     expect(store.getEngramsByAgent(AGENT).length).toBe(2);
   });
 
-  it('R2: reinforces the SUPERSEDER when match was already superseded', () => {
+  it('R2: reinforces the SUPERSEDER when match was already superseded', async () => {
     // Build a supersession chain: wrong → corrected
-    const wrong = performWrite({ store, connectionEngine }, {
+    const wrong = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Schema for tblMemberDetails',
       content: 'columns are foo, bar, baz',
       eventType: 'observation',
     });
-    const correction = performWrite({ store, connectionEngine }, {
+    const correction = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Schema for tblMemberDetails',
       content: 'CORRECTION: columns are member_id, activation_date, expiry_date',
@@ -135,7 +135,7 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     expect(correction.action).toBe('supersede');
 
     // Now write a third time matching the (now superseded) original
-    const third = performWrite({ store, connectionEngine }, {
+    const third = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Schema for tblMemberDetails',
       content: 'columns are foo, bar, baz',  // matches the OLD wrong content
@@ -148,16 +148,16 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     expect(third.engram.id).not.toBe(wrong.engram.id);
   });
 
-  it('AWM_WRITE_PIPELINE=off reverts to create-only', () => {
+  it('AWM_WRITE_PIPELINE=off reverts to create-only', async () => {
     const prev = process.env.AWM_WRITE_PIPELINE;
     process.env.AWM_WRITE_PIPELINE = 'off';
     try {
-      performWrite({ store, connectionEngine }, {
+      await performWrite({ store, connectionEngine }, {
         agentId: AGENT,
         concept: 'Repeat concept',
         content: 'first write',
       });
-      const second = performWrite({ store, connectionEngine }, {
+      const second = await performWrite({ store, connectionEngine }, {
         agentId: AGENT,
         concept: 'Repeat concept',
         content: 'second write — should NOT reinforce when pipeline off',
@@ -170,8 +170,8 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     }
   });
 
-  it('user_feedback auto-promotes to canonical class', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('user_feedback auto-promotes to canonical class', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Auth approach decision',
       content: 'Robert decided that magic link + social login is the long-term path; passwords are dev-only.',

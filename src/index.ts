@@ -33,14 +33,18 @@ import { getEmbedder } from './core/embeddings.js';
 import { getReranker } from './core/reranker.js';
 import { getExpander } from './core/query-expander.js';
 import { initLogger } from './core/logger.js';
+import { openStore, getConfiguredBackend, type StoreBackend } from './storage/factory.js';
+import type { IEngramStore } from './storage/store.js';
 
 const PORT = parseInt(process.env.AWM_PORT ?? '8400', 10);
-const DB_PATH = process.env.AWM_DB_PATH ?? 'memory.db';
+const BACKEND: StoreBackend = getConfiguredBackend();
+const DB_PATH = process.env.AWM_DB_PATH ?? (BACKEND === 'pglite' ? 'memory-pglite' : 'memory.db');
 const API_KEY = process.env.AWM_API_KEY ?? null;
 
 async function main() {
-  // Auto-backup: copy DB to backups/ on startup (cheap insurance)
-  if (existsSync(DB_PATH)) {
+  // Auto-backup: copy DB to backups/ on startup (SQLite-only; PGlite is a
+  // directory and is backed up by snapshot/replication at the OS level).
+  if (BACKEND === 'sqlite' && existsSync(DB_PATH)) {
     const dbDir = dirname(resolve(DB_PATH));
     const backupDir = resolve(dbDir, 'backups');
     mkdirSync(backupDir, { recursive: true });
@@ -57,11 +61,16 @@ async function main() {
   // Logger — write activity to awm.log alongside the DB
   initLogger(DB_PATH);
 
-  // Storage
-  const store = new EngramStore(DB_PATH);
+  // Storage — backend-agnostic open via the factory.
+  // Some routes (export, coordination health) are still SQLite-only and
+  // gracefully return 501 / skip when running on PGlite.
+  const { store: storeAny } = await openStore();
+  const store = storeAny as unknown as EngramStore;
 
-  // Integrity check
-  const integrity = store.integrityCheck();
+  // Integrity check — SQLite-only. PGlite has its own consistency model.
+  const integrity = BACKEND === 'sqlite'
+    ? store.integrityCheck()
+    : { ok: true, result: 'pglite: skipped' };
   if (!integrity.ok) {
     console.error(`DB integrity check FAILED: ${integrity.result}`);
     // Close corrupt DB, restore from backup, and exit for process manager to restart
@@ -97,7 +106,7 @@ async function main() {
   const evictionEngine = new EvictionEngine(store);
   const retractionEngine = new RetractionEngine(store);
   const evalEngine = new EvalEngine(store);
-  const consolidationEngine = new ConsolidationEngine(store);
+  const consolidationEngine = new ConsolidationEngine(store, connectionEngine);
   const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine);
 
   // API — disable Fastify's default request logging (too noisy for hive polling)
@@ -122,10 +131,12 @@ async function main() {
     consolidationEngine, consolidationScheduler,
   });
 
-  // Coordination module (opt-in via AWM_COORDINATION=true)
+  // Coordination module (opt-in via AWM_COORDINATION=true) — SQLite-only.
   const { isCoordinationEnabled, initCoordination, stopCoordinationCleanup } = await import('./coordination/index.js');
-  if (isCoordinationEnabled()) {
+  if (isCoordinationEnabled() && BACKEND === 'sqlite') {
     initCoordination(app, store.getDb(), store);
+  } else if (isCoordinationEnabled()) {
+    console.log(`  Coordination requested but disabled — requires SQLite backend (current: ${BACKEND})`);
   } else {
     console.log('  Coordination module disabled (set AWM_COORDINATION=true to enable)');
   }
@@ -154,7 +165,8 @@ async function main() {
     }
   } catch { /* cleanup is non-fatal */ }
 
-  const backupTimer = setInterval(() => {
+  // Periodic hot backup — SQLite-only. PGlite directory backups are an OS-level concern.
+  const backupTimer: ReturnType<typeof setInterval> | null = BACKEND === 'sqlite' ? setInterval(() => {
     try {
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const backupPath = resolve(backupDir, `${basename(DB_PATH, '.db')}-${ts}.db`);
@@ -168,38 +180,40 @@ async function main() {
     } catch (err) {
       console.warn(`[backup] failed: ${(err as Error).message}`);
     }
-  }, 10 * 60_000); // 10 minutes
+  }, 10 * 60_000) : null;
 
   // Pre-load ML models (downloads on first run: embeddings ~22MB, reranker ~22MB, expander ~80MB)
   getEmbedder().catch(err => console.warn('Embedding model unavailable:', err.message));
   getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
   getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));
 
-  // Eager slim-cache populate — pays the ~600ms first-fetch cost at startup
-  // instead of charging it to the first user recall (0.7.14+).
-  setImmediate(() => {
-    try {
-      const t0 = Date.now();
-      store.warmSlimCache();
-      const stats = store.getSlimCacheStats();
-      console.log(`  Slim cache warmed: ${stats.size} entries in ${Date.now() - t0}ms`);
-    } catch (err) {
-      console.warn(`  Slim cache warm failed: ${(err as Error).message}`);
-    }
-  });
+  if (BACKEND === 'sqlite') {
+    setImmediate(() => {
+      try {
+        const t0 = Date.now();
+        store.warmSlimCache();
+        const stats = store.getSlimCacheStats();
+        console.log(`  Slim cache warmed: ${stats.size} entries in ${Date.now() - t0}ms`);
+      } catch (err) {
+        console.warn(`  Slim cache warm failed: ${(err as Error).message}`);
+      }
+    });
+  }
 
   // Start server
   await app.listen({ port: PORT, host: '0.0.0.0' });
-  console.log(`AgentWorkingMemory v0.8.0 listening on port ${PORT}`);
+  console.log(`AgentWorkingMemory v0.8.5 listening on port ${PORT}`);
 
   // Graceful shutdown
   const shutdown = async () => {
-    clearInterval(backupTimer);
+    if (backupTimer) clearInterval(backupTimer);
     await stopCoordinationCleanup();
     consolidationScheduler.stop();
     stagingBuffer.stop();
-    try { store.walCheckpoint(); } catch { /* non-fatal */ }
-    store.close();
+    if (BACKEND === 'sqlite') {
+      try { store.walCheckpoint(); } catch { /* non-fatal */ }
+    }
+    try { await (store as any).close?.(); } catch { /* best-effort */ }
     process.exit(0);
   };
   process.on('SIGINT', shutdown);

@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.8.1",
+  "version": "0.8.5",
   "description": "Cognitive memory layer for AI agents — activation-based retrieval, salience filtering, associative connections",
   "type": "module",
   "main": "dist/index.js",
@@ -25,6 +25,7 @@
     "test:stress": "tsx tests/stress-test/runner.ts",
     "test:edge": "tsx tests/edge-cases/runner.ts",
     "test:pilot": "tsx tests/pilot-metrics/runner.ts",
+    "test:perf": "tsx tests/perf-test/runner.ts",
     "eval": "tsx tests/eval/run.ts",
     "eval:generate": "tsx tests/eval/generate.ts",
     "test:all": "vitest run && tsx tests/mcp-smoke.ts"
@@ -41,6 +42,7 @@
     "LICENSE"
   ],
   "dependencies": {
+    "@electric-sql/pglite": "^0.4.6",
     "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",

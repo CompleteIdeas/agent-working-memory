@@ -12,7 +12,7 @@
  * Task impact (with/without memory) is measured externally via TaskTrial records.
  */
 
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { EvalMetrics } from '../types/index.js';
 
 export class EvalEngine {
@@ -25,23 +25,23 @@ export class EvalEngine {
   /**
    * Compute aggregate metrics for an agent over a time window.
    */
-  computeMetrics(agentId: string, windowHours: number = 24): EvalMetrics {
+  async computeMetrics(agentId: string, windowHours: number = 24): Promise<EvalMetrics> {
     const window = windowHours <= 24 ? '24h' : `${Math.round(windowHours / 24)}d`;
 
     // Retrieval quality
-    const precision = this.store.getRetrievalPrecision(agentId, windowHours);
+    const precision = await this.store.getRetrievalPrecision(agentId, windowHours);
 
     // Staging accuracy
-    const stagingMetrics = this.store.getStagingMetrics(agentId);
+    const stagingMetrics = await this.store.getStagingMetrics(agentId);
     const totalStaged = stagingMetrics.promoted + stagingMetrics.discarded + stagingMetrics.expired;
     const promotionPrecision = totalStaged > 0 ? stagingMetrics.promoted / totalStaged : 0;
 
     // Memory health
-    const activeEngrams = this.store.getEngramsByAgent(agentId, 'active');
-    const stagingEngrams = this.store.getEngramsByAgent(agentId, 'staging');
-    const retractedEngrams = this.store.getEngramsByAgent(agentId, undefined, true)
+    const activeEngrams = await this.store.getEngramsByAgent(agentId, 'active');
+    const stagingEngrams = await this.store.getEngramsByAgent(agentId, 'staging');
+    const retractedEngrams = (await this.store.getEngramsByAgent(agentId, undefined, true))
       .filter(e => e.retracted);
-    const allAssociations = this.store.getAllAssociations(agentId);
+    const allAssociations = await this.store.getAllAssociations(agentId);
 
     const avgConfidence = activeEngrams.length > 0
       ? activeEngrams.reduce((sum, e) => sum + e.confidence, 0) / activeEngrams.length
@@ -62,10 +62,10 @@ export class EvalEngine {
       : 0;
 
     // Activation performance stats
-    const activationStats = this.store.getActivationStats(agentId, windowHours);
+    const activationStats = await this.store.getActivationStats(agentId, windowHours);
 
     // Consolidated count
-    const consolidatedCount = this.store.getConsolidatedCount(agentId);
+    const consolidatedCount = await this.store.getConsolidatedCount(agentId);
 
     return {
       agentId,

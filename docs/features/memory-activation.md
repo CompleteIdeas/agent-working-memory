@@ -46,6 +46,57 @@ Each result includes:
 - Per-phase score breakdown (`phaseScores`)
 - Human-readable explanation (`why` string)
 - All associations for the engram
+- **Recall confidence** (v0.8.5) — score-distribution-aware signal in
+  [0, 1] attached to every result. Same value on every result in the same
+  recall — it describes the *set*, not the individual.
+- **Summary** (v0.8.5, optional) — present when the caller passes
+  `granularity: 'compact'` or `'auto'`. A confidence-adaptive truncation of
+  the engram's content. The engram body is never modified.
+
+### Recall confidence (v0.8.5)
+
+Three orthogonal measures of the result distribution, blended via weighted
+geometric mean (default weights 0.4 / 0.3 / 0.3):
+
+| Measure | Formula | Meaning |
+|---|---|---|
+| Sharpness | `top1 / mean(top5)` mapped via `(s-1)/(s+1)` | Clear winner vs flat distribution |
+| Cliff | `(top1 - top10) / top1` | Sharp drop-off vs gradual decay |
+| Floor | `clamp(top1, 0, 1)` | "Best from a strong pool" vs "best of bad bunch" |
+
+The HTTP route also surfaces the same value at the top level of the response
+(useful for 0-result recalls, where the array is empty but you still want
+to know whether the recall *would have* been confident).
+
+Research grounding: Geifman & El-Yaniv (NeurIPS 2017), Roitero et al
+(SIGIR 2022), Carmel & Yom-Tov (Synthesis Lectures, 2010).
+
+### Opt-in confidence-based abstention (v0.8.5)
+
+Pass `requireConfidence: <threshold>` on the activation query to make the
+engine return `[]` when the distribution shape falls below the threshold.
+
+| Threshold | Behavior |
+|---|---|
+| 0.10 | Strict — only abstain on clearly noisy queries |
+| 0.25 | Balanced |
+| 0.40 | Aggressive — only return high-confidence recalls |
+
+Independent of the legacy `abstentionThreshold` (which is reranker-score
+based, requires a reranker in the pipeline). Either gate trips abstains.
+
+### Adaptive output granularity (v0.8.5)
+
+Pass `granularity` to control how much content the engine surfaces:
+
+| Value | Behavior |
+|---|---|
+| `'full'` (default) | No change — callers get the raw engram content. |
+| `'compact'` | Every result carries a `summary` field truncated to ~200 chars (`AWM_GRANULARITY_COMPACT_LEN`). Engram body unchanged. |
+| `'auto'` | Confidence-adaptive. When recall confidence ≥ `AWM_GRANULARITY_AUTO_THRESHOLD` (0.4), the top result gets a ~1000-char summary (`AWM_GRANULARITY_FULL_LEN`) and the rest are compact. When confidence is low, all results are compact. |
+
+The MCP `memory_recall` tool surfaces `summary` to its text-rendered output
+when set. Research grounding: Brill 2018 ACT-R collaboration.
 
 ### Requirements
 

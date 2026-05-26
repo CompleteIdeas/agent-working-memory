@@ -25,10 +25,11 @@ import { strengthenAssociation, CoActivationBuffer, ValidationGatedBuffer } from
 import { embed, cosineSimilarity } from '../core/embeddings.js';
 import { rerank } from '../core/reranker.js';
 import { expandQuery } from '../core/query-expander.js';
+import { computeRecallConfidence } from './confidence.js';
 import type {
   Engram, ActivationResult, ActivationQuery, Association, PhaseScores, QueryMode,
 } from '../types/index.js';
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -181,11 +182,12 @@ export class ActivationEngine {
     const useReranker = query.useReranker ?? true;
     const useExpansion = query.useExpansion ?? true;
     const abstentionThreshold = query.abstentionThreshold ?? 0;
+    const requireConfidence = query.requireConfidence ?? 0;
     const adaptive = resolveAdaptiveParams(query);
 
     // Resolve workspace scope: if workspace is set, search across all agents in that workspace
     const agentIds = query.workspace
-      ? this.store.getWorkspaceAgentIds(query.agentId, query.workspace)
+      ? await this.store.getWorkspaceAgentIds(query.agentId, query.workspace)
       : [query.agentId];
     const isWorkspaceScoped = agentIds.length > 1;
 
@@ -194,7 +196,7 @@ export class ActivationEngine {
     const pronounPattern = /\b(she|he|they|her|his|him|their|it|that|this|there)\b/i;
     if (pronounPattern.test(queryContext)) {
       try {
-        const recentEntities = this.store.getEngramsByAgents(agentIds, 'active')
+        const recentEntities = (await this.store.getEngramsByAgents(agentIds, 'active'))
           .sort((a, b) => b.accessCount - a.accessCount)
           .slice(0, 10)
           .flatMap(e => e.tags.filter(t => t.length >= 3 && !/^(session-|low-|D\d)/.test(t)))
@@ -234,9 +236,9 @@ export class ActivationEngine {
     // Two-pass BM25: (1) keyword-stripped query for precision, (2) expanded query for recall.
     const keywordQuery = Array.from(tokenize(query.context)).join(' ');
     const bm25Keyword = keywordQuery.length > 2
-      ? this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3)
+      ? await this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3)
       : [];
-    const bm25Expanded = this.store.searchBM25WithRankMultiAgent(agentIds, searchContext, limit * 3);
+    const bm25Expanded = await this.store.searchBM25WithRankMultiAgent(agentIds, searchContext, limit * 3);
 
     // Merge: take the best BM25 score per engram from either pass
     const bm25ScoreMap = new Map<string, number>();
@@ -257,78 +259,73 @@ export class ActivationEngine {
     //           Used for cosine sim + adaptive z-score stats + cheap pool filter.
     //   Pass 2: full fetch ONLY on the survivors that pass the filter.
     //
-    // Why: phase-breakdown spike (2026-05-08, post-0.7.7) showed `SELECT * FROM
-    // engrams WHERE agent_id = ?` over 10K rows costs 440ms (40% of recall) due
-    // to row materialization of content/tags/JSON-blob columns the filter pass
-    // doesn't read. Slim fetch trims the per-row payload to the three fields
-    // the filter actually uses.
-    const slimActive = this.store.getEngramsByAgentsSlim(
-      agentIds,
-      query.includeStaging ? undefined : 'active',
-      query.includeRetracted ?? false
-    );
+    // AWM 0.8.x — Native vector search refactor (2026-05-25): the prior slim
+    // fetch path materialized ALL active engrams (id + concept + embedding)
+    // for in-process cosine + z-score gating. On PGlite that meant parsing
+    // 11K embedding vectors per recall (~200-500ms). Replaced with native
+    // vector search: PGlite uses pgvector + ivfflat (O(log N)); SQLite uses
+    // its slim cache + JS cosine (same as before but encapsulated). Z-score
+    // normalization is replaced with a mode-adaptive raw-cosine floor —
+    // simpler, faster, model-tuned for BGE-small embeddings.
+    const VECTOR_TOP_K = Math.max(50, limit * 5);
 
-    // Tokenize query once (used by filter + scoring)
+    // Tokenize query once (used by scoring)
     const queryTokens = tokenize(query.context);
 
-    // Phase 3a: Compute raw cosine similarities on slim pool for adaptive normalization
+    // Phase 3a: native vector search across agents — top-K by cosine.
+    // Apply a candidate floor — BGE-small unit-norm vectors typically cluster
+    // around 0.30-0.40 even for unrelated text, so we need a floor that
+    // distinguishes "related" from "noise" without throwing out genuine
+    // related-but-not-identical matches.
+    //
+    // Tuning: targeted=0.40, exploratory=0.30. Earlier 0.55/0.45 floors were
+    // too aggressive — they dropped Recall@5 on the 200-fact eval corpus
+    // from 0.80 → 0.46 (verified 2026-05-26). BGE-small cosines for genuine
+    // related matches commonly land 0.42-0.55, so a 0.55 floor cut them
+    // entirely. The vectorMatch scoring floor (0.50 targeted / 0.35 exploratory)
+    // still suppresses low-confidence matches in the final score.
+    // Env override: AWM_SIM_CANDIDATE_FLOOR_TARGETED, AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY.
+    const SIM_CANDIDATE_FLOOR = adaptive.zScoreGate > 0.5
+      ? Number(process.env.AWM_SIM_CANDIDATE_FLOOR_TARGETED ?? 0.40)
+      : Number(process.env.AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY ?? 0.30);
     const rawCosineSims = new Map<string, number>();
+    const vectorHits: Engram[] = [];
     if (queryEmbedding) {
-      for (const e of slimActive) {
-        if (e.embedding) {
-          rawCosineSims.set(e.id, cosineSimilarity(queryEmbedding, e.embedding));
+      for (const aid of agentIds) {
+        try {
+          const hits = await this.store.searchByVector(aid, queryEmbedding, VECTOR_TOP_K);
+          for (const h of hits) {
+            // pgvector cosine distance: 0 = identical, 2 = opposite.
+            // For unit-norm BGE vectors, distance ≈ 1 - cosineSimilarity.
+            const sim = 1 - h.distance;
+            // pgvector returns sorted ASC by distance (DESC by sim) — break once
+            // we drop below the candidate floor; all subsequent hits will too.
+            if (sim < SIM_CANDIDATE_FLOOR) break;
+            if (!rawCosineSims.has(h.engram.id)) {
+              rawCosineSims.set(h.engram.id, sim);
+              vectorHits.push(h.engram);
+            }
+          }
+        } catch {
+          // Vector search unavailable — fall back to BM25-only ranking
         }
       }
     }
 
-    // Compute distribution stats for model-agnostic normalization
-    const simValues = Array.from(rawCosineSims.values());
-    const simMean = simValues.length > 0
-      ? simValues.reduce((a, b) => a + b, 0) / simValues.length : 0;
-    const rawStdDev = simValues.length > 1
-      ? Math.sqrt(simValues.reduce((sum, s) => sum + (s - simMean) ** 2, 0) / simValues.length) : 0.15;
-    // Floor stddev at 0.10 to prevent z-score inflation with small candidate pools
-    const simStdDev = Math.max(rawStdDev, 0.10);
-
-    // Determine survivor IDs from the slim pool using the same survival criteria
-    // (BM25 hit / cosine z-score / concept-jaccard) plus all BM25-ranked candidates
-    // (which already came in fully-hydrated and may not be in slimActive's stage filter).
-    const poolFilterEnabled = process.env.AWM_DISABLE_POOL_FILTER !== '1';
+    // Survivors = BM25 candidates ∪ vector candidates.
+    // The slim-fetch jaccard-fallback path is dropped: in practice it surfaced
+    // <1% of candidates that BM25 + vector missed, and on PGlite cost more
+    // than the candidates were worth. Concept jaccard signal still contributes
+    // via textMatch in scoring.
     const survivorIds = new Set<string>();
-    // Always include BM25-ranked engrams (they came pre-hydrated)
     for (const r of bm25Ranked) survivorIds.add(r.engram.id);
+    for (const e of vectorHits) survivorIds.add(e.id);
 
-    if (poolFilterEnabled) {
-      for (const e of slimActive) {
-        if (survivorIds.has(e.id)) continue;
-        const bm25 = bm25ScoreMap.get(e.id) ?? 0;
-        if (bm25 > 0) { survivorIds.add(e.id); continue; }
-        const sim = rawCosineSims.get(e.id);
-        if (sim !== undefined) {
-          const z = (sim - simMean) / simStdDev;
-          if (z > adaptive.zScoreGate) { survivorIds.add(e.id); continue; }
-        }
-        // Cheap concept jaccard
-        const ct = tokenize(e.concept);
-        if (ct.size === 0) continue;
-        let overlap = 0;
-        for (const w of ct) if (queryTokens.has(w)) overlap++;
-        if (overlap > 0) survivorIds.add(e.id);
-      }
-    } else {
-      // Filter disabled — include all slim active engrams
-      for (const e of slimActive) survivorIds.add(e.id);
-    }
-
-    // Pass 2: hydrate full Engram rows ONLY for survivors that aren't already loaded
+    // Hydrate full engrams. BM25 and vector hits arrive pre-hydrated; nothing
+    // else needs fetching in the normal path.
     const candidateMap = new Map<string, Engram>();
     for (const r of bm25Ranked) candidateMap.set(r.engram.id, r.engram);
-    const idsToHydrate = Array.from(survivorIds).filter(id => !candidateMap.has(id));
-    if (idsToHydrate.length > 0) {
-      for (const e of this.store.getEngramsByIds(idsToHydrate)) {
-        candidateMap.set(e.id, e);
-      }
-    }
+    for (const e of vectorHits) candidateMap.set(e.id, e);
     let candidates = Array.from(candidateMap.values());
 
     // Filter by memory type if specified
@@ -349,7 +346,7 @@ export class ActivationEngine {
     // Graph walk still needs full Association objects, but it operates on the
     // top-N (~30 candidates) — its on-demand `getAssociationsFor` lookups are
     // cheap (<5ms total).
-    const assocStats = this.store.getAssociationStatsForBatch(candidates.map(e => e.id));
+    const assocStats = await this.store.getAssociationStatsForBatch(candidates.map(e => e.id));
     const scored = candidates.map(engram => {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const stats = assocStats.get(engram.id) ?? { count: 0, sumWeight: 0 };
@@ -375,14 +372,16 @@ export class ActivationEngine {
       const keywordMatch = Math.min(Math.max(bm25Score, jaccardScore) + conceptBonus, 1.0);
 
       // --- Vector similarity (semantic signal) ---
-      // Two-stage: absolute floor prevents noise, then z-score ranks within matches.
-      // z-gate adapts to query mode: targeted uses strict gate (0.8), exploratory relaxes (0.3).
+      // AWM 0.8.x: model-tuned raw-cosine floor in place of z-score normalization.
+      // For BGE-small unit-norm vectors: unrelated ~0.3, related 0.5-0.7, near-duplicate 0.85+.
+      // Floor adapts to query mode: targeted=0.50 (stricter), exploratory=0.35 (looser).
       let vectorMatch = 0;
       const rawSim = rawCosineSims.get(engram.id);
-      if (rawSim !== undefined) {
-        const zScore = (rawSim - simMean) / simStdDev;
-        if (zScore > adaptive.zScoreGate) {
-          vectorMatch = Math.min(1, (zScore - adaptive.zScoreGate) / 2.0);
+      if (rawSim !== undefined && rawSim > 0) {
+        const SIM_FLOOR = adaptive.zScoreGate > 0.5 ? 0.50 : 0.35;
+        if (rawSim > SIM_FLOOR) {
+          // Map [SIM_FLOOR, 1.0] → [0, 1] linearly with cap at 1.0.
+          vectorMatch = Math.min(1, (rawSim - SIM_FLOOR) / (0.95 - SIM_FLOOR));
         }
       }
 
@@ -462,14 +461,14 @@ export class ActivationEngine {
       // Take top 5 feedback terms and re-search
       const extraTerms = Array.from(feedbackTerms).slice(0, 5).join(' ');
       if (extraTerms) {
-        const feedbackBM25 = this.store.searchBM25WithRankMultiAgent(agentIds, `${searchContext} ${extraTerms}`, limit * 2);
+        const feedbackBM25 = await this.store.searchBM25WithRankMultiAgent(agentIds, `${searchContext} ${extraTerms}`, limit * 2);
         for (const r of feedbackBM25) {
           if (!candidateMap.has(r.engram.id)) {
             candidateMap.set(r.engram.id, r.engram);
             // Score the new candidate
             const engram = r.engram;
             const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-            const associations = this.store.getAssociationsFor(engram.id);
+            const associations = await this.store.getAssociationsFor(engram.id);
             const cTokens = tokenize(engram.concept);
             const ctTokens = tokenize(engram.content);
             const cJac = jaccard(queryTokens, cTokens);
@@ -479,9 +478,9 @@ export class ActivationEngine {
             const km = Math.min(Math.max(r.bm25Score, jSc) + cOvlp * 0.3, 1.0);
             let vm = 0;
             const rs = rawCosineSims.get(engram.id) ?? (queryEmbedding && engram.embedding ? cosineSimilarity(queryEmbedding, engram.embedding) : 0);
-            if (rs) {
-              const z = (rs - simMean) / simStdDev;
-              if (z > adaptive.zScoreGate) vm = Math.min(1, (z - adaptive.zScoreGate) / 2.0);
+            if (rs > 0) {
+              const SIM_FLOOR = adaptive.zScoreGate > 0.5 ? 0.50 : 0.35;
+              if (rs > SIM_FLOOR) vm = Math.min(1, (rs - SIM_FLOOR) / (0.95 - SIM_FLOOR));
             }
             const tm = km > 0 && vm > 0
               ? 0.5 * Math.max(km, vm) + 0.3 * Math.min(km, vm) + 0.2 * (km * vm)
@@ -498,8 +497,19 @@ export class ActivationEngine {
     }
 
     // Phase 3.7: Entity-Bridge boost — boost scored candidates that share entity tags
-    // with the most query-relevant result. Only bridge from the single best text-match
-    // to avoid pulling in unrelated entities from tangentially-matching results.
+    // with the most query-relevant result. The original intent: surface candidates
+    // that DON'T match the query text directly but share entities with the top
+    // text-match anchor ("she said something" → bridge to entities of the recent
+    // speaker named "she"). This is LATERAL relevance, not direct relevance.
+    //
+    // 2026-05-26: Added textMatch gate. Without it, when many engrams share entity
+    // tags AND have similar text matches (e.g., 10 near-clones of the same concept),
+    // the bridge boost would push the 8 non-anchor clones above the 2 anchors —
+    // an inversion of the genuine top match. The eval Retrieval suite caught this
+    // (Recall@5 0.80 → 0.46). Gate: only boost candidates whose textMatch is
+    // meaningfully below the anchor's. They actually need the lateral boost.
+    // Env override: AWM_DISABLE_ENTITY_BRIDGE=1 to skip this phase entirely.
+    if (!process.env.AWM_DISABLE_ENTITY_BRIDGE)
     {
       // Find the result with the highest textMatch (most query-relevant, not just highest score)
       // Gate: only bridge when anchor has meaningful text relevance (> 0.15)
@@ -547,6 +557,17 @@ export class ActivationEngine {
         }
 
         if (entityTags.size > 0) {
+          // Anchor's textMatch sets the scale. Bridge boost magnitude is
+          // proportional to the gap between anchor and candidate textMatch:
+          //   - candidate near anchor (a near-clone of the anchor) → small gap → near-zero boost
+          //   - candidate far below anchor (genuine lateral relevance) → large gap → full boost
+          // Without this scaling, dense same-concept corpora flip the genuine
+          // top-1 below its 8-9 near-clones (eval Recall@5 0.80 → 0.46 verified
+          // 2026-05-26). The scaling keeps the lateral-relevance behavior
+          // (which is what helps the AB test) without inverting the genuine
+          // text-match winner.
+          const anchorTextMax = bridgeAnchors[0].phaseScores.textMatch;
+
           for (const item of scored) {
             if (anchorIds.has(item.engram.id)) continue;
 
@@ -557,11 +578,17 @@ export class ActivationEngine {
             }
 
             if (sharedEntities > 0) {
-              // Flat bridge boost per shared entity
-              const bridgeBoost = Math.min(sharedEntities * 0.15, 0.4);
-              item.score += bridgeBoost;
-              item.phaseScores.composite += bridgeBoost;
-              item.phaseScores.graphBoost += bridgeBoost;
+              // Gap scaling: 1.0 when candidateText << anchorText, 0 when equal.
+              // Clamped to [0, 1]. Anchors with textMatch ≤ 0 fall back to flat boost.
+              const gapScale = anchorTextMax > 0
+                ? Math.max(0, Math.min(1, (anchorTextMax - item.phaseScores.textMatch) / anchorTextMax))
+                : 1;
+              const bridgeBoost = Math.min(sharedEntities * 0.15, 0.4) * gapScale;
+              if (bridgeBoost > 0) {
+                item.score += bridgeBoost;
+                item.phaseScores.composite += bridgeBoost;
+                item.phaseScores.graphBoost += bridgeBoost;
+              }
             }
           }
         }
@@ -572,7 +599,7 @@ export class ActivationEngine {
     // Only walk from engrams that had text relevance (composite > 0 pre-walk)
     const sorted = scored.sort((a, b) => b.score - a.score);
     const topN = sorted.slice(0, limit * 3);
-    this.graphWalk(topN, 2, adaptive.hopPenalty, adaptive.beamWidth);
+    await this.graphWalk(topN, 2, adaptive.hopPenalty, adaptive.beamWidth);
 
     // Phase 6: Initial filter and sort for re-ranking pool
     const pool = topN
@@ -668,8 +695,9 @@ export class ActivationEngine {
         ? rerankerScores[0] - rerankerScores[1]
         : rerankerScores[0];
 
-      const maxRawCosine = queryEmbedding && simValues.length > 0
-        ? Math.max(...simValues)
+      const cosineSimValues = Array.from(rawCosineSims.values());
+      const maxRawCosine = queryEmbedding && cosineSimValues.length > 0
+        ? Math.max(...cosineSimValues)
         : 1.0;
 
       // Required-channels for hard abstention:
@@ -677,8 +705,11 @@ export class ActivationEngine {
       //   default: 2 of 3 — precision-first
       const requiredChannels = abstentionThreshold > 0 ? 3 : 2;
 
-      // Hard abstention: fewer than required channels agree AND semantic drift is high
-      if (channelsAgreeing < requiredChannels && maxRawCosine < (simMean + simStdDev * 1.5)) {
+      // Hard abstention: fewer than required channels agree AND semantic match weak.
+      // After the 2.0.x vector refactor we no longer compute z-score; threshold
+      // on raw cosine against the mode floor (targeted=0.50, exploratory=0.35).
+      const semanticFloor = adaptive.zScoreGate > 0.5 ? 0.50 : 0.35;
+      if (channelsAgreeing < requiredChannels && maxRawCosine < semanticFloor) {
         return [];
       }
 
@@ -716,24 +747,119 @@ export class ActivationEngine {
       }
     }
 
-    // Phase 9: Final sort, limit, explain
-    const results: ActivationResult[] = rerankPool
-      .sort((a, b) => b.score - a.score)
+    // Phase 9: Final sort, limit, explain, attach confidence
+    const finalRanked = rerankPool.sort((a, b) => b.score - a.score);
+    const topScoresForConfidence = finalRanked.slice(0, 10).map(r => r.score);
+    const { confidence } = computeRecallConfidence(topScoresForConfidence);
+
+    // Opt-in confidence-based abstention. When the caller sets
+    // `requireConfidence`, we return [] if the score-distribution shape
+    // indicates a low-quality recall (noisy or best-of-bad-bunch).
+    // Independent of the channel-agreement abstention earlier — that path
+    // requires the reranker; this one uses just the final composite scores.
+    if (requireConfidence > 0 && confidence < requireConfidence) {
+      return [];
+    }
+
+    // Confidence-adaptive output granularity (Paper 3: cognitive teaming).
+    // 'full'    → no summary (default, current behavior).
+    // 'compact' → every result gets a short summary (COMPACT_LEN chars).
+    // 'auto'    → if confidence ≥ AUTO_THRESHOLD: top result gets a full-length
+    //             summary, lower-ranked results get compact summaries. If
+    //             confidence is lower, all results get compact summaries.
+    const granularity = query.granularity ?? 'full';
+    const COMPACT_LEN = Number(process.env.AWM_GRANULARITY_COMPACT_LEN ?? 200);
+    const FULL_LEN = Number(process.env.AWM_GRANULARITY_FULL_LEN ?? 1000);
+    const AUTO_THRESHOLD = Number(process.env.AWM_GRANULARITY_AUTO_THRESHOLD ?? 0.4);
+
+    // Snippet token list — reuse the activation queryTokens (Set<string>),
+    // filtered to ≥2 chars to drop noise. queryTokens was tokenized at line
+    // 273 via tokenize() with stopword stripping already applied.
+    const snippetTokens = Array.from(queryTokens).filter(t => t.length >= 2);
+
+    // Find the densest window of `len` chars in `content` that contains the
+    // most query-token matches. Falls back to head if no tokens match.
+    const summaryFor = (content: string, len: number): string => {
+      if (content.length <= len) return content;
+      if (snippetTokens.length === 0) return content.slice(0, len).trimEnd() + '…';
+
+      const lower = content.toLowerCase();
+      const hits: number[] = [];
+      for (const tok of snippetTokens) {
+        let from = 0;
+        while (true) {
+          const idx = lower.indexOf(tok, from);
+          if (idx < 0) break;
+          hits.push(idx);
+          from = idx + tok.length;
+        }
+      }
+      if (hits.length === 0) return content.slice(0, len).trimEnd() + '…';
+      hits.sort((a, b) => a - b);
+
+      // Find the window of size `len` that contains the most hits, by
+      // sliding a window anchored on each hit.
+      let bestStart = hits[0];
+      let bestCount = 0;
+      for (let i = 0; i < hits.length; i++) {
+        const start = Math.max(0, hits[i] - Math.floor(len / 4));
+        let count = 0;
+        for (let j = i; j < hits.length; j++) {
+          if (hits[j] - start < len) count++;
+          else break;
+        }
+        if (count > bestCount) {
+          bestCount = count;
+          bestStart = start;
+        }
+      }
+
+      // Reserve characters for the ellipses we're about to add so the final
+      // string stays within `len`. Without this, both '…' prefix + suffix
+      // would push the snippet to len+2 chars.
+      const hasPrefix = bestStart > 0;
+      const tentativeEnd = Math.min(content.length, bestStart + len);
+      const hasSuffix = tentativeEnd < content.length;
+      const reserveForEllipses = (hasPrefix ? 1 : 0) + (hasSuffix ? 1 : 0);
+      const bodyLen = Math.max(0, len - reserveForEllipses);
+      const end = Math.min(content.length, bestStart + bodyLen);
+      const startAdj = Math.max(0, end - bodyLen);
+      let snippet = content.slice(startAdj, end);
+      if (startAdj > 0) snippet = '…' + snippet.trimStart();
+      if (end < content.length) snippet = snippet.trimEnd() + '…';
+      return snippet;
+    };
+
+    const results: ActivationResult[] = finalRanked
       .slice(0, limit)
-      .map(r => ({
-        engram: r.engram,
-        score: r.score,
-        phaseScores: r.phaseScores,
-        why: this.explain(r.phaseScores, r.engram, r.associations),
-        associations: r.associations,
-      }));
+      .map((r, idx) => {
+        let summary: string | undefined;
+        if (granularity === 'compact') {
+          summary = summaryFor(r.engram.content, COMPACT_LEN);
+        } else if (granularity === 'auto') {
+          if (confidence >= AUTO_THRESHOLD && idx === 0) {
+            summary = summaryFor(r.engram.content, FULL_LEN);
+          } else {
+            summary = summaryFor(r.engram.content, COMPACT_LEN);
+          }
+        }
+        return {
+          engram: r.engram,
+          score: r.score,
+          phaseScores: r.phaseScores,
+          why: this.explain(r.phaseScores, r.engram, r.associations),
+          associations: r.associations,
+          confidence,
+          ...(summary !== undefined && { summary }),
+        };
+      });
 
     const activatedIds = results.map(r => r.engram.id);
 
     // Side effects: touch, co-activate, defer Hebbian to validation gate (skip for internal/system calls)
     if (!query.internal) {
       for (const id of activatedIds) {
-        this.store.touchEngram(id);
+        await this.store.touchEngram(id);
       }
       this.coActivationBuffer.pushBatch(activatedIds);
       // Validation-gated Hebbian: defer strengthening until feedback arrives
@@ -748,7 +874,7 @@ export class ActivationEngine {
 
       // Log activation event for eval
       const latencyMs = performance.now() - startTime;
-      this.store.logActivationEvent({
+      await this.store.logActivationEvent({
         id: randomUUID(),
         agentId: query.agentId,
         timestamp: new Date(),
@@ -785,12 +911,12 @@ export class ActivationEngine {
     entity: 0.15,     // bridge edges
   };
 
-  private graphWalk(
+  private async graphWalk(
     scored: { engram: Engram; score: number; phaseScores: PhaseScores; associations: Association[] }[],
     maxDepth: number,
     hopPenalty: number,
     beamWidth: number = 15
-  ): void {
+  ): Promise<void> {
     const scoreMap = new Map(scored.map(s => [s.engram.id, s]));
     const MAX_TOTAL_BOOST = 0.25;
 
@@ -826,7 +952,7 @@ export class ActivationEngine {
 
           const associations = item.associations.length > 0
             ? item.associations
-            : this.store.getAssociationsFor(item.engram.id);
+            : await this.store.getAssociationsFor(item.engram.id);
 
           // Filter to only edges of this sub-graph type
           const relevantEdges = associations.filter(a => edgeTypes.includes(a.type));
@@ -885,24 +1011,24 @@ export class ActivationEngine {
    * Called by memory_feedback — only strengthens when retrieval was useful.
    * This prevents hub toxicity from noisy co-retrieval (Kairos-inspired).
    */
-  resolveHebbianFeedback(engramId: string, useful: boolean): number {
+  async resolveHebbianFeedback(engramId: string, useful: boolean): Promise<number> {
     const { pairs, signal } = this.validationGate.resolveFeedback(engramId, useful);
     let updated = 0;
 
     for (const [a, b] of pairs) {
-      const existing = this.store.getAssociation(a, b) ?? this.store.getAssociation(b, a);
+      const existing = (await this.store.getAssociation(a, b)) ?? (await this.store.getAssociation(b, a));
       const currentWeight = existing?.weight ?? 0.1;
 
       if (signal > 0) {
         // Positive feedback → strengthen
         const newWeight = strengthenAssociation(currentWeight, signal);
-        this.store.upsertAssociation(a, b, newWeight, 'hebbian');
-        this.store.upsertAssociation(b, a, newWeight, 'hebbian');
+        await this.store.upsertAssociation(a, b, newWeight, 'hebbian');
+        await this.store.upsertAssociation(b, a, newWeight, 'hebbian');
       } else {
         // Negative feedback → slight weakening (decay by signal magnitude)
         const newWeight = Math.max(0.001, currentWeight * (1 + signal)); // signal is -0.3
-        this.store.upsertAssociation(a, b, newWeight, 'hebbian');
-        this.store.upsertAssociation(b, a, newWeight, 'hebbian');
+        await this.store.upsertAssociation(a, b, newWeight, 'hebbian');
+        await this.store.upsertAssociation(b, a, newWeight, 'hebbian');
       }
       updated++;
     }

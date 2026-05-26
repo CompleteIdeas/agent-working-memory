@@ -87,11 +87,14 @@ The sleep cycle in `src/engine/consolidation.ts`:
 |-------|------|-------------|
 | 1 | Replay | Identify memory clusters for strengthening |
 | 2 | Strengthen | Boost edges between co-accessed memories |
+| 2.5 | Synthesis | Tag-grouped session summaries + pattern syntheses |
 | 3 | Bridge | Create cross-topic edges between related clusters |
 | 4 | Decay | Apply time-based decay to edge weights |
 | 5 | Homeostasis | Normalize hub weights to prevent domination |
+| **5.5** | **Content fade** (v0.8.5) | Trim content of accessed-but-stale engrams to 150 chars; transition `active → fading`. Preserves concept, tags, embedding. |
 | 6 | Forget | Archive/delete low-confidence, low-access memories |
 | 6.5 | Redundancy prune | Archive semantically similar (>0.85) low-conf duplicates |
+| 6.7 | Confidence drift | Adjust confidence based on structural signals |
 | 7 | Sweep staging | Promote or discard memories in staging buffer |
 
 ## Database Schema
@@ -103,7 +106,8 @@ SQLite with FTS5 for full-text search. Key tables:
 - `salience`, `confidence`, `access_count`, `last_access`
 - `embedding` (384d float array, stored as blob)
 - `task_status`, `task_priority`, `blocked_by` (task management)
-- `disposition` (active/staging/archived/retracted)
+- `stage` (`staging` / `active` / `fading` / `consolidated` / `archived`) — `fading` added in v0.8.5
+- `retracted` (boolean), `retracted_by`, `retracted_at` (soft-delete metadata)
 
 **edges** — Associations between memories
 - `source_id`, `target_id`, `weight`, `edge_type` (hebbian/temporal/bridge)

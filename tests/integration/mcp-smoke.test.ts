@@ -224,7 +224,7 @@ describe('MCP smoke tests — all 11 tools', () => {
   });
 
   // Tool 4: memory_retract
-  it('memory_retract: retracts and creates correction', () => {
+  it('memory_retract: retracts and creates correction', async () => {
     const wrong = store.createEngram({
       agentId: AGENT_ID,
       concept: 'wrong fact',
@@ -233,7 +233,7 @@ describe('MCP smoke tests — all 11 tools', () => {
       confidence: 0.7,
     });
 
-    const result = retraction.retract({
+    const result = await retraction.retract({
       agentId: AGENT_ID,
       targetEngramId: wrong.id,
       reason: 'Incorrect color',
@@ -256,7 +256,7 @@ describe('MCP smoke tests — all 11 tools', () => {
       salience: 0.6,
     });
 
-    const metrics = evalEngine.computeMetrics(AGENT_ID);
+    const metrics = await evalEngine.computeMetrics(AGENT_ID);
     expect(metrics.agentId).toBe(AGENT_ID);
     expect(metrics.activeEngramCount).toBe(1);
     expect(metrics.avgConfidence).toBeGreaterThan(0);

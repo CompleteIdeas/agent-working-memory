@@ -11,7 +11,7 @@
  */
 
 import type { SalienceFeatures, MemoryClass } from '../types/index.js';
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 
 export type SalienceEventType = 'decision' | 'friction' | 'surprise' | 'causal' | 'observation' | 'user_feedback';
 
@@ -76,6 +76,46 @@ export function detectVerifiedFinding(content: string): boolean {
   return dateCount + idCount >= 2;
 }
 
+/**
+ * Auto-detect trivial routine operations: file reads, status pings, log-line
+ * completions. These have high BM25 novelty (each one has different filenames,
+ * timestamps, attempt counts) but represent NO learning value — they're the
+ * sort of background chatter a working agent generates by the thousand.
+ *
+ * Why this exists: the novelty weight (0.45) puts a floor at ~0.45 for every
+ * write on a fresh agent, which prevents trivial observations from ever
+ * routing to 'discard'. self-test 1.2 ("File read completed successfully for
+ * file 0") explicitly asks for trivial → discard. We can't detect triviality
+ * from features alone — the caller passes surprise=0, effort=0 but novelty
+ * computes to 1.0 — so we need a content shape check.
+ *
+ * Pattern requires:
+ *   - A routine verb phrase: "completed", "succeeded", "finished", "returned",
+ *     "loaded", "saved", "read", "wrote", "synced", "pinged", "checked",
+ *     "started", "stopped", "rotated", "flushed"
+ *   - Generic operational noun: file/log/request/response/status/job/connection
+ *   - Total length under ~150 chars (trivial events are short)
+ *
+ * Matched memories get a salience CAP at 0.10 (below the 0.2 stagingThreshold,
+ * so they route to 'discard'). Caller can still force-store via
+ * memory_class=canonical or memory_class=structural.
+ */
+const TRIVIAL_VERB_PATTERN = /\b(completed|succeeded|finished|returned|loaded|saved|read|wrote|synced|pinged|checked|started|stopped|rotated|flushed)\b/i;
+const TRIVIAL_NOUN_PATTERN = /\b(file|log|request|response|status|job|connection|task|cron|sync|tick|batch)\b/i;
+
+/** Returns true if the content looks like a routine operational ping that adds no learning value. */
+export function detectTrivialOperation(content: string): boolean {
+  if (typeof content !== 'string' || content.length === 0) return false;
+  const text = content.trim();
+  if (text.length > 150) return false;
+  if (!TRIVIAL_VERB_PATTERN.test(text)) return false;
+  if (!TRIVIAL_NOUN_PATTERN.test(text)) return false;
+  // Don't trip on verified findings — they share some verbs (Completed) but
+  // have concrete identifiers. detectVerifiedFinding has priority.
+  if (detectVerifiedFinding(text)) return false;
+  return true;
+}
+
 export interface SalienceInput {
   content: string;
   eventType?: SalienceEventType;
@@ -124,6 +164,7 @@ export function evaluateSalience(
   let resolvedMemoryClass: MemoryClass = input.memoryClass ?? 'working';
   let autoPromoted = false;
   let verifiedFindingFloor = false;
+  let trivialOperationCap = false;
   if (detectUserFeedback(input.content)) {
     resolvedEventType = 'user_feedback';
     resolvedMemoryClass = 'canonical';
@@ -136,6 +177,10 @@ export function evaluateSalience(
       resolvedEventType = 'decision';
     }
     verifiedFindingFloor = true;
+  } else if (detectTrivialOperation(input.content)) {
+    // Trivial routine operation — cap salience below stagingThreshold so it
+    // routes to 'discard'. Caller can still force-keep via canonical/structural.
+    trivialOperationCap = true;
   }
 
   const features: SalienceFeatures = {
@@ -149,6 +194,7 @@ export function evaluateSalience(
   const reasonCodes: string[] = [];
   if (autoPromoted) reasonCodes.push('auto:user_feedback');
   if (verifiedFindingFloor) reasonCodes.push('auto:verified_finding');
+  if (trivialOperationCap) reasonCodes.push('auto:trivial_operation');
 
   // Novelty: 1.0 = completely new info, 0 = exact duplicate exists
   // Default to 0.8 (assume mostly novel) when caller doesn't check
@@ -168,18 +214,62 @@ export function evaluateSalience(
   if (novelty > 0.7) reasonCodes.push('novel_information');
   if (novelty < 0.3) reasonCodes.push('redundant_information');
 
-  // Event type bonus
+  // Event type bonus — gated by signal strength. The bonus represents the
+  // confidence that an event of this type warrants the type-specific boost.
+  // If the caller labels something `friction` but every signal is near zero,
+  // they're telling the system the friction was minor — the typeBonus is
+  // attenuated to reflect that. Without this gate, any labeled friction
+  // event clears the active threshold on novelty alone (self-test 1.4).
   let typeBonus = 0;
+  let typeReason = '';
   switch (features.eventType) {
-    case 'decision': typeBonus = 0.15; reasonCodes.push('event:decision'); break;
-    case 'friction': typeBonus = 0.2; reasonCodes.push('event:friction'); break;
-    case 'surprise': typeBonus = 0.25; reasonCodes.push('event:surprise'); break;
-    case 'causal': typeBonus = 0.2; reasonCodes.push('event:causal'); break;
-    case 'user_feedback': typeBonus = 0.3; reasonCodes.push('event:user_feedback'); break;
+    case 'decision': typeBonus = 0.15; typeReason = 'event:decision'; break;
+    case 'friction': typeBonus = 0.2; typeReason = 'event:friction'; break;
+    case 'surprise': typeBonus = 0.25; typeReason = 'event:surprise'; break;
+    case 'causal': typeBonus = 0.2; typeReason = 'event:causal'; break;
+    case 'user_feedback': typeBonus = 0.3; typeReason = 'event:user_feedback'; break;
     case 'observation': break;
   }
+  // Signal-weakness gate. The novelty score alone (~0.45 for fresh content)
+  // would clear the active threshold (0.4), so any labelled event with no
+  // backing numerical signals lands as 'active' regardless of the label's
+  // semantics. That's wrong for friction/causal: those types describe events
+  // that *happened to the agent* and benefit from explicit intensity signals.
+  // surprise / user_feedback / decision-with-decisionMade are exempt: their
+  // label alone is the signal.
+  const exemptFromAttenuation =
+       features.eventType === 'user_feedback'
+    || features.eventType === 'surprise'
+    || (features.eventType === 'decision' && features.decisionMade);
+  const signalStrength = features.surprise + features.causalDepth + features.resolutionEffort + (features.decisionMade ? 0.5 : 0);
+  const signalsAreWeak = !exemptFromAttenuation && signalStrength < 0.5;
 
-  let score = Math.min(surpriseScore + decisionScore + causalScore + effortScore + noveltyScore + typeBonus, 1.0);
+  if (typeBonus > 0 && signalsAreWeak) {
+    typeBonus *= 0.25; // weak-signal event: keep a hint, not the full bonus
+    typeReason += ':attenuated';
+  }
+  if (typeReason) reasonCodes.push(typeReason);
+
+  // Cap the novelty contribution when signals are weak AND the eventType
+  // claims a typeBonus (friction/causal). Without this, novelty=1.0 alone
+  // (0.45 noveltyScore) clears the active threshold (0.4), making any
+  // weakly-signalled non-exempt write 'active' regardless of intent.
+  // Plain observations (typeBonus=0) are NOT capped — a novel observation
+  // is still default-active even without explicit signals.
+  let cappedNoveltyScore = noveltyScore;
+  if (signalsAreWeak && typeBonus > 0) {
+    cappedNoveltyScore = Math.min(noveltyScore, 0.30);
+    if (cappedNoveltyScore < noveltyScore) reasonCodes.push('novelty:capped');
+  }
+
+  let score = Math.min(surpriseScore + decisionScore + causalScore + effortScore + cappedNoveltyScore + typeBonus, 1.0);
+
+  // Apply triviality cap BEFORE memoryClass floor — the floor still wins for
+  // canonical/structural writes (covered below). Trivial cap forces routine
+  // operational chatter below stagingThreshold.
+  if (trivialOperationCap) {
+    score = Math.min(score, 0.1);
+  }
 
   // Memory class overrides
   const memoryClass = resolvedMemoryClass;
@@ -234,14 +324,14 @@ export function evaluateSalience(
  *
  * The check is cheap (~1ms) because BM25 is synchronous SQLite FTS5.
  */
-export function computeNovelty(store: EngramStore, agentId: string, concept: string, content: string): number {
+export async function computeNovelty(store: EngramStore, agentId: string, concept: string, content: string): Promise<number> {
   try {
     // Search using concept + first 100 chars of content (enough to detect duplicates, fast)
     const contentStr = typeof content === 'string' ? content : '';
     const conceptStr = typeof concept === 'string' ? concept : '';
     const searchText = `${conceptStr} ${contentStr.slice(0, 100)}`;
 
-    const results = store.searchBM25WithRank(agentId, searchText, 5);
+    const results = await store.searchBM25WithRank(agentId, searchText, 5);
     if (results.length === 0) return 1.0; // Nothing similar — fully novel
 
     // searchBM25WithRank normalizes scores to 0..1 via |rank|/(1+|rank|).
@@ -293,43 +383,108 @@ export interface NoveltyResult {
 }
 
 /**
- * Compute novelty score AND return the best matching engram (for reinforcement-on-duplicate).
- * Uses BM25 (synchronous, fast) to find the closest existing memory.
+ * Compute novelty score AND return the best matching engram (for
+ * reinforcement-on-duplicate).
+ *
+ * **v0.8.5+: dual-signal novelty (BM25 ∨ cosine, max).**
+ *
+ * When `embedding` is provided, computes both:
+ *   - BM25 lexical match (existing path) — catches verbatim duplicates,
+ *     identifier-driven matches, recall-output reingestion attempts.
+ *   - Cosine semantic match (new) — catches paraphrased duplicates,
+ *     vocabulary-drifted restatements of the same fact, cross-role
+ *     rephrasings (user question → assistant answer about same fact).
+ *
+ * Takes `max(bm25Score, cosineSimilarity)` and returns the engram from
+ * whichever signal won. Why both?
+ *   - BM25 is *backend-dependent* — Postgres ts_rank_cd and SQLite FTS5
+ *     BM25 are different algorithms producing different rankings for
+ *     short-text matches (verified empirically 2026-05-26). Cosine is
+ *     *backend-agnostic* — same embedding model produces identical
+ *     similarity scores on either backend.
+ *   - Cosine alone misses the exact-text cases BM25 catches (recall
+ *     output leakage, identifier matching). BM25 alone misses the
+ *     semantic cases cosine catches (paraphrase, vocabulary drift —
+ *     the LoCoMo pattern of "user said X" across conversations).
+ *
+ * When `embedding` is null/omitted, falls back to BM25-only (preserves
+ * backward compat with v0.8.4 and earlier callers).
+ *
  * Optionally checks workspace-scoped memories too (cross-agent dedup).
  */
-export function computeNoveltyWithMatch(
+export async function computeNoveltyWithMatch(
   store: EngramStore, agentId: string, concept: string, content: string,
-  workspace?: string | null
-): NoveltyResult {
+  workspace?: string | null,
+  embedding?: number[] | null,
+): Promise<NoveltyResult> {
   try {
     const contentStr = typeof content === 'string' ? content : '';
     const conceptStr = typeof concept === 'string' ? concept : '';
     const searchText = `${conceptStr} ${contentStr.slice(0, 100)}`;
 
-    // Agent-scoped search (limit:3 to avoid single shallow match suppressing novelty)
-    const results = store.searchBM25WithRank(agentId, searchText, 3);
-
-    // Workspace search — only if the store supports it (v0.5.4+)
-    let wsResults: { engram: { id: string }; bm25Score: number }[] = [];
+    // BM25 channel (existing) — agent-scoped + optional workspace.
+    const bm25Results = await store.searchBM25WithRank(agentId, searchText, 3);
+    let wsResults: { engram: { id: string; concept?: string; createdAt?: Date | string | number }; bm25Score: number }[] = [];
     if (workspace && typeof (store as any).searchBM25WithRankWorkspace === 'function') {
-      wsResults = (store as any).searchBM25WithRankWorkspace(agentId, searchText, 3, workspace);
+      wsResults = await (store as any).searchBM25WithRankWorkspace(agentId, searchText, 3, workspace);
+    }
+    const allBm25 = [...bm25Results, ...wsResults];
+    allBm25.sort((a, b) => b.bm25Score - a.bm25Score);
+    const topBm25 = allBm25[0]
+      ? { engramId: allBm25[0].engram.id, score: allBm25[0].bm25Score, engram: allBm25[0].engram }
+      : null;
+
+    // Cosine channel (v0.8.5) — only when caller supplies an embedding.
+    // The embed cost is paid once in the write-pipeline pre-novelty and
+    // re-used for the engram's stored vector, so we don't double-embed.
+    let topCosine: { engramId: string; score: number; engram: any } | null = null;
+    if (embedding && embedding.length > 0) {
+      try {
+        const hits = await store.searchByVector(agentId, embedding, 3);
+        if (hits.length > 0) {
+          const h = hits[0];
+          // pgvector distance ≈ 1 - cosineSimilarity for unit-norm BGE vectors.
+          // SQLite searchByVector returns distance = 1 - sim in the same form.
+          // Clamp into [0, 1] to be safe with floating-point drift.
+          const sim = Math.max(0, Math.min(1, 1 - h.distance));
+          topCosine = { engramId: h.engram.id, score: sim, engram: h.engram };
+        }
+      } catch { /* cosine channel optional — fall back to BM25 alone */ }
     }
 
-    const allResults = [...results, ...wsResults];
-    if (allResults.length === 0) return { novelty: 1.0, matchedEngramId: null, matchScore: 0 };
+    // Combine: take the higher-confidence signal. If both fired and they
+    // identify the same engram, scores reinforce each other (we still take
+    // max, but the matched engram is the same). If they identify *different*
+    // engrams (one semantic match, one lexical), the higher score wins —
+    // typically the more discriminating signal for that particular content.
+    //
+    // Tested MIN and cosine-primary on 2026-05-26 to address PGlite token
+    // bloat; both dropped accuracy 7–20pp across backends. The bloat is a
+    // recall-output problem (returning full merged engram content when only
+    // a slice matches the query), not a novelty problem. Keeping MAX
+    // preserves the 100% / 97.5% accuracy we had on PGlite / SQLite.
+    let combinedTop: { engramId: string; score: number; engram: any } | null;
+    if (topCosine && topBm25) {
+      combinedTop = topCosine.score >= topBm25.score ? topCosine : topBm25;
+    } else if (topCosine) {
+      combinedTop = topCosine;
+    } else if (topBm25) {
+      combinedTop = topBm25;
+    } else {
+      return { novelty: 1.0, matchedEngramId: null, matchScore: 0 };
+    }
 
-    allResults.sort((a, b) => b.bm25Score - a.bm25Score);
-    const top = allResults[0];
-    const topScore = top.bm25Score;
+    const topScore = combinedTop.score;
 
     // Quadratic dampening — see computeNovelty for curve rationale
     const baseNovelty = 1.0 - topScore * topScore;
 
-    // Recent-only concept penalty (30d window)
+    // Recent-only concept penalty (30d window). Check across all matches we
+    // saw on EITHER channel — exact-concept repeat counts as a near-duplicate
+    // regardless of which signal noticed it.
     const conceptLower = conceptStr.toLowerCase().trim();
     const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const exactConceptRecent = allResults.some(r => {
-      const eng = r.engram as { concept?: string; createdAt?: Date | string | number };
+    const checkExactConcept = (eng: { concept?: string; createdAt?: Date | string | number }): boolean => {
       if (eng?.concept?.toLowerCase().trim() !== conceptLower) return false;
       const created = eng?.createdAt;
       if (!created) return true;
@@ -337,11 +492,13 @@ export function computeNoveltyWithMatch(
         ? created.getTime()
         : typeof created === 'number' ? created : Date.parse(created);
       return Number.isFinite(createdMs) && createdMs >= cutoffMs;
-    });
+    };
+    const exactConceptRecent = allBm25.some(r => checkExactConcept(r.engram))
+      || (topCosine ? checkExactConcept(topCosine.engram) : false);
     const conceptPenalty = exactConceptRecent ? 0.3 : 0;
 
     const novelty = Math.max(0.05, Math.min(0.95, baseNovelty - conceptPenalty));
-    return { novelty, matchedEngramId: top.engram.id, matchScore: topScore };
+    return { novelty, matchedEngramId: combinedTop.engramId, matchScore: topScore };
   } catch {
     return { novelty: 0.8, matchedEngramId: null, matchScore: 0 };
   }

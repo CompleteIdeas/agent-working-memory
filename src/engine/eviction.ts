@@ -10,7 +10,7 @@
  *   4. Decay unused association weights over time
  */
 
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { AgentConfig } from '../types/agent.js';
 import { decayAssociation } from '../core/hebbian.js';
 
@@ -25,42 +25,42 @@ export class EvictionEngine {
    * Check capacity budgets and evict if needed.
    * Returns count of evicted engrams.
    */
-  enforceCapacity(agentId: string, config: AgentConfig): { evicted: number; edgesPruned: number } {
+  async enforceCapacity(agentId: string, config: AgentConfig): Promise<{ evicted: number; edgesPruned: number }> {
     let evicted = 0;
     let edgesPruned = 0;
 
     // Active engram budget
-    const activeCount = this.store.getActiveCount(agentId);
+    const activeCount = await this.store.getActiveCount(agentId);
     if (activeCount > config.maxActiveEngrams) {
       const excess = activeCount - config.maxActiveEngrams;
-      const candidates = this.store.getEvictionCandidates(agentId, excess);
+      const candidates = await this.store.getEvictionCandidates(agentId, excess);
       for (const engram of candidates) {
-        this.store.updateStage(engram.id, 'archived');
+        await this.store.updateStage(engram.id, 'archived');
         evicted++;
       }
     }
 
     // Staging budget
-    const stagingCount = this.store.getStagingCount(agentId);
+    const stagingCount = await this.store.getStagingCount(agentId);
     if (stagingCount > config.maxStagingEngrams) {
-      const expired = this.store.getExpiredStaging();
+      const expired = await this.store.getExpiredStaging();
       for (const engram of expired) {
-        this.store.deleteEngram(engram.id);
+        await this.store.deleteEngram(engram.id);
         evicted++;
       }
     }
 
     // Edge pruning — cap per engram
-    const engrams = this.store.getEngramsByAgent(agentId, 'active');
+    const engrams = await this.store.getEngramsByAgent(agentId, 'active');
     for (const engram of engrams) {
-      const edgeCount = this.store.countAssociationsFor(engram.id);
+      const edgeCount = await this.store.countAssociationsFor(engram.id);
       if (edgeCount > config.maxEdgesPerEngram) {
         // Remove weakest edges until under cap
         let toRemove = edgeCount - config.maxEdgesPerEngram;
         while (toRemove > 0) {
-          const weakest = this.store.getWeakestAssociation(engram.id);
+          const weakest = await this.store.getWeakestAssociation(engram.id);
           if (weakest) {
-            this.store.deleteAssociation(weakest.id);
+            await this.store.deleteAssociation(weakest.id);
             edgesPruned++;
           }
           toRemove--;
@@ -75,8 +75,8 @@ export class EvictionEngine {
    * Decay all association weights based on time since last activation.
    * Run periodically (e.g., daily).
    */
-  decayEdges(agentId: string, halfLifeDays: number = 7): number {
-    const associations = this.store.getAllAssociations(agentId);
+  async decayEdges(agentId: string, halfLifeDays: number = 7): Promise<number> {
+    const associations = await this.store.getAllAssociations(agentId);
     let decayed = 0;
 
     for (const assoc of associations) {
@@ -86,10 +86,10 @@ export class EvictionEngine {
       const newWeight = decayAssociation(assoc.weight, daysSince, halfLifeDays);
       if (newWeight < 0.01) {
         // Below minimum useful weight — prune
-        this.store.deleteAssociation(assoc.id);
+        await this.store.deleteAssociation(assoc.id);
         decayed++;
       } else if (Math.abs(newWeight - assoc.weight) > 0.001) {
-        this.store.upsertAssociation(
+        await this.store.upsertAssociation(
           assoc.fromEngramId, assoc.toEngramId, newWeight, assoc.type, assoc.confidence
         );
         decayed++;

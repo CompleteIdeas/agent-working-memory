@@ -138,7 +138,7 @@ both — stable link survives concept renames. No match found → stores just
   "tagsAll": ["string"],                                    // 0.8 — explicit AND (alias for tags)
   "tagsAny": ["string"],                                    // 0.8 — OR (at least one)
   "tagsNone": ["string"],                                   // 0.8 — NOT (exclude all)
-  "stage": "active | staging | archived | consolidated",
+  "stage": "active | staging | fading | archived | consolidated",  // 0.8.2 — fading added
   "retracted": false,
   "limit": 20,
   "offset": 0,
@@ -551,7 +551,7 @@ Default half-life: 7 days
 | created_at | TEXT | ISO datetime |
 | salience_features | TEXT | JSON |
 | reason_codes | TEXT | JSON array |
-| stage | TEXT | active/staging/archived/consolidated |
+| stage | TEXT | staging / active / fading (v0.8.5) / consolidated / archived |
 | ttl | INTEGER | Milliseconds (staging only) |
 | retracted | INTEGER | 0 or 1 |
 | retracted_by | TEXT | FK to correction engram |

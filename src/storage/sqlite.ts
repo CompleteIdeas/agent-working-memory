@@ -9,6 +9,7 @@
 
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import { cosineSimilarity } from '../core/embeddings.js';
 import type {
   Engram, EngramCreate, EngramStage, Association, AssociationType,
   SearchQuery, SalienceFeatures, ActivationEvent, StagingEvent,
@@ -599,7 +600,7 @@ export class EngramStore {
     if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit);
 
     const sanitized = query
-      .replace(/[^\w\s]/g, '')
+      .replace(/[^\w\s]/g, ' ')   // Split on punctuation so hyphenated IDs (PROJ-1000) match FTS5's separator-split tokens.
       .split(/\s+/)
       .filter(w => w.length > 1)
       .map(w => `"${w}"`)
@@ -674,6 +675,16 @@ export class EngramStore {
     this.cacheUpdateStage(id, stage);
   }
 
+  /**
+   * Replace an engram's content. Used by the fade phase of consolidation
+   * (Paper 1: storage degradation) to coarsen un-recalled memories without
+   * deleting them — concept + tags stay intact for tag-based retrieval, but
+   * BM25 content surface area shrinks.
+   */
+  updateContent(id: string, content: string): void {
+    this.db.prepare('UPDATE engrams SET content = ? WHERE id = ?').run(content, id);
+  }
+
   updateConfidence(id: string, confidence: number): void {
     this.db.prepare('UPDATE engrams SET confidence = ? WHERE id = ?').run(
       Math.max(0, Math.min(1, confidence)), id
@@ -737,6 +748,46 @@ export class EngramStore {
   }
 
   /**
+   * Vector similarity top-K search. SQLite has no native vector index, so we
+   * iterate over the slim cache, compute cosine similarity in-process, and
+   * return the top-K nearest neighbors. PGlite uses pgvector + ivfflat for
+   * the same operation in O(log N).
+   *
+   * Returns engrams with their cosine distance (0 = identical, 2 = opposite)
+   * to match the PGlite contract. Activation engine consumes `1 - distance`
+   * as the cosine similarity score.
+   */
+  searchByVector(
+    agentId: string,
+    vec: number[],
+    limit: number = 10,
+  ): Array<{ engram: Engram; distance: number }> {
+    if (!vec || vec.length === 0) return [];
+    // Include both 'active' and 'fading' — faded engrams retain their embedding
+    // (Paper 1: storage degradation; only content is trimmed) so they should still
+    // participate in vector recall. Concept + tags + truncated content remain in BM25.
+    const activeSlim = this.getEngramsByAgentSlim(agentId, 'active', false);
+    const fadingSlim = this.getEngramsByAgentSlim(agentId, 'fading', false);
+    const slim = activeSlim.concat(fadingSlim);
+    const scored: Array<{ id: string; sim: number }> = [];
+    for (const e of slim) {
+      if (!e.embedding) continue;
+      const sim = cosineSimilarity(vec, e.embedding);
+      scored.push({ id: e.id, sim });
+    }
+    scored.sort((a, b) => b.sim - a.sim);
+    const topIds = scored.slice(0, limit).map(s => s.id);
+    if (topIds.length === 0) return [];
+    const engrams = this.getEngramsByIds(topIds);
+    const engramMap = new Map(engrams.map(e => [e.id, e]));
+    return scored
+      .slice(0, limit)
+      .map(s => ({ engram: engramMap.get(s.id), sim: s.sim }))
+      .filter((x): x is { engram: Engram; sim: number } => x.engram !== undefined)
+      .map(x => ({ engram: x.engram, distance: 1 - x.sim }));
+  }
+
+  /**
    * BM25 search returning rank scores alongside engrams.
    * FTS5 rank is negative (lower = better match).
    * We normalize to 0-1 where higher = better.
@@ -744,7 +795,7 @@ export class EngramStore {
   searchBM25WithRank(agentId: string, query: string, limit: number = 10): { engram: Engram; bm25Score: number }[] {
     // Sanitize query for FTS5: quote each word to prevent column name interpretation
     const sanitized = query
-      .replace(/[^\w\s]/g, '')
+      .replace(/[^\w\s]/g, ' ')   // Split on punctuation so hyphenated IDs (PROJ-1000) match FTS5's separator-split tokens.
       .split(/\s+/)
       .filter(w => w.length > 1)
       .map(w => `"${w}"`)
@@ -1566,6 +1617,26 @@ export class EngramStore {
    */
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
+  }
+
+  /**
+   * Async-aware transaction wrapper. `fn` may await — we hold the SQLite
+   * lock across awaits by issuing raw BEGIN/COMMIT/ROLLBACK statements rather
+   * than using better-sqlite3's sync `db.transaction()`.
+   *
+   * Used by Form B (atomic write + supersede) where the body calls
+   * async store methods through the IEngramStore contract.
+   */
+  async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+    this.db.exec('BEGIN');
+    try {
+      const result = await fn();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch { /* best-effort */ }
+      throw err;
+    }
   }
 
   // ============================================================

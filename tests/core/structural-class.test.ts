@@ -44,8 +44,8 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     try { rmSync(tmp, { recursive: true, force: true }); } catch { /* best-effort */ }
   });
 
-  it('produces class:structural reasonCode and 0.7 salience floor', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('produces class:structural reasonCode and 0.7 salience floor', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Plot summary — Chapter 1',
       content: 'A short structural record.',  // low-novelty, would normally discard
@@ -61,10 +61,10 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     expect(result.salience!.disposition).toBe('active');
   });
 
-  it('reinforce branch still fires for same-concept structural writes', () => {
+  it('reinforce branch still fires for same-concept structural writes', async () => {
     // Structural is high-volume — repeated chapter analyses on the same chapter
     // produce same-concept writes. R1 should still reinforce, not duplicate.
-    const first = performWrite({ store, connectionEngine }, {
+    const first = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Ending — Chapter 1',
       content: 'Ending classification: emotional-landing.',
@@ -72,7 +72,7 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     });
     expect(first.action).toBe('create');
 
-    const second = performWrite({ store, connectionEngine }, {
+    const second = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Ending — Chapter 1',
       content: 'Ending classification: emotional-landing.',
@@ -86,8 +86,8 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     expect(all[0]!.memoryClass).toBe('structural');
   });
 
-  it('persists sequence column and round-trips it', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('persists sequence column and round-trips it', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Plot summary — Chapter 5',
       content: 'What happened in chapter five.',
@@ -99,8 +99,8 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     expect(fetched.sequence).toBe(5);
   });
 
-  it('persists references array and round-trips it', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('persists references array and round-trips it', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'Advancement of "Mara deferred disclosure"',
       content: 'Resolved in Ch 3.',
@@ -117,8 +117,8 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     expect(fetched.references![0]!.matchConcept).toBe("Mara's deferred disclosure");
   });
 
-  it('sequence defaults to NULL when not provided', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('sequence defaults to NULL when not provided', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'A working-class write with no sequence',
       content: 'Default behavior.',
@@ -128,8 +128,8 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     expect(fetched.references).toBeNull();
   });
 
-  it('working-class write still works (no regression)', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('working-class write still works (no regression)', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'A working-class observation',
       content: 'This is a long enough content that should pass novelty checks easily.',
@@ -141,8 +141,8 @@ describe('memory_class: structural (0.8 Cluster A)', () => {
     expect(result.salience!.reasonCodes).not.toContain('class:canonical');
   });
 
-  it('canonical-class write still works (no regression)', () => {
-    const result = performWrite({ store, connectionEngine }, {
+  it('canonical-class write still works (no regression)', async () => {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
       concept: 'A canonical decision',
       content: 'This is a deliberate canonical write.',

@@ -165,31 +165,31 @@ function fakeStore(matches: FakeMatch[]) {
 }
 
 describe('Novelty curve (production-tuned)', () => {
-  it('returns 1.0 when nothing similar exists', () => {
-    const n = computeNovelty(fakeStore([]), 'agent', 'concept', 'content');
+  it('returns 1.0 when nothing similar exists', async () => {
+    const n = await computeNovelty(fakeStore([]), 'agent', 'concept', 'content');
     expect(n).toBe(1.0);
   });
 
-  it('topScore=0.95 → near-floor novelty (suppress true dupes)', () => {
-    const n = computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.95 }]), 'agent', 'concept', 'content');
+  it('topScore=0.95 → near-floor novelty (suppress true dupes)', async () => {
+    const n = await computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.95 }]), 'agent', 'concept', 'content');
     expect(n).toBeGreaterThan(0.05);
     expect(n).toBeLessThan(0.15);
   });
 
-  it('topScore=0.60 → meaningful novelty (loose match)', () => {
-    const n = computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.6 }]), 'agent', 'concept', 'content');
+  it('topScore=0.60 → meaningful novelty (loose match)', async () => {
+    const n = await computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.6 }]), 'agent', 'concept', 'content');
     expect(n).toBeGreaterThan(0.55);
     expect(n).toBeLessThan(0.70);
   });
 
-  it('topScore=0.30 → high novelty (different topic)', () => {
-    const n = computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.3 }]), 'agent', 'concept', 'content');
+  it('topScore=0.30 → high novelty (different topic)', async () => {
+    const n = await computeNovelty(fakeStore([{ engram: { concept: 'x' }, bm25Score: 0.3 }]), 'agent', 'concept', 'content');
     expect(n).toBeGreaterThan(0.85);
   });
 
-  it('exact concept match within 30d → penalized', () => {
+  it('exact concept match within 30d → penalized', async () => {
     const recent = new Date();
-    const n = computeNovelty(
+    const n = await computeNovelty(
       fakeStore([{ engram: { concept: 'My Concept', createdAt: recent }, bm25Score: 0.5 }]),
       'agent', 'My Concept', 'content'
     );
@@ -198,9 +198,9 @@ describe('Novelty curve (production-tuned)', () => {
     expect(n).toBeLessThan(0.50);
   });
 
-  it('exact concept match older than 30d → not penalized', () => {
+  it('exact concept match older than 30d → not penalized', async () => {
     const old = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-    const n = computeNovelty(
+    const n = await computeNovelty(
       fakeStore([{ engram: { concept: 'My Concept', createdAt: old }, bm25Score: 0.5 }]),
       'agent', 'My Concept', 'content'
     );

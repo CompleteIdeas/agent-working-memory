@@ -56,6 +56,8 @@ Usage:
   awm merge --target <db> --source <db> [--source ...]
             [--remap uuid=name] [--remap-all-uuids <name>]
             [--dedupe] [--dry-run]                  Merge multiple memory DBs
+  awm migrate --from <sqlite.db> --to <pglite-dir> [--dry-run] [--verbose]
+                                                    Migrate SQLite DB to PGlite
 
 Setup targets:
   claude-code (default)   .mcp.json + CLAUDE.md + hooks
@@ -334,7 +336,7 @@ async function exportMemories() {
   const agents = [...new Set(memories.map((m: any) => m.agent_id))];
 
   const exportData = {
-    version: '0.8.0',
+    version: '0.8.5',
     exported_at: new Date().toISOString(),
     source_db: dbPath,
     agent_filter: agentFilter,
@@ -680,6 +682,37 @@ async function mergeMemories() {
   if (dryRun) console.log('(dry run — no data written)');
 }
 
+async function migrateCmd() {
+  let from = '';
+  let to = '';
+  let dryRun = false;
+  let verbose = false;
+
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--from') { from = args[++i]; }
+    else if (a === '--to') { to = args[++i]; }
+    else if (a === '--dry-run') { dryRun = true; }
+    else if (a === '--verbose' || a === '-v') { verbose = true; }
+    else { console.error(`Unknown argument: ${a}`); process.exit(1); }
+  }
+
+  if (!from || !to) {
+    console.error('Usage: awm migrate --from <sqlite.db> --to <pglite-dir> [--dry-run] [--verbose]');
+    process.exit(1);
+  }
+
+  const { migrate, printStats } = await import('./cli/migrate.js');
+  try {
+    console.log(`Migrating ${from} → ${to}${dryRun ? ' (dry run)' : ''}`);
+    const stats = await migrate({ from, to, dryRun, verbose });
+    printStats(stats, dryRun);
+  } catch (err) {
+    console.error(`Migration failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
 // ─── Dispatch ──────────────────────────────────────
 
 switch (command) {
@@ -706,6 +739,9 @@ switch (command) {
     break;
   case 'merge':
     mergeMemories();
+    break;
+  case 'migrate':
+    await migrateCmd();
     break;
   case '--help':
   case '-h':

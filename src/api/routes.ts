@@ -34,7 +34,7 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ActivationEngine } from '../engine/activation.js';
 import type { ConnectionEngine } from '../engine/connections.js';
 import type { EvictionEngine } from '../engine/eviction.js';
@@ -138,9 +138,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     // (+ optional matchTags) and store both. Stable link survives concept
     // edits. No match found → store just matchConcept so the intent
     // (link-to-future or link-to-deleted) is preserved.
-    const resolvedRefs = (body.references ?? []).map(ref => {
+    const resolvedRefs = await Promise.all((body.references ?? []).map(async ref => {
       if (!ref.matchEngramId && ref.matchConcept) {
-        const matched = store.findActiveMatchByConcept(
+        const matched = await store.findActiveMatchByConcept(
           body.agentId, ref.matchConcept, ref.matchTags,
         );
         if (matched) {
@@ -148,9 +148,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         }
       }
       return { type: ref.type, matchEngramId: ref.matchEngramId, matchConcept: ref.matchConcept };
-    });
+    }));
 
-    const result = performWrite({ store, connectionEngine }, {
+    const result = await performWrite({ store, connectionEngine }, {
       agentId: body.agentId,
       concept: body.concept,
       content: body.content,
@@ -168,7 +168,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
-    try { store.updateAutoCheckpointWrite(body.agentId, result.engram.id); } catch { /* non-fatal */ }
+    try { await store.updateAutoCheckpointWrite(body.agentId, result.engram.id); } catch { /* non-fatal */ }
 
     if (result.action === 'reinforce') {
       return reply.code(200).send({
@@ -188,20 +188,20 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     const isStructural = body.memory_class === 'structural';
     if (!isStructural) {
       try {
-        const prev = store.getLatestEngram(body.agentId, result.engram.id);
+        const prev = await store.getLatestEngram(body.agentId, result.engram.id);
         if (prev) {
-          store.upsertAssociation(prev.id, result.engram.id, 0.3, 'temporal', 0.8);
+          await store.upsertAssociation(prev.id, result.engram.id, 0.3, 'temporal', 0.8);
         }
       } catch { /* Temporal edge creation is non-fatal */ }
 
       if (result.salience
           && (result.salience.disposition === 'active' || result.salience.disposition === 'discard')) {
         try {
-          let episode = store.getActiveEpisode(body.agentId, 3600_000);
+          let episode = await store.getActiveEpisode(body.agentId, 3600_000);
           if (!episode) {
-            episode = store.createEpisode({ agentId: body.agentId, label: body.concept });
+            episode = await store.createEpisode({ agentId: body.agentId, label: body.concept });
           }
-          store.addEngramToEpisode(result.engram.id, episode.id);
+          await store.addEngramToEpisode(result.engram.id, episode.id);
         } catch { /* Episode assignment is non-fatal */ }
       }
     }
@@ -210,7 +210,12 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     return reply.code(201).send({
       stored: true,
       action: result.action,
+      // disposition: legacy field — 'low-salience' is returned for discard so
+      // callers know the engram was kept but marked low-value. The raw inner
+      // salience decision is exposed as `salienceDisposition` for callers
+      // (and tests) that want the unmapped value.
       disposition: isLowSalience ? 'low-salience' : (result.salience?.disposition ?? 'active'),
+      salienceDisposition: result.salience?.disposition ?? null,
       salience: result.salience?.score ?? 0,
       reasonCodes: result.salience?.reasonCodes ?? [],
       engram: result.engram,
@@ -248,7 +253,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       const memTags = [...(mem.tags ?? [])];
       if (sid) memTags.push(`sid=${sid}`);
 
-      const engram = store.createEngram({
+      const engram = await store.createEngram({
         agentId: body.agentId,
         concept: mem.concept,
         content: mem.content,
@@ -260,9 +265,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
       // Handle supersession inline — archive superseded memory to remove from active pool
       if (mem.supersedes) {
-        store.supersedeEngram(mem.supersedes, engram.id);
-        store.updateConfidence(mem.supersedes, 0.1);
-        store.updateStage(mem.supersedes, 'archived'); // Remove from active search pool
+        await store.supersedeEngram(mem.supersedes, engram.id);
+        await store.updateConfidence(mem.supersedes, 0.1);
+        await store.updateStage(mem.supersedes, 'archived'); // Remove from active search pool
       }
 
       results.push({ id: engram.id, concept: mem.concept, disposition: 'active' });
@@ -274,12 +279,12 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       const vecs = await embedBatch(texts);
       for (let i = 0; i < vecs.length; i++) {
         if (results[i]) {
-          store.updateEmbedding(results[i].id, vecs[i]);
+          await store.updateEmbedding(results[i].id, vecs[i]);
         }
       }
     } catch { /* Embedding failure is non-fatal */ }
 
-    try { store.updateAutoCheckpointWrite(body.agentId, results[results.length - 1]?.id ?? ''); } catch {}
+    try { await store.updateAutoCheckpointWrite(body.agentId, results[results.length - 1]?.id ?? ''); } catch {}
 
     return reply.code(201).send({
       stored: results.length,
@@ -297,8 +302,10 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       useReranker?: boolean;
       useExpansion?: boolean;
       abstentionThreshold?: number;
+      requireConfidence?: number;
       workspace?: string;
       bm25Only?: boolean;
+      granularity?: 'full' | 'compact' | 'auto';
     };
 
     const results = await activationEngine.activate({
@@ -310,17 +317,23 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       useReranker: body.useReranker,
       useExpansion: body.useExpansion,
       abstentionThreshold: body.abstentionThreshold,
+      requireConfidence: body.requireConfidence,
       workspace: body.workspace,
       bm25Only: body.bm25Only,
+      granularity: body.granularity,
     });
 
     // Auto-checkpoint: track recall for consolidation scheduling
     try {
       const ids = results.map(r => r.engram.id);
-      store.updateAutoCheckpointRecall(body.agentId, body.context, ids);
+      await store.updateAutoCheckpointRecall(body.agentId, body.context, ids);
     } catch { /* non-fatal */ }
 
-    return reply.send({ results });
+    // Surface recall confidence as a top-level field too — same value is on
+    // every result, but it describes the recall as a whole, so exposing it
+    // once is easier for consumers (and lets them inspect 0-result recalls).
+    const confidence = results[0]?.confidence ?? 0;
+    return reply.send({ results, confidence });
   });
 
   app.post('/memory/feedback', async (req, reply) => {
@@ -331,7 +344,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       context?: string;
     };
 
-    store.logRetrievalFeedback(
+    await store.logRetrievalFeedback(
       body.activationEventId ?? null,
       body.engramId,
       body.useful,
@@ -339,18 +352,18 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     );
 
     // Update engram confidence based on feedback
-    const engram = store.getEngram(body.engramId);
+    const engram = await store.getEngram(body.engramId);
     if (engram) {
       const config = DEFAULT_AGENT_CONFIG;
       const delta = body.useful
         ? config.feedbackPositiveBoost
         : -config.feedbackNegativePenalty;
-      store.updateConfidence(engram.id, engram.confidence + delta);
+      await store.updateConfidence(engram.id, engram.confidence + delta);
     }
 
     // Touch activity for consolidation scheduling
     if (engram) {
-      try { store.touchActivity(engram.agentId); } catch { /* non-fatal */ }
+      try { await store.touchActivity(engram.agentId); } catch { /* non-fatal */ }
     }
 
     return reply.send({ recorded: true });
@@ -364,7 +377,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       counterContent?: string;
     };
 
-    const result = retractionEngine.retract({
+    const result = await retractionEngine.retract({
       agentId: body.agentId,
       targetEngramId: body.targetEngramId,
       reason: body.reason,
@@ -372,7 +385,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     });
 
     // Touch activity for consolidation scheduling
-    try { store.touchActivity(body.agentId); } catch { /* non-fatal */ }
+    try { await store.touchActivity(body.agentId); } catch { /* non-fatal */ }
 
     return reply.send(result);
   });
@@ -416,15 +429,15 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
     // ── Form A — by IDs ──
     if (isFormA) {
-      const oldEngram = store.getEngram(body.oldEngramId!);
-      const newEngram = store.getEngram(body.newEngramId!);
+      const oldEngram = await store.getEngram(body.oldEngramId!);
+      const newEngram = await store.getEngram(body.newEngramId!);
       if (!oldEngram) return reply.code(404).send({ error: `Old engram ${body.oldEngramId} not found` });
       if (!newEngram) return reply.code(404).send({ error: `New engram ${body.newEngramId} not found` });
 
-      store.upsertAssociation(body.newEngramId!, body.oldEngramId!, 0.8, 'causal', 1.0);
-      store.updateConfidence(body.oldEngramId!, oldEngram.confidence * 0.2);
-      store.supersedeEngram(body.oldEngramId!, body.newEngramId!);
-      try { store.touchActivity(oldEngram.agentId); } catch { /* non-fatal */ }
+      await store.upsertAssociation(body.newEngramId!, body.oldEngramId!, 0.8, 'causal', 1.0);
+      await store.updateConfidence(body.oldEngramId!, oldEngram.confidence * 0.2);
+      await store.supersedeEngram(body.oldEngramId!, body.newEngramId!);
+      try { await store.touchActivity(oldEngram.agentId); } catch { /* non-fatal */ }
 
       return reply.send({
         superseded: body.oldEngramId,
@@ -437,12 +450,15 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     // Find old (most recent active match by concept + optional tags), write
     // new engram via performWrite, link them — all in one SQL transaction.
     // If no match: write new anyway, return { superseded: null }.
-    const result = store.transaction(() => {
-      const matched = store.findActiveMatchByConcept(
+    // AWM 0.8.x P4b follow-up: Form B atomicity via withTransaction.
+    // Holds the SQLite/PGlite lock across the async write + supersede pair
+    // so callers never observe a half-completed state.
+    const result = await (store.withTransaction(async () => {
+      const matched = await store.findActiveMatchByConcept(
         body.agentId!, body.matchConcept!, body.matchTags,
       );
 
-      const writeRes = performWrite({ store, connectionEngine }, {
+      const writeRes = await performWrite({ store, connectionEngine }, {
         agentId: body.agentId!,
         concept: body.newEngram!.concept,
         content: body.newEngram!.content,
@@ -450,20 +466,18 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         memoryClass: body.newEngram!.memory_class,
         sequence: body.newEngram!.sequence,
         eventType: body.newEngram!.eventType,
-        // Form B's whole point is atomicity — disable reinforce/supersede
-        // branching to avoid double-supersede or no-op-reinforce paths.
         enableReinforcement: false,
       });
 
       if (matched) {
-        store.upsertAssociation(writeRes.engram.id, matched.id, 0.8, 'causal', 1.0);
-        store.updateConfidence(matched.id, matched.confidence * 0.2);
-        store.supersedeEngram(matched.id, writeRes.engram.id);
+        await store.upsertAssociation(writeRes.engram.id, matched.id, 0.8, 'causal', 1.0);
+        await store.updateConfidence(matched.id, matched.confidence * 0.2);
+        await store.supersedeEngram(matched.id, writeRes.engram.id);
       }
       return { writeRes, matched };
-    });
+    }) as Promise<{ writeRes: Awaited<ReturnType<typeof performWrite>>; matched: any }>);
 
-    try { store.touchActivity(body.agentId!); } catch { /* non-fatal */ }
+    try { await store.touchActivity(body.agentId!); } catch { /* non-fatal */ }
 
     return reply.code(201).send({
       newEngram: result.writeRes.engram,
@@ -494,7 +508,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       sortOrder?: 'asc' | 'desc';
     };
 
-    const results = store.search({
+    const results = await store.search({
       agentId: body.agentId,
       text: body.text,
       concept: body.concept,
@@ -534,7 +548,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     if (!body.agentId || !body.tagKey) {
       return reply.code(400).send({ error: 'agentId and tagKey are required' });
     }
-    const results = store.getLatestByTag({
+    const results = await store.getLatestByTag({
       agentId: body.agentId,
       tagKeyPrefix: body.tagKey,
       scopeTagsAll: body.scopeTagsAll,
@@ -564,7 +578,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     if (!body.agentId || !body.sortField) {
       return reply.code(400).send({ error: 'agentId and sortField are required' });
     }
-    const results = store.getTopBy({
+    const results = await store.getTopBy({
       agentId: body.agentId,
       sortField: body.sortField,
       order: body.order ?? 'desc',
@@ -595,7 +609,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
     let targetId = body.targetEngramId;
     if (!targetId && body.matchConcept) {
-      const matched = store.findActiveMatchByConcept(
+      const matched = await store.findActiveMatchByConcept(
         body.agentId, body.matchConcept, body.matchTags,
       );
       if (!matched) {
@@ -611,7 +625,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       });
     }
 
-    const result = store.resolveEffectiveState(targetId);
+    const result = await store.resolveEffectiveState(targetId);
     if (!result) return reply.code(404).send({ error: `Engram ${targetId} not found` });
     return reply.send(result);
   });
@@ -623,25 +637,25 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
    */
   app.get('/memory/sequence/:agentId/next', async (req, reply) => {
     const { agentId } = req.params as { agentId: string };
-    const next = store.allocateNextSequence(agentId);
+    const next = await store.allocateNextSequence(agentId);
     return reply.send({ agentId, next });
   });
 
   app.get('/memory/:id', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const engram = store.getEngram(id);
+    const engram = await store.getEngram(id);
     if (!engram) return reply.code(404).send({ error: 'Not found' });
 
-    const associations = store.getAssociationsFor(id);
+    const associations = await store.getAssociationsFor(id);
     return reply.send({ engram, associations });
   });
 
   app.get('/agent/:id/stats', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const active = store.getEngramsByAgent(id, 'active');
-    const staging = store.getEngramsByAgent(id, 'staging');
-    const retracted = store.getEngramsByAgent(id, undefined, true).filter(e => e.retracted);
-    const associations = store.getAllAssociations(id);
+    const active = await store.getEngramsByAgent(id, 'active');
+    const staging = await store.getEngramsByAgent(id, 'staging');
+    const retracted = (await store.getEngramsByAgent(id, undefined, true)).filter(e => e.retracted);
+    const associations = await store.getAllAssociations(id);
 
     return reply.send({
       agentId: id,
@@ -661,7 +675,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
   app.get('/agent/:id/metrics', async (req, reply) => {
     const { id } = req.params as { id: string };
     const windowHours = parseInt((req.query as any).window ?? '24', 10);
-    const metrics = evalEngine.computeMetrics(id, windowHours);
+    const metrics = await evalEngine.computeMetrics(id, windowHours);
     return reply.send({ metrics });
   });
 
@@ -681,13 +695,13 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
   app.post('/system/evict', async (req, reply) => {
     const body = req.body as { agentId: string };
-    const result = evictionEngine.enforceCapacity(body.agentId, DEFAULT_AGENT_CONFIG);
+    const result = await evictionEngine.enforceCapacity(body.agentId, DEFAULT_AGENT_CONFIG);
     return reply.send(result);
   });
 
   app.post('/system/decay', async (req, reply) => {
     const body = req.body as { agentId: string; halfLifeDays?: number };
-    const decayed = evictionEngine.decayEdges(body.agentId, body.halfLifeDays);
+    const decayed = await evictionEngine.decayEdges(body.agentId, body.halfLifeDays);
     return reply.send({ edgesDecayed: decayed });
   });
 
@@ -729,7 +743,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
   app.get('/memory/restore/:agentId', async (req, reply) => {
     const { agentId } = req.params as { agentId: string };
-    const checkpoint = store.getCheckpoint(agentId);
+    const checkpoint = await store.getCheckpoint(agentId);
 
     const now = Date.now();
     const idleMs = checkpoint
@@ -739,7 +753,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     // Get last written engram for context
     let lastWrite: { id: string; concept: string; content: string } | null = null;
     if (checkpoint?.auto.lastWriteId) {
-      const engram = store.getEngram(checkpoint.auto.lastWriteId);
+      const engram = await store.getEngram(checkpoint.auto.lastWriteId);
       if (engram) {
         lastWrite = { id: engram.id, concept: engram.concept, content: engram.content };
       }
@@ -802,7 +816,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       blockedBy?: string;
     };
 
-    const engram = store.createEngram({
+    const engram = await store.createEngram({
       agentId: body.agentId,
       concept: body.concept,
       content: body.content,
@@ -820,8 +834,8 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     });
 
     connectionEngine.enqueue(engram.id);
-    embed(`${body.concept} ${body.content}`).then(vec => {
-      store.updateEmbedding(engram.id, vec);
+    embed(`${body.concept} ${body.content}`).then(async vec => {
+      await store.updateEmbedding(engram.id, vec);
     }).catch(() => {});
 
     return reply.send(engram);
@@ -835,29 +849,29 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       blockedBy?: string | null;
     };
 
-    const engram = store.getEngram(body.taskId);
+    const engram = await store.getEngram(body.taskId);
     if (!engram || !engram.taskStatus) {
       return reply.code(404).send({ error: 'Task not found' });
     }
 
     if (body.blockedBy !== undefined) {
-      store.updateBlockedBy(body.taskId, body.blockedBy);
+      await store.updateBlockedBy(body.taskId, body.blockedBy);
     }
     if (body.status) {
-      store.updateTaskStatus(body.taskId, body.status);
+      await store.updateTaskStatus(body.taskId, body.status);
     }
     if (body.priority) {
-      store.updateTaskPriority(body.taskId, body.priority);
+      await store.updateTaskPriority(body.taskId, body.priority);
     }
 
-    return reply.send(store.getEngram(body.taskId));
+    return reply.send(await store.getEngram(body.taskId));
   });
 
   app.get('/task/list/:agentId', async (req, reply) => {
     const { agentId } = req.params as { agentId: string };
     const { status, includeDone } = req.query as { status?: TaskStatus; includeDone?: string };
 
-    let tasks = store.getTasks(agentId, status);
+    let tasks = await store.getTasks(agentId, status);
     if (includeDone !== 'true' && !status) {
       tasks = tasks.filter(t => t.taskStatus !== 'done');
     }
@@ -867,7 +881,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
   app.get('/task/next/:agentId', async (req, reply) => {
     const { agentId } = req.params as { agentId: string };
-    const next = store.getNextTask(agentId);
+    const next = await store.getNextTask(agentId);
     return reply.send(next ? { task: next } : { task: null, message: 'No actionable tasks' });
   });
 
@@ -875,7 +889,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
   app.post('/system/time-warp', async (req, reply) => {
     const body = req.body as { agentId: string; days: number };
     const ms = body.days * 24 * 60 * 60 * 1000;
-    const shifted = store.timeWarp(body.agentId, ms);
+    const shifted = await store.timeWarp(body.agentId, ms);
     return reply.send({ shifted, days: body.days });
   });
 
@@ -884,7 +898,12 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
   app.get('/memory/export', async (req, reply) => {
     const { agentId, all } = req.query as { agentId?: string; all?: string };
     const includeAll = all === 'true';
-    const db = store.getDb();
+    // /memory/export uses raw SQL — SQLite-only. On PGlite, callers should use
+    // the awm CLI export/merge tools instead.
+    if (typeof (store as any).getDb !== 'function') {
+      return reply.code(501).send({ error: 'export endpoint requires the SQLite backend' });
+    }
+    const db = (store as any).getDb();
 
     let engramSql = `SELECT id, agent_id, concept, content, confidence, salience, access_count,
       last_accessed, created_at, salience_features, reason_codes, stage, ttl,
@@ -933,12 +952,12 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     const base: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '0.8.0',
+      version: '0.8.5',
       coordination: coordEnabled,
     };
-    if (coordEnabled) {
+    if (coordEnabled && typeof (deps.store as any).getDb === 'function') {
       try {
-        const db = deps.store.getDb();
+        const db = (deps.store as any).getDb();
         const stats = db.prepare(`SELECT
           (SELECT COUNT(*) FROM coord_agents WHERE status != 'dead') AS agents_alive,
           (SELECT COUNT(*) FROM coord_assignments WHERE status = 'pending') AS pending_tasks,

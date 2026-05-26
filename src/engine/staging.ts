@@ -13,7 +13,7 @@
  * that only persists if reactivated.
  */
 
-import type { EngramStore } from '../storage/sqlite.js';
+import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ActivationEngine } from './activation.js';
 
 export class StagingBuffer {
@@ -47,7 +47,7 @@ export class StagingBuffer {
     const promoted: string[] = [];
     const discarded: string[] = [];
 
-    const expired = this.store.getExpiredStaging();
+    const expired = await this.store.getExpiredStaging();
     for (const engram of expired) {
       // Check if this engram resonates with active memory
       const results = await this.engine.activate({
@@ -60,11 +60,11 @@ export class StagingBuffer {
 
       if (results.length > 0) {
         // Resonance found — promote to active
-        this.store.updateStage(engram.id, 'active');
+        await this.store.updateStage(engram.id, 'active');
         promoted.push(engram.id);
       } else {
         // No resonance — discard
-        this.store.deleteEngram(engram.id);
+        await this.store.deleteEngram(engram.id);
         discarded.push(engram.id);
       }
     }

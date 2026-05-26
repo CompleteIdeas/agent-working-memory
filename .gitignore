@@ -23,3 +23,8 @@ tests/eval/fixtures/
 *.db-shm
 docker-compose.test.yml
 .awm-hook-secret
+
+# PGlite test databases (directories — not files, so *.db doesn't cover them)
+memory-pg*/
+memory-sq*/
+memory-pglite*/
