@@ -352,6 +352,33 @@ When it isn't:
   return nothing, the memory probably isn't there — read the code instead of
   burning more recalls.
 
+### Recall tuning (0.8.x — opt-in parameters for higher-quality recall)
+Default \`memory_recall\` is tuned for the common case. The 0.8.x recall pipeline
+exposes four opt-in parameters that change the cost/quality tradeoff. Use them
+when the default doesn't match what you actually need.
+
+- **\`granularity: 'compact'\`** — every result carries a 200-char \`summary\`
+  field with a query-aware snippet (the densest window of query terms in the
+  content). Use this when you expect to scan 5+ results to find one — saves
+  ~70% of recall output tokens. The full content stays available in
+  \`engram.content\` if you want to drill into a specific result.
+- **\`granularity: 'auto'\`** — confidence-adaptive. If the top result is a clear
+  winner, it gets a longer summary while the rest are compact. If confidence
+  is uniform across results, everything is compact. Use when you don't know
+  in advance whether one result will dominate.
+- **\`require_confidence: 0.10 | 0.25 | 0.40\`** — opt-in abstention. AWM
+  returns \`[]\` instead of low-confidence noise. Use when you're about to ACT
+  on the recalled fact (grounding a decision, citing the memory verbatim,
+  contradicting a prior assumption). Thresholds: \`0.10\` strict — only abstain
+  on garbage; \`0.25\` balanced; \`0.40\` aggressive — prefer "I don't know"
+  over "best of bad." When abstention fires (empty result), treat it as a
+  signal — either the memory genuinely isn't there (read the code) or your
+  query missed (reformulate). Don't retry without the threshold.
+- **\`workspace: "<name>"\`** — hive-mode recall across all agents in the
+  workspace. Use when other agents may have written canonical knowledge you
+  need. Default is agent-scoped (your own memories only). Can also be set
+  globally via the \`AWM_WORKSPACE\` env var.
+
 ### Keep memory fresh
 - After recalling a memory, if you observe the real state is different → call
   \`memory_supersede\` immediately with the corrected version.
@@ -361,6 +388,24 @@ When it isn't:
 - **If you bypass AWM (file-memory, in-context notes, "I'll just remember"), the memory
   drifts out of date. The system relies on you to keep it current. This is the #1
   failure mode.**
+
+### Content fade — write-and-forget is safe (0.8.x)
+Un-recalled engrams gradually fade their content while preserving cue pathways
+(concept + tags + embedding stay intact). This is Paper 1 — storage
+degradation. Practical implications:
+
+- **Don't manually purge memories** to "save space." The system already
+  compresses unused content. Old memories stay findable via cue match even
+  when their body has decayed.
+- **Don't over-pin with \`memory_class: canonical\`** to fight fade. Canonical
+  only changes salience gating at write time, not fade behavior. Fade
+  affects un-recalled engrams of any class.
+- **Recall keeps content alive.** Every recall touches the engram and resets
+  its fade clock. Frequently-recalled memories stay full-fidelity automatically.
+- **Supersede is the right tool for stale facts.** When you observe a memory
+  is outdated, call \`memory_supersede\` — the new version inherits the old
+  one's coherent associations (counter-narrative replacement, 0.8.x) so cue
+  pathways carry forward to the replacement.
 
 ### Example — good vs bad memory_write
 
@@ -392,19 +437,61 @@ memory_write(
 - AWM is shared across all agents in real time. When any agent writes or supersedes a
   memory, every other agent can recall it immediately.
 
-### Diagnostics / escape hatches (env vars, only if you know why)
-The 0.7.6→0.7.14 work cut recall latency from 11s to ~300ms. Each optimization
-is gated by an env-var so it can be disabled for A/B testing if a regression
-appears in your workload:
+### Backend (SQLite vs PGlite, 0.8.x)
+AWM ships two storage backends. The installer picks SQLite by default; both
+are functionally equivalent for cognitive workloads, but differ in operational
+guarantees:
 
-- \`AWM_DISABLE_POOL_FILTER=1\` (0.7.7+) — disables the candidate pool reduction
+- **SQLite** (default) — embedded, **multi-process safe** via WAL mode. Best
+  for single-machine setups and MCP scenarios where multiple Claude Code
+  sessions may open the same database concurrently.
+- **PGlite** — embedded Postgres (WASM) with pgvector. **Single-process only**
+  — two MCP processes against the same \`memory-pglite/\` directory will
+  abort the second. Pick via \`AWM_STORE_BACKEND=pglite\` and
+  \`AWM_DB_PATH=path/to/memory-pglite\`.
+- **Auto-detect** — if \`AWM_DB_PATH\` points to a directory that already
+  exists, AWM detects PGlite; a file → SQLite. No explicit
+  \`AWM_STORE_BACKEND\` needed when an existing DB is present.
+
+For the comparison table (recall quality parity, BM25 vs \`ts_rank_cd\`,
+multi-process guarantees), see \`docs/pglite-feature-parity.md\`.
+
+### Diagnostics / escape hatches (env vars, only if you know why)
+The 0.7.6→0.7.14 work cut recall latency from 11s to ~300ms. The 0.8.x work
+added the write-path rewrite (per-write 300+ ms → under 10ms) and PGlite
+parity tuning. Each optimization is gated by an env-var so it can be disabled
+for A/B testing if a regression appears in your workload:
+
+Recall pipeline (0.7.x):
+- \`AWM_DISABLE_POOL_FILTER=1\` — disables the candidate pool reduction
   pre-filter in recall. Reverts to scoring all active candidates.
-- \`AWM_DISABLE_SLIM_CACHE=1\` (0.7.10+) — disables the in-memory slim cache.
+- \`AWM_DISABLE_SLIM_CACHE=1\` — disables the in-memory slim cache.
   Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
-- \`AWM_DISABLE_RERANK_SKIP=1\` (0.7.10+) — disables the cross-encoder skip on
+- \`AWM_DISABLE_RERANK_SKIP=1\` — disables the cross-encoder skip on
   clear-winner queries. Forces every recall through the reranker.
-- \`AWM_DISABLE_EXPANSION_CACHE=1\` (0.7.11+) — disables the query expansion
-  skip heuristic + LRU cache. Forces every recall through flan-t5-small.
+- \`AWM_DISABLE_EXPANSION_CACHE=1\` — disables the query expansion skip
+  heuristic + LRU cache. Forces every recall through flan-t5-small.
+
+Write pipeline + lifecycle (0.8.x):
+- \`AWM_REINFORCE_MAX_CONTENT_LEN=1500\` — max chars an engram's content
+  can grow to via merge-on-reinforce (drop-oldest on overflow). Higher =
+  preserves more reinforced detail; lower = leaner recall output.
+- \`AWM_REINFORCE_MERGE_CONTENT=0\` — disable content merge on reinforce.
+  Reverts to pre-0.8.5 behavior (discard new content, only bump confidence).
+- \`AWM_NOVELTY_EMBED=0\` — disable the cosine channel in novelty
+  computation. BM25-only fallback. Reverts to pre-0.8.5 novelty.
+- \`AWM_GRANULARITY_COMPACT_LEN=200\` — char budget for query-aware snippet
+  in \`granularity: 'compact'\` mode.
+- \`AWM_GRANULARITY_FULL_LEN=1000\` — char budget for the top result in
+  \`granularity: 'auto'\` mode when there's a clear winner.
+
+PGlite backend (0.8.x):
+- \`AWM_PGLITE_BM25_M=1\` — multiplier on PGlite \`ts_rank_cd\` to calibrate
+  against SQLite FTS5 BM25 distribution. M=1 (default) is passthrough;
+  higher M boosts PGlite scores at the cost of recall-ranking precision
+  (see CHANGELOG 0.8.5 follow-up).
+- \`AWM_IVFFLAT_PROBES=5\` — pgvector ivfflat probes per query. Higher =
+  more accurate, slower.
 
 In production, leave these all unset. Use only when diagnosing a suspected
 recall-quality regression.

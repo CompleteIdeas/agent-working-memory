@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.8.6 (2026-05-26) — installer template surfaces 0.8.x features to downstream agents
+
+A behavior-driven release with no library code changes: the `AWM_INSTRUCTION_CONTENT`
+template that `awm setup --global` writes into the user's CLAUDE.md was missing
+guidance on the 0.8.x features. MCP tool schemas already documented the
+parameters (`granularity`, `require_confidence`, `workspace`) so the model
+could discover them when looking at a specific tool, but the global CLAUDE.md
+— which shapes behavioral defaults — never told the agent *when* to use them.
+Result: agents on 0.8.x never used compact granularity, never opted into
+abstention, and didn't know about content fade or PGlite backend.
+
+Added to `src/adapters/common.ts` (the installer's CLAUDE.md template):
+
+- **§ Recall tuning (0.8.x — opt-in parameters)** — when to use
+  `granularity: 'compact'` (scanning 5+ results), `granularity: 'auto'`
+  (unknown winner), `require_confidence: 0.10–0.40` (high-stakes recall
+  with opt-in abstention), and `workspace: "<name>"` (hive-mode cross-agent
+  recall).
+- **§ Content fade — write-and-forget is safe (0.8.x)** — un-recalled
+  engrams fade their content while preserving cue pathways. Don't manually
+  purge, don't over-pin with canonical, recall keeps content alive, use
+  `memory_supersede` for stale facts (counter-narrative replacement carries
+  associations forward).
+- **§ Backend (SQLite vs PGlite, 0.8.x)** — SQLite is default + multi-process
+  safe; PGlite is opt-in and single-process; auto-detect from `AWM_DB_PATH`
+  shape (directory → PGlite, file → SQLite). Points to
+  `docs/pglite-feature-parity.md` for the comparison table.
+- **§ Diagnostics / escape hatches** — added the 0.8.x env-var knobs:
+  `AWM_REINFORCE_MAX_CONTENT_LEN`, `AWM_REINFORCE_MERGE_CONTENT`,
+  `AWM_NOVELTY_EMBED`, `AWM_GRANULARITY_COMPACT_LEN`, `AWM_GRANULARITY_FULL_LEN`,
+  `AWM_PGLITE_BM25_M`, `AWM_IVFFLAT_PROBES`. Reorganized into
+  "Recall pipeline (0.7.x)", "Write pipeline + lifecycle (0.8.x)", and
+  "PGlite backend (0.8.x)" subsections.
+
+**Roll-out note for existing 0.8.5 users:** `awm setup --global` is idempotent
+and uses a section-replacement strategy that preserves surrounding CLAUDE.md
+content. Existing users should re-run `awm setup --global` after upgrading to
+0.8.6 to pick up the new instructions. No DB migration required — purely a
+docs/template change.
+
+**Validation:**
+- `vitest run` — 561/561 pass through the template change.
+- `awm setup --global` smoke test — section replaced cleanly, surrounding
+  user content preserved, all four new headings present in the updated
+  CLAUDE.md.
+
+Files changed:
+- `package.json` — version 0.8.5 → 0.8.6
+- `src/adapters/common.ts` — 4 new sections in `AWM_INSTRUCTION_CONTENT`
+- `src/mcp.ts`, `src/cli.ts`, `src/api/routes.ts` — hardcoded version strings bumped
+
 ## 0.8.5 follow-up (2026-05-26 PM) — PGlite cross-backend gap closed + production retrieval benchmark
 
 After the initial 0.8.5 ship in the morning, a deeper investigation into the
