@@ -1,8 +1,13 @@
 # User Guide
 
+> **New to AWM?** If terms like *engram, salience, activation, Hebbian,
+> staging* are unfamiliar, start with
+> [`onboarding-vocabulary.md`](onboarding-vocabulary.md) — a 5-minute read
+> that defines the seven core terms in plain language.
+
 ## Prerequisites
 
-- **Node.js** >= 20.0.0
+- **Node.js** >= 22.0.0 (Node 20 reached EOL on 2026-04-30; v0.8.6+ requires Node 22 LTS)
 - **npm** (bundled with Node)
 - ~150MB disk space for ML models (downloaded automatically on first run)
 
@@ -24,7 +29,7 @@ The server starts on port 8400 (configurable via `AWM_PORT` env var). On first r
 
 | Model | Size | Purpose |
 |-------|------|---------|
-| all-MiniLM-L6-v2 | ~22MB | Vector embeddings (384 dimensions) |
+| bge-small-en-v1.5 | ~33MB | Vector embeddings (384 dimensions) — BAAI, retrieval-optimized |
 | ms-marco-MiniLM-L-6-v2 | ~22MB | Cross-encoder reranking |
 | flan-t5-small | ~80MB | Query expansion |
 
@@ -125,7 +130,7 @@ The project includes a `.mcp.json` that registers the MCP server:
 }
 ```
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with 9 tools.
+After restarting Claude Code, check `/mcp` to verify the server is connected with **14 memory tools**.
 
 ### MCP Tools
 
@@ -135,11 +140,18 @@ After restarting Claude Code, check `/mcp` to verify the server is connected wit
 | `memory_recall` | Retrieve relevant memories by context |
 | `memory_feedback` | Report if a memory was useful |
 | `memory_retract` | Invalidate a wrong memory |
+| `memory_supersede` | Replace outdated memory with a current version |
 | `memory_stats` | View memory health metrics |
+| `memory_checkpoint` | Save execution state (survives context compaction) |
+| `memory_restore` | Recover state + relevant context at session start |
 | `memory_task_add` | Create a prioritized task |
 | `memory_task_update` | Change task status/priority/blocking |
 | `memory_task_list` | List tasks filtered by status |
 | `memory_task_next` | Get highest-priority actionable task |
+| `memory_task_begin` | Start a task — auto-checkpoints and recalls context |
+| `memory_task_end` | End a task — writes summary and checkpoints |
+
+For substrate-style structured projects (chapter analyses, plot beats, etc.) the HTTP API also exposes `latest-by-tag`, `top-by`, `resolve`, `supersede` Form B, and a race-free `sequence/next` allocator — see [`reference.md`](reference.md) for full details.
 
 ### Usage Example (in Claude Code)
 
@@ -156,7 +168,7 @@ Claude Code will automatically use these tools when appropriate. You can also tr
 | `AWM_PORT` | `8400` | HTTP server port |
 | `AWM_DB_PATH` | `memory.db` | SQLite database file path |
 | `AWM_AGENT_ID` | `claude-code` | Default agent ID for MCP server |
-| `AWM_EMBED_MODEL` | `Xenova/all-MiniLM-L6-v2` | Embedding model |
+| `AWM_EMBED_MODEL` | `Xenova/bge-small-en-v1.5` | Embedding model (BAAI retrieval-optimized, default since 0.7) |
 | `AWM_EMBED_DIMS` | `384` | Embedding dimensions |
 | `AWM_RERANKER_MODEL` | `Xenova/ms-marco-MiniLM-L-6-v2` | Cross-encoder reranker model |
 

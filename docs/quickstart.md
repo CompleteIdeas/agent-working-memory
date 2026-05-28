@@ -19,13 +19,25 @@ It runs entirely on your machine as a lightweight background process. No cloud s
 
 - **Windows 10/11** (macOS/Linux also work)
 - **Claude Code** installed and working
-- **Node.js 20+** — check with `node --version`
+- **Node.js 22 LTS or newer** *(Node 20 reached EOL on 2026-04-30 — AWM 0.8.6+ requires Node 22)*
 
-Don't have Node.js? Open PowerShell and run:
+### Install Node.js (skip if you already have it)
+
+Open PowerShell:
 ```powershell
-winget install OpenJS.NodeJS.LTS
+winget install OpenJS.NodeJS.LTS    # Windows
+# brew install node                  # macOS
+# sudo apt install nodejs npm        # Debian/Ubuntu
 ```
-Then close and reopen your terminal.
+
+Close and reopen your terminal, then verify:
+```bash
+node --version    # should print v22.x or higher
+```
+
+If `node` is still "not found" after reopening, your PATH may not have
+been updated. Restart the machine, or add Node's install directory to
+your PATH manually.
 
 ---
 
@@ -155,7 +167,8 @@ Claude Code uses the closest `.mcp.json` ancestor, so any project under `work/` 
 | First conversation is slow | Normal — models downloading (once only) |
 | Claude isn't saving much | Add the Stop hook above, or say "save what you learned" |
 | `awm` command not found | Run `npm install -g agent-working-memory` again |
-| Node.js not found | Install via `winget install OpenJS.NodeJS.LTS` |
+| Node.js not found | Install via `winget install OpenJS.NodeJS.LTS` (Win) / `brew install node` (mac) |
+| Deploying AWM to a server? | See [deployment.md](deployment.md) for Docker / Railway / Fly / Render / systemd recipes |
 
 For the full setup guide with advanced options, see [team-setup-guide.md](team-setup-guide.md).
 
