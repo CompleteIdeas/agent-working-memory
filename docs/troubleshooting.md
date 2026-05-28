@@ -85,6 +85,29 @@ AWM uses WAL (Write-Ahead Logging) mode. If the process crashed:
 Run eviction to clean up: `POST /system/evict` with `{ "agentId": "your-agent" }`
 Run edge decay to prune stale associations: `POST /system/decay`
 
+## Deployment issues
+
+For production deploys (Docker, Railway, Fly, Render, systemd), the
+canonical recipes and recovery procedures are in
+[`deployment.md`](deployment.md). The most common failures and where
+they're addressed:
+
+| Symptom | Likely cause | See |
+|---|---|---|
+| Railway "Deploy failed" with no detail | `VOLUME` directive in Dockerfile | [deployment.md → Railway](deployment.md#2-railway) |
+| `ERR_DLOPEN_FAILED` on `onnxruntime-node/binding.js` | Alpine base (musl libc); needs glibc | [deployment.md § 1](deployment.md#1-the-docker-recipe-foundation) |
+| Container exits with `MODULE_NOT_FOUND dist/index.js` | TypeScript build skipped or `dist/` not copied | confirm builder stage runs `npx tsc` |
+| Two deploys produce identical image digest, platform reports "nothing new" | Build cache deduped | pass `--build-arg BUILD_TIMESTAMP=$(date +%s)` |
+| `Deployment is not restartable` (Railway CLI) | Latest deploy in FAILED state | `railway redeploy --service <name>` or push a new build |
+| AWM container starts but isn't reachable from sibling services | Internal-DNS hostname mismatch | check `RAILWAY_PRIVATE_DOMAIN` env var matches the URL your backend uses |
+| Backup/restore between hosts | SQLite Online Backup API | [deployment.md → Backup, restore, migration](deployment.md#5-backup-restore-migration) |
+
+If Railway specifically tells you nothing useful, the buildLogs are
+behind the GraphQL API — pull them via
+`POST https://backboard.railway.com/graphql/v2` with
+`{ query: "{ buildLogs(deploymentId: <id>, limit: 200) { ... } }" }`. The
+deployment ID comes from `railway status --json`.
+
 ## Test failures
 
 ### Unit tests timing out

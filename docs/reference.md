@@ -400,6 +400,93 @@ Returns the single highest-priority non-blocked task. Prefers in_progress tasks 
 
 ---
 
+## Hook Configuration
+
+The `awm setup --global` command installs three Claude Code hooks into
+`~/.claude/settings.json`. The block below is the exact shape they take —
+use it if `awm setup` failed and you need to add them manually, or to
+audit what was installed.
+
+```jsonc
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -fsS -X POST -H \"Authorization: Bearer ${AWM_HOOK_SECRET}\" http://127.0.0.1:8401/hook/stop"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -fsS -X POST -H \"Authorization: Bearer ${AWM_HOOK_SECRET}\" http://127.0.0.1:8401/hook/pre-compact"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -fsS -X POST -H \"Authorization: Bearer ${AWM_HOOK_SECRET}\" http://127.0.0.1:8401/hook/session-end"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**What each hook does:**
+
+| Hook | When it fires | What the sidecar does |
+|---|---|---|
+| `Stop` | After every Claude response | Bumps the daily counter; nudges the agent to write/recall via system reminder. |
+| `PreCompact` | Before context compaction | Auto-saves the current execution state to AWM so context survives the compress. |
+| `SessionEnd` | When the conversation closes | Final auto-checkpoint + triggers a consolidation pass. |
+
+**The hook sidecar:**
+
+The sidecar is a separate HTTP server bundled with AWM, run automatically
+when the MCP server starts. It listens on `AWM_HOOK_PORT` (default
+`8401`) on `127.0.0.1` only. Authentication is via the `Authorization:
+Bearer ${AWM_HOOK_SECRET}` header — set this env var to anything random
+and the same value will be substituted into the hooks above by
+`awm setup --global`.
+
+**Port collisions:** If you run multiple AWM agents simultaneously (e.g.,
+"work" and "personal" pools per the [Quickstart](quickstart.md#separate-memory-pools-optional)),
+give each a different `AWM_HOOK_PORT` and update the URLs above
+accordingly.
+
+**Verifying the hooks installed correctly:**
+
+```bash
+# Show the installed hook config
+cat ~/.claude/settings.json | python -m json.tool
+
+# Confirm the sidecar is listening
+curl -fsS -H "Authorization: Bearer $AWM_HOOK_SECRET" \
+  http://127.0.0.1:8401/stats
+# {"writes": N, "recalls": N, "hooks": N, "total": N}
+```
+
+If `curl` returns `401`, the secret is wrong. If `connection refused`,
+the sidecar isn't running — restart Claude Code or check `awm serve`
+output.
+
+---
+
 ## Configuration Defaults
 
 All values from `DEFAULT_AGENT_CONFIG` in `src/types/agent.ts`:

@@ -29,9 +29,9 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. Done — 13 memory tools appear automatically.
+Restart Claude Code. Done — 14 memory tools appear automatically.
 
-> First conversation takes ~30s while ML models download (~124MB). Cached after that.
+> First conversation takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that.
 
 ### What `awm setup --global` creates
 
@@ -39,7 +39,7 @@ Restart Claude Code. Done — 13 memory tools appear automatically.
 |------|---------|
 | `~/.mcp.json` | Tells Claude Code to load the AWM MCP server |
 | `~/.claude/CLAUDE.md` | Memory workflow instructions (when to write, recall, checkpoint) |
-| `~/.claude/settings.json` | Auto-checkpoint hooks (Stop, PreCompact, SessionEnd) |
+| `~/.claude/settings.json` | Auto-checkpoint hooks (Stop, PreCompact, SessionEnd) — see [reference.md → Hook Configuration](reference.md#hook-configuration) for the exact JSON shape if you need to add them manually |
 
 ### Verify
 
@@ -47,7 +47,7 @@ Start a new conversation:
 
 > "What memory tools do you have?"
 
-Claude should list: `memory_write`, `memory_recall`, `memory_restore`, `memory_feedback`, `memory_retract`, `memory_stats`, `memory_checkpoint`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`.
+Claude should list: `memory_write`, `memory_recall`, `memory_restore`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_checkpoint`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`.
 
 ---
 

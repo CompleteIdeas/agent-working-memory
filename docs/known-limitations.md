@@ -44,14 +44,32 @@ Memories are embedded one at a time via async fire-and-forget on write. There's 
 
 ## Data
 
-### No backup/restore mechanism
-No built-in export/import for memory databases. The SQLite file can be copied manually.
+### No library-level export/import API
+There's no programmatic export endpoint that serializes engrams to JSON.
+However, file-level backup, restore, and subset migration **all work**
+and are documented in [`deployment.md` § 5](deployment.md#5-backup-restore-migration).
+Summary:
+- **Backup**: SQLite Online Backup API (`sqlite3 .backup …`) is safe on a
+  live DB. AWM also snapshots `memory.db` into `/data/backups/` on every
+  start.
+- **Restore**: stop AWM, drop the file in place, start AWM. The startup
+  integrity check verifies the file.
+- **Subset migration** (one agent_id out of a multi-agent DB): use the
+  Python `DELETE … WHERE agent_id NOT IN (…) ; VACUUM` pattern shown in
+  the deployment doc.
 
-### No migration system
-Schema changes require manual database recreation. There's no versioned migration system.
+### No versioned migration system
+Schema changes use additive `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE`
+statements at startup. Most upgrades (every 0.6 → 0.8 step so far) are
+backward-compatible — existing databases open cleanly on new code. Major
+schema changes are called out explicitly in the
+[CHANGELOG](../CHANGELOG.md) when they happen.
 
 ### Embedding dimension is fixed
-The system uses 384-dimensional embeddings (all-MiniLM-L6-v2). Switching to a different embedding model requires re-embedding all existing memories.
+The system uses 384-dimensional embeddings (bge-small-en-v1.5).
+Switching to a different embedding model requires re-embedding all
+existing memories — the in-place upgrade isn't supported as a
+configuration toggle.
 
 ## Eval
 
