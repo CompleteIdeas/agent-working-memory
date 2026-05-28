@@ -1,7 +1,7 @@
 {
   "name": "agent-working-memory",
   "version": "0.8.6",
-  "description": "Cognitive memory layer for AI agents — activation-based retrieval, salience filtering, associative connections",
+  "description": "Cognitive memory layer for AI agents \u00e2\u20ac\u201d activation-based retrieval, salience filtering, associative connections",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -31,7 +31,7 @@
     "test:all": "vitest run && tsx tests/mcp-smoke.ts"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "license": "Apache-2.0",
   "files": [

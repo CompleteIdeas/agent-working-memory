@@ -10,7 +10,7 @@
 # there's nothing to deploy and reporting "Deploy failed").
 
 # Stage 1: Build
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ COPY src/ src/
 RUN npx tsc
 
 # Stage 2: Production
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
