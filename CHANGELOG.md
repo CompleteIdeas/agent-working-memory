@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased — TOON output compression for token-efficient tool results
+
+Adds an output-only compressor so agents can shrink large **structured tool
+outputs** before they enter the context window — without changing the data or
+touching the memory write/recall paths.
+
+New module `src/core/lite-compress.ts`:
+
+- `liteCompress(value, opts?)` encodes JSON objects/arrays as **TOON**
+  (Token-Oriented Object Notation — a compact, schema-aware tabular form of
+  JSON), cutting ~50–65% of tokens on uniform arrays. An A/B test on
+  `claude-sonnet-4-6` and `claude-haiku-4-5` found **identical** retrieval
+  accuracy reading TOON vs JSON (same scores, same misses), so the saving is
+  free of comprehension cost.
+- **Fidelity guard:** every encode is self-verified (`encode → decode →
+  deep-equal`). TOON is emitted only when it round-trips exactly *and* clears a
+  minimum-saving threshold; ambiguous cases (e.g. a string `"00123"` that would
+  decode as a number) and prose fall back to JSON / passthrough.
+- **CCR-lite:** verbatim originals are stashed (bounded FIFO) and retrievable by
+  a `ref` handle, so the exact source is never lost.
+
+New MCP tools in `src/mcp.ts`:
+
+- **`compress_output`** — compress a structured tool output to TOON + `ref`.
+- **`retrieve_original`** — get the verbatim source back for a `ref`.
+
+Notes: `memory_recall` output is intentionally **not** TOON-encoded — it is
+already compact prose, so the guard would simply fall back. Adds dependency
+`@toon-format/toon`.
+
 ## 0.8.6 (2026-05-26) — installer template surfaces 0.8.x features to downstream agents
 
 A behavior-driven release with no library code changes: the `AWM_INSTRUCTION_CONTENT`
