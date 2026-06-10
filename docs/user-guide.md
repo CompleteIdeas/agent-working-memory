@@ -130,7 +130,7 @@ The project includes a `.mcp.json` that registers the MCP server:
 }
 ```
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with **14 memory tools**.
+After restarting Claude Code, check `/mcp` to verify the server is connected with **16 memory tools**.
 
 ### MCP Tools
 
@@ -150,6 +150,8 @@ After restarting Claude Code, check `/mcp` to verify the server is connected wit
 | `memory_task_next` | Get highest-priority actionable task |
 | `memory_task_begin` | Start a task — auto-checkpoints and recalls context |
 | `memory_task_end` | End a task — writes summary and checkpoints |
+| `compress_output` | Encode a structured tool output as TOON — ~50-65% fewer tokens, lossless, output-only |
+| `retrieve_original` | Get the verbatim source back for a `compress_output` ref |
 
 For substrate-style structured projects (chapter analyses, plot beats, etc.) the HTTP API also exposes `latest-by-tag`, `top-by`, `resolve`, `supersede` Form B, and a race-free `sequence/next` allocator — see [`reference.md`](reference.md) for full details.
 

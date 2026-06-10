@@ -437,6 +437,19 @@ memory_write(
 - AWM is shared across all agents in real time. When any agent writes or supersedes a
   memory, every other agent can recall it immediately.
 
+### Output compression (token efficiency, output-only)
+When a tool returns a LARGE STRUCTURED result you need to keep in context — a JSON
+array of records, query rows, a log dump, an API response — pass it through
+\`compress_output\` first. It re-encodes the data as TOON (a compact, lossless,
+schema-aware tabular form of JSON), cutting ~50-65% of the tokens at no
+comprehension cost. This is output-only: it never changes the data or your memories.
+- Use it on big STRUCTURED outputs, not on prose. Prose is returned unchanged —
+  for trimming memory prose, use recall \`granularity: 'compact'\` instead.
+- It returns a \`ref\`; call \`retrieve_original(ref)\` if you later need the exact
+  verbatim source (e.g. to hand it to another tool unchanged).
+- Don't bother for small outputs — it only compresses when the saving is worthwhile
+  and falls back to plain JSON if TOON wouldn't reproduce the data exactly.
+
 ### Backend (SQLite vs PGlite, 0.8.x)
 AWM ships two storage backends. The installer picks SQLite by default; both
 are functionally equivalent for cognitive workloads, but differ in operational

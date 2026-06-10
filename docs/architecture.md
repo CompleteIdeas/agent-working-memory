@@ -10,7 +10,7 @@ AWM is a single-process system: one Node.js process runs the MCP server (stdio),
 │                                                         │
 │  ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
 │  │  MCP (stdio) │   │  HTTP API    │   │  Hooks     │  │
-│  │  13 tools    │   │  18 routes   │   │  (curl)    │  │
+│  │  16 tools    │   │  18 routes   │   │  (curl)    │  │
 │  └──────┬───────┘   └──────┬───────┘   └─────┬──────┘  │
 │         │                  │                  │         │
 │         └──────────┬───────┘                  │         │
@@ -57,7 +57,7 @@ src/
     sqlite.ts         SQLite + FTS5 persistence (~650 lines)
   api/
     routes.ts         HTTP endpoints (memory + task + system)
-  mcp.ts            MCP server (13 tools, incognito support)
+  mcp.ts            MCP server (16 tools, incognito support)
   cli.ts            CLI (setup, serve, hook config)
   index.ts          HTTP server entry point
 ```

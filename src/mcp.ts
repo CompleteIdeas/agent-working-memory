@@ -6,7 +6,7 @@
  * Runs as a stdio-based MCP server that Claude Code connects to directly.
  * Uses the storage and engine layers in-process (no HTTP overhead).
  *
- * Tools exposed (12):
+ * Tools exposed (16):
  *   memory_write       — store a memory (salience filter decides disposition)
  *   memory_recall      — activate memories by context (cognitive retrieval)
  *   memory_feedback    — report whether a recalled memory was useful
@@ -19,6 +19,10 @@
  *   memory_task_update — change task status, priority, or blocking
  *   memory_task_list   — list tasks filtered by status
  *   memory_task_next   — get the highest-priority actionable task
+ *   memory_task_begin  — start a task (auto-checkpoint + recall)
+ *   memory_task_end    — end a task (write summary + checkpoint)
+ *   compress_output    — encode structured tool output as TOON (token-efficient, lossless)
+ *   retrieve_original  — get the verbatim source for a compress_output ref
  *
  * Run: npx tsx src/mcp.ts
  * Config: add to ~/.claude.json or .mcp.json
@@ -71,6 +75,7 @@ import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { embed } from './core/embeddings.js';
 import { startSidecar } from './hooks/sidecar.js';
 import { initLogger, log, getLogPath } from './core/logger.js';
+import { liteCompress, retrieveOriginal } from './core/lite-compress.js';
 import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-decisions.js';
 
 // --- Incognito Mode ---
@@ -94,7 +99,20 @@ if (INCOGNITO) {
 
 const BACKEND: StoreBackend = getConfiguredBackend();
 const DB_PATH = process.env.AWM_DB_PATH ?? (BACKEND === 'pglite' ? 'memory-pglite' : 'memory.db');
-const AGENT_ID = process.env.AWM_AGENT_ID ?? process.env.WORKER_NAME ?? 'claude-code';
+
+// Fallback agent selection when AWM_AGENT_ID/WORKER_NAME are unset: derive from
+// the project directory so plain `claude` launches still bind to the right
+// store. Personal-Projects -> 'personal'; everything else -> 'work' (the
+// primary store). MUST stay in sync with the SessionStart hook
+// (~/.claude/hooks/awm-session-start.ps1) so the hook's restore and the
+// server's reads/writes never diverge. Guard the AWM package's own path
+// (it lives under Personal-Projects) so a stray server cwd can't mis-bind.
+function deriveAgentFromDir(): string {
+  const dir = (process.env.CLAUDE_PROJECT_DIR ?? process.cwd()).replace(/\\/g, '/');
+  if (/\/AgentSynapse\//i.test(dir)) return 'work';
+  return /\/Personal-Projects(\/|$)/i.test(dir) ? 'personal' : 'work';
+}
+const AGENT_ID = process.env.AWM_AGENT_ID ?? process.env.WORKER_NAME ?? deriveAgentFromDir();
 const HOOK_PORT = parseInt(process.env.AWM_HOOK_PORT ?? '8401', 10);
 const HOOK_SECRET = process.env.AWM_HOOK_SECRET ?? null;
 
@@ -1076,6 +1094,54 @@ This captures what was accomplished so future sessions can recall it.`,
         type: 'text' as const,
         text: `Completed: "${completedTask}" [${salience.score.toFixed(2)}]${supersededNote}`,
       }],
+    };
+  }
+);
+
+server.tool(
+  'compress_output',
+  `Compress a STRUCTURED tool output (JSON object/array, query rows, log records) into TOON —
+a compact, schema-aware tabular encoding — before putting it in your context. Cuts ~50-65%
+of the tokens on uniform arrays at zero comprehension cost (validated: models read TOON as
+accurately as JSON). Use this on large tool results you need to keep in context.
+
+Output-only and safe: it never changes the data. Non-JSON / prose is returned unchanged.
+TOON is only emitted when it reproduces the input exactly (self-verified round-trip);
+otherwise you get plain JSON back. When compressed, you also get a 'ref' — call
+retrieve_original(ref) to get the verbatim source back if you ever need it.`,
+  {
+    output: z.string().describe('The tool output to compress — JSON text (preferred) or any string. Non-JSON is returned unchanged.'),
+    min_saving_chars: z.number().optional().describe('Only emit TOON if it saves at least this many characters (default 40).'),
+  },
+  async (params) => {
+    const r = liteCompress(params.output, { minSavingChars: params.min_saving_chars });
+    log(AGENT_ID, 'compress', `${r.format} ${r.charsBefore}->${r.charsAfter} chars (${(r.ratio * 100).toFixed(0)}%)${r.ref ? ` ref=${r.ref}` : ''}`);
+    const header = r.format === 'toon'
+      ? `[TOON, ${(r.ratio * 100).toFixed(0)}% smaller — compact lossless JSON; read as data, ref=${r.ref}]\n`
+      : '';
+    return {
+      content: [{ type: 'text' as const, text: header + r.text }],
+    };
+  }
+);
+
+server.tool(
+  'retrieve_original',
+  `Retrieve the verbatim original text for a 'ref' returned by compress_output. Use this when
+you need the exact, uncompressed source (e.g. to pass it to another tool unchanged). Returns
+an error if the ref has expired (originals are kept for the most recent compressions only).`,
+  {
+    ref: z.string().describe('The ref handle returned by compress_output (e.g. "awm_orig_12").'),
+  },
+  async (params) => {
+    const original = retrieveOriginal(params.ref);
+    if (original === undefined) {
+      return {
+        content: [{ type: 'text' as const, text: `Error: ref "${params.ref}" not found or expired.` }],
+      };
+    }
+    return {
+      content: [{ type: 'text' as const, text: original }],
     };
   }
 );
