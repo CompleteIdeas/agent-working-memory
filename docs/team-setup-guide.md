@@ -177,7 +177,7 @@ Start a new conversation and ask:
 
 > "What memory tools do you have?"
 
-Claude should mention `memory_write`, `memory_recall`, `memory_restore`, `memory_task_begin`, `memory_task_end`, etc. — 13 tools total.
+Claude should mention `memory_write`, `memory_recall`, `memory_restore`, `memory_task_begin`, `memory_task_end`, etc. — 16 tools total.
 
 ### 2. Check the activity log
 

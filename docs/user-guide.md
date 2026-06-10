@@ -125,7 +125,7 @@ The project includes a `.mcp.json` that registers the MCP server:
 }
 ```
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with 9 tools.
+After restarting Claude Code, check `/mcp` to verify the server is connected with 16 tools.
 
 ### MCP Tools
 
@@ -135,11 +135,18 @@ After restarting Claude Code, check `/mcp` to verify the server is connected wit
 | `memory_recall` | Retrieve relevant memories by context |
 | `memory_feedback` | Report if a memory was useful |
 | `memory_retract` | Invalidate a wrong memory |
+| `memory_supersede` | Replace an outdated memory with a current one |
 | `memory_stats` | View memory health metrics |
+| `memory_checkpoint` | Save execution state (survives context compaction) |
+| `memory_restore` | Recover state + relevant context at session start |
 | `memory_task_add` | Create a prioritized task |
 | `memory_task_update` | Change task status/priority/blocking |
 | `memory_task_list` | List tasks filtered by status |
 | `memory_task_next` | Get highest-priority actionable task |
+| `memory_task_begin` | Start a task — auto-checkpoints and recalls context |
+| `memory_task_end` | End a task — writes summary and checkpoints |
+| `compress_output` | Encode a structured tool output as TOON — ~50-65% fewer tokens, lossless, output-only |
+| `retrieve_original` | Get the verbatim source back for a `compress_output` ref |
 
 ### Usage Example (in Claude Code)
 

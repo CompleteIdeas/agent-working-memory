@@ -40,6 +40,8 @@ AWM exposes two interfaces: an HTTP REST API (Fastify) and an MCP stdio server. 
 | `memory_feedback` | Report usefulness | engram_id, useful, context                                                                   | `src/mcp.ts:174` |
 | `memory_retract`  | Invalidate memory | engram_id, reason, correction                                                                | `src/mcp.ts:204` |
 | `memory_stats`    | Health metrics    | (none)                                                                                       | `src/mcp.ts:237` |
+| `compress_output` | TOON-compress a structured tool output (output-only, lossless) | output, min_saving_chars | `src/mcp.ts:1100` |
+| `retrieve_original` | Get the verbatim source for a compress_output ref | ref | `src/mcp.ts:1127` |
 
 ## Data Flow Diagram
 

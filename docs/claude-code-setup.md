@@ -29,7 +29,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. Done — 13 memory tools appear automatically.
+Restart Claude Code. Done — 16 memory tools appear automatically.
 
 > First conversation takes ~30s while ML models download (~124MB). Cached after that.
 
@@ -47,7 +47,7 @@ Start a new conversation:
 
 > "What memory tools do you have?"
 
-Claude should list: `memory_write`, `memory_recall`, `memory_restore`, `memory_feedback`, `memory_retract`, `memory_stats`, `memory_checkpoint`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`.
+Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `compress_output`, `retrieve_original`.
 
 ---
 

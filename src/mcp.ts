@@ -6,7 +6,7 @@
  * Runs as a stdio-based MCP server that Claude Code connects to directly.
  * Uses the storage and engine layers in-process (no HTTP overhead).
  *
- * Tools exposed (14):
+ * Tools exposed (16):
  *   memory_write       — store a memory (salience filter decides disposition)
  *   memory_recall      — activate memories by context (cognitive retrieval)
  *   memory_feedback    — report whether a recalled memory was useful
@@ -19,6 +19,8 @@
  *   memory_task_update — change task status, priority, or blocking
  *   memory_task_list   — list tasks filtered by status
  *   memory_task_next   — get the highest-priority actionable task
+ *   memory_task_begin  — start a task (auto-checkpoint + recall)
+ *   memory_task_end    — end a task (write summary + checkpoint)
  *   compress_output    — encode structured tool output as TOON (token-efficient, lossless)
  *   retrieve_original  — get the verbatim source for a compress_output ref
  *

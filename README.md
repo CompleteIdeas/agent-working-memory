@@ -29,7 +29,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. That's it — 14 memory tools appear automatically.
+Restart Claude Code. That's it — 16 memory tools appear automatically.
 
 ### Upgrading
 
@@ -142,7 +142,7 @@ All evals are reproducible. See [Testing & Evaluation](#testing--evaluation).
 
 ## Features
 
-### Memory Tools (14)
+### Memory Tools (16)
 
 | Tool | Purpose |
 |------|---------|
@@ -160,6 +160,8 @@ All evals are reproducible. See [Testing & Evaluation](#testing--evaluation).
 | `memory_task_next` | Get the highest-priority actionable task |
 | `memory_task_begin` | Start a task — auto-checkpoints and recalls context |
 | `memory_task_end` | End a task — writes summary and checkpoints |
+| `compress_output` | Encode a structured tool output as TOON — ~50-65% fewer tokens, lossless, output-only |
+| `retrieve_original` | Get the verbatim source back for a `compress_output` ref |
 
 ### Separate Memory Pools
 

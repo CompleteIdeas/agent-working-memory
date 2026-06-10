@@ -40,7 +40,7 @@ The system is built on established cognitive science — ACT-R base-level activa
 | Language | TypeScript (ES2022, strict mode) | Type-safe cognitive engine |
 | Database | SQLite via better-sqlite3 + FTS5 | Persistence, BM25 full-text search |
 | HTTP Server | Fastify 5 | REST API for agents |
-| MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (9 tools via stdio) |
+| MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (16 tools via stdio) |
 | Embeddings | Xenova/all-MiniLM-L6-v2 (~22MB ONNX) | 384-dim semantic vectors |
 | Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (~22MB ONNX) | Cross-encoder passage relevance |
 | Query Expander | Xenova/flan-t5-small (~80MB ONNX) | Synonym/related term expansion |
