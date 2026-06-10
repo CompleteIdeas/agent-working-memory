@@ -31,7 +31,7 @@ awm setup --global
 
 Restart Claude Code. Done — 16 memory tools appear automatically.
 
-> First conversation takes ~30s while ML models download (~124MB). Cached after that.
+> First conversation takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that.
 
 ### What `awm setup --global` creates
 
@@ -39,7 +39,7 @@ Restart Claude Code. Done — 16 memory tools appear automatically.
 |------|---------|
 | `~/.mcp.json` | Tells Claude Code to load the AWM MCP server |
 | `~/.claude/CLAUDE.md` | Memory workflow instructions (when to write, recall, checkpoint) |
-| `~/.claude/settings.json` | Auto-checkpoint hooks (Stop, PreCompact, SessionEnd) |
+| `~/.claude/settings.json` | Auto-checkpoint hooks (Stop, PreCompact, SessionEnd) — see [reference.md → Hook Configuration](reference.md#hook-configuration) for the exact JSON shape if you need to add them manually |
 
 ### Verify
 

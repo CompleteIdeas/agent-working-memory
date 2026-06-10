@@ -99,7 +99,14 @@ The sleep cycle in `src/engine/consolidation.ts`:
 
 ## Database Schema
 
-SQLite with FTS5 for full-text search. Key tables:
+SQLite with FTS5 for full-text search. The full schema (all `CREATE TABLE`
+statements, indices, and triggers) lives at
+[`src/storage/sqlite.ts`](../src/storage/sqlite.ts) — read that file
+directly for the canonical definition. The full column reference is also
+in [`reference.md` → Database Schema](reference.md#database-schema). The
+section below is a high-level orientation.
+
+Key tables:
 
 **engrams** — Individual memories
 - `id` (UUID), `agent_id`, `concept`, `content`, `event_type`
@@ -109,16 +116,26 @@ SQLite with FTS5 for full-text search. Key tables:
 - `stage` (`staging` / `active` / `fading` / `consolidated` / `archived`) — `fading` added in v0.8.5
 - `retracted` (boolean), `retracted_by`, `retracted_at` (soft-delete metadata)
 
-**edges** — Associations between memories
-- `source_id`, `target_id`, `weight`, `edge_type` (hebbian/temporal/bridge)
+**associations** — Edges between memories
+- `from_engram_id`, `to_engram_id`, `weight`, `type` (hebbian / connection / invalidation / temporal / causal)
 
 **episodes** — Grouping of related memories
 - `id`, `agent_id`, `name`, `created_at`
 
-**engram_fts** — FTS5 virtual table on concept + content
+**engrams_fts** — FTS5 virtual table on concept + content + tags. Auto-synced via triggers.
 
 **conscious_state** — Checkpoint storage
 - `agent_id`, `state` (JSON blob), `updated_at`
+
+**activation_events** — Every recall: context, result count, top score, latency.
+
+**retrieval_feedback** — Useful / not-useful ground truth from `memory_feedback`.
+
+**staging_events** — Consolidation decisions: promoted, discarded, expired.
+
+> If you need to audit memory health or write a custom export, the schema
+> file is the source of truth — table names and column orders here may
+> drift slightly between minor releases, but `sqlite.ts` is always current.
 
 ## ML Models
 

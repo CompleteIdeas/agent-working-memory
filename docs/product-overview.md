@@ -1,5 +1,11 @@
 # AgentWorkingMemory — Product Overview
 
+> **New to AWM?** The vocabulary below — *engram, salience, activation,
+> Hebbian, staging* — is defined plainly in
+> [`onboarding-vocabulary.md`](onboarding-vocabulary.md). Read that first
+> if any of these terms are unfamiliar; the rest of this page will land
+> better.
+
 ## What It Is
 
 AgentWorkingMemory (AWM) is a cognitive memory layer for AI agents. It gives any LLM-based agent the ability to **remember**, **forget**, **learn from experience**, and **self-correct** across conversations. Instead of treating every interaction as a blank slate, AWM maintains a persistent, scored, and associatively-linked memory graph that surfaces the right information at the right time.
@@ -41,7 +47,7 @@ The system is built on established cognitive science — ACT-R base-level activa
 | Database | SQLite via better-sqlite3 + FTS5 | Persistence, BM25 full-text search |
 | HTTP Server | Fastify 5 | REST API for agents |
 | MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (16 tools via stdio) |
-| Embeddings | Xenova/all-MiniLM-L6-v2 (~22MB ONNX) | 384-dim semantic vectors |
+| Embeddings | Xenova/bge-small-en-v1.5 (~33MB ONNX, BAAI retrieval-optimized) | 384-dim semantic vectors |
 | Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (~22MB ONNX) | Cross-encoder passage relevance |
 | Query Expander | Xenova/flan-t5-small (~80MB ONNX) | Synonym/related term expansion |
 | ML Runtime | @huggingface/transformers | Local ONNX inference (no API calls) |

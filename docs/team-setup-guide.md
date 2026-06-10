@@ -18,6 +18,12 @@ AWM (AgentWorkingMemory) fixes that. It gives Claude persistent memory that work
 
 Everything runs locally on your machine. No cloud, no API keys, no data leaves your computer. It's a single SQLite file.
 
+> **Hosting AWM on a server instead of every laptop?**
+> This guide covers per-user installs. For a shared deploy — Docker,
+> Railway, Fly, Render, or systemd — see [`deployment.md`](deployment.md).
+> It captures the gotchas (Railway `VOLUME` rejection, glibc vs musl,
+> Node 20 EOL) so you don't have to rediscover them.
+
 ---
 
 ## Option A: Install with npm (recommended)
