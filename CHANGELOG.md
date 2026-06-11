@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — TOON output compression for token-efficient tool results
+## 0.8.7 (2026-06-10) — TOON output compression for token-efficient tool results
 
 Adds an output-only compressor so agents can shrink large **structured tool
 outputs** before they enter the context window — without changing the data or
