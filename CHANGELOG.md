@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.8 (2026-06-12) — Hermes Agent integration recipe (docs)
+
+Documents using AWM as the memory backend for any MCP-capable agent host, with
+[Nous Hermes Agent](https://github.com/NousResearch/hermes-agent) as the worked
+example — **no adapter code required**.
+
+- New `docs/integrations/hermes.md`: derived Docker image, `config.yaml`
+  `mcp_servers` block, model-provider examples (Anthropic + Azure
+  `azure-foundry`), a write/recall verification, `mcp_<server>_<tool>` naming,
+  and gotchas (the Windows CRLF/s6 clone fix; the Azure GPT-5.x `/openai/v1`
+  responses-path 404; first-call embedding-model download).
+- README: new **Integrations** section with the concise Hermes how-to.
+
+Verified on `claude-haiku-4-5` and Azure `gpt-5-4-mini`. No library code
+changes.
+
 ## 0.8.7 (2026-06-10) — TOON output compression for token-efficient tool results
 
 Adds an output-only compressor so agents can shrink large **structured tool

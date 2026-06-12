@@ -659,6 +659,47 @@ callers keep working without modification. Full validation at the milestone:
 
 See [CHANGELOG.md](CHANGELOG.md) for full details.
 
+## Integrations
+
+AWM is a standard MCP server, so it plugs into any MCP-capable agent host with
+**no adapter code** — the same server Claude Code uses. Point two hosts at the
+same `AWM_DB_PATH` (with a shared `AWM_AGENT_ID`/`AWM_WORKSPACE`) and they share
+one cognitive memory.
+
+### Hermes Agent (Nous Research)
+
+1. Make AWM available where Hermes runs (e.g. a derived Docker image — the
+   Hermes image already bundles Node):
+
+   ```dockerfile
+   FROM hermes-agent:local
+   USER root
+   RUN npm install -g agent-working-memory@latest
+   ENV HF_HOME=/opt/data/.cache/huggingface
+   ```
+
+2. Register it in `~/.hermes/config.yaml`:
+
+   ```yaml
+   mcp_servers:
+     awm:
+       command: node
+       args: ["/usr/local/lib/node_modules/agent-working-memory/dist/mcp.js"]
+       env:
+         AWM_AGENT_ID: hermes
+         AWM_DB_PATH: /opt/data/awm/hermes.db    # on a persistent volume
+         HF_HOME: /opt/data/.cache/huggingface
+       timeout: 600                              # first call downloads the embedder
+   ```
+
+3. AWM's tools appear to the agent as `mcp_awm_memory_write`,
+   `mcp_awm_memory_recall`, etc. Works with any Hermes model provider
+   (verified on Anthropic and Azure `gpt-5-4-mini`).
+
+Full recipe — model-provider examples, the Azure GPT-5.x `/openai/v1` note, and
+gotchas (incl. the Windows CRLF/s6 clone fix) — is in
+[docs/integrations/hermes.md](docs/integrations/hermes.md).
+
 ## Project Status
 
 AWM is in active development (v0.8.5). The core memory pipeline, consolidation
