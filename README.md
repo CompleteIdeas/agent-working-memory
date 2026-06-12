@@ -667,6 +667,7 @@ daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
+- Other MCP hosts (e.g. [Hermes Agent](docs/integrations/hermes.md)): **supported** — AWM drops in as an MCP memory server with no adapter code
 - Multi-agent coordination: **stable** (v0.8.1 hardening)
 - Task management: **stable**
 - Hook sidecar and auto-checkpoint: **stable**
