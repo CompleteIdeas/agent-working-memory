@@ -84,6 +84,39 @@ Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM
 
 The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](docs/cognitive-model.md) for details.
 
+> **Build an agent on it:** the [AWM-Native Agent Harness pattern](docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
+
+---
+
+## Why it matters at scale
+
+The reason AWM exists: **past roughly half a million tokens, you can no longer keep a large project's context alive by carrying it.** The codebase, the docs, the decision history, and the meeting/work transcripts outgrow every model's window — and summarizing to fit silently drops the fact you needed next.
+
+These figures come from real-world use on a large software platform project, where a single work agent has accumulated **20,000+ memories** over a multi-million-token codebase and documentation set:
+
+| To answer one question, carry… | tokens | AWM scoped recall |
+|---|---|---|
+| the accumulated memory (~20K memories) | ~1.3M | **~630, flat** |
+| the project's notes & transcript docs | ~2M | **~630, flat** |
+| the whole system (code + docs) | ~29M — fits in no window, any tier | **~630, flat** |
+
+A scoped recall answers from the relevant *slice*, independent of how large the store grows. Measured consequences on real questions against the real project:
+
+- **~2,000× fewer tokens per query** than carrying the memory store — and **~5× fewer** than opening the single best-matching documentation file (a floor; agents usually open several and still miss cross-file facts).
+- **At scale, "carry everything" isn't an option.** At ~20K memories no context window holds it, so retrieval is not an optimization — it is the only door. A static notes file or long-context approach is forced to truncate, which silently drops facts.
+
+Two structural advantages a file or a flat vector store cannot match:
+
+- **Staleness is tracked.** When a fact changes, `memory_supersede` retires the old value and recall stops returning it — the system *knows* what changed. A notes file or repo goes stale silently; you would re-scan everything to find out. (This work agent has superseded and retracted dozens of facts as the project moved.)
+- **Dead weight costs nothing.** ~90% of accumulated memories are never recalled for a given task — a notes file pays for all of them in every prompt; recall pays for ≈zero.
+
+### Honest about the trade-offs
+
+- AWM does **not** win on small, one-shot tasks — write/recall overhead exceeds the savings until knowledge is reused or the corpus grows past what fits in context.
+- Recall is not free: a few seconds of latency per query buys the token reduction.
+- Recall accuracy is bounded by what was written — write quality matters (lead with the fact; tag with identifiers like file, table, ticket).
+- It does not replace your source of truth. The intended pattern is: **recall first, read/grep the code for ground truth on a miss, and supersede when reality differs.**
+
 ---
 
 ## Benchmarks

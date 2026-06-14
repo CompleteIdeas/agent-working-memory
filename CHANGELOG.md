@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased (2026-06-14) — docs: scale rationale + AWM-Native Harness pattern
+
+Documentation only — no library code or version change. Folds into the next release.
+
+- **README "Why it matters at scale"**: real-world token-economics from a 20,000+
+  memory work agent over a ~29M-token codebase + docs project — ~2,000× fewer
+  tokens per query than carrying the store (and ~5× fewer than opening the single
+  best-matching doc file), supersede-tracked staleness, dead-weight-costs-nothing,
+  plus an honest trade-offs section (no win on small one-shot tasks; recall latency;
+  write-quality-bound accuracy; recall-first-then-verify).
+- **New `docs/patterns/awm-native-harness.md`**: the AWM-Native Agent Harness
+  pattern — treat AWM as an always-on cognitive *substrate* (PRIME → ACT → VERIFY →
+  LEARN) so a cheap model performs at a high level and gets cheaper + better over
+  time. Measured on a real domain workload: gpt-5.4-mini + AWM scored 14/15 vs a
+  frontier model's 7/15 at ~1/40th the cost. README links it from the intro.
+
 ## 0.8.8 (2026-06-12) — Hermes Agent integration recipe (docs)
 
 Documents using AWM as the memory backend for any MCP-capable agent host, with
