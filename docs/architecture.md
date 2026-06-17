@@ -78,7 +78,7 @@ The activation pipeline in `src/engine/activation.ts` runs these phases in order
 | 5 | Temporal decay | ACT-R power-law decay based on time since last access |
 | 6 | Graph walk | Beam search over Hebbian + temporal edges |
 | 7 | Confidence gating | Filter by confidence threshold, apply feedback bonus |
-| 8 | Z-score normalization | Model-agnostic score normalization (stddev floor 0.10) |
+| 8 | Vector scoring | Raw-cosine floor (`AWM_SIM_FLOOR_*`, default 0.50/0.35), model-tuned for BGE-small (replaced z-score normalization in 0.8.x) |
 
 ## Consolidation Pipeline (7 phases)
 

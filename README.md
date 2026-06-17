@@ -617,6 +617,7 @@ callers keep working without modification. Full validation at the milestone:
 ## What's New in v0.7.13
 
 - **Reranker pool size reduction** — cross-encoder pool dropped from `max(limit*3, 30)` to `max(limit*2, 15)`. For typical agent queries (limit=5 or 10), that's 15-20 candidates reranked instead of 30, halving the cross-encoder cost. Top-K quality preserved (8/8 top-1, identical top-5/top-10 overlap) — reranking the 21st-30th candidates was wasted when the user only wants top-5 anyway.
+  > **⚠️ Superseded in 0.9.0 — this reduction was reversed.** A pipeline-attribution study found that "wasted" tail was actually where ~50% of retrievable answers were being squeezed out *before* the reranker saw them (the small 8-query A/B above missed it). 0.9.0 widens the pool back to `max(limit*4, 40)` and adds a top-K abstention gate — lifting LoCoMo recall 22.7%→25.7% **and** adversarial precision 73.4→74.9, with no regression. See the CHANGELOG and `docs/reference.md` → "Recall tuning."
 
 ## What's New in v0.7.12
 
