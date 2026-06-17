@@ -84,6 +84,8 @@ Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM
 
 The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](docs/cognitive-model.md) for details.
 
+> **New to AWM?** [`docs/pipeline-walkthrough.html`](docs/pipeline-walkthrough.html) is a visual, plain-language walkthrough (no background required) — what happens when AWM learns and recalls a fact, why it's built this way, and how it differs from a plain vector store. Open it in a browser.
+
 > **Build an agent on it:** the [AWM-Native Agent Harness pattern](docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
 
 ---

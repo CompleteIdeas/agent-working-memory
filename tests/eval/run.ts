@@ -44,6 +44,7 @@ const flags = {
   noConsolidation: args.has('--no-consolidation'),
   bm25Only: args.has('--bm25-only'),
   vectorOnly: args.has('--vector-only'),
+  noExpansion: args.has('--no-expansion'), // A/B the query-expansion stage (rerank stays on)
   suite: [...args].find(a => a.startsWith('--suite='))?.split('=')[1] ?? null,
 };
 
@@ -98,7 +99,7 @@ async function queryEngine(activation: ActivationEngine, text: string, limit = 1
     context: text,
     limit,
     useReranker: !flags.bm25Only && !flags.vectorOnly,
-    useExpansion: !flags.bm25Only && !flags.vectorOnly,
+    useExpansion: !flags.bm25Only && !flags.vectorOnly && !flags.noExpansion,
     internal: true,
   });
   return results.map(r => r.engram.id);

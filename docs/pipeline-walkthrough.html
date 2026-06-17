@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How AWM Remembers — A Visual Walkthrough</title>
+<style>
+  :root{
+    --paper:#faf7f0; --paper2:#f3eee3; --ink:#23201b; --muted:#6b6457;
+    --accent:#b3541e; --accent2:#1f6f6b; --line:#e0d8c8; --gold:#c79a3b;
+    --good:#2f7d4f; --warn:#a9501a; --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(40,30,10,.06);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:17px/1.65 ui-serif,Georgia,"Times New Roman",serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  h1,h2,h3,.sans{font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  h1{font-size:2.6rem;line-height:1.1;margin:.2em 0 .1em;letter-spacing:-.02em}
+  h2{font-size:1.7rem;margin:2.4em 0 .2em;letter-spacing:-.01em}
+  h3{font-size:1.18rem;margin:1.6em 0 .3em}
+  p{margin:.7em 0}
+  a{color:var(--accent)}
+  header.hero{background:linear-gradient(160deg,#2a2620,#403a2e);color:#f3ecdc;padding:64px 0 52px;border-bottom:4px solid var(--gold)}
+  header.hero .wrap{max-width:920px}
+  header .kicker{font-family:ui-sans-serif,sans-serif;text-transform:uppercase;letter-spacing:.22em;font-size:.72rem;color:var(--gold);margin:0}
+  header h1{color:#fdf8ee}
+  header .sub{font-size:1.18rem;color:#d8cfbb;max-width:680px;margin:.5em 0 0}
+  .grain{height:6px;background:repeating-linear-gradient(90deg,var(--gold),var(--gold) 2px,transparent 2px,transparent 8px);opacity:.5}
+  .lead{font-size:1.22rem;color:#3a352c}
+  .tag{display:inline-block;font-family:ui-sans-serif,sans-serif;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;
+    background:var(--paper2);border:1px solid var(--line);border-radius:999px;padding:3px 11px;color:var(--muted);margin:0 6px 6px 0}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:18px 0;box-shadow:var(--shadow)}
+  .box{border-radius:12px;padding:15px 18px;margin:15px 0;font-size:.97rem}
+  .analogy{background:#f4efe1;border-left:4px solid var(--gold)}
+  .example{background:#eef4f2;border-left:4px solid var(--accent2)}
+  .why{background:#f7eee7;border-left:4px solid var(--accent)}
+  .box .lbl{font-family:ui-sans-serif,sans-serif;font-weight:700;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:4px}
+  .analogy .lbl{color:var(--gold)} .example .lbl{color:var(--accent2)} .why .lbl{color:var(--accent)}
+  .pill{font-family:ui-sans-serif,sans-serif;font-size:.78rem;background:var(--ink);color:var(--paper);border-radius:6px;padding:2px 8px;white-space:nowrap}
+  code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.86em;background:var(--paper2);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .muted{color:var(--muted)}
+  .funnel{display:flex;flex-direction:column;align-items:center;gap:3px;margin:24px 0}
+  .funnel .stage{font-family:ui-sans-serif,sans-serif;text-align:center;color:#fff;border-radius:10px;padding:12px 10px;font-size:.92rem;box-shadow:var(--shadow)}
+  .funnel .stage small{display:block;font-weight:400;opacity:.9;font-size:.82rem}
+  .phaselist{counter-reset:ph;list-style:none;padding:0;margin:0}
+  .phaselist>li{position:relative;background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px 18px 64px;margin:14px 0;box-shadow:var(--shadow)}
+  .phaselist>li::before{counter-increment:ph;content:counter(ph);position:absolute;left:16px;top:18px;
+    width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;font-family:ui-sans-serif,sans-serif;
+    font-weight:700;display:flex;align-items:center;justify-content:center}
+  .phaselist h3{margin:.1em 0 .35em}
+  .step-name{font-family:ui-monospace,monospace;font-size:.8rem;color:var(--muted)}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:.94rem;font-family:ui-sans-serif,sans-serif}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--paper2);font-size:.8rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.two{grid-template-columns:1fr}h1{font-size:2rem}}
+  .toc{font-family:ui-sans-serif,sans-serif;font-size:.95rem}
+  .toc a{display:block;padding:5px 0;border-bottom:1px dashed var(--line);text-decoration:none;color:var(--ink)}
+  .toc a:hover{color:var(--accent)}
+  .toc .n{color:var(--accent);font-weight:700;margin-right:10px}
+  .formula{background:#2a2620;color:#f3ecdc;border-radius:12px;padding:18px 20px;font-family:ui-monospace,monospace;
+    font-size:1.05rem;text-align:center;margin:18px 0;overflow-x:auto}
+  .formula .v{color:var(--gold)}
+  footer{margin:60px 0 30px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-family:ui-sans-serif,sans-serif;font-size:.85rem}
+  .big-quote{font-size:1.35rem;line-height:1.5;color:var(--accent2);border-left:4px solid var(--accent2);padding-left:18px;margin:24px 0;font-style:italic}
+  .chip-row{margin:10px 0}
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:12px;overflow:hidden;border:1px solid var(--line);margin:16px 0}
+  .vs>div{padding:16px 18px}
+  .vs .a{background:#f6ece6} .vs .b{background:#eaf3f0}
+  .vs h4{font-family:ui-sans-serif,sans-serif;margin:.1em 0 .5em;font-size:1rem}
+  @media(max-width:680px){.vs{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">Agent Working Memory · A Visual Walkthrough</p>
+    <h1>How AWM Remembers</h1>
+    <p class="sub">A plain-language tour of the memory system behind the agent — what happens when it
+    learns something, how it finds the right memory later, and why it was built the way it was. No
+    background required.</p>
+  </div>
+</header>
+<div class="grain"></div>
+
+<div class="wrap">
+
+<p class="lead">Most AI tools have no memory. Every conversation starts from zero. <strong>AWM</strong>
+(Agent Working Memory) gives an AI agent something closer to a <em>human memory</em>: it decides what's
+worth keeping, strengthens what it uses, forgets what it doesn't, links related ideas together, and —
+crucially — knows when it simply doesn't know. This page walks through exactly how, using everyday
+analogies and one running example you can follow the whole way down.</p>
+
+<p class="lead">But the real question is <strong>why this is different from the other ways an AI can
+"have memory," and where that difference actually pays off in everyday use.</strong> That's the thread
+running through this whole page — and §7 lays it out head-to-head with concrete, day-in-the-life
+scenarios.</p>
+
+<div class="card">
+  <strong class="sans">The running example we'll follow:</strong>
+  <p style="margin:.4em 0 0">You tell your assistant: <em>"My main project is called Atlas, and its deadline
+  just moved from July&nbsp;1 to August&nbsp;15 because the scope grew."</em> Later you ask:
+  <em>"When is Atlas due?"</em> — and weeks after that, <em>"What was the <u>old</u> Atlas deadline, and why
+  did it change?"</em> We'll trace how AWM stores this, finds it, and keeps the history.</p>
+</div>
+
+<div class="toc card">
+  <strong class="sans" style="display:block;margin-bottom:8px">On this page</strong>
+  <a href="#big"><span class="n">1</span> The big idea: memory is not a filing cabinet</a>
+  <a href="#actr"><span class="n">2</span> The science it's built on: ACT-R, in plain English</a>
+  <a href="#write"><span class="n">3</span> Writing a memory: the bouncer at the door</a>
+  <a href="#recall"><span class="n">4</span> Recall: the funnel from thousands to a few</a>
+  <a href="#sleep"><span class="n">5</span> Sleep: how memories settle overnight</a>
+  <a href="#decisions"><span class="n">6</span> The big design decisions — and why</a>
+  <a href="#realworld"><span class="n">7</span> Different from the other modes — and where it wins in real life</a>
+  <a href="#notjust"><span class="n">8</span> "Why not just use a bigger model / more context / plain search?"</a>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="big">1 · The big idea: memory is not a filing cabinet</h2>
+
+<p>The simplest way to give an AI memory is to dump everything into a big pile and, when asked a question,
+hand back whatever looks vaguely similar. That's how a lot of "AI memory" works. It's a
+<strong>filing cabinet</strong>: it stores, and it retrieves-by-similarity.</p>
+
+<p>AWM is built on a different belief: <strong>remembering is an act of judgment, not storage.</strong>
+A good personal assistant doesn't recite every email you've ever received when you ask a question — they
+recall the <em>right small handful</em>, and if they genuinely don't know, they say so instead of making
+something up.</p>
+
+<div class="box analogy"><span class="lbl">Analogy</span>
+A filing cabinet keeps every scrap of paper and, when you ask for something, dumps the whole drawer on
+your desk. A <strong>seasoned librarian</strong> remembers which books matter, knows which ones connect to
+each other, lets the dusty unused ones drift to storage, and — if you ask for a book that doesn't exist —
+tells you "we don't have that" instead of handing you a random one. AWM is the librarian.</div>
+
+<div class="vs">
+  <div class="a"><h4>The filing cabinet (naïve RAG)</h4>
+    <p style="margin:0;font-size:.95rem">Keep everything → on a question, return the top-N most similar
+    chunks → paste them into the prompt. No sense of importance, no links between facts, no forgetting,
+    no "I don't know."</p></div>
+  <div class="b"><h4>The librarian (AWM)</h4>
+    <p style="margin:0;font-size:.95rem">Decide what's worth keeping → strengthen what gets used →
+    link related facts → let unused detail fade → and return a <em>precise</em> few, or nothing at all.
+    Precision over volume, by design.</p></div>
+</div>
+
+<p class="big-quote">AWM would rather return <em>nothing</em> than return facts you didn't ask for —
+because a wrong memory poisons the agent's answer worse than a missing one.</p>
+
+<!-- ============================================================= -->
+<h2 id="actr">2 · The science it's built on: ACT-R, in plain English</h2>
+
+<p>AWM didn't invent how memory should behave from scratch. It borrows from <strong>ACT-R</strong>, a model
+of human memory that cognitive scientists have refined for over 30 years. The single most important idea
+AWM takes from it is the <strong>base-level activation</strong> of a memory — a fancy term for a simple,
+familiar feeling:</p>
+
+<div class="box analogy"><span class="lbl">Analogy</span>
+Think about how easily a fact comes to mind. Your own phone number? Instant — you've used it thousands of
+times. A hotel room number from a trip three years ago? Gone. <strong>Memories you use often stay sharp;
+memories you don't use fade.</strong> That "how easily does this come to mind right now" strength is what
+ACT-R calls activation, and AWM computes it for every stored fact.</div>
+
+<p>The formula looks intimidating but says something intuitive:</p>
+
+<div class="formula">activation = ln(<span class="v">n</span> + 1) &nbsp;−&nbsp; <span class="v">d</span> · ln( <span class="v">age</span> / (<span class="v">n</span> + 1) )</div>
+
+<table>
+  <tr><th>Symbol</th><th>Plain meaning</th><th>Effect</th></tr>
+  <tr><td><code>n</code></td><td>How many times this memory has been used</td><td>More uses → higher, sharper. (Your phone number.)</td></tr>
+  <tr><td><code>age</code></td><td>How long since it was created / last touched</td><td>Older → weaker, <em>unless</em> it keeps getting used.</td></tr>
+  <tr><td><code>d</code> <span class="muted">(0.3–0.6)</span></td><td>The "forgetting rate" dial</td><td>AWM nudges this per query: a precise lookup forgets faster (recent matters); broad exploration forgets slower (old memories surface).</td></tr>
+</table>
+
+<div class="box why"><span class="lbl">Why this design</span>
+Using a real cognitive model — not an ad-hoc "recency score" — means the behavior is principled and
+predictable: frequently-used knowledge persists, one-off noise decays, and the system has a built-in,
+biologically-motivated reason for <em>every</em> memory's current strength. AWM layers more signals on top
+(below), but this is the spine.</div>
+
+<p>Two more borrowed ideas you'll see throughout:</p>
+<div class="two">
+  <div class="card"><h3 style="margin-top:0">"Fire together, wire together"</h3>
+  <p style="margin:0;font-size:.96rem">When two memories get recalled together and that turns out useful,
+  AWM strengthens the <strong>link</strong> between them (called a Hebbian edge). Next time, recalling one
+  gently pulls up the other — like how "salt" makes you think "pepper."</p></div>
+  <div class="card"><h3 style="margin-top:0">Sleep consolidation</h3>
+  <p style="margin:0;font-size:.96rem">Human brains replay and reorganize the day's memories during sleep.
+  AWM runs a "sleep cycle" too (§5): it clusters related facts, strengthens important links, prunes
+  duplicates, and lets trivia fade.</p></div>
+</div>
+
+<!-- ============================================================= -->
+<h2 id="write">3 · Writing a memory: the bouncer at the door</h2>
+
+<p>When the agent learns something — <em>"My main project is called Atlas…"</em> — AWM does <strong>not</strong>
+just save it. It runs a short pipeline first.</p>
+
+<ol class="phaselist">
+  <li>
+    <h3>Understand it <span class="step-name">— embed</span></h3>
+    <p>The text is turned into a list of numbers (an <em>embedding</em>) that captures its meaning, so the
+    system can later judge how similar two ideas are even when the words differ.</p>
+    <div class="box analogy"><span class="lbl">Analogy</span> Like assigning every sentence a precise GPS
+    coordinate in "meaning-space." Sentences about the same thing land near each other, even if worded
+    differently ("due date" sits near "deadline").</div>
+  </li>
+  <li>
+    <h3>Is this worth remembering? <span class="step-name">— salience</span></h3>
+    <p>A <strong>bouncer</strong> scores how important the fact is, from several cues: Is it surprising? Is
+    it a decision? Does it carry consequences? Is it new, or just a restatement of something already known?
+    Novelty counts most.</p>
+    <table>
+      <tr><th>Verdict</th><th>What happens</th></tr>
+      <tr><td><span class="pill">active</span></td><td>Important enough to keep front-of-mind and link up.</td></tr>
+      <tr><td><span class="pill">staging</span></td><td>Borderline — held in a waiting room; promoted only if it proves relevant later, else it expires.</td></tr>
+      <tr><td><span class="pill">discard</span></td><td>Noise — barely kept, easily forgotten.</td></tr>
+    </table>
+    <div class="box why"><span class="lbl">Why this design</span> If everything is "important," nothing is.
+    The bouncer is what keeps the store from drowning in trivia — the difference between a memory and a log file.</div>
+  </li>
+  <li>
+    <h3>Have I heard this before? <span class="step-name">— novelty &amp; reinforce</span></h3>
+    <p>AWM checks for an existing memory about the same thing. If you <em>repeat</em> a fact, it doesn't make
+    a clumsy duplicate — it <strong>strengthens the one it already has</strong> (bumps its confidence and
+    use-count, the <code>n</code> from the ACT-R formula).</p>
+    <div class="box analogy"><span class="lbl">Analogy</span> Hearing a name twice doesn't create two
+    people in your head — it makes you more sure of the one person. Repetition = a stronger single memory,
+    not clutter.</div>
+  </li>
+  <li>
+    <h3>Did something change? <span class="step-name">— supersede</span></h3>
+    <p>Our example says the deadline <em>moved</em> from July&nbsp;1 to August&nbsp;15. AWM writes the new
+    fact and marks the old one <strong>superseded</strong> — so normal recall returns "August&nbsp;15," but
+    the history isn't erased. Ask specifically for the old value and the "why," and it can still surface it.</p>
+    <div class="box example"><span class="lbl">Example</span> "When is Atlas due?" → <strong>August&nbsp;15</strong>
+    (the live answer). "What was the <u>old</u> deadline and why did it change?" → <strong>July&nbsp;1, moved
+    because scope grew.</strong> A filing cabinet that simply overwrote the value could never answer the
+    second question.</div>
+    <div class="box why"><span class="lbl">Why this design</span> Decisions have history, and history is
+    knowledge: it stops the agent from quietly reverting to a known-bad choice, and lets it reason about
+    "we tried X, it didn't work, so we chose Y." A plain notes file goes silently stale; AWM tracks the change.</div>
+  </li>
+  <li>
+    <h3>File it and link it <span class="step-name">— store &amp; connect</span></h3>
+    <p>The memory is saved, and AWM looks for related memories to <strong>link</strong> it to (the "Atlas"
+    facts wire together). These links are what later let it follow a train of thought from one fact to a
+    connected one.</p>
+  </li>
+</ol>
+
+<!-- ============================================================= -->
+<h2 id="recall">4 · Recall: the funnel from thousands to a few</h2>
+
+<p>Now you ask: <em>"When is Atlas due?"</em> The hard part isn't storing — it's finding the right one or two
+memories among thousands without dragging along junk. AWM does this as a <strong>funnel</strong>: cast a wide
+net, then narrow with progressively smarter (and more expensive) filters.</p>
+
+<div class="box analogy"><span class="lbl">Analogy</span> Hiring for a job. You don't interview everyone in
+the city. A cheap keyword filter pulls a few hundred résumés; a scoring pass shortlists a few dozen; you
+chase down a couple of references; then a senior expert <em>actually reads</em> the finalists and ranks them.
+Cheap-and-wide first, expensive-and-precise last. Recall works the same way.</div>
+
+<div class="funnel">
+  <div class="stage" style="background:#7a8b8a;width:100%">Everything in memory <small>thousands of facts</small></div>
+  <div class="stage" style="background:#5f7d79;width:82%">Wide net — keyword + meaning search <small>a few hundred candidates</small></div>
+  <div class="stage" style="background:#4f7a59;width:60%">Score each one <small>ACT-R strength + relevance + links + confidence</small></div>
+  <div class="stage" style="background:#a96a2c;width:42%">Follow the associations <small>pull in connected facts</small></div>
+  <div class="stage" style="background:#b3541e;width:26%">Expert re-read (reranker) <small>the precision cut</small></div>
+  <div class="stage" style="background:#23201b;width:14%">A precise few — or nothing <small>with a confidence score</small></div>
+</div>
+
+<p>Here's what each layer actually does:</p>
+
+<ol class="phaselist">
+  <li><h3>Untangle the question <span class="step-name">— coreference</span></h3>
+    <p>If you said "it" or "that," AWM first swaps in what you meant ("it" → "Atlas"), so the search isn't
+    chasing a pronoun.</p></li>
+
+  <li><h3>Cast a wide net <span class="step-name">— keyword + vector search</span></h3>
+    <p>Two searches run at once: a <strong>keyword</strong> match (great at exact terms and IDs) and a
+    <strong>meaning</strong> match using the embeddings from §3 (great when the words differ — "due date"
+    finds "deadline"). Their results are pooled. This is the <em>only</em> step that decides what's even
+    eligible.</p>
+    <div class="box why"><span class="lbl">Why both</span> Keyword search nails exact tokens but misses
+    paraphrases; meaning search handles paraphrases but can drift. Running both and merging gets the strengths
+    of each. <em>This step is also AWM's known limit:</em> a fact that's neither lexically nor semantically
+    close to your query can fall outside the net — and nothing downstream can rescue what was never caught.
+    That's why <em>how a memory is written</em> matters so much.</div></li>
+
+  <li><h3>Score every candidate <span class="step-name">— composite scoring</span></h3>
+    <p>Each surviving candidate gets a blended score from several signals — not just "how similar."</p>
+    <table>
+      <tr><th>Signal</th><th>Plain meaning</th></tr>
+      <tr><td>Text / meaning match</td><td>How well it matches the words and the intent.</td></tr>
+      <tr><td>ACT-R activation</td><td>The §2 strength — used-often-and-recent beats stale.</td></tr>
+      <tr><td>Link strength</td><td>Is it well-connected to other relevant memories?</td></tr>
+      <tr><td>Confidence gate</td><td>Shaky, low-confidence memories are held back.</td></tr>
+      <tr><td>Proven-useful bonus</td><td>Memories you've confirmed helpful before get a nudge.</td></tr>
+    </table>
+    <div class="box why"><span class="lbl">Why gated, not just added</span> The relevance signal
+    <em>gates</em> the others: a memory that's strong and well-connected but <em>irrelevant</em> to this
+    question doesn't get to ride its popularity to the top. Relevance is the admission ticket; the rest are
+    tie-breakers.</div></li>
+
+  <li><h3>Follow the train of thought <span class="step-name">— association walk</span></h3>
+    <p>Starting from the best matches, AWM walks the <strong>links</strong> between memories a step or two
+    out, pulling in connected facts the raw search might have under-ranked — including the special case of
+    <strong>who said it / which entity it's about</strong>, so "what does Caroline think about the trip"
+    can favor Caroline's notes.</p>
+    <div class="box analogy"><span class="lbl">Analogy</span> One memory reminds you of another. Recalling
+    "Atlas deadline" naturally brings up "Atlas owner" and "Atlas codename" — the same way remembering a
+    friend's face brings up their name.</div></li>
+
+  <li><h3>The expert re-reads a generous shortlist <span class="step-name">— cross-encoder reranker</span></h3>
+    <p>A second, more careful model reads each finalist <em>together with your question</em> and re-scores
+    relevance directly. This is the precision step — the senior reviewer who actually reads the candidates.
+    Everything before it (the scoring in the last step) is really just a <strong>cheap, wide pre-filter</strong>
+    whose job is to hand this expert a <em>generous</em> shortlist — not to pick the winner itself.</p>
+    <div class="box why"><span class="lbl">Why this balance — and a real tuning win</span> The expert is
+    accurate but slow, so it reads a shortlist, not the whole store. We recently found the shortlist was cut
+    <em>too short</em> — the cheap pre-filter was quietly dropping good answers before the expert ever saw
+    them. <strong>Widening the shortlist let the expert rescue them: recall went up across the board with no
+    loss of precision</strong> — the expert simply isn't fooled by the extra also-rans, and it correctly stays
+    silent when nothing fits. The lesson: let the precise judge see plenty; let the cheap filter only keep out
+    obvious noise.</div></li>
+
+  <li><h3>The "I don't know" guard <span class="step-name">— abstention</span></h3>
+    <p>Before answering, AWM checks whether the three independent signals (keyword, meaning, expert) actually
+    <strong>agree</strong> this question is in-domain. If they don't, it returns <strong>nothing</strong>
+    rather than a shaky guess.</p>
+    <div class="box example"><span class="lbl">Example</span> Ask "When is Atlas due?" and the signals agree
+    → it answers August&nbsp;15. Ask "What's the capital of the moon?" → no real match, the signals disagree
+    → AWM stays silent instead of inventing an answer.</div>
+    <div class="box why"><span class="lbl">Why this is the whole point</span> For an agent, a confidently
+    wrong memory is worse than a blank — it derails the answer and the user trusts it. Abstention is what makes
+    AWM safe to wire directly into an agent's reasoning.</div></li>
+
+  <li><h3>Final answer, with a confidence number <span class="step-name">— confidence</span></h3>
+    <p>The top few memories are returned, each with a confidence score, so the agent knows how much to lean
+    on them.</p></li>
+</ol>
+
+<!-- ============================================================= -->
+<h2 id="sleep">5 · Sleep: how memories settle overnight</h2>
+
+<p>Like a brain, AWM periodically runs a <strong>consolidation cycle</strong> — a "sleep." Nothing is being
+asked of it; it's reorganizing what it already has so future recall is sharper and cheaper.</p>
+
+<div class="two">
+  <div class="card"><h3 style="margin-top:0">🧩 Replay &amp; cluster</h3><p style="margin:0;font-size:.95rem">Groups related memories together (all the "Atlas" facts), like tidying scattered notes into folders.</p></div>
+  <div class="card"><h3 style="margin-top:0">💪 Strengthen</h3><p style="margin:0;font-size:.95rem">Reinforces the links between memories that genuinely belong together.</p></div>
+  <div class="card"><h3 style="margin-top:0">🌉 Bridge</h3><p style="margin:0;font-size:.95rem">Builds shortcuts between clusters that keep co-occurring, so multi-step recall gets easier.</p></div>
+  <div class="card"><h3 style="margin-top:0">🍂 Decay &amp; forget</h3><p style="margin:0;font-size:.95rem">Lets unused, low-value memories fade and eventually archive — capacity for what matters.</p></div>
+  <div class="card"><h3 style="margin-top:0">🧹 Prune duplicates</h3><p style="margin:0;font-size:.95rem">Merges near-identical notes so one strong memory replaces several weak echoes.</p></div>
+  <div class="card"><h3 style="margin-top:0">⚖️ Rebalance</h3><p style="margin:0;font-size:.95rem">Keeps any single memory from becoming an over-connected "hub" that hijacks every search.</p></div>
+</div>
+
+<div class="box why"><span class="lbl">Why bother — the counter-intuitive part</span> You'd think more
+memories = better recall. The opposite is often true: clutter and duplicates <em>bury</em> the relevant fact
+under similar-looking noise. Consolidation has been measured to <strong>improve</strong> retrieval by removing
+that noise. Tidying the library makes the right book easier to find.</div>
+
+<div class="box analogy"><span class="lbl">A subtle one: memories fade their detail, not their address</span>
+When a memory goes long unused, AWM gradually compresses its <em>contents</em> while keeping the "cue" that
+finds it (its topic, links, and meaning-coordinate). Like an old memory where you recall <em>that</em>
+something happened and roughly what it was about, even if the fine detail has blurred — and recalling it
+freshens it right back up. This is why writing memories down and forgetting about them is safe.</div>
+
+<!-- ============================================================= -->
+<h2 id="decisions">6 · The big design decisions — and why</h2>
+
+<p>Every notable choice in AWM trades something away. Here's the reasoning behind the ones that define it.</p>
+
+<table>
+  <tr><th>Decision</th><th>The trade-off, and why it's worth it</th></tr>
+  <tr><td><strong>Precision over recall</strong></td><td>It will sometimes miss a loosely-related memory, in
+    exchange for almost never surfacing a wrong one. For an agent feeding its own reasoning, a clean small
+    answer beats a noisy complete one.</td></tr>
+  <tr><td><strong>Built on ACT-R, not ad-hoc scores</strong></td><td>30 years of cognitive science gives
+    principled, predictable forgetting and strengthening — rather than a pile of hand-tuned heuristics that
+    nobody can reason about.</td></tr>
+  <tr><td><strong>Abstention (the "I don't know")</strong></td><td>Costs a little recall (it occasionally
+    stays silent when it could have guessed right), buys enormous safety — the agent won't act on a
+    hallucinated memory.</td></tr>
+  <tr><td><strong>Wide net → expert rerank funnel</strong></td><td>The accurate model is slow, so it only
+    judges a shortlist. This keeps recall fast (tens of milliseconds, locally) while still getting expert-level
+    precision on the finalists.</td></tr>
+  <tr><td><strong>Local &amp; in-process</strong></td><td>Runs on your machine with no network round-trip and
+    no data leaving it. Fast and private, at the cost of using small (not giant) models — which the funnel
+    design makes good enough.</td></tr>
+  <tr><td><strong>Track changes (supersede), don't overwrite</strong></td><td>Slightly more storage and
+    bookkeeping, in exchange for never losing decision history — the thing a notes file silently destroys.</td></tr>
+  <tr><td><strong>Shared across agents</strong></td><td>One memory store can be read and written by many
+    agents/tools at once, so a fact learned by one is instantly recallable by another — a shared brain, not
+    siloed notebooks.</td></tr>
+</table>
+
+<div class="box analogy"><span class="lbl">The one-line philosophy</span> AWM is the <strong>precise, fast,
+durable memory layer</strong>; the <strong>judgment</strong> — what to chain together, what to ignore, when
+to act — is the agent's job. It hands the model the right small slice and gets out of the way.</div>
+
+<!-- ============================================================= -->
+<h2 id="realworld">7 · Different from the other modes — and where it wins in real life</h2>
+
+<p>There are really only a handful of ways to give an AI "memory" today. Here is how AWM compares
+on the capabilities that actually decide whether an agent feels reliable over weeks of use.</p>
+
+<table>
+  <tr>
+    <th>Capability</th>
+    <th>No memory</th>
+    <th>Stuff it all<br>in the prompt</th>
+    <th>Plain search<br>(RAG)</th>
+    <th>A notes file</th>
+    <th>AWM</th>
+  </tr>
+  <tr><td><strong>Survives across sessions</strong> (no re-explaining)</td><td>✗</td><td>✗ (resets)</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td><strong>Knows what's important</strong> vs noise</td><td>—</td><td>✗</td><td>✗</td><td>✗ (manual)</td><td>✓</td></tr>
+  <tr><td><strong>Links related facts</strong> &amp; follows them</td><td>✗</td><td>partial</td><td>✗</td><td>✗</td><td>✓</td></tr>
+  <tr><td><strong>Forgets stale noise</strong> on its own</td><td>—</td><td>✗</td><td>✗</td><td>✗ (grows forever)</td><td>✓</td></tr>
+  <tr><td><strong>Tracks changes</strong> (old → new + why)</td><td>✗</td><td>✗</td><td>✗ (overwrites)</td><td>✗ (silently stale)</td><td>✓</td></tr>
+  <tr><td><strong>Says "I don't know"</strong> instead of guessing</td><td>—</td><td>✗</td><td>✗</td><td>✗</td><td>✓</td></tr>
+  <tr><td><strong>Fast &amp; private</strong> (local, no re-scan)</td><td>✓</td><td>✗ (slow/costly)</td><td>partial</td><td>✗ (re-reads file)</td><td>✓</td></tr>
+  <tr><td><strong>Shared</strong> across many agents/tools live</td><td>✗</td><td>✗</td><td>partial</td><td>✗</td><td>✓</td></tr>
+</table>
+<p class="muted" style="font-size:.9rem">✓ = does it · partial = sort of / with effort · ✗ = no · — = not applicable</p>
+
+<p>Capabilities are abstract. Here's what each one feels like on an ordinary day:</p>
+
+<div class="card"><h3 style="margin-top:0">☀️ Monday, and every Monday after</h3>
+  <p style="margin:0"><strong>The advantage: continuity.</strong> You don't re-explain who you are, what
+  Atlas is, or who's on the team — every morning, forever. A no-memory tool forgets overnight; a
+  prompt-stuffing setup makes you (or the app) keep re-pasting the same context and pay for it every time.
+  AWM just <em>knows</em>, and pulls only the slice that's relevant to today's question.</p></div>
+
+<div class="card"><h3 style="margin-top:0">🔁 The decision that changed</h3>
+  <p style="margin:0"><strong>The advantage: it won't backslide.</strong> Atlas's deadline moved July&nbsp;1 →
+  August&nbsp;15. A notes file or plain-search system that overwrote the value can answer "what is it now"
+  but has <em>destroyed</em> the history — so nothing stops the agent from later re-suggesting July&nbsp;1, or
+  repeating a plan you already tried and rejected. AWM keeps "we changed this, and here's why," so the agent
+  reasons forward instead of in circles.</p></div>
+
+<div class="card"><h3 style="margin-top:0">🗂️ The crowded topic</h3>
+  <p style="margin:0"><strong>The advantage: precision under clutter.</strong> After months of use you have
+  fifty notes that mention "budget." Plain search dumps a dozen near-identical ones into the prompt and the
+  model gets distracted; the more you've stored, the <em>worse</em> it gets. AWM consolidates the duplicates,
+  ranks by genuine relevance, and returns the one or two that matter — or, if your question really isn't
+  covered, says nothing rather than padding the answer with lookalikes.</p></div>
+
+<div class="card"><h3 style="margin-top:0">🙊 The question it shouldn't answer</h3>
+  <p style="margin:0"><strong>The advantage: it doesn't make things up.</strong> You ask about something
+  that was never actually discussed. Every other mode will cheerfully hand the model the "closest" text it
+  can find, and the agent confidently states something false. AWM's three-signal agreement check makes it
+  <em>abstain</em> — the single most important property for trusting an agent to act on its own memory.</p></div>
+
+<div class="card"><h3 style="margin-top:0">💸 The cost line</h3>
+  <p style="margin:0"><strong>The advantage: leverage on a cheap model.</strong> Because AWM hands the model
+  the <em>right small slice</em> instead of a giant context dump, a small, inexpensive model can punch far
+  above its weight. The headline result behind this project: a small model <em>with</em> AWM matched a
+  frontier model's task accuracy at roughly <strong>1/40th the cost</strong> — and recall runs locally in
+  tens of milliseconds, with nothing leaving the machine.</p></div>
+
+<div class="card"><h3 style="margin-top:0">👥 The shared brain</h3>
+  <p style="margin:0"><strong>The advantage: learned once, known everywhere.</strong> A fact one agent learns
+  — or one you tell it in a chat window — is instantly recallable by another agent, another tool, even a
+  different model, because they share the same live store. Separate notebooks can't do this; a shared memory
+  turns a fleet of agents into a team that actually remembers together.</p></div>
+
+<div class="box why"><span class="lbl">The honest caveat (because trust matters)</span> AWM is tuned for
+<em>precision</em>, so on a benchmark that simply asks "did you retrieve every related snippet?" it scores
+modestly <em>on purpose</em> — surfacing everything loosely-related is exactly the noise it's built to avoid.
+Judge it instead on the thing that matters in practice: <strong>does the agent get the right answer, cheaply,
+without hallucinating, session after session.</strong> That's the axis where the differences above show up.</div>
+
+<!-- ============================================================= -->
+<h2 id="notjust">8 · "Why not just use a bigger model / more context / plain search?"</h2>
+
+<div class="card">
+  <h3 style="margin-top:0">"Just put everything in the prompt."</h3>
+  <p style="margin:0">Context windows are large but not infinite, and they reset every session — close the
+  chat and it's all gone. Stuffing thousands of facts in is also slow, expensive, and actually <em>lowers</em>
+  accuracy (the model gets distracted by irrelevant text). AWM keeps a durable store and injects only the
+  relevant slice.</p>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">"Just use plain similarity search (RAG)."</h3>
+  <p style="margin:0">That's the filing cabinet from §1. It has no sense of importance, no links between facts,
+  no forgetting, no change-tracking, and no "I don't know." It also re-reads files from scratch every time.
+  AWM adds exactly those missing judgments — and is one a system can <em>combine</em> with RAG, using AWM for
+  decisions/insights and RAG for bulk documents.</p>
+</div>
+<div class="card">
+  <h3 style="margin-top:0">"Just use a bigger, smarter model."</h3>
+  <p style="margin:0">A bigger model still has no memory between sessions, and following a long thread is the
+  model's job — finding the <em>right facts to think about</em> is memory's job. The headline result behind this
+  whole effort: a small, cheap model <em>with</em> AWM matched a frontier model's task accuracy at a tiny
+  fraction of the cost. Good memory is leverage on top of any model.</p>
+</div>
+
+<footer>
+  <p>AWM — Agent Working Memory · a local, precision-first cognitive memory built on ACT-R.
+  This walkthrough describes the live retrieval, write, and consolidation pipelines in plain language;
+  the underlying engine adds further refinements (query expansion, pseudo-relevance feedback, validation-gated
+  link learning, multi-channel out-of-domain detection) that follow the same principles shown here.</p>
+  <p>Generated for a first-time reader · diagrams and analogies are illustrative of the real pipeline stages.</p>
+</footer>
+
+</div>
+</body>
+</html>

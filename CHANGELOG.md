@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased (2026-06-17) — recall pipeline: wide rerank pool + top-K abstention gate
+
+**Staged for the next release (candidate 0.9.0). Pending end-to-end gauntlet confirm +
+maintainer publish go.** All changes are env-revertible defaults; no API changes.
+
+A pipeline-attribution study (new tracer, below) found the dominant recall failure was
+**not** candidate generation or the reranker — it was the stage between: ~50% of answerable
+LoCoMo queries (N=616) had gold that *cleared the candidate floor* (89%) but was squeezed out
+of the rerank pool by the decay-compressed composite **before the high-lift (+3.29) reranker
+saw it**. The composite was acting as a strong gatekeeper in front of the strong reranker —
+backwards. Fix: make the composite a **cheap wide pre-filter** and let the reranker discriminate
+on a wider pool, with abstention scoped to the returned top-K so precision is decoupled from pool
+width.
+
+- **Wider rerank pool** — `topN` breadth `3×`→`8×limit`; rerank pool `max(limit*2,15)`→
+  `max(limit*4,40)`. (`AWM_TOPN_MULT`, `AWM_RERANK_POOL`.)
+- **Top-K abstention gate** — the multi-channel OOD gate now computes its in-domain channel
+  maxes over the **post-rerank top-5** instead of the whole (now wide) pool, so a lone deep
+  distractor can't defeat abstention. (`AWM_ABSTAIN_GATE_K`, default 5; `0` = legacy.)
+- **Result (official LoCoMo, expansion-off):** overall **22.7%→25.7%** — multi-hop 13.4→17.3,
+  single-hop 18.6→23.5, open-domain 11.8→15.1, temporal 9.7→10.0 — **and** adversarial precision
+  **73.4→74.9** (strictly better on every axis). Recall latency ~35→77ms (sub-100ms, tunable).
+- **Regression:** none — eval 4-suite 0.980/1.000/0.966/0.932 (identical), 569/569 unit, sleep
+  78.6%, stress clean, edge 32/34 (≥ old-config 31/34), workday 81.8% (= old config). The
+  edge/workday gaps vs older READMEs are pre-existing cross-version drift, not this change
+  (confirmed by an old-config A/B).
+- **New opt-in retrieval flags (default-off):** `AWM_QUERY_BRIDGE` (query-named-entity boost —
+  attribution 36%→92% on a controlled eval; small adversarial cost), `AWM_AUTOTAG` (write-time
+  `entity:`/`cat:` meta-tags — wires the previously-dead `auto-tagger`), `AWM_BROAD_EDGES`
+  (entity-co-occurrence edges). `AWM_SPREAD`/`AWM_SPREAD_INJECT` (iterative spreading activation)
+  **parked** — regressed recall by displacing gold; kept for research.
+- **New tooling:** pipeline-attribution tracer — `scripts/trace-query.ts` (single-query contrast
+  trace), `scripts/trace-eval.ts` (batch stage-attribution stats), `tests/locomo-eval/trace.ts`
+  (full-scale LoCoMo attribution: where gold is lost, per stage/category). Judge retrieval changes
+  by *stage attribution*, not just final score — it distinguishes a masked improvement from a
+  genuinely-dead one.
+- See `docs/reference.md` → "Recall tuning (env overrides)" for all knobs.
+
 ## Unreleased (2026-06-14) — docs: scale rationale + AWM-Native Harness pattern
 
 Documentation only — no library code or version change. Folds into the next release.

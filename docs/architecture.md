@@ -73,7 +73,8 @@ The activation pipeline in `src/engine/activation.ts` runs these phases in order
 | 3 | Score fusion | Weighted merge of BM25 + semantic candidates |
 | 3.5 | Rocchio expansion | Pseudo-relevance feedback: expand query with top-3 terms, re-search |
 | 3.7 | Entity-Bridge boost | Boost candidates sharing entity tags with top text matches |
-| 4 | Cross-encoder rerank | ms-marco-MiniLM scores passage relevance (adaptive blend) |
+| 4 | Cross-encoder rerank | ms-marco-MiniLM scores passage relevance on a **wide candidate pool** (default `max(limit*4,40)`, `AWM_RERANK_POOL`); adaptive blend. The composite is a cheap pre-filter; the reranker does the discrimination. |
+| 4.5 | Abstention gate | Multi-channel OOD agreement, judged on the **post-rerank top-5** (`AWM_ABSTAIN_GATE_K`) so pool width (recall) is decoupled from precision; returns nothing if channels disagree |
 | 5 | Temporal decay | ACT-R power-law decay based on time since last access |
 | 6 | Graph walk | Beam search over Hebbian + temporal edges |
 | 7 | Confidence gating | Filter by confidence threshold, apply feedback bonus |

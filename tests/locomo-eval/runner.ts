@@ -111,7 +111,7 @@ const STOP_WORDS = new Set([
  * Extract a meaningful concept string from a conversation turn.
  * Prioritizes proper nouns, uncommon words, and topic-bearing terms.
  */
-function extractConcept(speaker: string, text: string): string {
+export function extractConcept(speaker: string, text: string): string {
   // Extract proper nouns (capitalized words not at sentence start)
   const properNouns: string[] = [];
   const sentences = text.split(/[.!?]\s+/);
@@ -228,7 +228,7 @@ interface ParsedTurn {
   sessionDate: string;
 }
 
-function parseConversation(conversation: Record<string, any>): ParsedTurn[] {
+export function parseConversation(conversation: Record<string, any>): ParsedTurn[] {
   const turns: ParsedTurn[] = [];
   const speakerA = conversation.speaker_a as string;
   const speakerB = conversation.speaker_b as string;
@@ -361,7 +361,8 @@ async function evaluateConversation(data: LocomoConversation, convIndex: number)
 
     const activateParams: any = {
       agentId, context: qa.question, limit: 10,
-      includeStaging: true, useReranker: true, useExpansion: true,
+      includeStaging: true, useReranker: true,
+      useExpansion: process.env.LOCOMO_NO_EXPANSION !== '1', // A/B the expansion stage (LOCOMO_NO_EXPANSION=1 → off)
     };
     if (isAdversarial) {
       activateParams.minScore = 0.3;

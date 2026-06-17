@@ -28,3 +28,4 @@ docker-compose.test.yml
 memory-pg*/
 memory-sq*/
 memory-pglite*/
+tests/locomo-eval/trace-log.jsonl

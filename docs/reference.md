@@ -530,6 +530,36 @@ All values from `DEFAULT_AGENT_CONFIG` in `src/types/agent.ts`:
 | `connectionThreshold` | `0.7` | Min activation score to form a new edge |
 | `connectionCheckIntervalMs` | `60,000` | Queue processing frequency |
 
+### Recall tuning (env overrides)
+
+Recall is a funnel: candidate generation → composite scoring → **rerank pool** → cross-encoder
+rerank → abstention gate. A 2026-06 pipeline-attribution study (LoCoMo, N=616 answerable) found
+~50% of answerable queries had gold that *cleared the candidate floor* but was squeezed out of the
+rerank pool by the (decay-compressed) composite before the high-lift reranker saw it. Widening the
+pool + scoping the abstention gate to the returned top-K lifted LoCoMo recall 22.7%→25.7% (every
+category up) **and** adversarial precision 73.4%→74.9%, with no 4-suite/edge/workday regression and
+recall ~35→77ms. These env vars expose the knobs; the **defaults are the validated values**.
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_RERANK_POOL` | `max(limit*4, 40)` | How many candidates reach the cross-encoder reranker. Wider = more retrievable gold reaches the reranker (recall ↑) at more (query,passage) pairs (latency ↑). |
+| `AWM_TOPN_MULT` | `8` | Candidate breadth carried into graph-walk + rerank (`limit × this`). |
+| `AWM_ABSTAIN_GATE_K` | `5` | Out-of-domain abstention judges the **post-rerank top-K** (not the whole wide pool), so widening for recall doesn't inflate the in-domain signal. `0` = legacy whole-pool behavior. |
+| `AWM_SIM_FLOOR_TARGETED` | `0.50` | Raw-cosine floor below which vector match scores 0 (targeted/precise queries). |
+| `AWM_SIM_FLOOR_EXPLORATORY` | `0.35` | Same, for exploratory-mode queries. |
+| `AWM_SIM_CANDIDATE_FLOOR_TARGETED` | `0.40` | Min cosine for a vector hit to *enter* the candidate pool (targeted). |
+| `AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY` | `0.30` | Same, exploratory. |
+| `AWM_RECALL_EXPAND` | `0` | `1` restores query-expansion-by-default (default is rerank-only). |
+
+#### Opt-in / experimental retrieval flags (default-off)
+
+| Env var | Meaning | Status |
+|---------|---------|--------|
+| `AWM_QUERY_BRIDGE` | Query-named entities boost in-pool candidates tagged with them (relevance-modulated). Lifts **attribution** ("what does X think") strongly; small adversarial cost. | Validated, opt-in |
+| `AWM_AUTOTAG` | Write-time `entity:`/`cat:` meta-tags (feeds the entity-bridge + BM25). | Neutral on recall; opt-in |
+| `AWM_BROAD_EDGES` | Form entity-co-occurrence edges (not just high-cosine) at write time. | Enabler; opt-in |
+| `AWM_SPREAD` / `AWM_SPREAD_INJECT` | Iterative PPR/SYNAPSE-style spreading activation over the graph. | **Parked** — regressed recall (displaces gold); kept for research |
+
 ---
 
 ## Salience Scoring Formula

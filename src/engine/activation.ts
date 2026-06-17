@@ -180,7 +180,12 @@ export class ActivationEngine {
     const limit = query.limit ?? 10;
     const minScore = query.minScore ?? 0.01; // Default: filter out zero-relevance results
     const useReranker = query.useReranker ?? true;
-    const useExpansion = query.useExpansion ?? true;
+    // Default OFF (rerank-only): query expansion ~doubles recall latency (it inflates the rerank
+    // candidate pool) for no measured accuracy gain — validated no-regression on LoCoMo
+    // (overall 22.8→22.7, adversarial 73.5→73.4), the 4-suite eval (identical), and the MWA
+    // gauntlet. Callers can still opt in per-query (useExpansion:true); AWM_DEFAULT_EXPANSION=1
+    // restores expansion-by-default globally as an escape hatch.
+    const useExpansion = query.useExpansion ?? process.env.AWM_DEFAULT_EXPANSION === '1';
     const abstentionThreshold = query.abstentionThreshold ?? 0;
     const requireConfidence = query.requireConfidence ?? 0;
     const adaptive = resolveAdaptiveParams(query);
@@ -333,6 +338,54 @@ export class ActivationEngine {
       candidates = candidates.filter(e => e.memoryType === query.memoryType);
     }
 
+    // ── ENTITY-AWARE CANDIDATE FETCH (2026-06, fixes the buried 2-hop / sparse-cue gap) ──
+    // A query like "codename for my main project" strongly recalls "main project = Atlas" but the
+    // ANSWER ("Atlas codename = Magpie") is a different-vocabulary attribute fact that falls out
+    // of the candidate pool — and rerank can't rescue what isn't in the pool. AWM doesn't form
+    // entity-co-occurrence edges, so graph-walk can't bridge it either. Fix: from the strongest
+    // seeds, pull the proper-noun ENTITIES that aren't already in the query, run ONE cheap local
+    // BM25 pass on them, and add the hits to the candidate pool. RECALL-ONLY: these only become
+    // candidates the reranker can consider — the final top-K stays rerank-gated, so this never
+    // surfaces facts you don't need (preserves AWM's precision-first design). Fast (one BM25
+    // call), local (no network/LLM), capped. DEFAULT-OFF (opt-in AWM_ENTITY_FETCH=1): verified
+    // recall-only pool-injection is INSUFFICIENT at scale — the buried fact enters the pool but
+    // still ranks below distractors against the vocab-mismatched original query, and a ranking
+    // boost would trade precision (against AWM's precision-first design). The design-aligned fix
+    // is HARNESS-side multi-hop decomposition (LLM chains sequential single-hop recalls). Kept
+    // opt-in for future spreading-activation experiments.
+    if (process.env.AWM_ENTITY_FETCH === '1' && candidates.length > 0) {
+      const ENT_SEEDS = Number(process.env.AWM_ENTITY_FETCH_SEEDS ?? 5);
+      const ENT_CAP = Number(process.env.AWM_ENTITY_FETCH_CAP ?? 30);
+      const STOPCAPS = new Set(['my', 'the', 'a', 'an', 'i', 'we', 'you', 'he', 'she', 'it', 'they', 'this', 'that', 'what', 'when', 'where', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 'do', 'does', 'project', 'account', 'codename', 'name', 'team', 'main', 'internal']);
+      const seeds = candidates
+        .map(e => ({ e, s: Math.max(bm25ScoreMap.get(e.id) ?? 0, rawCosineSims.get(e.id) ?? 0) }))
+        .sort((a, b) => b.s - a.s).slice(0, ENT_SEEDS);
+      const ents = new Set<string>();
+      for (const { e } of seeds) {
+        for (const match of `${e.concept} ${e.content}`.matchAll(/\b[A-Z][A-Za-z]{2,}\b/g)) {
+          const w = match[0]; const lw = w.toLowerCase();
+          if (!queryTokens.has(lw) && !STOPCAPS.has(lw)) ents.add(w);
+        }
+      }
+      if (ents.size > 0) {
+        try {
+          const entHits = await this.store.searchBM25WithRankMultiAgent(agentIds, Array.from(ents).slice(0, 8).join(' '), ENT_CAP);
+          let added = 0;
+          for (const h of entHits) {
+            if (added >= ENT_CAP) break;
+            const n = h.engram;
+            if (candidateMap.has(n.id)) continue;
+            if (n.stage !== 'active' || (n as any).retracted || n.supersededBy) continue;
+            if (query.memoryType && n.memoryType !== query.memoryType) continue;
+            candidateMap.set(n.id, n);
+            bm25ScoreMap.set(n.id, Math.max(bm25ScoreMap.get(n.id) ?? 0, h.bm25Score)); // scoring sees it
+            added++;
+          }
+          if (added > 0) candidates = Array.from(candidateMap.values());
+        } catch { /* best-effort: entity fetch never breaks recall */ }
+      }
+    }
+
     if (candidates.length === 0) return [];
 
     // Phase 3b: Score each candidate with per-phase breakdown
@@ -378,7 +431,9 @@ export class ActivationEngine {
       let vectorMatch = 0;
       const rawSim = rawCosineSims.get(engram.id);
       if (rawSim !== undefined && rawSim > 0) {
-        const SIM_FLOOR = adaptive.zScoreGate > 0.5 ? 0.50 : 0.35;
+        const SIM_FLOOR = adaptive.zScoreGate > 0.5
+        ? Number(process.env.AWM_SIM_FLOOR_TARGETED ?? 0.50)
+        : Number(process.env.AWM_SIM_FLOOR_EXPLORATORY ?? 0.35);
         if (rawSim > SIM_FLOOR) {
           // Map [SIM_FLOOR, 1.0] → [0, 1] linearly with cap at 1.0.
           vectorMatch = Math.min(1, (rawSim - SIM_FLOOR) / (0.95 - SIM_FLOOR));
@@ -479,7 +534,9 @@ export class ActivationEngine {
             let vm = 0;
             const rs = rawCosineSims.get(engram.id) ?? (queryEmbedding && engram.embedding ? cosineSimilarity(queryEmbedding, engram.embedding) : 0);
             if (rs > 0) {
-              const SIM_FLOOR = adaptive.zScoreGate > 0.5 ? 0.50 : 0.35;
+              const SIM_FLOOR = adaptive.zScoreGate > 0.5
+        ? Number(process.env.AWM_SIM_FLOOR_TARGETED ?? 0.50)
+        : Number(process.env.AWM_SIM_FLOOR_EXPLORATORY ?? 0.35);
               if (rs > SIM_FLOOR) vm = Math.min(1, (rs - SIM_FLOOR) / (0.95 - SIM_FLOOR));
             }
             const tm = km > 0 && vm > 0
@@ -532,6 +589,10 @@ export class ActivationEngine {
             // Skip non-entity tags: turn IDs, session tags, dialogue IDs, generic speaker labels
             if (/^t\d+$/.test(t) || t.startsWith('session-') || t.startsWith('dia_') || t.length < 3) continue;
             if (/^speaker\d*$/.test(t)) continue; // Generic speaker labels are too broad
+            // Auto-tagger `cat:` category tags are too broad to bridge on (they'd link
+            // every "cat:work" memory laterally); they stay for BM25 recall only. The
+            // precise `entity:` proper-noun tags are kept as bridges.
+            if (t.startsWith('cat:')) continue;
             entityTags.add(t);
           }
         }
@@ -595,11 +656,74 @@ export class ActivationEngine {
       }
     }
 
+    // Phase 3.75: Query-conditioned entity bridge (default-OFF, AWM_QUERY_BRIDGE=1).
+    //
+    // The anchor-based bridge above (Phase 3.7) is query-BLIND: it bridges from the
+    // top text-match result's tags and a document-frequency filter DELETES common
+    // tags (e.g. a speaker present in >30% of turns). That is exactly backwards for
+    // attribution / entity-named queries: if the user asks "what does Caroline think
+    // about the trip" or "who said the trip moved to Saturday", the speaker/entity the
+    // query NAMES is the single most valuable bridge — its corpus frequency is
+    // irrelevant. This phase extracts proper-noun entities from the QUERY and boosts
+    // candidates whose tags match them, regardless of frequency, gated by topical
+    // relevance (textMatch floor) so it surfaces "Caroline's turns ABOUT the trip"
+    // rather than every Caroline turn. Boost folds into composite → survives rerank.
+    // Recall-only re-ranking of in-pool candidates (no injection) → low precision risk.
+    if (process.env.AWM_QUERY_BRIDGE === '1') {
+      const QSTOP = new Set(['what', 'who', 'when', 'where', 'why', 'how', 'which', 'whose', 'whom',
+        'the', 'this', 'that', 'these', 'those', 'and', 'but', 'for', 'did', 'does', 'is', 'are',
+        'was', 'were', 'how', 'tell', 'about', 'they', 'them']);
+      const qEnts = new Set<string>();
+      for (const m of query.context.matchAll(/\b[A-Z][a-zA-Z]{2,}\b/g)) {
+        const w = m[0].toLowerCase();
+        if (!QSTOP.has(w)) qEnts.add(w);
+      }
+      if (qEnts.size > 0) {
+        const QC_WEIGHT = Number(process.env.AWM_QUERY_BRIDGE_WEIGHT ?? 0.4);
+        const QC_CAP = Number(process.env.AWM_QUERY_BRIDGE_CAP ?? 0.4);
+        const QC_FLOOR = Number(process.env.AWM_QUERY_BRIDGE_FLOOR ?? 0.1);
+        for (const item of scored) {
+          if (item.phaseScores.textMatch < QC_FLOOR) continue; // only re-rank topically-relevant candidates
+          let matches = 0;
+          for (const tag of item.engram.tags) {
+            const t = tag.toLowerCase();
+            const val = t.startsWith('entity:') ? t.slice(7) : t;
+            // match whole-tag or any word of a multi-word entity ("marcus lee" ← "Marcus")
+            if (qEnts.has(val) || val.split(/\s+/).some(w => qEnts.has(w))) { matches++; }
+          }
+          if (matches > 0) {
+            // Relevance-modulated: scale by the candidate's topical relevance so
+            // "named-entity AND on-topic" wins big while "named-entity but off-topic
+            // chatter" (a common speaker tag on an irrelevant turn) gets almost
+            // nothing. Without this, a broad speaker tag floods the top with the
+            // person's unrelated turns (verified 2026-06-16 _query-bridge-verify).
+            const boost = Math.min(matches * QC_WEIGHT * item.phaseScores.textMatch, QC_CAP);
+            item.score += boost;
+            item.phaseScores.composite += boost;
+            item.phaseScores.graphBoost += boost;
+          }
+        }
+      }
+    }
+
     // Phase 4+5: Graph walk — boost engrams connected to high-scoring ones
     // Only walk from engrams that had text relevance (composite > 0 pre-walk)
     const sorted = scored.sort((a, b) => b.score - a.score);
-    const topN = sorted.slice(0, limit * 3);
-    await this.graphWalk(topN, 2, adaptive.hopPenalty, adaptive.beamWidth);
+    // Candidate breadth carried into graph-walk + rerank. Default 8×limit (was 3×).
+    // WHY 8× (2026-06-16): the pipeline-attribution trace showed ~50% of answerable LoCoMo
+    // queries had gold that CLEARED the floor (89%) but was squeezed out HERE by the
+    // decay-compressed composite before the (high-lift, +3.29) reranker saw it — the
+    // dominant loss. Widening this + the rerank pool (below) lifted official LoCoMo
+    // 22.7→25.1 (every recall category up), 4-suite unchanged, recall 35→77ms; small
+    // adversarial cost 73.4→71.0 (a fixed step, recoverable on the abstention gate).
+    // Tunable via AWM_TOPN_MULT.
+    const topNMult = Number(process.env.AWM_TOPN_MULT ?? 8);
+    const topN = sorted.slice(0, limit * topNMult);
+    if (process.env.AWM_SPREAD === '1' && query.spread !== false) {
+      await this.spreadActivation(topN);
+    } else {
+      await this.graphWalk(topN, 2, adaptive.hopPenalty, adaptive.beamWidth);
+    }
 
     // Phase 6: Initial filter and sort for re-ranking pool
     const pool = topN
@@ -608,8 +732,15 @@ export class ActivationEngine {
 
     // Phase 7: Cross-encoder re-ranking — scores (query, passage) pairs directly
     // Widens the pool to find relevant results that keyword matching missed.
-    // 0.7.13: max(limit*2, 15) — halved the cross-encoder cost (was max(limit*3, 30))
-    const rerankPool = pool.slice(0, Math.max(limit * 2, 15));
+    // How many candidates reach the cross-encoder. Default max(limit*4, 40) — widened
+    // from max(limit*2, 15) on 2026-06-16. WHY: the reranker rarely loses gold (0.5%) and
+    // lifts it +3.29, but the weak composite was only passing it ~35% of retrievable gold;
+    // feeding it more recovered the dominant lost@pool/scoring bucket. Validated knee on
+    // recall × precision × latency (pool 40 ≈ 25.1% LoCoMo / 71.0% adv / 77ms; pool 60 adds
+    // only +0.6pp for +33ms). The composite is now a CHEAP WIDE PRE-FILTER, not the ranker —
+    // the reranker does discrimination on a wide pool. Tunable via AWM_RERANK_POOL.
+    const rerankPoolSize = Number(process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 40));
+    const rerankPool = pool.slice(0, rerankPoolSize);
 
     // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
     // strong absolute score AND a meaningful gap to the runner-up, the cross-encoder
@@ -677,18 +808,37 @@ export class ActivationEngine {
     // Phase 8: Multi-channel OOD detection + agreement gate
     // Requires at least 2 of 3 retrieval channels to agree the query is in-domain.
     if (rerankPool.length >= 3) {
-      const topBM25 = Math.max(...rerankPool.map(r => bm25ScoreMap.get(r.engram.id) ?? 0));
+      // Abstention gate scope (2026-06-16): the in-domain channel maxes used to be taken
+      // over the ENTIRE rerankPool. Once that pool was widened for recall (pool 40), a lone
+      // high-scoring distractor inflated the maxes and defeated abstention on adversarial
+      // queries (adversarial 73.4→71.0). Fix: judge in-domain on the post-rerank TOP-K —
+      // the items we'd actually return — so pool width (recall) is decoupled from the
+      // abstention decision (precision). AWM_ABSTAIN_GATE_K controls K (0 = legacy
+      // whole-pool behavior). Answerable queries are unaffected: the gold is in the top-K
+      // and supplies the in-domain signal; only borderline distractors deep in a wide pool
+      // stop counting.
+      // Default 5 (2026-06-16): judge in-domain on the post-rerank top-5. With the widened
+      // rerank pool, basing it on the whole pool (legacy AWM_ABSTAIN_GATE_K=0) let a lone
+      // deep distractor defeat abstention; top-5 restored adversarial 71.0→74.9 (ABOVE the
+      // pre-widening 73.4) at ZERO recall cost (answerable categories unchanged) — the
+      // precision half of the two-dial pool-widening win.
+      const gateK = Number(process.env.AWM_ABSTAIN_GATE_K ?? 5);
+      const gatePool = gateK > 0
+        ? [...rerankPool].sort((a, b) => b.score - a.score).slice(0, gateK)
+        : rerankPool;
+
+      const topBM25 = Math.max(...gatePool.map(r => bm25ScoreMap.get(r.engram.id) ?? 0));
       const topVector = queryEmbedding
-        ? Math.max(...rerankPool.map(r => r.phaseScores.vectorMatch))
+        ? Math.max(...gatePool.map(r => r.phaseScores.vectorMatch))
         : 0;
-      const topReranker = Math.max(...rerankPool.map(r => r.phaseScores.rerankerScore));
+      const topReranker = Math.max(...gatePool.map(r => r.phaseScores.rerankerScore));
 
       const bm25Ok = topBM25 > 0.3;
       const vectorOk = topVector > 0.05;
       const rerankerOk = topReranker > 0.25;
       const channelsAgreeing = (bm25Ok ? 1 : 0) + (vectorOk ? 1 : 0) + (rerankerOk ? 1 : 0);
 
-      const rerankerScores = rerankPool
+      const rerankerScores = gatePool
         .map(r => r.phaseScores.rerankerScore)
         .sort((a, b) => b - a);
       const margin = rerankerScores.length >= 2
@@ -1002,6 +1152,173 @@ export class ActivationEngine {
       if (capped > 0.001) {
         item.score += capped;
         item.phaseScores.graphBoost += capped;
+      }
+    }
+  }
+
+  /**
+   * R2 — bounded iterative spreading activation (PPR / SYNAPSE-style).
+   *
+   * Default-OFF (`AWM_SPREAD=1`). The principled, in-AWM successor to the
+   * fixed depth-2 beam `graphWalk` and the MWA harness bridge: it runs T
+   * iterations of **fan-normalized** spreading with **lateral inhibition** and
+   * a **restart** term (Personalized PageRank) over the association graph —
+   * richest when R1's `AWM_BROAD_EDGES` entity edges are present.
+   *
+   * Two effects, both precision-guarded:
+   *  - **Boost** existing pool candidates by the *graph evidence* they receive
+   *    (convergent multi-path activation, not a single spurious hop).
+   *  - **Inject** (`AWM_SPREAD_INJECT=1`) strongly-reached *out-of-pool*
+   *    engrams as recall-only candidates so the reranker can see true
+   *    multi-hop bridges that BM25/vector missed. Their composite carries the
+   *    graph-activation signal (blended with rerank), which is what lets a
+   *    vocab-mismatched bridge surface where the prior `AWM_ENTITY_FETCH`
+   *    recall-only injection (rerank-only) could not.
+   *
+   * Precision is preserved because spreading is **seeded by the initial
+   * retrieval**: adversarial "is this even in memory?" queries have weak/empty
+   * seeds, so nothing meaningful propagates and abstention is unaffected.
+   * Fan-normalization stops hubs from flooding; lateral inhibition keeps only
+   * the top-M activated nodes per step; a node budget bounds cost; injected
+   * candidates stay rerank-gated and the pool-level OOD agreement gate is
+   * unaffected (seeds still supply the BM25/vector channels).
+   */
+  private async spreadActivation(
+    topN: { engram: Engram; score: number; phaseScores: PhaseScores; associations: Association[] }[],
+  ): Promise<void> {
+    const T = Number(process.env.AWM_SPREAD_ITERS ?? 3);
+    const delta = Number(process.env.AWM_SPREAD_DAMPING ?? 0.5);
+    const NODE_BUDGET = Number(process.env.AWM_SPREAD_BUDGET ?? 64);
+    const BOOST_SCALE = Number(process.env.AWM_SPREAD_BOOST ?? 0.4);
+    const PER_NODE_CAP = 0.15;
+    const MAX_TOTAL_BOOST = 0.25;
+    const inject = process.env.AWM_SPREAD_INJECT === '1';
+    const INJECT_THRESHOLD = Number(process.env.AWM_SPREAD_INJECT_MIN ?? 0.08);
+    const INJECT_BUDGET = Number(process.env.AWM_SPREAD_INJECT_CAP ?? 8);
+    const INJECT_SCALE = Number(process.env.AWM_SPREAD_INJECT_SCALE ?? 1.0);
+    const EPS = 0.01;
+    // 'invalidation' edges link superseded→replacement; excluded so spreading
+    // never pulls stale facts back in.
+    const allowed = new Set(['connection', 'hebbian', 'temporal', 'causal', 'bridge']);
+
+    const scoreMap = new Map(topN.map(s => [s.engram.id, s]));
+
+    // Seed activation from query-relevant candidates (textMatch gate), normalized to [0,1].
+    const seed = new Map<string, number>();
+    let maxSeed = 0;
+    for (const item of topN) {
+      if (item.phaseScores.textMatch >= 0.15) {
+        const v = Math.max(0, item.score);
+        seed.set(item.engram.id, v);
+        if (v > maxSeed) maxSeed = v;
+      }
+    }
+    if (seed.size === 0 || maxSeed <= 0) return;
+    for (const [k, v] of seed) seed.set(k, v / maxSeed);
+
+    const edgeCache = new Map<string, Association[]>();
+    const getEdges = async (id: string): Promise<Association[]> => {
+      let e = edgeCache.get(id);
+      if (!e) {
+        e = (await this.store.getAssociationsFor(id)).filter(a => allowed.has(a.type));
+        edgeCache.set(id, e);
+      }
+      return e;
+    };
+
+    let act = new Map(seed);
+    // Cumulative inflow received from the graph (excludes a node's own seed) —
+    // this is the multi-hop "evidence" signal used for boost + injection.
+    const graphActivation = new Map<string, number>();
+
+    for (let t = 0; t < T; t++) {
+      const inflow = new Map<string, number>();
+      for (const [u, au] of act) {
+        if (au <= EPS) continue;
+        const edges = await getEdges(u);
+        if (edges.length === 0) continue;
+        let fan = 0;
+        for (const e of edges) fan += Math.max(0, e.weight);
+        if (fan <= 0) continue;
+        for (const e of edges) {
+          const v = e.fromEngramId === u ? e.toEngramId : e.fromEngramId;
+          const share = Math.max(0, e.weight) / fan; // fan-effect normalization
+          inflow.set(v, (inflow.get(v) ?? 0) + au * share);
+        }
+      }
+      for (const [v, f] of inflow) graphActivation.set(v, (graphActivation.get(v) ?? 0) + f);
+
+      // Restart (PPR): blend propagated inflow with the original seed vector.
+      const newAct = new Map<string, number>();
+      const keys = new Set<string>([...act.keys(), ...inflow.keys()]);
+      for (const v of keys) {
+        const val = (1 - delta) * (seed.get(v) ?? 0) + delta * (inflow.get(v) ?? 0);
+        if (val > EPS) newAct.set(v, val);
+      }
+      // Lateral inhibition: keep only the top-M activated nodes (competition + cost bound).
+      if (newAct.size > NODE_BUDGET) {
+        act = new Map([...newAct.entries()].sort((a, b) => b[1] - a[1]).slice(0, NODE_BUDGET));
+      } else {
+        act = newAct;
+      }
+    }
+
+    // Normalize graph evidence to [0,1] so the boost magnitude is scale-stable
+    // (raw `ga` accumulates across iterations + bidirectional edges, so its
+    // absolute scale varies with graph density). The top-reached node maps to 1.0.
+    let maxGa = 0;
+    for (const ga of graphActivation.values()) if (ga > maxGa) maxGa = ga;
+    const normGa = (id: string): number => (maxGa > 0 ? (graphActivation.get(id) ?? 0) / maxGa : 0);
+
+    if (process.env.AWM_SPREAD_DEBUG === '1') {
+      const top = [...graphActivation.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+      process.stderr.write(`[spread] seeds=${seed.size} reached=${graphActivation.size} inPool=${[...graphActivation.keys()].filter(id => scoreMap.has(id)).length} maxGa=${maxGa.toFixed(3)}\n`);
+      for (const [id, ga] of top) {
+        const e = scoreMap.get(id)?.engram;
+        process.stderr.write(`[spread]   ga=${ga.toFixed(3)} norm=${normGa(id).toFixed(2)} pool=${scoreMap.has(id)} ${e ? e.concept.slice(0, 40) : '(out-of-pool ' + id.slice(0, 8) + ')'}\n`);
+      }
+    }
+
+    // Boost existing candidates by the (normalized) graph evidence they received.
+    // Folded into `composite` (NOT just `score`) so it survives the rerank blend
+    // — the reranker recomputes score from composite, so a score-only boost would
+    // be discarded. This makes spreading a first-class multi-hop ranking signal.
+    for (const [id] of graphActivation) {
+      const item = scoreMap.get(id);
+      if (!item) continue;
+      const boost = Math.min(normGa(id) * BOOST_SCALE, PER_NODE_CAP);
+      const capped = Math.min(boost, MAX_TOTAL_BOOST - item.phaseScores.graphBoost);
+      if (capped > 0.001) {
+        item.phaseScores.composite += capped;
+        item.score += capped;
+        item.phaseScores.graphBoost += capped;
+      }
+    }
+
+    // Inject strongly-reached out-of-pool engrams as recall-only candidates.
+    if (inject) {
+      const reached = [...graphActivation.entries()]
+        .filter(([id]) => !scoreMap.has(id) && normGa(id) >= INJECT_THRESHOLD)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, INJECT_BUDGET);
+      for (const [id] of reached) {
+        const engram = await this.store.getEngram(id);
+        if (!engram || engram.stage !== 'active') continue;
+        if ((engram as unknown as { retracted?: boolean }).retracted || engram.supersededBy) continue;
+        const composite = Math.min(0.6, normGa(id) * INJECT_SCALE);
+        const phaseScores: PhaseScores = {
+          textMatch: 0,
+          vectorMatch: 0,
+          decayScore: 0,
+          hebbianBoost: 0,
+          graphBoost: composite,
+          confidenceGate: engram.confidence,
+          composite,
+          rerankerScore: 0,
+        };
+        const injected = { engram, score: composite, phaseScores, associations: [] as Association[] };
+        topN.push(injected);
+        scoreMap.set(id, injected);
       }
     }
   }

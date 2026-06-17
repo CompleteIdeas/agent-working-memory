@@ -47,6 +47,7 @@ import {
   type NoveltyResult,
 } from './salience.js';
 import { embed } from './embeddings.js';
+import { extractMetaTags } from './auto-tagger.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 
 /** Confidence floor below which a matched engram is treated as "decaying out". */
@@ -443,6 +444,20 @@ async function createNewEngram(
 
   const tags = [...(input.tags ?? [])];
   if (isLowSalience && !tags.includes('low-salience')) tags.push('low-salience');
+
+  // Auto-tag meta-tags (default-OFF, AWM_AUTOTAG=1). extractMetaTags emits
+  // `entity:<ProperNoun>` and `cat:<category>` tags from concept+content. These
+  // are indexed in FTS5 (→ BM25 recall boost on entity/category terms) AND feed
+  // the Phase 3.7 entity-bridge boost, which is otherwise STARVED: that boost
+  // explicitly skips session/speaker/turn tags, so without `entity:` tags it has
+  // nothing to bridge on (inert on LoCoMo and underfed in real use). Gated +
+  // additive so existing callers' tags are untouched when off.
+  if (process.env.AWM_AUTOTAG === '1') {
+    const existing = new Set(tags.map(t => t.toLowerCase()));
+    for (const mt of extractMetaTags(input.concept, input.content)) {
+      if (!existing.has(mt.toLowerCase())) { tags.push(mt); existing.add(mt.toLowerCase()); }
+    }
+  }
 
   const engram = await store.createEngram({
     agentId: input.agentId,

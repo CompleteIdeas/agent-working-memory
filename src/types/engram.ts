@@ -252,6 +252,7 @@ export interface ActivationQuery {
    */
   requireConfidence?: number;
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
+  spread?: boolean;            // R2: when AWM_SPREAD=1, set false to skip iterative spreading activation (connection-discovery uses this so edge-building doesn't recurse)
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default
   workspace?: string;          // Search across all agents in this workspace (hive mode). If unset, agent-scoped only.

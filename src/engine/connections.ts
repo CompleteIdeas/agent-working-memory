@@ -28,6 +28,50 @@ import type { Engram } from '../types/index.js';
 
 const COLD_START_THRESHOLD = Number(process.env.AWM_CONNECTION_COLD_START_THRESHOLD ?? 10);
 
+/**
+ * R1 — broaden edge FORMATION beyond high-cosine semantic links.
+ *
+ * The semantic `activate` path only links engrams at ≥0.7 cosine, so two facts
+ * that share an entity but are lexically/semantically distant ("my main project
+ * is Atlas" vs "Atlas's codename is Magpie") never get an edge — starving the
+ * graph walk / spreading activation of exactly the bridges multi-hop needs.
+ *
+ * When enabled, after the semantic pass we also form *entity co-occurrence*
+ * edges: extract proper-noun entities from the engram, find other engrams that
+ * literally mention the same entity (BM25 + substring re-check for precision),
+ * and link them at a LOWER weight than semantic edges. Recall-only by design —
+ * the edges feed candidate generation; the reranker still makes the final cut.
+ *
+ * Default-OFF (gate per docs/awm-improvement-register.md). Set
+ * `AWM_BROAD_EDGES=1` to enable.
+ */
+const BROAD_EDGES = process.env.AWM_BROAD_EDGES === '1';
+/** Max entity-co-occurrence edges formed per engram (on top of semantic). */
+const MAX_ENTITY_EDGES = Number(process.env.AWM_BROAD_EDGES_MAX ?? 6);
+/** Proper-noun entity extraction — mirrors auto-tagger's `entity:` pattern. */
+const ENTITY_RE = /\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]+)*)\b/g;
+/** Common capitalized words that are not useful entity bridges. */
+const ENTITY_STOPWORDS = new Set([
+  'The', 'This', 'That', 'These', 'Those', 'There', 'Then', 'They', 'Them',
+  'And', 'But', 'For', 'With', 'From', 'Into', 'When', 'What', 'Where', 'Which',
+  'While', 'Who', 'Why', 'How', 'Also', 'After', 'Before', 'Because', 'Should',
+  'Would', 'Could', 'Will', 'Was', 'Were', 'Has', 'Have', 'Had', 'Not', 'Now',
+  'New', 'One', 'Two', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+  'Saturday', 'Sunday', 'January', 'February', 'March', 'April', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December',
+]);
+
+function extractEntities(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(ENTITY_RE)) {
+    const name = m[1].trim();
+    if (name.length < 3 || name.length > 40) continue;
+    if (ENTITY_STOPWORDS.has(name)) continue;
+    out.add(name);
+  }
+  return [...out];
+}
+
 export class ConnectionEngine {
   private store: EngramStore;
   private engine: ActivationEngine;
@@ -130,6 +174,7 @@ export class ConnectionEngine {
       limit: 5,
       minScore: this.threshold,
       internal: true,
+      spread: false, // edge discovery must not recurse through R2 spreading
     });
 
     // Filter out self and already-connected engrams
@@ -157,6 +202,55 @@ export class ConnectionEngine {
         result.score,
         'connection'
       );
+      existingIds.add(result.engram.id);
+    }
+
+    if (BROAD_EDGES) {
+      await this.formEntityEdges(engram, existingIds);
+    }
+  }
+
+  /**
+   * R1 — form entity co-occurrence edges (default-off, `AWM_BROAD_EDGES=1`).
+   *
+   * Extract proper-noun entities from the engram, find other engrams that
+   * literally mention the same entity, and link them at a lower weight than
+   * the semantic edges above. The BM25 candidate is re-checked with a
+   * case-insensitive substring match so a coincidental capitalized word
+   * doesn't create a spurious edge (precision guard); edge weight scales with
+   * the number of shared entities but stays below the 0.7 semantic floor so
+   * semantic links still dominate the graph walk.
+   */
+  private async formEntityEdges(engram: Engram, existingIds: Set<string>): Promise<void> {
+    const entities = extractEntities(`${engram.concept} ${engram.content}`);
+    if (entities.length === 0) return;
+
+    // Gather candidates that match any of the engram's entities (BM25 OR).
+    const query = entities.slice(0, 6).join(' ');
+    const candidates = await this.store.searchBM25(engram.agentId, query, 20);
+    const lowerEntities = entities.map(e => e.toLowerCase());
+
+    // Rank candidates by how many of our entities they literally contain.
+    const scored: Array<{ id: string; engram: Engram; shared: number }> = [];
+    for (const cand of candidates) {
+      if (cand.id === engram.id) continue;
+      if (existingIds.has(cand.id)) continue;
+      if (cand.stage !== 'active') continue;
+      const candText = `${cand.concept} ${cand.content}`.toLowerCase();
+      let shared = 0;
+      for (const ent of lowerEntities) {
+        if (candText.includes(ent)) shared++;
+      }
+      if (shared > 0) scored.push({ id: cand.id, engram: cand, shared });
+    }
+
+    scored.sort((a, b) => b.shared - a.shared);
+    for (const { id, shared } of scored.slice(0, MAX_ENTITY_EDGES)) {
+      // Below the 0.7 semantic floor; more shared entities → stronger edge.
+      const weight = Math.min(0.6, 0.4 + 0.1 * shared);
+      await this.store.upsertAssociation(engram.id, id, weight, 'connection');
+      await this.store.upsertAssociation(id, engram.id, weight, 'connection');
+      existingIds.add(id);
     }
   }
 }
