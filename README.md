@@ -512,6 +512,49 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.9.0 *(staged — pending publish)*
+
+A recall-quality default + new tuning knobs + a builder/researcher doc set.
+Every change is an **env-revertible default** with no API changes — existing
+callers keep working unmodified. Validated: official LoCoMo **22.7% → 25.7%**
+(every category up) **and** adversarial precision **73.4 → 74.9** (strictly
+better on each axis); recall latency ~35 → ~77ms (sub-100ms, tunable); zero
+regression across the standard suite (eval 4-suite identical, 569/569 unit,
+edge 32/34, workday = old config).
+
+- **Wide rerank pool + top-K abstention (the win).** A pipeline-attribution
+  study (new tracer, `tests/locomo-eval/trace.ts`) found the dominant recall
+  loss wasn't candidate generation *or* the reranker — it was the stage between:
+  ~50% of answerable queries had gold that *cleared the candidate floor* but was
+  squeezed out of the rerank pool by the decay-compressed composite **before the
+  high-lift (+3.29) reranker saw it**. Fix: the composite becomes a cheap **wide
+  pre-filter** (`AWM_TOPN_MULT=8`, was 3×), the reranker discriminates on a wider
+  pool (`AWM_RERANK_POOL=max(limit*4,40)`, was `max(limit*2,15)`), and the
+  out-of-domain abstention gate judges only the **post-rerank top-K**
+  (`AWM_ABSTAIN_GATE_K=5`) so widening for recall doesn't inflate the in-domain
+  signal. Reverses the v0.7.13 "pool reduction" change. See
+  [reference.md → Recall tuning](docs/reference.md#recall-tuning-env-overrides).
+
+- **Tunable similarity floors.** `AWM_SIM_FLOOR_TARGETED` / `_EXPLORATORY`
+  (defaults 0.50 / 0.35, unchanged) and the candidate-entry floors are now env
+  overrides for retuning against a different embedder.
+
+- **Opt-in / experimental flags (default-off).** `AWM_QUERY_BRIDGE`
+  (query-named-entity boost — lifts attribution "what does X think" 36% → 92% on
+  a controlled eval; small adversarial cost, so opt-in), `AWM_AUTOTAG`
+  (write-time `entity:`/`cat:` meta-tags), `AWM_BROAD_EDGES`. `AWM_SPREAD`
+  (in-engine spreading activation) is **parked** — it regressed recall by
+  displacing gold; multi-hop is solved harness-side instead (see the playbook).
+
+- **New docs for builders & researchers.** [`docs/awm-for-agents.html`](docs/awm-for-agents.html)
+  — the agent playbook (why AWM exists, the PRIME→ACT→VERIFY→LEARN harness, the
+  full agent feature surface, how multi-hop is solved, and the honest gauntlet
+  findings). [`docs/pipeline-walkthrough.html`](docs/pipeline-walkthrough.html)
+  redesigned for devs/researchers. Both are published on GitHub Pages. A new
+  **Storage Backends + Postgres roadmap** section in
+  [architecture.md](docs/architecture.md) documents SQLite (default) vs PGlite
+  and the path to a networked-Postgres backend (v1 target).
+
 ## What's New in v0.8.5
 
 A research-grounded hardening pass on recall quality, retraction propagation,
