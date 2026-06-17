@@ -125,55 +125,83 @@ Two structural advantages a file or a flat vector store cannot match:
 
 ## Benchmarks
 
-### Eval Harness
+Two kinds of tests, both reproducible (see [Testing & Evaluation](#testing--evaluation)).
+First, **recall quality** — does the pipeline return the right memory? Second,
+**behavior under stress** — does it stay honest, filter noise, and hold up as the
+store grows and ages? Numbers below were re-run on the 0.9-staged line (2026-06-17).
 
-| Suite | Score (v0.8.5) | Score (v0.6.0 baseline) | Threshold | What it tests |
-|-------|---|---|-----------|---------------|
-| Retrieval | **Recall@5 = 0.980** | 0.800 | >= 0.80 | 200 facts, 50 queries — BM25 + vector + reranker pipeline precision |
-| Associative | **success@10 = 1.000** | 1.000 | >= 0.70 | 20 multi-hop causal chains — graph walk finds non-obvious connections |
-| Redundancy | **dedup F1 = 0.966** | 0.966 | >= 0.80 | 50 clusters × 4 paraphrases — consolidation removes duplicates correctly |
-| Temporal | **Spearman = 0.932** | 0.932 | >= 0.75 | 25 facts with controlled age/access — ACT-R decay ranking accuracy |
+### 1 · Recall quality (eval harness)
 
-> **v0.8.5 recall fix:** A regression intermediate-step had Recall@5 drop to
-> 0.46. Root cause: the entity-bridge boost (Phase 3.7) inverted top-1 in
-> dense same-concept corpora — it rewarded clones that shared tags with
-> the anchor while excluding the anchor itself. Fix: proportional gating
-> so the boost scales with the textMatch gap between candidate and anchor.
-> Clones near the anchor get near-zero boost; genuine lateral candidates
-> (low textMatch, shared entities) still get the full boost.
-> Result: Recall@5 0.46 → 0.980 with all 4 eval suites green.
+Each suite has a pass threshold; all four pass.
 
-### Full Test Suite
+| Suite | Score | Threshold | What it measures |
+|-------|-------|-----------|------------------|
+| Retrieval | **Recall@5 = 0.980** | ≥ 0.80 | 200 facts, 50 queries — does the BM25 + vector + reranker pipeline surface the right fact in the top 5? |
+| Associative | **success@10 = 1.000** | ≥ 0.70 | 20 multi-hop causal chains — does the graph walk find non-obvious connections? |
+| Redundancy | **dedup F1 = 0.966** | ≥ 0.80 | 50 clusters × 4 paraphrases — does consolidation merge duplicates without losing the original? |
+| Temporal | **Spearman = 0.932** | ≥ 0.75 | 25 facts with controlled age/access — does ACT-R decay rank recent/used memories ahead of stale ones? |
 
-| Command | Score | What it tests |
-|---------|-------|---------------|
-| `npm run eval` | **4/4 suites pass** | Retrieval, associative, redundancy, temporal benchmarks with ablation support |
-| `npm run test:run` | **77/77 tests** | Unit tests: salience, decay, hebbian, supersession, coordination |
-| `npm run test:mcp` | **5/5 pass** | MCP protocol: write, recall, feedback, retract, stats |
-| `npm run test:self` | **94.1% EXCELLENT** | Pipeline component checks across all cognitive subsystems |
-| `npm run test:edge` | **All pass** | 9 failure modes: narcissistic interference, identity collision, contradiction trapping, bridge overshoot, noise forgetting |
-| `npm run test:stress` | **96.2% (50/52)** | 500 memories, 100 sleep cycles, catastrophic forgetting, adversarial spam, recovery |
-| `npm run test:workday` | **93.3% EXCELLENT** | 43 memories across 4 projects, cross-cutting queries, noise filtering |
-| `npm run test:ab` | **AWM 20/22 vs Baseline 18/22** | AWM outperforms keyword baseline on architecture + testing topics |
-| `npm run test:sleep` | **71.4%** | 60 memories, 4 topic clusters, consolidation impact across 3 cycles |
-| `npm run test:tokens` | **56.3% savings, 2.3x efficiency** | Memory-guided context vs full history, keyword accuracy 72.5% |
-| `scripts/measure-claude-vs-awm.ts` | **9.8× lower aggregate cost vs file_retrieval** | Real Claude Code session audit: AWM recall vs Read/Grep/Glob workflows |
-| `npm run test:pilot` | **14/15 pass** | Production-like queries with noise rejection (5/5 noise rejected) |
-| `npm run test:locomo` | **28.2%** | Industry-standard LoCoMo conversational memory benchmark (1,986 QA pairs) |
+### 2 · Behavior under stress & adversarial conditions
 
-### Consolidation Health (v0.6.0)
+These are graded suites (not pass/fail). The headline risk they guard against is a
+memory system that confidently returns the *wrong* thing — so the weakest area is
+called out, not hidden.
 
-| Metric | Value |
-|--------|-------|
-| Topic clusters formed | **10** per consolidation cycle |
-| Cross-topic bridges | **20** in first cycle |
-| Edges strengthened | **135** per cycle (access-weighted) |
-| Graph size at scale | **3,000-4,500 edges** (500 memories) |
-| Recall after 100 cycles | **90%** stable |
-| Catastrophic forgetting survival | **5/5** (100%) |
-| Post-dedup retrieval | **0.950** (consolidation improves recall) |
+| Suite | Score | What it measures |
+|-------|-------|------------------|
+| `test:run` (unit) | **569 / 569** | Salience, decay, Hebbian, supersession, coordination, scheduler |
+| `test:self` | **93.9% (EXCELLENT)** | Every cognitive subsystem end-to-end; weakest = exact-topic retrieval |
+| `test:workday` | **85.4% (GOOD)** | A realistic mixed day — 43 memories across 4 projects, cross-cutting queries; weakest = noise filtering |
+| `test:edge` | **~32 / 34** | Named failure modes: identity collision, contradiction trapping, bridge overshoot, false generalization |
+| `test:ab` | **AWM 10 / 11 vs keyword baseline 8 / 11** | Where the cognitive pipeline beats plain keyword search |
+| `test:pilot` | **14 / 15** (5/5 noise rejected) | Production-like queries that must reject planted distractors |
+| `test:locomo` | **25.7%** | LoCoMo conversational-memory benchmark (a *chatbot* benchmark — see note) |
+| `test:mcp` | **5 / 5** | MCP protocol smoke: write, recall, feedback, retract, stats |
 
-All evals are reproducible. See [Testing & Evaluation](#testing--evaluation).
+> **On LoCoMo (25.7%):** LoCoMo measures *chatbot* recall ("what did we say about X"
+> across long conversations). It is not the workload AWM is tuned for (productivity /
+> engineering, staying on topic, rejecting noise), and ~66% of AWM's misses there are
+> retriever-coverage (the gold turn isn't in the top-10), not extraction. The 0.9 recall
+> work lifted it from 22.7% with every category up. We report it for comparability, not
+> as the headline.
+
+### 3 · The sleep cycle (consolidation)
+
+The **sleep cycle** is AWM's offline maintenance pass (the term is borrowed from how
+human memory consolidates during sleep). On each cycle it **clusters** related
+memories, builds **cross-topic bridges**, **strengthens** co-used edges, **decays**
+unused ones, and **prunes** duplicates. You run it so the association graph stays
+*healthy and navigable* as the store grows — without it, edges accumulate into noise.
+
+> **Reading the score:** `test:sleep` = **78.6%** is a *consolidation-quality* score —
+> it asks "after the maintenance pass, is recall at least as good and is the structure
+> better?" **It is not recall falling to 78.6%.** In this fixture recall is held flat
+> across three cycles (78.6% before = 78.6% after) while the graph reorganizes. The
+> scaling picture is the real proof:
+
+| Under a 100-cycle stress run | Observed |
+|---|---|
+| Recall across cycles | **holds 90–100%** (no catastrophic forgetting) |
+| Cross-topic recall | **~80%**, stable |
+| Graph self-pruning | edges grow to ~2,300 then prune back to ~1,500 as unused links decay |
+| Clusters / bridges per cycle | ~10 clusters, bridges formed early then settle |
+
+So consolidation *protects* recall over the long run — the per-cycle score measures the
+health of the maintenance, and the stress run shows recall doesn't degrade.
+
+### 4 · Token economics — honest
+
+The win that matters is **structural**: at the scale AWM targets you can't carry the
+project at all (see [Why it matters at scale](#why-it-matters-at-scale)). On real coding
+sessions, scoped recall costs **9.8× less in aggregate** than the Read/Grep/Glob
+rediscovery it replaces (`scripts/measure-claude-vs-awm.ts`).
+
+The small per-turn micro-benchmark (`test:tokens`) is more nuanced and we don't hide it:
+current **recall accuracy is 97.5%** (up from ~72.5% before v0.8.5's content-merge fix),
+but raw **token savings are currently −7.9%** — a regression we have not yet root-caused
+(it reproduces independent of the recall change). v0.8.5 deliberately traded raw savings
+for that accuracy jump (less-but-correct beats more-but-lossy); the negative number on the
+tiny corpus is a known open item, not the at-scale story.
 
 ---
 
