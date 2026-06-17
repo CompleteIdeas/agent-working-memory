@@ -138,6 +138,46 @@ Key tables:
 > file is the source of truth — table names and column orders here may
 > drift slightly between minor releases, but `sqlite.ts` is always current.
 
+## Storage Backends
+
+AWM ships two functionally-equivalent backends behind one `IEngramStore`
+interface. The cognitive engines (write, recall, consolidation, retraction,
+eviction) are identical on both — the difference is operational.
+
+| | SQLite (**default**) | PGlite |
+|---|---|---|
+| Engine | `better-sqlite3` + FTS5 (BM25) | embedded Postgres-in-WASM + pgvector (ivfflat) |
+| Vector search | JS cosine over an in-memory slim cache | native `ivfflat` index |
+| Multi-process safe | ✓ (WAL mode — concurrent Claude sessions OK) | ✗ single-process WASM (2nd process aborts) |
+| Hive coordination plugin | ✓ | ✗ (auto-disabled with a warning) |
+| Hot backups / `/memory/export` | ✓ | ✗ (use OS-level dir snapshots; export returns 501) |
+| Native bindings at install | yes (prebuilds) | no (pure-JS) |
+| Path to a networked Postgres server | ✗ | ✓ (same SQL surface) |
+
+**Backend selection** (precedence): `AWM_STORE_BACKEND` env (`sqlite`/`pglite`)
+→ auto-detect (`memory-pglite/` dir → PGlite, `memory.db` file → SQLite) →
+fresh-install fallback to SQLite. A mismatch between the configured backend and
+what's on disk prints a warning; it never silently switches.
+
+> **MCP / multi-session setups should use SQLite** — it's the multi-process-safe
+> backend. PGlite is best for the single long-running HTTP-server path that owns
+> the database. Full capability/parity detail (the 7 SQLite-only code paths and
+> their graceful degradation) is in
+> [`pglite-feature-parity.md`](pglite-feature-parity.md).
+
+### Roadmap
+
+- **0.8.x** — SQLite default; PGlite opt-in; auto-detect + warnings.
+- **0.9.x** — recall-quality + agent-feature improvements (this line); PGlite
+  the default for *new* installs (target); existing `memory.db` stays on SQLite.
+- **1.0** — coordination plugin + `/memory/export` ported to async PGlite;
+  SQLite still supported.
+- **Post-1.0 (v1 target)** — a **networked Postgres backend for scale**: same
+  engine code as PGlite, swap the connection layer (`AWM_STORE_URL`). Remaining
+  work before it ships: cognitive engines made fully `await`-correct at every
+  call site, an async adapter for the SQLite path, ported export/coordination,
+  and a server-DB backup/integrity story. A deliberate milestone, not a flag flip.
+
 ## ML Models
 
 All models run locally via ONNX Runtime (no API calls):
