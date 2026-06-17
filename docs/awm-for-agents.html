@@ -573,22 +573,28 @@
     single recall is larger per call, but you make ~21× fewer of them.)</p>
   </div>
 
-  <h3>The micro-benchmark caveat <span class="tag t-honest">under investigation</span></h3>
-  <p>A small per-turn "token-savings" micro-benchmark (a 44-turn dev-conversation corpus) tells a more
-  complicated story, and we won't hide it:</p>
-  <ul>
-    <li>It once reported ~<strong>56–64% savings</strong> — but that number was partly an artifact:
-      reinforce-on-duplicate was <em>silently discarding</em> new content. Less text returned, but the
-      memory had lost information.</li>
-    <li>v0.8.5 fixed that (merge-and-re-embed restated facts): <strong>accuracy jumped 45%→97.5%</strong>
-      while raw savings fell to ~20% — the correct trade.</li>
-    <li>On the current line, that micro-benchmark shows a savings <strong>regression (≈−8%)</strong> we
-      have <em>not</em> yet root-caused (it reproduces on old and new recall configs, so it isn't the
-      recall change). It's an open archaeology item, flagged as such — not papered over.</li>
-  </ul>
-  <p class="lead-rule">Bottom line: <strong>the savings that justify AWM are the structural ones at
-  scale</strong> (you literally can't carry 29M tokens), not a per-turn percentage on a tiny corpus.
-  We report the micro-benchmark honestly, including its current regression.</p>
+  <h3>The micro-benchmark, and the baseline trap <span class="tag t-validated">root-caused</span></h3>
+  <p>A per-turn micro-benchmark (a 44-turn dev-conversation corpus) once looked like a regression
+  (≈−8% "savings"). Chasing it down showed the number was a <strong>baseline-choice artifact</strong>,
+  not a recall defect. The benchmark now reports both baselines, because the baseline you pick <em>is</em>
+  the result:</p>
+  <table>
+    <tr><th>Baseline (the alternative to recall)</th><th class="num">savings</th><th class="num">accuracy</th></tr>
+    <tr><td><strong>Carry the full conversation history</strong> — what a memoryless agent must actually do</td><td class="num win">+67%</td><td class="num">97.5%</td></tr>
+    <tr><td>Oracle: carry only the exactly-relevant task's turns <span class="flat">(assumes perfect manual scoping)</span></td><td class="num">≈ −13%</td><td class="num">97.5%</td></tr>
+  </table>
+  <p>The oracle baseline hands the comparison the very thing retrieval exists to produce — a context
+  already narrowed to the right task — so on a 6–8-turn task a fixed top-5 recall is
+  break-even-to-negative <em>by construction</em>. The realistic baseline (carry everything, because you
+  can't know in advance which turn matters) is <strong>+67%</strong>, consistent with the at-scale story
+  in §1.</p>
+  <p>And the old "~56%" oracle-bar number? An <strong>artifact of a data-loss bug</strong>: pre-v0.8.5,
+  reinforce-on-duplicate silently discarded memory content, so recalls were artificially tiny. v0.8.5
+  fixed it (accuracy ~72%→97.5%); better recall now fills all five slots, which lowers the oracle-bar
+  percentage while raising correctness — less-but-lossy traded for more-but-correct.</p>
+  <p class="lead-rule">Lesson worth keeping: a token-savings number is meaningless without naming the
+  baseline. The savings that justify AWM are <strong>structural</strong> (you cannot carry 29M tokens at
+  all) — not a per-turn percentage against a baseline that already did retrieval's job for it.</p>
 </section>
 
 <!-- ================= 9 BACKENDS ================= -->

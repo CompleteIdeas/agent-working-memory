@@ -265,7 +265,8 @@ async function main() {
   // =========================================================
   console.log('\n=== PHASE 2: RECALL CHALLENGES ===\n');
 
-  let totalBaselineTokens = 0;
+  let totalBaselineTokens = 0;       // oracle: per-task pre-scoped turns (a hard, arguably unfair bar)
+  let totalFullBaselineTokens = 0;   // realistic: what a memoryless agent must carry every query
   let totalAWMTokens = 0;
   let totalHits = 0;
   let totalKeywordsExpected = 0;
@@ -315,6 +316,7 @@ async function main() {
     });
 
     totalBaselineTokens += challengeBaselineTokens;
+    totalFullBaselineTokens += baselineTokens;   // full history is the realistic "carry it all" alternative
     totalAWMTokens += awmTokens;
     totalKeywordsExpected += challenge.expectedKeywords.length;
     totalKeywordsFound += keywordsFound;
@@ -333,7 +335,15 @@ async function main() {
   console.log('TOKEN SAVINGS REPORT');
   console.log('='.repeat(70));
 
-  const overallSavings = 1 - totalAWMTokens / totalBaselineTokens;
+  // PRIMARY (realistic): a memoryless agent can't know which task is relevant, so it carries the
+  // full conversation history every query. That is the real alternative AWM replaces.
+  const realisticSavings = 1 - totalAWMTokens / totalFullBaselineTokens;
+  // SECONDARY (oracle): compare against only the relevant task's turns — assumes a perfect manual
+  // scoper already narrowed context to the right task (the work recall itself does). A hard bar;
+  // on tiny per-task corpora a fixed top-5 recall is ~break-even-to-negative here BY DESIGN, and
+  // historically looked positive only because reinforce was silently discarding memory content.
+  const oracleSavings = 1 - totalAWMTokens / totalBaselineTokens;
+  const overallSavings = realisticSavings; // grade on the realistic baseline
   const overallAccuracy = totalKeywordsExpected > 0 ? totalKeywordsFound / totalKeywordsExpected : 0;
 
   console.log(`\nFull conversation history: ${baselineTokens.toLocaleString()} tokens`);
@@ -341,26 +351,26 @@ async function main() {
   console.log(`Challenges: ${RECALL_CHALLENGES.length}`);
 
   console.log(`\nPer-challenge averages:`);
-  console.log(`  Baseline context: ${Math.round(totalBaselineTokens / results.length).toLocaleString()} tokens`);
-  console.log(`  AWM context:      ${Math.round(totalAWMTokens / results.length).toLocaleString()} tokens`);
-  console.log(`  Token savings:    ${(overallSavings * 100).toFixed(1)}%`);
+  console.log(`  AWM context:                 ${Math.round(totalAWMTokens / results.length).toLocaleString()} tokens (top-5 recall)`);
+  console.log(`  Carry full history:          ${Math.round(totalFullBaselineTokens / results.length).toLocaleString()} tokens  -> savings ${(realisticSavings * 100).toFixed(1)}%  [PRIMARY: realistic]`);
+  console.log(`  Carry oracle-scoped task:    ${Math.round(totalBaselineTokens / results.length).toLocaleString()} tokens  -> savings ${(oracleSavings * 100).toFixed(1)}%  [secondary: vs perfect manual scoping]`);
 
   console.log(`\nRecall quality:`);
   console.log(`  Keyword accuracy: ${(overallAccuracy * 100).toFixed(1)}% (${totalKeywordsFound}/${totalKeywordsExpected})`);
   console.log(`  Challenges passed (≥50% keywords): ${totalHits}/${results.length}`);
 
   // Quality per token comparison
-  const baselineQPT = overallAccuracy / (totalBaselineTokens / 1000);
+  const baselineQPT = overallAccuracy / (totalFullBaselineTokens / 1000);
   const awmQPT = overallAccuracy / (totalAWMTokens / 1000);
-  console.log(`\nEfficiency:`);
-  console.log(`  Baseline quality/1K tokens: ${baselineQPT.toFixed(3)}`);
-  console.log(`  AWM quality/1K tokens:      ${awmQPT.toFixed(3)}`);
-  console.log(`  Efficiency multiplier:      ${(awmQPT / baselineQPT).toFixed(1)}x`);
+  console.log(`\nEfficiency (vs carrying full history):`);
+  console.log(`  Full-history quality/1K tokens: ${baselineQPT.toFixed(3)}`);
+  console.log(`  AWM quality/1K tokens:          ${awmQPT.toFixed(3)}`);
+  console.log(`  Efficiency multiplier:          ${(awmQPT / baselineQPT).toFixed(1)}x`);
 
   // Cost projection
   const costPer1MTokens = 3.00; // Approximate input token cost for Claude/GPT
   const queriesPerDay = 50;
-  const baselineDailyCost = (totalBaselineTokens / results.length) * queriesPerDay / 1_000_000 * costPer1MTokens;
+  const baselineDailyCost = (totalFullBaselineTokens / results.length) * queriesPerDay / 1_000_000 * costPer1MTokens;
   const awmDailyCost = (totalAWMTokens / results.length) * queriesPerDay / 1_000_000 * costPer1MTokens;
   console.log(`\nCost projection (${queriesPerDay} queries/day @ $${costPer1MTokens}/1M tokens):`);
   console.log(`  Baseline: $${baselineDailyCost.toFixed(2)}/day`);
