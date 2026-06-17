@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased (2026-06-17) — recall pipeline: wide rerank pool + top-K abstention gate
+## 0.9.0 (2026-06-17) — recall pipeline: wide rerank pool + top-K abstention gate
 
-**Staged for the next release (candidate 0.9.0). Pending end-to-end gauntlet confirm +
-maintainer publish go.** All changes are env-revertible defaults; no API changes.
+All changes are env-revertible defaults; no API changes. This release also lands the
+builder/researcher documentation set (see "Documentation & tooling" below).
 
 A pipeline-attribution study (new tracer, below) found the dominant recall failure was
 **not** candidate generation or the reranker — it was the stage between: ~50% of answerable
@@ -38,21 +38,28 @@ width.
   genuinely-dead one.
 - See `docs/reference.md` → "Recall tuning (env overrides)" for all knobs.
 
-## Unreleased (2026-06-14) — docs: scale rationale + AWM-Native Harness pattern
+### Documentation & tooling (also in 0.9.0)
 
-Documentation only — no library code or version change. Folds into the next release.
-
-- **README "Why it matters at scale"**: real-world token-economics from a 20,000+
-  memory work agent over a ~29M-token codebase + docs project — ~2,000× fewer
-  tokens per query than carrying the store (and ~5× fewer than opening the single
-  best-matching doc file), supersede-tracked staleness, dead-weight-costs-nothing,
-  plus an honest trade-offs section (no win on small one-shot tasks; recall latency;
-  write-quality-bound accuracy; recall-first-then-verify).
-- **New `docs/patterns/awm-native-harness.md`**: the AWM-Native Agent Harness
-  pattern — treat AWM as an always-on cognitive *substrate* (PRIME → ACT → VERIFY →
-  LEARN) so a cheap model performs at a high level and gets cheaper + better over
-  time. Measured on a real domain workload: gpt-5.4-mini + AWM scored 14/15 vs a
-  frontier model's 7/15 at ~1/40th the cost. README links it from the intro.
+- **New `docs/awm-for-agents.html`** — agent playbook for builders/researchers: why AWM
+  exists (the ~29M-token context-window wall), the PRIME→ACT→VERIFY→LEARN harness, the
+  full agent feature surface (workspace, session IDs, bearer-token hooks, classes,
+  supersede/feedback), harness-side multi-hop, and the honest gauntlet findings.
+  Published on GitHub Pages with a redesigned `docs/pipeline-walkthrough.html` and a new
+  `docs/index.html` landing page (`.nojekyll` so Pages serves the static HTML).
+- **`docs/architecture.md`** — new Storage Backends section + roadmap (SQLite default →
+  PGlite → networked Postgres for scale).
+- **`test:tokens` baseline fix** — reports savings against the realistic "carry full
+  history" baseline (**+67% @ 97.5% accuracy**) plus a labelled oracle baseline; resolves
+  a reported "regression" that was a baseline-choice artifact (the old high number was
+  inflated by the pre-0.8.5 reinforce data-loss bug).
+- **README "Why it matters at scale"** — real-world token-economics from a 20,000+
+  memory work agent over a ~29M-token codebase + docs project: ~2,000× fewer tokens per
+  query than carrying the store, supersede-tracked staleness, dead-weight-costs-nothing,
+  plus an honest trade-offs section. Benchmarks section refreshed + deduped.
+- **`docs/patterns/awm-native-harness.md`** — the AWM-Native Agent Harness pattern:
+  treat AWM as an always-on cognitive *substrate* (PRIME → ACT → VERIFY → LEARN) so a
+  cheap model performs at a high level and gets cheaper + better over time. Measured:
+  gpt-5.4-mini + AWM 14/15 vs a frontier model's 7/15 at ~1/40th the cost.
 
 ## 0.8.8 (2026-06-12) — Hermes Agent integration recipe (docs)
 

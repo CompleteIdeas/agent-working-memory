@@ -550,7 +550,7 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.9.0 *(staged — pending publish)*
+## What's New in v0.9.0
 
 A recall-quality default + new tuning knobs + a builder/researcher doc set.
 Every change is an **env-revertible default** with no API changes — existing
