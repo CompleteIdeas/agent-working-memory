@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWM for Agents — Harness Playbook, Features &amp; Benchmark Findings</title>
+<style>
+  :root{
+    --ink:#15181d; --ink2:#3a414b; --mut:#6b7480; --line:#e3e7ec; --line2:#eef1f4;
+    --bg:#fbfcfd; --panel:#ffffff; --code:#f4f6f8;
+    --indigo:#3b4ee0; --indigo-d:#2336c7; --teal:#0e8f86; --amber:#b5731a;
+    --green:#1f9254; --red:#c0392b; --wash:#f0f3fe;
+    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:880px;margin:0 auto;padding:0 24px}
+  header.hero{border-bottom:1px solid var(--line);background:
+    linear-gradient(180deg,#fff,#fbfcfd)}
+  .hero .wrap{padding:54px 24px 40px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--indigo);font-weight:600}
+  h1{font-size:34px;line-height:1.18;letter-spacing:-.02em;margin:14px 0 12px;font-weight:700}
+  .lede{font-size:18px;color:var(--ink2);max-width:62ch;margin:0}
+  .meta{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--mut)}
+  .meta b{color:var(--ink2);font-weight:600}
+  nav.toc{margin-top:28px;display:flex;flex-wrap:wrap;gap:8px}
+  nav.toc a{font-family:var(--mono);font-size:12px;text-decoration:none;
+    color:var(--ink2);background:#fff;border:1px solid var(--line);
+    border-radius:6px;padding:5px 10px}
+  nav.toc a:hover{border-color:var(--indigo);color:var(--indigo)}
+  main .wrap{padding:8px 24px 40px}
+  section{padding:34px 0;border-bottom:1px solid var(--line2)}
+  h2{font-size:24px;letter-spacing:-.01em;margin:6px 0 6px;font-weight:700}
+  h2 .num{font-family:var(--mono);font-size:14px;color:var(--indigo);
+    margin-right:10px;font-weight:600}
+  h3{font-size:17px;margin:26px 0 6px;font-weight:650;color:var(--ink)}
+  p{margin:12px 0}
+  .sub{color:var(--mut);font-size:15px;margin-top:0}
+  a{color:var(--indigo-d)}
+  code{font-family:var(--mono);font-size:.86em;background:var(--code);
+    padding:1.5px 5px;border-radius:4px;color:#1d2330}
+  strong{font-weight:650}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;margin:18px 0}
+  .panel.wash{background:var(--wash);border-color:#d6ddfb}
+  .panel.warn{background:#fdf6ec;border-color:#f0dcb8}
+  .panel.good{background:#eef8f1;border-color:#cfe9d8}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;
+    letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:5px;
+    vertical-align:middle}
+  .t-validated{background:#e7f3ec;color:var(--green)}
+  .t-honest{background:#fdf0e6;color:var(--amber)}
+  .t-pending{background:#eef1f4;color:var(--mut)}
+  .t-design{background:#eef0fe;color:var(--indigo-d)}
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:14px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line)}
+  th{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--mut);font-weight:600;border-bottom:1.5px solid var(--line)}
+  td.num,th.num{text-align:right;font-family:var(--mono)}
+  tr:last-child td{border-bottom:none}
+  .win{color:var(--green);font-weight:650}
+  .loss{color:var(--red);font-weight:650}
+  .flat{color:var(--mut)}
+  ul,ol{margin:12px 0;padding-left:22px}
+  li{margin:7px 0}
+  .fig{margin:22px 0;text-align:center}
+  .fig svg{max-width:100%;height:auto}
+  .figcap{font-size:12.5px;color:var(--mut);margin-top:8px;font-family:var(--mono)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:680px){.grid2{grid-template-columns:1fr}h1{font-size:27px}}
+  .lead-rule{border-left:3px solid var(--indigo);padding-left:14px;color:var(--ink2)}
+  .pill{font-family:var(--mono);font-size:12px;color:var(--ink2)}
+  footer{padding:34px 0 60px;color:var(--mut);font-size:13px}
+  .mono-h{font-family:var(--mono);font-size:12px;color:var(--mut);letter-spacing:.05em;
+    text-transform:uppercase;margin:0 0 4px}
+  dl{margin:14px 0}
+  dt{font-weight:650;margin-top:14px}
+  dd{margin:2px 0 0;color:var(--ink2)}
+  .callout-n{font-family:var(--mono);font-size:13px;color:var(--teal);font-weight:600}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">AgentWorkingMemory · for builders &amp; researchers</div>
+    <h1>AWM for Agents: a harness playbook and what the benchmarks actually showed</h1>
+    <p class="lede">AWM is a fast, precise <em>recall substrate</em> for long-running agents — not a
+      multi-hop reasoner and not a sponge that remembers everything. This page explains why it was
+      built, how to wire it into an agent so the agent learns by working, the full agent-facing
+      feature surface, and the honest results from a benchmark suite we had to build because the
+      established memory benchmarks don't test what agents need.</p>
+    <div class="meta">
+      <b>Audience:</b> developers &amp; researchers evaluating AWM as agent memory &nbsp;·&nbsp;
+      <b>Scope:</b> design rationale, integration pattern, measured findings &nbsp;·&nbsp;
+      <b>Companion:</b> <a href="pipeline-walkthrough.html">pipeline-walkthrough.html</a> (how recall works internally)
+    </div>
+    <nav class="toc">
+      <a href="#origin">1 · Why AWM exists</a>
+      <a href="#harness">2 · The harness pattern</a>
+      <a href="#features">3 · Agent feature surface</a>
+      <a href="#multihop">4 · Multi-hop</a>
+      <a href="#gauntlet">5 · The gauntlet</a>
+      <a href="#multiagent">6 · Multi-agent</a>
+      <a href="#context">7 · Context-window tests</a>
+      <a href="#tokens">8 · Token economics</a>
+      <a href="#backends">9 · Backends &amp; roadmap</a>
+      <a href="#notwin">10 · When not to use it</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<div class="wrap">
+
+<!-- ================= 1 ORIGIN ================= -->
+<section id="origin">
+  <h2><span class="num">01</span>Why AWM exists: the context-window wall</h2>
+  <p class="sub">What the system was originally designed to do, and the problem that forced it.</p>
+
+  <p>AWM was born out of a single, concrete pain on a <strong>large, long-lived software platform
+  project</strong>. The codebase, its documentation, the decision history, and the accumulated
+  work transcripts together come to roughly <strong>29 million tokens</strong>. That number fits in
+  <em>no</em> context window, at any tier, on any model. You cannot keep that project's context
+  "alive" by carrying it — and the usual escape hatch, summarizing to fit, silently drops the one
+  fact you need next.</p>
+
+  <p>So the design goal was never "remember everything." It was the opposite: <strong>given a single
+  question, retrieve only the relevant slice</strong> — a few hundred tokens — independent of how
+  large the project grows. One work agent on that project has accumulated <strong>20,000+ memories</strong>
+  across the multi-million-token corpus, and still answers a given question from a tiny scoped recall.</p>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 232" role="img" aria-label="Funnel: 29M-token project vs ~630-token scoped recall">
+      <text x="0" y="18" font-family="var(--mono)" font-size="12" fill="#6b7480">TO ANSWER ONE QUESTION, CARRY…</text>
+      <!-- bars -->
+      <g font-family="-apple-system,Segoe UI,sans-serif" font-size="13" fill="#15181d">
+        <rect x="0" y="34" width="250" height="30" rx="4" fill="#dfe4ea"/>
+        <text x="12" y="54">accumulated memory store (~20K memories)</text>
+        <text x="640" y="54" text-anchor="end" font-family="var(--mono)" font-size="12" fill="#3a414b">~1.3M tok</text>
+
+        <rect x="0" y="74" width="380" height="30" rx="4" fill="#d3d9e0"/>
+        <text x="12" y="94">the project's notes &amp; transcript docs</text>
+        <text x="640" y="94" text-anchor="end" font-family="var(--mono)" font-size="12" fill="#3a414b">~2M tok</text>
+
+        <rect x="0" y="114" width="640" height="30" rx="4" fill="#c0392b"/>
+        <text x="12" y="134" fill="#fff">the whole system (code + docs)</text>
+        <text x="628" y="134" text-anchor="end" font-family="var(--mono)" font-size="12" fill="#fff">~29M — fits in no window</text>
+      </g>
+      <!-- scoped recall -->
+      <g>
+        <rect x="0" y="168" width="64" height="30" rx="4" fill="#1f9254"/>
+        <text x="74" y="188" font-family="-apple-system,Segoe UI,sans-serif" font-size="13" fill="#15181d">AWM scoped recall — <tspan font-weight="700">~630 tokens, flat</tspan> (≈2,000× fewer than carrying the store)</text>
+      </g>
+      <text x="0" y="222" font-family="var(--mono)" font-size="11" fill="#6b7480">Figures from real use on the platform project. A scoped recall answers from the relevant slice, not the whole corpus.</text>
+    </svg>
+    <div class="figcap">The wall is structural: at ~20K memories, "carry everything" isn't an option — retrieval is the only door.</div>
+  </div>
+
+  <p>Two structural properties separate this from a notes file or a flat vector store — and they are
+  the reason a coding/operations agent can keep <em>moving through</em> a project for months:</p>
+  <ul>
+    <li><strong>Staleness is tracked.</strong> When a fact changes, <code>memory_supersede</code>
+      retires the old value and recall stops returning it — the system <em>knows</em> what changed.
+      A notes file or a repo goes stale silently; you'd re-scan everything to find out.</li>
+    <li><strong>Dead weight costs nothing.</strong> ~90% of accumulated memories are never recalled
+      for a given task. A notes file pays for all of them in every prompt; scoped recall pays for
+      ≈zero.</li>
+  </ul>
+
+  <p class="lead-rule">The thesis in one line: <strong>past roughly half a million tokens, you stop
+  carrying context and start retrieving it.</strong> AWM is the retrieval layer built for that
+  regime — tuned for productivity and engineering workflows where <em>staying on topic and filtering
+  noise</em> matter, explicitly not for remembering every line of every chat.</p>
+</section>
+
+<!-- ================= 2 HARNESS ================= -->
+<section id="harness">
+  <h2><span class="num">02</span>The agent-harness pattern: memory as a substrate, not a tool</h2>
+  <p class="sub">PRIME → ACT → VERIFY → LEARN. The phases the model does <em>not</em> control are what make it a substrate.</p>
+
+  <p>The highest-leverage way to use AWM is not "give the model a recall tool and hope it calls it."
+  It's to make the <strong>harness</strong> own memory: recall <em>before</em> the model's turn and
+  learn <em>after</em> it, with zero model cooperation required. That single shift is what lets a
+  cheap model perform at a high level — because the hard-won domain knowledge lives in the substrate,
+  not the model's weights.</p>
+
+  <div class="panel good">
+    <div class="mono-h">Headline result <span class="tag t-validated">measured</span></div>
+    <p style="margin:6px 0 0">On a real domain-support workload (a 15-task stress suite over a member-support
+    investigation domain):</p>
+    <table>
+      <tr><th>Configuration</th><th class="num">Score</th><th class="num">Cost / task</th></tr>
+      <tr><td><strong>cheap reasoning-mini model + AWM</strong> (primed)</td><td class="num win">14 / 15</td><td class="num"><strong>$0.0069</strong></td></tr>
+      <tr><td>frontier model, no substrate priming</td><td class="num">7 / 15</td><td class="num">$0.277 <span class="flat">(≈40×)</span></td></tr>
+    </table>
+    <p style="margin:6px 0 0">A small, cheap model <strong>out-performed a frontier model at ~1/40th the
+    cost</strong> — the domain knowledge (schemas, working queries, business rules, prior corrections)
+    was primed into context for it. <em>Move capability from the model into the memory.</em></p>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 184" role="img" aria-label="PRIME ACT VERIFY LEARN loop around the AWM substrate">
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 Z" fill="#3b4ee0"/>
+        </marker>
+      </defs>
+      <g font-family="-apple-system,Segoe UI,sans-serif" font-size="13" text-anchor="middle">
+        <!-- four phase boxes -->
+        <g>
+          <rect x="14" y="20" width="150" height="58" rx="8" fill="#eef0fe" stroke="#c8d0fb"/>
+          <text x="89" y="44" font-weight="700" fill="#2336c7">1 · PRIME</text>
+          <text x="89" y="63" font-size="11.5" fill="#3a414b">auto recall → prompt</text>
+        </g>
+        <g>
+          <rect x="190" y="20" width="150" height="58" rx="8" fill="#fff" stroke="#e3e7ec"/>
+          <text x="265" y="44" font-weight="700" fill="#15181d">2 · ACT</text>
+          <text x="265" y="63" font-size="11.5" fill="#3a414b">cost-tiered tools</text>
+        </g>
+        <g>
+          <rect x="366" y="20" width="150" height="58" rx="8" fill="#fff" stroke="#e3e7ec"/>
+          <text x="441" y="44" font-weight="700" fill="#15181d">3 · VERIFY</text>
+          <text x="441" y="63" font-size="11.5" fill="#3a414b">read-back + substance</text>
+        </g>
+        <g>
+          <rect x="542" y="20" width="160" height="58" rx="8" fill="#eef8f1" stroke="#cfe9d8"/>
+          <text x="622" y="44" font-weight="700" fill="#1f9254">4 · LEARN</text>
+          <text x="622" y="63" font-size="11.5" fill="#3a414b">auto feedback + capture</text>
+        </g>
+        <!-- arrows across -->
+        <line x1="164" y1="49" x2="186" y2="49" stroke="#3b4ee0" stroke-width="1.6" marker-end="url(#ar)"/>
+        <line x1="340" y1="49" x2="362" y2="49" stroke="#3b4ee0" stroke-width="1.6" marker-end="url(#ar)"/>
+        <line x1="516" y1="49" x2="538" y2="49" stroke="#3b4ee0" stroke-width="1.6" marker-end="url(#ar)"/>
+        <!-- substrate -->
+        <rect x="120" y="118" width="480" height="44" rx="8" fill="#f4f6f8" stroke="#e3e7ec"/>
+        <text x="360" y="145" font-weight="650" fill="#0e8f86">AWM substrate — recall feeds in ↑ · learning feeds back ↓</text>
+        <!-- feedback arcs -->
+        <line x1="89" y1="78" x2="160" y2="116" stroke="#0e8f86" stroke-width="1.4" marker-end="url(#ar)" opacity=".7"/>
+        <line x1="622" y1="78" x2="560" y2="116" stroke="#0e8f86" stroke-width="1.4" marker-end="url(#ar)" opacity=".7"/>
+      </g>
+    </svg>
+    <div class="figcap">The loop. Priming and learning are harness-owned and automatic — the model never has to "decide to remember."</div>
+  </div>
+
+  <dl>
+    <dt>1 · PRIME <span class="pill">(automatic, pre-model)</span></dt>
+    <dd>Before the model sees anything, the harness recalls relevant memories — verified facts,
+      working query patterns, prior corrections — and injects them into the system prompt. The model
+      starts already knowing what every prior run learned.</dd>
+    <dt>2 · ACT <span class="pill">(cost-tiered)</span></dt>
+    <dd>A router picks a cheap model for lookups and escalates to a reasoning model only when needed,
+      per iteration. Most iterations are cheap.</dd>
+    <dt>3 · VERIFY <span class="pill">(mechanical gates)</span></dt>
+    <dd>Reversible-write tools require a read-back confirmation; responses are validated for substance
+      (did it actually answer with real data?). Failures loop back with a corrective prompt before finalizing.</dd>
+    <dt>4 · LEARN <span class="pill">(automatic, post-model)</span></dt>
+    <dd>After the turn, with zero model cooperation, the harness sends <strong>feedback</strong> on
+      which recalled memories were used (Hebbian strengthening), captures <strong>discovered schemas</strong>
+      as canonical memories with <strong>supersede-on-correction</strong>, captures <strong>working query
+      patterns</strong>, and reflects on gaps as friction memories.</dd>
+  </dl>
+
+  <h3>Why it compounds</h3>
+  <p>A stateless tool-calling agent pays full price for every task forever. This pattern doesn't:
+  primed schemas + working queries mean fewer iterations next time, recall <em>replaces flailing</em>
+  (measured ≈<strong>9.8× cheaper</strong> than a Read/Grep/Glob rediscovery workflow), corrections
+  supersede wrong facts so mistakes don't recur, and the Hebbian loop promotes what proved useful.
+  Net: <strong>on a fixed workload the same agent gets cheaper <em>and</em> better with use.</strong></p>
+
+  <div class="panel">
+    <div class="mono-h">Two integration depths</div>
+    <p style="margin:6px 0 0"><strong>Embedded (deepest):</strong> AWM engines run in-process on a local
+    SQLite DB — no network hop; the harness calls feedback/edge-strengthen/class-bonus rerank directly.
+    <strong>HTTP / MCP client (shallower):</strong> recall/write/feedback over the wire, for agents that
+    can't embed. Either way the <strong>recall→feedback wiring must be owned by the harness</strong> — which
+    is exactly why a generic MCP-tool host (where recall is a tool the model <em>chooses</em> to call)
+    can't reproduce the flywheel: priming and feedback stop being automatic.</p>
+  </div>
+
+  <h3>Reuse checklist</h3>
+  <ol>
+    <li>Embed AWM (in-process if possible); own recall + feedback in the harness, never leave it to the model.</li>
+    <li>Prime before the model runs — recall + domain topic files into the prompt; use <code>compact</code> granularity to keep token cost low (~70% trim).</li>
+    <li>Cost-tier the loop — cheap model for lookups, escalate only when needed.</li>
+    <li>Wire the post-turn learning pipeline — feedback, canonical capture with supersede-on-correction, working-pattern capture, reflection.</li>
+    <li>Add verify gates — read-back on writes, substance validation.</li>
+    <li>Set the network perimeter, then tier every tool (see §3) — guards in the tool code, not the prompt.</li>
+  </ol>
+
+  <h3>Best practice: write for recall — summary, <em>detail</em>, and tags</h3>
+  <p>Recall quality is decided at <em>write</em> time. AWM is good at finding what's findable, but a
+  badly-shaped write can't be rescued by any retriever. Every memory has three parts that all matter —
+  and the common mistake is filling in only the first:</p>
+  <div class="panel">
+    <table>
+      <tr><th>Part</th><th>Do</th></tr>
+      <tr><td><strong>Concept</strong> <span class="flat">(short summary)</span></td><td>3–8 words, and <strong>lead with the rule or fact</strong>, not the backstory. "Period-close BLOCKED check missing server-side" — not "a thing about accounting." This is the label, not the memory.</td></tr>
+      <tr><td><strong>Content</strong> <span class="flat">(the detail / description field)</span></td><td><strong>Don't stop at the summary.</strong> The body is what BM25, the embedding model, and concept extraction read most strongly — and what a future query actually matches. Be slightly more verbose at the front than feels natural: include the mechanism, the file/function, and (for guidance) the <em>why</em>. A rule with no reason can't be applied to edge cases.</td></tr>
+      <tr><td><strong>Tags</strong></td><td>Always pass the structured prefix-tags — <code>proj=</code>, <code>topic=</code> (most specific you can), <code>intent=</code>, <code>confidence_level=</code> — and add <strong>2+ retrievable identifiers</strong> present in the content: <code>file=</code>/path, function name, <code>ticket=</code>, <code>date=YYYY-MM-DD</code>, <code>person=</code>. Tags are a hard filter and a BM25/entity-bridge boost at recall time; the difference between a memory found in three months and one lost in a noisy bucket.</td></tr>
+    </table>
+    <p style="margin:6px 0 0"><strong>Write in the vocabulary of the future question.</strong> Imagine
+    asking this in three months — use those exact nouns (file paths, table columns, error strings),
+    not a neutral paraphrase. Reserve <code>canonical</code> for stable invariants and anything other
+    agents must recall; leave findings and progress notes in the default <code>working</code> class.</p>
+  </div>
+</section>
+
+<!-- ================= 3 FEATURES ================= -->
+<section id="features">
+  <h2><span class="num">03</span>Agent feature surface</h2>
+  <p class="sub">The full set of capabilities an agent (or a fleet of agents) can use — identity, sharing, learning, safety.</p>
+
+  <h3>Identity, isolation &amp; sharing</h3>
+  <table>
+    <tr><th>Feature</th><th>What it gives the agent</th></tr>
+    <tr><td><strong>Agent ID</strong></td><td>Hard memory isolation per agent. Default recall is agent-scoped — you only see your own memories.</td></tr>
+    <tr><td><strong>Workspace</strong> <span class="tag t-validated">multi-agent</span></td><td>A shared substrate across a fleet. Pass <code>workspace</code> on recall (or set <code>AWM_WORKSPACE</code>) and one agent recalls what another wrote — in real time, distinct agent IDs, one store. This is the capability a per-process notes file or library <em>structurally cannot</em> do.</td></tr>
+    <tr><td><strong>Session ID</strong></td><td>Group memories from one conversation. Memories sharing a <code>session_id</code> get an entity-bridge recall boost (things learned together resurface together).</td></tr>
+    <tr><td><strong>Incognito</strong></td><td>A mode where the agent can read the store without writing — for exploratory or read-only tasks.</td></tr>
+  </table>
+
+  <h3>Writing &amp; correcting knowledge</h3>
+  <table>
+    <tr><th>Feature</th><th>What it gives the agent</th></tr>
+    <tr><td><strong>Memory classes</strong></td><td><code>canonical</code> (source-of-truth, salience floor 0.7, never staged), <code>working</code> (default, salience-gated), <code>ephemeral</code> (decays fast), <code>structural</code> (high-volume system event-log records, excluded from auto-activation).</td></tr>
+    <tr><td><strong>Prefix-tags</strong></td><td>Structured, retrievable metadata — <code>proj=</code>, <code>topic=</code>, <code>intent=</code>, <code>confidence_level=</code>, plus identifiers like <code>ticket=</code>, <code>date=YYYY-MM-DD</code>, <code>person=</code>. Drive BM25 boosts and entity bridges at recall time.</td></tr>
+    <tr><td><strong>Supersede</strong></td><td>Retire an outdated fact and link the replacement (old confidence decays, BM25 stops returning it). Atomic "write-and-supersede by concept match" in one transaction — staleness is <em>tracked</em>, not silent.</td></tr>
+    <tr><td><strong>Retract</strong></td><td>Invalidate a wrong memory, attach the correction, and propagate penalties to associated memories (depth 2, decaying).</td></tr>
+    <tr><td><strong>Feedback</strong></td><td>Mark a recalled memory useful / not-useful. Tunes confidence and the validation-gated Hebbian edges so useful memories strengthen and surface first next time.</td></tr>
+    <tr><td><strong>Reinforce-on-duplicate</strong></td><td>A restated fact merges into the existing memory and re-embeds, instead of creating a near-duplicate.</td></tr>
+    <tr><td><strong>References &amp; resolve</strong> <span class="pill">(0.8)</span></td><td>Typed cross-record links (<code>advances</code>/<code>resolves</code>/…) and a <code>resolve</code> call that computes an engram's effective state (active / resolved / superseded / abandoned).</td></tr>
+  </table>
+
+  <h3>Recall controls</h3>
+  <table>
+    <tr><th>Feature</th><th>What it gives the agent</th></tr>
+    <tr><td><strong>Cognitive recall</strong></td><td>Not cosine-only: dual BM25 (keyword + expanded) + vectors + cross-encoder rerank + graph walk + ACT-R decay + coreference expansion. See the <a href="pipeline-walkthrough.html">pipeline walkthrough</a>.</td></tr>
+    <tr><td><strong>Granularity</strong></td><td><code>full</code> (default), <code>compact</code> (a query-aware ~200-char snippet per result — ~70% fewer output tokens when scanning many), <code>auto</code> (confidence-adaptive).</td></tr>
+    <tr><td><strong>Abstention</strong></td><td><code>require_confidence</code> makes recall return nothing rather than best-of-bad noise — so the agent can act on "I don't know" instead of a plausible-but-wrong fact. A multi-channel agreement gate backs it (2+ channels must agree).</td></tr>
+    <tr><td><strong>Tag-set search</strong> <span class="pill">(0.8)</span></td><td>AND / OR / NOT tag operators, <code>latest-by-tag</code>, <code>top-by</code> numeric tag sort, race-free <code>sequence</code> allocator — relational-style queries over the memory store.</td></tr>
+  </table>
+
+  <h3>Interfaces, hooks &amp; the bearer token</h3>
+  <table>
+    <tr><th>Feature</th><th>What it gives the agent</th></tr>
+    <tr><td><strong>MCP server</strong></td><td>16 first-class memory tools over stdio — recall / write / supersede / retract / feedback / tasks / checkpoint / restore.</td></tr>
+    <tr><td><strong>HTTP API</strong></td><td>18 routes (write / activate / search / supersede / feedback / tasks / stats / metrics) for any non-Claude-Code agent or service.</td></tr>
+    <tr><td><strong>Lifecycle hooks + bearer token</strong></td><td>A bundled hook sidecar (loopback <code>127.0.0.1</code> only) auto-checkpoints on <code>Stop</code> / <code>PreCompact</code> / <code>SessionEnd</code> so context survives compaction and session close. Hook calls authenticate with an <code>Authorization: Bearer ${AWM_HOOK_SECRET}</code> token — set the env var to any random value and <code>awm setup</code> wires the same secret into the hook config. Wrong token → 401; the local-only bind keeps the surface tight.</td></tr>
+    <tr><td><strong>Tasks</strong></td><td>First-class task records (create / update / list / next) with priority and <code>blockedBy</code> dependencies — the agent's working backlog lives in the same store as its knowledge.</td></tr>
+    <tr><td><strong>Metrics</strong></td><td><code>/agent/:id/metrics</code> exposes precision@k, recall latency (p50/p95), edge-utility rate, retraction rate — so an operator can see whether memory is actually helping.</td></tr>
+  </table>
+
+  <h3>Tool-safety tiers (for agents that act, not just answer)</h3>
+  <p>Freedom is earned by containment. The reference deployment is network-isolated (private VPN /
+  Tailscale, <strong>no public ingress</strong>); because the perimeter is tight the agent can be granted
+  more internal action freedom. Then every tool is classified into a tier whose guard lives in the tool
+  code, not the prompt:</p>
+  <table>
+    <tr><th>Tier</th><th>Examples</th><th>Guard</th></tr>
+    <tr><td><strong>READ</strong></td><td>query, file read, recall</td><td>Auto, no gate, runs concurrently.</td></tr>
+    <tr><td><strong>REVERSIBLE-WRITE</strong></td><td>scoped update, file write</td><td>Auto, but mandatory read-back verify + audit.</td></tr>
+    <tr><td><strong>EGRESS</strong></td><td>email send, outbound POST</td><td>Recipient/host allowlist + rate limit + full audit to AWM + kill-switch env var.</td></tr>
+    <tr><td><strong>IRREVERSIBLE</strong></td><td>unscoped write, deletes</td><td>Snapshot/transaction first, or explicit confirm-token / dry-run-then-apply.</td></tr>
+  </table>
+</section>
+
+<!-- ================= 4 MULTI-HOP ================= -->
+<section id="multihop">
+  <h2><span class="num">04</span>Multi-hop: AWM stays precise; the harness does the chaining</h2>
+  <p class="sub">A deliberate division of labor — and the data that settled it.</p>
+
+  <p>AWM is a <strong>fast, precise single-hop retriever</strong>. Its final cut is a cross-encoder
+  reranker, by design. A natural temptation is to make AWM itself do multi-hop — spread activation
+  over the association graph and inject graph-neighbors into the result pool. <strong>We tried it, and
+  it regressed recall.</strong></p>
+
+  <div class="panel warn">
+    <div class="mono-h">In-engine spreading / injection — disconfirmed on LoCoMo <span class="tag t-honest">honest negative</span></div>
+    <table>
+      <tr><th>LoCoMo category</th><th class="num">baseline</th><th class="num">+ spread + inject</th><th class="num">Δ</th></tr>
+      <tr><td>Overall</td><td class="num">22.7%</td><td class="num">20.7%</td><td class="num loss">−2.0</td></tr>
+      <tr><td>Multi-hop <span class="flat">(the target)</span></td><td class="num">13.4%</td><td class="num">12.3%</td><td class="num loss">−1.1</td></tr>
+      <tr><td>Single-hop</td><td class="num">18.6%</td><td class="num">13.5%</td><td class="num loss">−5.1</td></tr>
+    </table>
+    <p style="margin:6px 0 0">Graph-neighbor candidates <em>displace genuine evidence</em> and fight the
+    reranker (AWM's final cut). Adding breadth in the final cut hurts everywhere. These paths are kept
+    behind default-off flags (<code>AWM_SPREAD</code>) for research; the production path is unchanged.</p>
+  </div>
+
+  <p>The design-aligned fix lives in the <strong>harness</strong>, not the engine: after the first
+  recall, extract the salient proper-noun <em>entities</em> from the top results that aren't already
+  in the instruction, and issue a <strong>fresh single-hop recall on each entity</strong> (2 rounds, so
+  3-hop chains resolve). Each follow-up is a high-precision single-hop query whose vocabulary now
+  matches the answer — it never asks AWM to be something it isn't. The model then chains over the
+  merged, primed set.</p>
+
+  <div class="panel good">
+    <div class="mono-h">Harness-side entity bridge — validated <span class="tag t-validated">validated</span></div>
+    <p style="margin:6px 0 8px">Gauntlet A/B (memory suite, <code>k=3</code>, bridge off → on):</p>
+    <table>
+      <tr><th>Probe</th><th class="num">off</th><th class="num">on</th></tr>
+      <tr><td>multi-hop (3 hops, no restatement)</td><td class="num">0%</td><td class="num win">67%</td></tr>
+      <tr><td>sparse-cue</td><td class="num">67%</td><td class="num win">100%</td></tr>
+      <tr><td>supersede-due</td><td class="num">67%</td><td class="num win">100%</td></tr>
+      <tr><td>recall-person <span class="flat">(no regression)</span></td><td class="num">100%</td><td class="num flat">100%</td></tr>
+      <tr><td><strong>headline</strong></td><td class="num">70%</td><td class="num win">81%</td></tr>
+    </table>
+    <p style="margin:8px 0 0">Cost: ~+20% steps from the extra bridge recalls — acceptable. CI moved
+    from [56–78] to [78–89] (essentially separating). For "what does X think"-style <em>attribution</em>
+    queries there's also an opt-in in-engine boost, <code>AWM_QUERY_BRIDGE</code>, which lifted attribution
+    36%→92% on a controlled eval (kept opt-in for its small adversarial cost).</p>
+  </div>
+  <p class="lead-rule">Principle: <strong>breadth in candidate generation, precision in the final cut.</strong>
+  Multi-hop is the harness's job (re-query with the entity); AWM stays fast, precise, and single-hop.</p>
+</section>
+
+<!-- ================= 5 GAUNTLET ================= -->
+<section id="gauntlet">
+  <h2><span class="num">05</span>The gauntlet: why we built it, and what it showed</h2>
+  <p class="sub">Established memory benchmarks measure a chatbot. Agents need something else measured.</p>
+
+  <h3>Why a custom suite</h3>
+  <p>LoCoMo, Mem0's eval, and the Letta leaderboard are <strong>chatbot-memory</strong> benchmarks:
+  long multi-session conversations, "what did we say about X." Useful, and we report on them (§8) — but
+  they don't exercise the capabilities an <em>agent</em> + memory system actually lives or dies on:</p>
+  <ul>
+    <li><strong>Cross-agent sharing</strong> — can agent B use what agent A learned?</li>
+    <li><strong>Staleness / supersede</strong> — when a fact changes, does recall stop returning the old one?</li>
+    <li><strong>Noise rejection &amp; abstention</strong> — distractors present; does it return the right fact or confidently return a wrong one?</li>
+    <li><strong>Context-switching / bleed</strong> — many parallel clients/projects; does one project's data leak into another's answer?</li>
+    <li><strong>Sparse cues &amp; multi-hop without restatement</strong> — the query doesn't echo the stored wording.</li>
+  </ul>
+
+  <div class="panel">
+    <div class="mono-h">Methodology guardrails (from an adversarial design review)</div>
+    <ul style="margin:6px 0 0">
+      <li>Each system uses <strong>its own canonical write policy</strong> — plus a naive-dump ablation. (Comparing a tuned writer to a naive one is unfair.)</li>
+      <li><strong>Distractor sweep</strong>, not a single point — a curve over 2/5/10/20 distractor turns.</li>
+      <li><strong>Required baselines:</strong> BM25, hybrid, time-weighted RAG, and long-context-no-memory. Without them the comparison is incomplete.</li>
+      <li><strong>Deterministic exact-match scoring</strong> for constrained-answer recall; reserve an LLM judge for synthesis only.</li>
+      <li>A custom benchmark is a <strong>diagnostic supplement, not the headline</strong> — "made to win" is a credibility risk. Established benchmarks carry the headline numbers.</li>
+    </ul>
+  </div>
+
+  <h3>The arms</h3>
+  <p><code>awm</code> (full cognitive substrate) · <code>rag</code> (AWM's own embeddings + plain cosine
+  top-k — a <em>strong</em> baseline) · <code>notes</code> (flat file, substring match) ·
+  <code>longctx</code> (stuff the whole store into context, byte-capped) · <code>off</code> (null memory,
+  ablation control).</p>
+
+  <h3>What it showed</h3>
+  <div class="grid2">
+    <div class="panel">
+      <div class="mono-h">Plain single-fact recall <span class="tag t-honest">honest tie</span></div>
+      <table>
+        <tr><th>Arm</th><th class="num">pass (95% CI)</th></tr>
+        <tr><td>rag</td><td class="num">78% [78–78]</td></tr>
+        <tr><td>awm</td><td class="num">70% [67–78]</td></tr>
+        <tr><td>notes</td><td class="num">59% [56–67]</td></tr>
+        <tr><td>longctx</td><td class="num loss">0%</td></tr>
+        <tr><td>off</td><td class="num loss">0%</td></tr>
+      </table>
+      <p style="margin:6px 0 0;font-size:13.5px;color:#3a414b">On a single-fact lookup, AWM's CI
+      <strong>overlaps</strong> the RAG baseline — no significant advantage, and we say so. Retrieval
+      alone is retrieval alone.</p>
+    </div>
+    <div class="panel good">
+      <div class="mono-h">Cross-agent shared recall <span class="tag t-validated">categorical win</span></div>
+      <table>
+        <tr><th>Arm</th><th class="num">B recalls A's facts</th></tr>
+        <tr><td><strong>awm</strong></td><td class="num win">100% (3/3)</td></tr>
+        <tr><td>rag</td><td class="num loss">0%</td></tr>
+        <tr><td>notes</td><td class="num loss">0%</td></tr>
+        <tr><td>off</td><td class="num loss">0%</td></tr>
+      </table>
+      <p style="margin:6px 0 0;font-size:13.5px;color:#3a414b">A categorical gap, not a noisy margin.
+      A per-process library/file <em>cannot</em> share across agents; AWM's shared substrate can.
+      <strong>This is the result that isn't a tie.</strong></p>
+    </div>
+  </div>
+
+  <div class="fig">
+    <svg viewBox="0 0 720 150" role="img" aria-label="Cross-agent recall: AWM 100 percent vs others 0 percent">
+      <g font-family="-apple-system,Segoe UI,sans-serif" font-size="13">
+        <text x="0" y="16" font-family="var(--mono)" font-size="11.5" fill="#6b7480">CROSS-AGENT SHARED RECALL — % OF AGENT A'S FACTS THAT AGENT B CAN RECALL</text>
+        <g transform="translate(0,28)">
+          <text x="0" y="16" fill="#15181d">awm</text>      <rect x="60" y="3" width="560" height="18" rx="3" fill="#1f9254"/> <text x="628" y="17" font-family="var(--mono)" font-size="12" fill="#1f9254">100%</text>
+          <text x="0" y="46" fill="#15181d">rag</text>      <rect x="60" y="33" width="2"  height="18" rx="3" fill="#c0392b"/> <text x="68" y="47" font-family="var(--mono)" font-size="12" fill="#c0392b">0%</text>
+          <text x="0" y="76" fill="#15181d">notes</text>    <rect x="60" y="63" width="2"  height="18" rx="3" fill="#c0392b"/> <text x="68" y="77" font-family="var(--mono)" font-size="12" fill="#c0392b">0%</text>
+          <text x="0" y="106" fill="#15181d">off</text>     <rect x="60" y="93" width="2"  height="18" rx="3" fill="#c0392b"/> <text x="68" y="107" font-family="var(--mono)" font-size="12" fill="#c0392b">0%</text>
+        </g>
+      </g>
+    </svg>
+    <div class="figcap">The one place AWM doesn't tie a vector store is the one a library architecturally can't reach.</div>
+  </div>
+
+  <p><strong>Efficiency, same suite:</strong> AWM ~9–11k input-tokens/task at ~150–200ms recall (rerank
+  + expansion included); RAG ~9–10k at ~7–10ms; <code>longctx</code> ~17k tokens/task and 0% on
+  memory-dependent answers (it truncates and drops the fact). AWM buys correctness and sharing at a few
+  hundred ms — not free, and we measure the cost.</p>
+</section>
+
+<!-- ================= 6 MULTI-AGENT ================= -->
+<section id="multiagent">
+  <h2><span class="num">06</span>Multi-agent: one substrate, a fleet of agents</h2>
+  <p class="sub">The capability that follows directly from a shared store with per-agent identity.</p>
+  <p>Because memories live in one store keyed by agent ID, a <strong>workspace</strong> turns the store
+  into shared cognition: when any agent writes or supersedes a <code>canonical</code> memory, every
+  other agent in the workspace can recall it immediately. That is what produced the 100%-vs-0%
+  cross-agent result above — and it's the foundation for a coordinated fleet:</p>
+  <ul>
+    <li><strong>Shared canonical knowledge.</strong> A "discovered the prod DB schema" fact written by
+      one agent primes every other agent's next task — no re-discovery.</li>
+    <li><strong>Coordination plugin.</strong> On the SQLite backend, AWM ships a hive-coordination layer:
+      a worker registry, assignment dispatch, per-decision propagation (peer decisions surface in each
+      agent's recall), and circuit-breaker / stale-worker detection.</li>
+    <li><strong>Entity-bridge boost via session/workspace.</strong> Facts learned together (shared
+      <code>session_id</code>) and facts other agents wrote (workspace recall) resurface together.</li>
+  </ul>
+  <p>Practical guidance for fleets: write the facts other agents must see as
+  <code>memory_class: canonical</code> (the default <code>working</code> class is salience-gated and may
+  not survive), and recall with the <code>workspace</code> set. Coordination currently requires the
+  SQLite backend (see §9).</p>
+</section>
+
+<!-- ================= 7 CONTEXT ================= -->
+<section id="context">
+  <h2><span class="num">07</span>Context-window &amp; context-switching tests</h2>
+  <p class="sub">What's implemented, and what's designed-but-not-yet-run — stated plainly.</p>
+
+  <h3>Context-switching / bleed <span class="tag t-validated">implemented</span></h3>
+  <p>The gauntlet includes a context-switch suite: several parallel "clients/projects," each with its
+  own contact, deadline, and budget, probed in <strong>interleaved</strong> order (one switch per turn).
+  It directly measures <strong>cross-project contamination</strong> — does a query about project A ever
+  return project B's budget? This is exactly the failure mode a single shared agent on a big platform
+  must not have, and it's why AWM scopes recall by relevance + identity rather than dumping a window.</p>
+
+  <h3>Needle-in-haystack / context-window scaling <span class="tag t-pending">designed, not yet run</span></h3>
+  <p>A scaling test — plant one fact among an increasing volume of distractor memories and measure
+  recall@k as the haystack grows — is <strong>specified but not yet executed</strong> (it's on the
+  backlog, not in the results). We're flagging it as pending rather than quoting a number we don't have.
+  The hypothesis it will test: because AWM retrieves a fixed-size <em>scoped slice</em>, recall@k
+  should stay roughly flat as the store grows, where a fixed context window degrades once the haystack
+  exceeds it. The §1 production figures (constant ~630-token recall against a 29M-token corpus) are the
+  real-world version of this claim; the synthetic scaling curve will quantify it.</p>
+</section>
+
+<!-- ================= 8 TOKENS ================= -->
+<section id="tokens">
+  <h2><span class="num">08</span>Token economics — the honest version</h2>
+  <p class="sub">Where the savings are real and large, where a micro-benchmark currently regresses, and why.</p>
+
+  <h3>The real, large win is structural</h3>
+  <p>The token argument that matters is the one from §1: at <strong>29M tokens you cannot carry the
+  project at all</strong>, and a scoped recall answers from ~630 tokens — ~2,000× fewer than carrying
+  the store, ~5× fewer than even opening the single best-matching doc file (a floor — agents usually
+  open several and still miss cross-file facts).</p>
+
+  <div class="panel">
+    <div class="mono-h">Production audit — real coding-agent sessions</div>
+    <table>
+      <tr><th>Retrieval method</th><th class="num">total tokens</th><th class="num">calls</th><th class="num">avg / call</th></tr>
+      <tr><td>file retrieval (read/grep)</td><td class="num">5,777,217</td><td class="num">2,743</td><td class="num">2,106</td></tr>
+      <tr><td>AWM recall</td><td class="num">591,366</td><td class="num">131</td><td class="num">4,514</td></tr>
+    </table>
+    <p style="margin:6px 0 0">Aggregate cost ratio <strong>9.8 : 1</strong> in AWM's favor — recall
+    <em>replaces</em> the repeated file-rediscovery that dominates a coding agent's token spend. (A
+    single recall is larger per call, but you make ~21× fewer of them.)</p>
+  </div>
+
+  <h3>The micro-benchmark caveat <span class="tag t-honest">under investigation</span></h3>
+  <p>A small per-turn "token-savings" micro-benchmark (a 44-turn dev-conversation corpus) tells a more
+  complicated story, and we won't hide it:</p>
+  <ul>
+    <li>It once reported ~<strong>56–64% savings</strong> — but that number was partly an artifact:
+      reinforce-on-duplicate was <em>silently discarding</em> new content. Less text returned, but the
+      memory had lost information.</li>
+    <li>v0.8.5 fixed that (merge-and-re-embed restated facts): <strong>accuracy jumped 45%→97.5%</strong>
+      while raw savings fell to ~20% — the correct trade.</li>
+    <li>On the current line, that micro-benchmark shows a savings <strong>regression (≈−8%)</strong> we
+      have <em>not</em> yet root-caused (it reproduces on old and new recall configs, so it isn't the
+      recall change). It's an open archaeology item, flagged as such — not papered over.</li>
+  </ul>
+  <p class="lead-rule">Bottom line: <strong>the savings that justify AWM are the structural ones at
+  scale</strong> (you literally can't carry 29M tokens), not a per-turn percentage on a tiny corpus.
+  We report the micro-benchmark honestly, including its current regression.</p>
+</section>
+
+<!-- ================= 9 BACKENDS ================= -->
+<section id="backends">
+  <h2><span class="num">09</span>Backends &amp; roadmap — where Postgres fits</h2>
+  <p class="sub">0.9 is the "make it commercially strong for agents" line; full networked Postgres is a v1 goal with real work remaining.</p>
+
+  <p>AWM ships two functionally-equivalent storage backends behind one interface:</p>
+  <table>
+    <tr><th>Capability</th><th>SQLite <span class="flat">(default)</span></th><th>PGlite</th></tr>
+    <tr><td>Cognitive engines (write/recall/consolidate/retract)</td><td class="win">✓</td><td class="win">✓</td></tr>
+    <tr><td>Vector search</td><td>JS cosine over slim cache</td><td><strong>pgvector</strong> (ivfflat)</td></tr>
+    <tr><td>Full-text search</td><td>FTS5 (BM25)</td><td>tsvector</td></tr>
+    <tr><td><strong>Multi-process safe</strong> (concurrent sessions)</td><td class="win">✓ (WAL)</td><td class="loss">✗ single-process WASM</td></tr>
+    <tr><td>Hive coordination plugin</td><td class="win">✓</td><td class="loss">✗ (auto-disabled)</td></tr>
+    <tr><td>Native bindings at install</td><td>yes (prebuilt)</td><td>no (pure-JS WASM)</td></tr>
+    <tr><td>Path to a real Postgres server</td><td class="loss">✗</td><td class="win">✓ (same SQL surface)</td></tr>
+  </table>
+  <p><strong>SQLite is the default</strong> and the right choice for the common case — multiple Claude
+  Code sessions can safely share one database via WAL. PGlite (embedded Postgres-in-WASM with pgvector)
+  is opt-in; it's <em>single-process</em>, so two processes against the same directory will abort the
+  second, and it currently has a known WASM-init crash on some Node-22 / Windows combinations — which is
+  another reason MCP / multi-session setups stay on SQLite.</p>
+
+  <div class="panel wash">
+    <div class="mono-h">Roadmap</div>
+    <dl style="margin:4px 0 0">
+      <dt>0.9.x <span class="callout-n">— commercial-grade for agents (this line)</span></dt>
+      <dd>The recall-quality + agent-feature improvements described on this page. PGlite default for
+        <em>new</em> installs (target); existing <code>memory.db</code> users stay on SQLite via
+        auto-detect.</dd>
+      <dt>1.0</dt>
+      <dd>Coordination plugin ported to async PGlite; <code>/memory/export</code> ported; SQLite still
+        supported.</dd>
+      <dt>Post-1.0 / v1 target <span class="tag t-design">in design</span></dt>
+      <dd><strong>A real networked Postgres backend for scale</strong> — same engine code as PGlite,
+        swap the connection layer (<code>AWM_STORE_URL</code>). The honest status: the embedded-Postgres
+        surface is built and tested, but the full networked move still needs the cognitive engines made
+        fully async at every call site, an async adapter for the SQLite path, the export/coordination
+        paths ported, and a backup/integrity story for a server DB. It's a deliberate v1 milestone, not
+        a flag flip.</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ================= 10 NOT WIN ================= -->
+<section id="notwin">
+  <h2><span class="num">10</span>When <em>not</em> to use it</h2>
+  <p class="sub">The trade-offs, stated up front.</p>
+  <ul>
+    <li><strong>Small, one-shot tasks.</strong> Write/recall overhead exceeds the savings until
+      knowledge is reused or the corpus outgrows the context window. AWM wins on <em>scale and reuse</em>.</li>
+    <li><strong>Recall isn't free.</strong> A few hundred ms (and a few seconds for cold models) per
+      query buys the token reduction. For a hot inner loop, cache or skip it.</li>
+    <li><strong>A generic MCP-tool host.</strong> You get recall-as-a-tool, but not the automatic
+      prime+feedback+learn flywheel — that requires the harness to own the wiring (§2).</li>
+    <li><strong>It is not your source of truth.</strong> The intended pattern is: recall first,
+      read/grep the code for ground truth on a miss, and <code>supersede</code> when reality differs.</li>
+    <li><strong>Recall quality is bounded by write quality.</strong> Lead with the fact; tag with
+      identifiers (file, table, ticket). A vague write can't be rescued by any retriever.</li>
+  </ul>
+</section>
+
+<footer>
+  <div class="mono-h">Start here</div>
+  <p style="margin:4px 0 0;color:#3a414b">
+    Install: <code>npm install -g agent-working-memory &amp;&amp; awm setup --global</code> &nbsp;·&nbsp;
+    Internals: <a href="pipeline-walkthrough.html">pipeline-walkthrough.html</a> &nbsp;·&nbsp;
+    Harness pattern: <a href="patterns/awm-native-harness.md">docs/patterns/awm-native-harness.md</a> &nbsp;·&nbsp;
+    At scale: <a href="using-awm-at-scale.md">docs/using-awm-at-scale.md</a>
+  </p>
+  <p style="margin:14px 0 0">All figures on this page are drawn from recorded eval runs, the gauntlet
+  scorecards, and production audits. Negative and in-progress results are labelled as such — a memory
+  system you'd stake an agent on has to be honest about where it ties, where it loses, and what isn't
+  measured yet.</p>
+</footer>
+
+</div>
+</main>
+</body>
+</html>

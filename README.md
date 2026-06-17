@@ -88,6 +88,8 @@ The design is based on cognitive science — ACT-R activation decay, Hebbian lea
 
 > **Build an agent on it:** the [AWM-Native Agent Harness pattern](docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
 
+> **For builders & researchers:** [`docs/awm-for-agents.html`](docs/awm-for-agents.html) is the agent playbook — why AWM exists (the context-window wall), the PRIME→ACT→VERIFY→LEARN harness, the full agent feature surface (workspace, session IDs, bearer-token hooks, supersede/feedback), how multi-hop is solved in the harness, and the honest gauntlet findings (where AWM wins, ties, and what isn't measured yet). Open it in a browser.
+
 ---
 
 ## Why it matters at scale
