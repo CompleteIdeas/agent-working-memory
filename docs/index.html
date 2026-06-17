@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWorkingMemory (AWM) — docs</title>
+<style>
+  :root{
+    --ink:#15181d; --ink2:#3a414b; --mut:#6b7480; --line:#e3e7ec; --line2:#eef1f4;
+    --bg:#fbfcfd; --panel:#ffffff; --code:#f4f6f8;
+    --indigo:#3b4ee0; --indigo-d:#2336c7; --teal:#0e8f86;
+    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto;padding:0 24px}
+  header.hero{border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fff,#fbfcfd)}
+  .hero .wrap{padding:56px 24px 40px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--indigo);font-weight:600}
+  h1{font-size:34px;letter-spacing:-.02em;margin:14px 0 10px;font-weight:700}
+  .lede{font-size:18px;color:var(--ink2);max-width:62ch;margin:0}
+  .install{margin-top:22px;font-family:var(--mono);font-size:13px;background:var(--code);
+    border:1px solid var(--line);border-radius:8px;padding:12px 14px;color:#1d2330;display:inline-block}
+  main .wrap{padding:14px 24px 30px}
+  h2{font-size:15px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;
+    color:var(--mut);margin:38px 0 14px;font-weight:600}
+  a{color:var(--indigo-d);text-decoration:none}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.cards{grid-template-columns:1fr}h1{font-size:27px}}
+  .card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;transition:border-color .15s,transform .15s}
+  .card:hover{border-color:var(--indigo);transform:translateY(-2px)}
+  .card .tag{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--teal)}
+  .card h3{margin:8px 0 6px;font-size:19px;color:var(--ink);font-weight:700}
+  .card p{margin:0;color:var(--ink2);font-size:14.5px}
+  ul.docs{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 28px}
+  @media(max-width:680px){ul.docs{grid-template-columns:1fr}}
+  ul.docs li{padding:9px 0;border-bottom:1px solid var(--line2);font-size:15px}
+  ul.docs li a{font-weight:600}
+  ul.docs li span{display:block;color:var(--mut);font-size:13px;font-weight:400;margin-top:1px}
+  footer{border-top:1px solid var(--line);margin-top:40px}
+  footer .wrap{padding:24px 24px 60px;color:var(--mut);font-size:13.5px;font-family:var(--mono)}
+  footer a{color:var(--ink2)}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker">AgentWorkingMemory · AWM</div>
+    <h1>Persistent working memory for AI agents</h1>
+    <p class="lede">A local-first cognitive memory substrate — salience-filtered storage, a
+      multi-phase recall pipeline, associative consolidation, and adaptive forgetting. Runs entirely
+      on your machine (SQLite + local ONNX models). This is the documentation home.</p>
+    <div class="install">npm install -g agent-working-memory &amp;&amp; awm setup --global</div>
+  </div>
+</header>
+<main>
+<div class="wrap">
+
+  <h2>Visual explainers</h2>
+  <div class="cards">
+    <a class="card" href="awm-for-agents.html">
+      <div class="tag">For builders &amp; researchers</div>
+      <h3>Agent Playbook &amp; Findings →</h3>
+      <p>Why AWM exists (the context-window wall), the PRIME→ACT→VERIFY→LEARN harness, the full agent
+      feature surface, how multi-hop is solved, and the honest benchmark results.</p>
+    </a>
+    <a class="card" href="pipeline-walkthrough.html">
+      <div class="tag">How it works inside</div>
+      <h3>Pipeline Walkthrough →</h3>
+      <p>A visual tour of the recall pipeline — candidate generation, composite scoring, the wide
+      rerank pool, the cross-encoder, ACT-R decay, and the abstention gate.</p>
+    </a>
+  </div>
+
+  <h2>Reference documentation</h2>
+  <ul class="docs">
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/quickstart.md">Quickstart</a>
+      <span>Install, setup, first session</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/architecture.md">Architecture</a>
+      <span>Pipelines, schema, storage backends, roadmap</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md">API &amp; config reference</a>
+      <span>HTTP routes, env vars, recall tuning, schema</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/patterns/awm-native-harness.md">AWM-Native Harness pattern</a>
+      <span>Build an agent on the substrate</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/using-awm-at-scale.md">Using AWM at scale</a>
+      <span>Large corpora, multi-hop, write-for-recall</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/pglite-feature-parity.md">SQLite ↔ PGlite parity</a>
+      <span>Backend capabilities &amp; selection</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md">Changelog</a>
+      <span>Release history &amp; design notes</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/README.md">README</a>
+      <span>Overview, benchmarks, why it's different</span></li>
+  </ul>
+
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/CompleteIdeas/agent-working-memory">github.com/CompleteIdeas/agent-working-memory</a>
+    &nbsp;·&nbsp; <a href="https://www.npmjs.com/package/agent-working-memory">npm: agent-working-memory</a>
+    &nbsp;·&nbsp; Apache-2.0 · runs locally, no cloud
+  </div>
+</footer>
+</body>
+</html>
