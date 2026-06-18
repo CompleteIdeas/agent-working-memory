@@ -444,9 +444,13 @@ async function importMemories() {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
+  // NOTE: associations.last_activated is NOT NULL on the engrams DB (storage/sqlite.ts),
+  // so importing into an existing store fails if it's omitted — and because import wraps
+  // memories+associations in ONE transaction, that rolls back the memories too (silent
+  // "empty store"). Set it alongside created_at. (migrate/merge paths already do this.)
   const insertAssoc = db.prepare(`
-    INSERT INTO associations (id, from_engram_id, to_engram_id, weight, type, activation_count, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO associations (id, from_engram_id, to_engram_id, weight, type, activation_count, created_at, last_activated)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
   `);
 
   const importTx = db.transaction(() => {

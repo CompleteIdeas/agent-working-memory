@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.1 (2026-06-18) — fix: `awm import` drops everything when the export has associations
+
+Bug fix, no API change. The `import` CLI's association INSERT omitted the `last_activated`
+column, which is `NOT NULL` on the engrams DB (`storage/sqlite.ts`). Because import wraps
+memories **and** associations in a single transaction, the constraint failure rolled the
+whole import back — so importing any export that contained associations produced a silent
+"empty store" (the memories never landed either). Now sets `last_activated = datetime('now')`
+alongside `created_at`, matching the already-correct `migrate`/`merge` paths. Round-tripping
+an export with associations now imports cleanly.
+
 ## 0.9.0 (2026-06-17) — recall pipeline: wide rerank pool + top-K abstention gate
 
 All changes are env-revertible defaults; no API changes. This release also lands the
