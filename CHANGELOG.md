@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.10.0 (2026-07-02) — networked Postgres backend + backend-agnostic import/export + data-movement/write-pipeline fixes
+
+First public 0.10.0 (npm was at 0.9.1). Correctness/stability fixes surfaced by a deep audit
+(see MWA `docs/gap-analysis-2026-07.md`), on top of the Postgres/import-export groundwork below.
+
+- **`awm merge` no longer silently drops data** — the hand-rolled merge used a truncated schema that
+  omitted `embedding`, `memory_class`/`memory_type`, task/supersession columns and never populated the
+  FTS index (killing both vector AND BM25 recall for merged rows). Rewritten to initialize the target
+  through `EngramStore` (authoritative schema + FTS triggers) and route every source engram through
+  `createEngram` (+ stage/retracted restore + supersession re-link). Now wrapped in `try/finally`
+  (no handle leak / partial merge on throw).
+- **`awm import` preserves stage + retracted** — previously every engram was minted `active` +
+  non-retracted, so `--include-retracted` **resurrected** retracted memories and all stages flattened.
+  Import now restores them via `updateStage`/`retractEngram`. Also: intra-file dedupe, and dry-run
+  reports the real association count.
+- **Cross-agent contamination guard (write pipeline)** — a workspace/hive recall can surface another
+  agent's same-concept engram; the reinforce/supersede branch now refuses to mutate an engram whose
+  `agentId` differs from the writer's (a cross-agent match falls through to a new engram). Also scoped
+  the exact-concept reinforce redirect to agent-local candidates only.
+- **Hive degradation is now visible** — `getWorkspaceAgentIds` on the Postgres/PGlite backends emits a
+  one-time warning (workspace coordination is SQLite-only) instead of silently returning self-only.
+
+### 0.10.0 groundwork — networked Postgres backend + backend-agnostic import/export (2026-06-30)
+
+Sub-1.0 on purpose: the database-agnostic surface is real but the Postgres backend is
+**experimental** until the remaining SQLite-only paths (coordination, hot backups, integrity
+check) are ported. 1.0 is gated on that + recall-quality parity confirmed across backends.
+
+- **New `postgres` backend** (`AWM_STORE_BACKEND=postgres`, `AWM_DATABASE_URL=…`) —
+  `storage/postgres.ts`, a real-server adapter over node-postgres (`pg`) + pgvector, a
+  near-clone of the PGlite adapter sharing the same `pglite-schema.ts` DDL. The first backend
+  that is multi-**connection** safe (vs SQLite's single-machine WAL and PGlite's single-process
+  WASM) — for cloud / multi-replica deployments. Registered in `storage/factory.ts`. New dep: `pg`.
+  - Per-DATABASE `ivfflat.probes` default set once at bootstrap (no per-connection race).
+  - Bootstrap DDL guarded by a `pg_advisory_lock` so concurrent stores can't race
+    `CREATE EXTENSION`/`CREATE TABLE` on shared catalogs.
+  - Transactions scoped to one client via `AsyncLocalStorage` (background queries keep the pool).
+  - int8/numeric coerced to JS numbers to match the other backends' row shapes.
+- **`awm import` / `awm export` are now backend-agnostic** — both route through `openStore()`
+  instead of hardcoded better-sqlite3, so you can export from any backend and **import INTO
+  Postgres or PGlite** (previously import was SQLite-only). This is what enables porting a
+  memory store into managed Postgres.
+  - **Export now includes embedding vectors** (the old SQLite-only export stripped them, forcing
+    a re-embed after import) → a faithful, recall-ready port when source/target embedding models
+    match. `--no-embeddings` on import skips them (then re-embed) for a model mismatch.
+  - New export flags: `--all-stages`, `--include-retracted` (default is the active, non-retracted
+    set). Associations + supersession links are preserved (re-linked with remapped ids).
+  - **Behavior change:** import normalizes `created_at`/`access_count` to import time (the
+    contract's `createEngram` stamps them); everything semantic — content, tags, confidence,
+    salience, classes, embeddings — is preserved, so recall is faithful. (Byte-perfect timestamp
+    preservation would need restore-aware `createEngram` fields — a follow-up.)
+  - Selection: `--db <path>` maps to a SQLite file / PGlite dir; `AWM_STORE_BACKEND=postgres` +
+    `AWM_DATABASE_URL` selects Postgres (no `--db`).
+
 ## 0.9.1 (2026-06-18) — fix: `awm import` drops everything when the export has associations
 
 Bug fix, no API change. The `import` CLI's association INSERT omitted the `last_activated`

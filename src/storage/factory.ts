@@ -39,7 +39,7 @@
 import { existsSync, statSync } from 'node:fs';
 import type { IEngramStore } from './store.js';
 
-export type StoreBackend = 'sqlite' | 'pglite';
+export type StoreBackend = 'sqlite' | 'pglite' | 'postgres';
 
 /**
  * Auto-detect the backend from on-disk state. Used when `AWM_STORE_BACKEND`
@@ -71,6 +71,7 @@ export function getConfiguredBackend(): StoreBackend {
     const normalized = raw.toLowerCase();
     if (normalized === 'pglite') return 'pglite';
     if (normalized === 'sqlite') return 'sqlite';
+    if (normalized === 'postgres') return 'postgres';
     console.warn(`Unknown AWM_STORE_BACKEND=${raw}; falling back to sqlite`);
     return 'sqlite';
   }
@@ -80,8 +81,11 @@ export function getConfiguredBackend(): StoreBackend {
 }
 
 export function getConfiguredPath(): string {
+  const backend = getConfiguredBackend();
+  // Postgres uses a connection URL, not an on-disk path.
+  if (backend === 'postgres') return process.env.AWM_DATABASE_URL ?? 'postgres://localhost:5432/awm';
   if (process.env.AWM_DB_PATH) return process.env.AWM_DB_PATH;
-  return getConfiguredBackend() === 'pglite' ? 'memory-pglite' : 'memory.db';
+  return backend === 'pglite' ? 'memory-pglite' : 'memory.db';
 }
 
 /**
@@ -132,7 +136,15 @@ export async function openStore(): Promise<{
   const backend = getConfiguredBackend();
   const path = getConfiguredPath();
 
-  warnIfBackendDisagreesWithDisk(backend, path);
+  // The on-disk mismatch warning only applies to file/dir backends.
+  if (backend !== 'postgres') warnIfBackendDisagreesWithDisk(backend, path);
+
+  if (backend === 'postgres') {
+    const { PostgresEngramStore } = await import('./postgres.js');
+    const store = new PostgresEngramStore(path);
+    await store.ready();
+    return { store: store as unknown as IEngramStore, backend, path };
+  }
 
   if (backend === 'pglite') {
     const { PGliteEngramStore } = await import('./pglite.js');

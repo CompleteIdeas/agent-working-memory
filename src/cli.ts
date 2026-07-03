@@ -245,6 +245,29 @@ function health() {
   }
 }
 
+// ─── BACKEND-AGNOSTIC STORE (export/import) ──────────────────────────────────
+//
+// export/import route through openStore() so they work on ANY backend (SQLite,
+// PGlite, Postgres) — not just better-sqlite3. `--db <path>` maps to AWM_DB_PATH
+// (a SQLite file or PGlite dir, by shape); for a Postgres target set
+// AWM_STORE_BACKEND=postgres + AWM_DATABASE_URL (no --db). This is what lets you
+// port a memory store INTO managed Postgres (the SQLite-hardcoded path could not).
+
+function toISOStr(d: Date | string | null | undefined): string | null {
+  if (d == null) return null;
+  return d instanceof Date ? d.toISOString() : String(d);
+}
+
+async function openCliStore(dbPath?: string): Promise<{ store: any; backend: string; close: () => Promise<void> }> {
+  // --db sets the path only when the env doesn't already select a backend/path.
+  if (dbPath && !process.env.AWM_DB_PATH && (process.env.AWM_STORE_BACKEND ?? '') !== 'postgres') {
+    process.env.AWM_DB_PATH = dbPath;
+  }
+  const { openStore } = await import('./storage/factory.js');
+  const { store, backend } = await openStore();
+  return { store, backend, close: async () => { try { await store.close?.(); } catch { /* */ } } };
+}
+
 // ─── EXPORT ──────────────────────────────────────
 
 async function exportMemories() {
@@ -252,113 +275,107 @@ async function exportMemories() {
   let agentFilter: string | null = null;
   let outputPath: string | null = null;
   let activeOnly = false;
+  let allStages = false;
+  let includeRetracted = false;
 
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--db' && args[i + 1]) dbPath = args[++i];
     else if (args[i] === '--agent' && args[i + 1]) agentFilter = args[++i];
     else if (args[i] === '--output' && args[i + 1]) outputPath = args[++i];
     else if (args[i] === '--active-only') activeOnly = true;
+    else if (args[i] === '--all-stages') allStages = true;
+    else if (args[i] === '--include-retracted') includeRetracted = true;
   }
 
-  if (!dbPath) {
-    console.error('Error: --db <path> is required');
-    process.exit(1);
+  // --db must exist for a file/dir backend; a Postgres source is selected by env instead.
+  const usingPostgres = (process.env.AWM_STORE_BACKEND ?? '').toLowerCase() === 'postgres';
+  if (!usingPostgres) {
+    if (!dbPath) { console.error('Error: --db <path> is required (or set AWM_STORE_BACKEND=postgres + AWM_DATABASE_URL)'); process.exit(1); }
+    if (!existsSync(dbPath)) { console.error(`Error: database not found: ${dbPath}`); process.exit(1); }
   }
 
-  if (!existsSync(dbPath)) {
-    console.error(`Error: database not found: ${dbPath}`);
-    process.exit(1);
-  }
+  const { store, backend, close } = await openCliStore(dbPath);
+  try {
+    const agentIds: string[] = agentFilter
+      ? [agentFilter]
+      : ((await store.getActiveAgents()) as any[]).map((a) => a.agentId);
+    if (agentIds.length === 0) {
+      console.error('Warning: no agents found to export. Pass --agent <id> if the store has no tracked activity yet.');
+    }
+    // Default to the meaningful memory set (active stage, non-retracted). --all-stages
+    // widens to every stage; --include-retracted adds retracted (off with --active-only).
+    const stage = allStages ? undefined : 'active';
+    const wantRetracted = includeRetracted && !activeOnly;
+    const engrams: any[] = (await store.getEngramsByAgents(agentIds, stage, wantRetracted)) ?? [];
 
-  // Dynamic import to avoid loading better-sqlite3 for other commands
-  const Database = (await import('better-sqlite3')).default;
-  const db = new Database(dbPath, { readonly: true });
-
-  // Build memory query
-  let memQuery = 'SELECT * FROM engrams';
-  const conditions: string[] = [];
-  const params: any[] = [];
-
-  if (agentFilter) {
-    conditions.push('agent_id = ?');
-    params.push(agentFilter);
-  }
-  if (activeOnly) {
-    conditions.push('retracted = 0');
-  }
-
-  if (conditions.length > 0) {
-    memQuery += ' WHERE ' + conditions.join(' AND ');
-  }
-  memQuery += ' ORDER BY created_at ASC';
-
-  const rows = db.prepare(memQuery).all(...params) as any[];
-
-  // Build memory objects (exclude embedding blobs)
-  const memories = rows.map((r: any) => ({
-    id: r.id,
-    agent_id: r.agent_id,
-    concept: r.concept,
-    content: r.content,
-    confidence: r.confidence,
-    salience: r.salience,
-    access_count: r.access_count,
-    last_accessed: r.last_accessed,
-    created_at: r.created_at,
-    stage: r.stage,
-    tags: r.tags ? JSON.parse(r.tags) : [],
-    memory_class: r.memory_class ?? 'working',
-    episode_id: r.episode_id ?? null,
-    task_status: r.task_status ?? null,
-    task_priority: r.task_priority ?? null,
-    supersedes: r.supersedes ?? null,
-    superseded_by: r.superseded_by ?? null,
-    retracted: r.retracted ?? 0,
-  }));
-
-  // Get memory IDs for association filtering
-  const memIds = new Set(memories.map((m: any) => m.id));
-
-  // Build associations
-  let assocQuery = 'SELECT * FROM associations';
-  const allAssocs = db.prepare(assocQuery).all() as any[];
-  const associations = allAssocs
-    .filter((a: any) => memIds.has(a.from_engram_id) && memIds.has(a.to_engram_id))
-    .map((a: any) => ({
-      from_id: a.from_engram_id,
-      to_id: a.to_engram_id,
-      weight: a.weight,
-      type: a.type ?? 'hebbian',
-      activation_count: a.activation_count ?? 0,
+    const memories = engrams.map((e: any) => ({
+      id: e.id,
+      agent_id: e.agentId,
+      concept: e.concept,
+      content: e.content,
+      // Embeddings ARE included now (the old SQLite-only export stripped them, forcing a
+      // re-embed after import) → a faithful, recall-ready port when source/target embed
+      // models match. import skips them with --no-embeddings (then re-embed).
+      embedding: Array.isArray(e.embedding) ? e.embedding : null,
+      confidence: e.confidence,
+      salience: e.salience,
+      access_count: e.accessCount ?? 0,
+      last_accessed: toISOStr(e.lastAccessed),
+      created_at: toISOStr(e.createdAt),
+      stage: e.stage ?? 'active',
+      tags: Array.isArray(e.tags) ? e.tags : [],
+      memory_class: e.memoryClass ?? 'working',
+      memory_type: e.memoryType ?? 'unclassified',
+      episode_id: e.episodeId ?? null,
+      task_status: e.taskStatus ?? null,
+      task_priority: e.taskPriority ?? null,
+      supersedes: e.supersedes ?? null,
+      superseded_by: e.supersededBy ?? null,
+      retracted: e.retracted ? 1 : 0,
     }));
 
-  // Collect unique agents
-  const agents = [...new Set(memories.map((m: any) => m.agent_id))];
+    const memIds = new Set(memories.map((m) => m.id));
+    const seen = new Set<string>();
+    const associations: any[] = [];
+    for (const aid of agentIds) {
+      for (const a of ((await store.getAllAssociations(aid)) as any[]) ?? []) {
+        if (!memIds.has(a.fromEngramId) || !memIds.has(a.toEngramId)) continue;
+        const k = `${a.fromEngramId}>${a.toEngramId}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        associations.push({
+          from_id: a.fromEngramId, to_id: a.toEngramId,
+          weight: a.weight, type: a.type ?? 'hebbian',
+          activation_count: a.activationCount ?? 0, confidence: a.confidence ?? 0.5,
+        });
+      }
+    }
 
-  const exportData = {
-    version: '0.8.8',
-    exported_at: new Date().toISOString(),
-    source_db: dbPath,
-    agent_filter: agentFilter,
-    memories,
-    associations,
-    stats: {
-      total_memories: memories.length,
-      total_associations: associations.length,
-      agents,
-    },
-  };
+    const exportData = {
+      version: '0.9.2',
+      exported_at: new Date().toISOString(),
+      source_backend: backend,
+      agent_filter: agentFilter,
+      embedding_model: process.env.AWM_EMBED_MODEL ?? null,
+      memories,
+      associations,
+      stats: {
+        total_memories: memories.length,
+        total_associations: associations.length,
+        agents: [...new Set(memories.map((m) => m.agent_id))],
+      },
+    };
 
-  const json = JSON.stringify(exportData, null, 2);
-
-  if (outputPath) {
-    writeFileSync(outputPath, json + '\n');
-    console.error(`Exported ${memories.length} memories, ${associations.length} associations → ${outputPath}`);
-  } else {
-    process.stdout.write(json + '\n');
+    const json = JSON.stringify(exportData, null, 2);
+    if (outputPath) {
+      writeFileSync(outputPath, json + '\n');
+      console.error(`Exported ${memories.length} memories, ${associations.length} associations → ${outputPath} (backend: ${backend})`);
+    } else {
+      process.stdout.write(json + '\n');
+    }
+  } finally {
+    await close();
   }
-
-  db.close();
 }
 
 // ─── IMPORT ──────────────────────────────────────
@@ -381,12 +398,17 @@ async function importMemories() {
     else if (!args[i].startsWith('--') && !filePath) filePath = args[i];
   }
 
+  // --no-embeddings: skip importing embedding vectors (use when source/target embed models
+  // differ → import without, then re-embed). Parsed alongside the existing flags above.
+  const noEmbeddings = args.includes('--no-embeddings');
+
   if (!filePath) {
     console.error('Error: <file> is required');
     process.exit(1);
   }
-  if (!dbPath) {
-    console.error('Error: --db <path> is required');
+  const usingPostgres = (process.env.AWM_STORE_BACKEND ?? '').toLowerCase() === 'postgres';
+  if (!dbPath && !usingPostgres) {
+    console.error('Error: --db <path> is required (or set AWM_STORE_BACKEND=postgres + AWM_DATABASE_URL)');
     process.exit(1);
   }
   if (!existsSync(filePath)) {
@@ -400,134 +422,100 @@ async function importMemories() {
     process.exit(1);
   }
 
-  const Database = (await import('better-sqlite3')).default;
-  const db = new Database(dbPath);
-
-  // Ensure tables exist in target
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS engrams (
-      id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, concept TEXT NOT NULL, content TEXT NOT NULL,
-      embedding BLOB, confidence REAL NOT NULL DEFAULT 0.5, salience REAL NOT NULL DEFAULT 0.5,
-      access_count INTEGER NOT NULL DEFAULT 0, last_accessed TEXT NOT NULL, created_at TEXT NOT NULL,
-      salience_features TEXT NOT NULL DEFAULT '{}', reason_codes TEXT NOT NULL DEFAULT '[]',
-      stage TEXT NOT NULL DEFAULT 'active', ttl INTEGER, retracted INTEGER NOT NULL DEFAULT 0,
-      retracted_by TEXT, retracted_at TEXT, tags TEXT NOT NULL DEFAULT '[]',
-      episode_id TEXT, task_status TEXT, task_priority TEXT, blocked_by TEXT,
-      memory_class TEXT NOT NULL DEFAULT 'working', superseded_by TEXT, supersedes TEXT
-    );
-    CREATE TABLE IF NOT EXISTS associations (
-      id TEXT PRIMARY KEY, from_engram_id TEXT NOT NULL, to_engram_id TEXT NOT NULL,
-      weight REAL NOT NULL DEFAULT 0.1, confidence REAL NOT NULL DEFAULT 0.5,
-      type TEXT NOT NULL DEFAULT 'hebbian', activation_count INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL, last_activated TEXT
-    );
-  `);
-
-  // Build dedup set if needed
-  const existingHashes = new Set<string>();
-  if (dedupe) {
-    const existing = db.prepare('SELECT concept, content FROM engrams').all() as any[];
-    for (const row of existing) {
-      const hash = (row.concept ?? '').toLowerCase().trim() + '||' + (row.content ?? '').toLowerCase().trim();
-      existingHashes.add(hash);
-    }
-  }
-  const idMap = new Map<string, string>();
-  let imported = 0;
-  let skippedDupes = 0;
-  let skippedRetracted = 0;
-
-  const insertMem = db.prepare(`
-    INSERT INTO engrams (id, agent_id, concept, content, confidence, salience,
-      access_count, last_accessed, created_at, stage, tags, memory_class,
-      episode_id, task_status, task_priority, supersedes, superseded_by, retracted)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  // NOTE: associations.last_activated is NOT NULL on the engrams DB (storage/sqlite.ts),
-  // so importing into an existing store fails if it's omitted — and because import wraps
-  // memories+associations in ONE transaction, that rolls back the memories too (silent
-  // "empty store"). Set it alongside created_at. (migrate/merge paths already do this.)
-  const insertAssoc = db.prepare(`
-    INSERT INTO associations (id, from_engram_id, to_engram_id, weight, type, activation_count, created_at, last_activated)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-  `);
-
-  const importTx = db.transaction(() => {
-    // Import memories
-    for (const mem of importData.memories) {
-      // Skip retracted unless --include-retracted
-      if (mem.retracted && !includeRetracted) {
-        skippedRetracted++;
-        continue;
-      }
-
-      // Dedupe check
-      if (dedupe) {
-        const hash = (mem.concept ?? '').toLowerCase().trim() + '||' + (mem.content ?? '').toLowerCase().trim();
-        if (existingHashes.has(hash)) {
-          skippedDupes++;
-          continue;
+  const { store, backend, close } = await openCliStore(dbPath);
+  try {
+    // Dedupe against existing memories for the TARGET agent(s).
+    const existingHashes = new Set<string>();
+    if (dedupe) {
+      const targetAgents = remapAgent
+        ? [remapAgent]
+        : [...new Set(importData.memories.map((m: any) => m.agent_id))] as string[];
+      for (const aid of targetAgents) {
+        for (const e of ((await store.getEngramsByAgent(aid, undefined, true)) as any[]) ?? []) {
+          existingHashes.add(`${(e.concept ?? '').toLowerCase().trim()}||${(e.content ?? '').toLowerCase().trim()}`);
         }
       }
+    }
 
-      const newId = randomUUID();
-      idMap.set(mem.id, newId);
+    const idMap = new Map<string, string>(); // old export id → new store id
+    let imported = 0, skippedDupes = 0, skippedRetracted = 0;
 
-      const agentId = remapAgent ?? mem.agent_id;
-      const tags = Array.isArray(mem.tags) ? JSON.stringify(mem.tags) : (mem.tags ?? '[]');
-
-      if (!dryRun) {
-        insertMem.run(
-          newId, agentId, mem.concept, mem.content,
-          mem.confidence ?? 0.5, mem.salience ?? 0.5,
-          mem.access_count ?? 0, mem.last_accessed ?? mem.created_at,
-          mem.created_at, mem.stage ?? 'active', tags,
-          mem.memory_class ?? 'working', mem.episode_id ?? null,
-          mem.task_status ?? null, mem.task_priority ?? null,
-          mem.supersedes ?? null, mem.superseded_by ?? null,
-          mem.retracted ?? 0
-        );
+    // Pass 1 — create engrams (createEngram mints a fresh id; we capture it for remapping).
+    // createdAt/accessCount normalize to import time (the contract's createEngram stamps
+    // them) — see CHANGELOG; everything semantic (content/tags/confidence/salience/classes/
+    // embedding) is preserved, so recall is faithful.
+    for (const mem of importData.memories) {
+      if (mem.retracted && !includeRetracted) { skippedRetracted++; continue; }
+      if (dedupe) {
+        const h = `${(mem.concept ?? '').toLowerCase().trim()}||${(mem.content ?? '').toLowerCase().trim()}`;
+        if (existingHashes.has(h)) { skippedDupes++; continue; }
+        existingHashes.add(h); // also catch duplicates WITHIN this import file, not just vs the target
+      }
+      // dry-run: still map the id so the association-count preview isn't always 0
+      if (dryRun) { idMap.set(mem.id, mem.id); imported++; continue; }
+      const created = await store.createEngram({
+        agentId: remapAgent ?? mem.agent_id,
+        concept: mem.concept,
+        content: mem.content,
+        tags: Array.isArray(mem.tags) ? mem.tags : [],
+        embedding: (!noEmbeddings && Array.isArray(mem.embedding) && mem.embedding.length > 0) ? mem.embedding : undefined,
+        confidence: mem.confidence ?? 0.5,
+        salience: mem.salience ?? 0.5,
+        memoryClass: mem.memory_class ?? 'working',
+        memoryType: mem.memory_type ?? undefined,
+        episodeId: mem.episode_id ?? undefined,
+        taskStatus: mem.task_status ?? undefined,
+        taskPriority: mem.task_priority ?? undefined,
+      });
+      idMap.set(mem.id, created.id);
+      // Restore stage + retracted status. createEngram always mints an ACTIVE, non-retracted engram, so
+      // without this an `--include-retracted` import RESURRECTS retracted memories as live, and every
+      // non-active stage (staging/consolidated/archived/fading) silently flattens to active.
+      if (typeof mem.stage === 'string' && mem.stage && mem.stage !== 'active') {
+        try { await store.updateStage(created.id, mem.stage); } catch { /* best-effort */ }
+      }
+      if (mem.retracted) { // only reached when --include-retracted (retracted are skipped above otherwise)
+        try { await store.retractEngram(created.id, (mem as { retracted_by?: string }).retracted_by ?? null); } catch { /* best-effort */ }
       }
       imported++;
     }
 
-    // Import associations (using remapped IDs)
-    let assocImported = 0;
-    const associations = importData.associations ?? [];
-    for (const assoc of associations) {
-      const fromId = idMap.get(assoc.from_id);
-      const toId = idMap.get(assoc.to_id);
-      if (!fromId || !toId) continue; // skip if either memory was skipped
-
-      if (!dryRun) {
-        insertAssoc.run(
-          randomUUID(), fromId, toId,
-          assoc.weight ?? 0.5, assoc.type ?? 'hebbian',
-          assoc.activation_count ?? 0
-        );
+    // Pass 2 — re-link supersession with remapped ids (supersedeEngram sets both sides:
+    // old.superseded_by = new, new.supersedes = old). Skipped in dry-run.
+    if (!dryRun) {
+      for (const mem of importData.memories) {
+        const newId = idMap.get(mem.id);
+        if (!newId || !mem.supersedes) continue;
+        const supersededNew = idMap.get(mem.supersedes);
+        if (supersededNew) { try { await store.supersedeEngram(supersededNew, newId); } catch { /* best-effort */ } }
       }
+    }
+
+    // Pass 3 — associations, remapped; skip any whose endpoints weren't imported.
+    let assocImported = 0;
+    for (const a of (importData.associations ?? [])) {
+      const fromId = idMap.get(a.from_id), toId = idMap.get(a.to_id);
+      if (!fromId || !toId) continue;
+      if (!dryRun) { try { await store.upsertAssociation(fromId, toId, a.weight ?? 0.5, a.type ?? 'hebbian', a.confidence ?? 0.5); } catch { /* best-effort */ } }
       assocImported++;
     }
 
-    return assocImported;
-  });
-
-  const assocCount = importTx();
-
-  const prefix = dryRun ? '[DRY RUN] Would import' : 'Imported';
-  console.log(`${prefix} ${imported} memories, ${assocCount} associations` +
-    (skippedDupes > 0 ? `, ${skippedDupes} skipped (dupes)` : '') +
-    (skippedRetracted > 0 ? `, ${skippedRetracted} skipped (retracted)` : '') +
-    (remapAgent ? ` (agent remapped to: ${remapAgent})` : ''));
-
-  db.close();
+    const prefix = dryRun ? '[DRY RUN] Would import' : 'Imported';
+    console.log(`${prefix} ${imported} memories, ${assocImported} associations` +
+      (skippedDupes > 0 ? `, ${skippedDupes} skipped (dupes)` : '') +
+      (skippedRetracted > 0 ? `, ${skippedRetracted} skipped (retracted)` : '') +
+      (remapAgent ? ` (agent remapped to: ${remapAgent})` : '') +
+      ` (backend: ${backend}${noEmbeddings ? ', embeddings skipped' : ''})`);
+  } finally {
+    await close();
+  }
 }
 
 // ─── MERGE ──────────────────────────────────────
 
 async function mergeMemories() {
   const Database = (await import('better-sqlite3')).default;
+  const { EngramStore } = await import('./storage/sqlite.js');
   const { createHash, randomUUID } = await import('node:crypto');
 
   let target = '';
@@ -574,29 +562,19 @@ async function mergeMemories() {
 
   console.log(`Target: ${target}${dryRun ? ' (DRY RUN)' : ''}`);
 
-  const targetDb = new Database(target);
-  targetDb.pragma('journal_mode = WAL');
-  targetDb.pragma('foreign_keys = ON');
+  // Open the target through the REAL store so it has the full, current schema (all columns) + the FTS
+  // triggers. The previous hand-rolled schema dropped embedding/memory_class/memory_type/supersession/
+  // task columns and never created engrams_fts — so merged rows lost vector recall, class, AND BM25.
+  const store: any = new EngramStore(target);
+  const targetDb = store.db as import('better-sqlite3').Database; // the store's better-sqlite3 handle
 
-  // Ensure tables exist in target
-  targetDb.exec(`
-    CREATE TABLE IF NOT EXISTS engrams (
-      id TEXT PRIMARY KEY, agent_id TEXT NOT NULL, concept TEXT NOT NULL, content TEXT NOT NULL,
-      embedding BLOB, confidence REAL NOT NULL DEFAULT 0.5, salience REAL NOT NULL DEFAULT 0.5,
-      access_count INTEGER NOT NULL DEFAULT 0, last_accessed TEXT NOT NULL, created_at TEXT NOT NULL,
-      salience_features TEXT NOT NULL DEFAULT '{}', reason_codes TEXT NOT NULL DEFAULT '[]',
-      stage TEXT NOT NULL DEFAULT 'active', ttl INTEGER, retracted INTEGER NOT NULL DEFAULT 0,
-      retracted_by TEXT, retracted_at TEXT, tags TEXT NOT NULL DEFAULT '[]'
-    );
-    CREATE TABLE IF NOT EXISTS associations (
-      id TEXT PRIMARY KEY, from_engram_id TEXT NOT NULL, to_engram_id TEXT NOT NULL,
-      weight REAL NOT NULL DEFAULT 0.1, confidence REAL NOT NULL DEFAULT 0.5,
-      type TEXT NOT NULL DEFAULT 'hebbian', activation_count INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL, last_activated TEXT NOT NULL
-    );
-  `);
+  const blobToArr = (b: unknown): number[] | undefined => {
+    const buf = b as Buffer | null | undefined;
+    return buf && buf.length ? Array.from(new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.length / 4))) : undefined;
+  };
+  const parseJson = <T>(s: unknown, fallback: T): T => { try { return s ? JSON.parse(String(s)) as T : fallback; } catch { return fallback; } };
 
-  // Build dedupe hash set from existing target memories
+  // Build dedupe hash set from existing target memories (cross-agent read via the store's handle)
   const existingHashes = new Set<string>();
   if (dedupe) {
     const rows = targetDb.prepare('SELECT concept, content FROM engrams').all() as { concept: string; content: string }[];
@@ -604,12 +582,6 @@ async function mergeMemories() {
     console.log(`Target has ${existingHashes.size} unique memories (for dedupe)\n`);
   }
 
-  const insertEngram = targetDb.prepare(`
-    INSERT OR IGNORE INTO engrams (id, agent_id, concept, content, confidence, salience, access_count,
-      last_accessed, created_at, salience_features, reason_codes, stage, ttl,
-      retracted, retracted_by, retracted_at, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
   const insertAssoc = targetDb.prepare(`
     INSERT OR IGNORE INTO associations (id, from_engram_id, to_engram_id, weight, confidence, type,
       activation_count, created_at, last_activated)
@@ -618,6 +590,7 @@ async function mergeMemories() {
 
   let totalMemories = 0, totalAssociations = 0, totalSkipped = 0;
 
+  try {
   for (const sourcePath of sources) {
     if (!existsSync(sourcePath)) {
       console.error(`  Source not found: ${sourcePath}`);
@@ -625,63 +598,84 @@ async function mergeMemories() {
     }
 
     const sourceDb = new Database(sourcePath, { readonly: true });
-    const engrams = sourceDb.prepare(
-      `SELECT id, agent_id, concept, content, confidence, salience, access_count,
-        last_accessed, created_at, salience_features, reason_codes, stage, ttl,
-        retracted, retracted_by, retracted_at, tags FROM engrams`
-    ).all() as any[];
-    const assocs = sourceDb.prepare(
-      `SELECT id, from_engram_id, to_engram_id, weight, confidence, type,
-        activation_count, created_at, last_activated FROM associations`
-    ).all() as any[];
+    // SELECT * is robust to older source schemas — a column a source predates just reads back undefined
+    // and createEngram fills the default.
+    const engrams = sourceDb.prepare('SELECT * FROM engrams').all() as any[];
+    const assocs = sourceDb.prepare('SELECT * FROM associations').all() as any[];
+    sourceDb.close(); // reads done — release the source handle before any (throwing) write work
 
     const idMap = new Map<string, string>();
     const skippedIds = new Set<string>();
+    let imported = 0, skipped = 0, assocImported = 0;
 
-    const result = targetDb.transaction(() => {
-      let imported = 0, skipped = 0;
+    for (const e of engrams) {
+      const hash = contentHash(e.concept, e.content);
+      if (dedupe && existingHashes.has(hash)) { skippedIds.add(e.id); skipped++; continue; }
+      existingHashes.add(hash);
+      if (dryRun) { idMap.set(e.id, e.id); imported++; continue; }
+      // Route each engram through the store's createEngram so EVERY column (embedding, memory_class,
+      // memory_type, task fields, sequence, references) AND the FTS index are populated correctly.
+      const created = store.createEngram({
+        agentId: remapAgentId(e.agent_id),
+        concept: e.concept, content: e.content,
+        embedding: blobToArr(e.embedding),
+        confidence: e.confidence ?? 0.5, salience: e.salience ?? 0.5,
+        salienceFeatures: parseJson(e.salience_features, undefined),
+        reasonCodes: parseJson(e.reason_codes, undefined),
+        tags: parseJson<string[]>(e.tags, []),
+        memoryClass: e.memory_class ?? 'working',
+        memoryType: e.memory_type ?? undefined,
+        episodeId: e.episode_id ?? undefined,
+        taskStatus: e.task_status ?? undefined,
+        taskPriority: e.task_priority ?? undefined,
+        blockedBy: e.blocked_by ?? undefined,
+        ttl: e.ttl ?? undefined,
+        sequence: e.sequence ?? undefined,
+        references: parseJson(e.references_json, undefined),
+      });
+      idMap.set(e.id, created.id);
+      // preserve stage + retracted (createEngram always mints active/non-retracted)
+      if (typeof e.stage === 'string' && e.stage && e.stage !== 'active') { try { store.updateStage(created.id, e.stage); } catch { /* */ } }
+      if (e.retracted) { try { store.retractEngram(created.id, e.retracted_by ?? null); } catch { /* */ } }
+      imported++;
+    }
+    // second pass — re-link supersession with remapped ids
+    if (!dryRun) {
       for (const e of engrams) {
-        const hash = contentHash(e.concept, e.content);
-        if (dedupe && existingHashes.has(hash)) { skippedIds.add(e.id); skipped++; continue; }
-        const newId = randomUUID();
-        idMap.set(e.id, newId);
-        existingHashes.add(hash);
-        if (!dryRun) {
-          insertEngram.run(newId, remapAgentId(e.agent_id), e.concept, e.content, e.confidence,
-            e.salience, e.access_count, e.last_accessed, e.created_at, e.salience_features,
-            e.reason_codes, e.stage, e.ttl, e.retracted, e.retracted_by, e.retracted_at, e.tags);
-        }
-        imported++;
+        const newId = idMap.get(e.id);
+        if (!newId || !e.supersedes) continue;
+        const supNew = idMap.get(e.supersedes);
+        if (supNew) { try { store.supersedeEngram(supNew, newId); } catch { /* */ } }
       }
-      let assocImported = 0;
-      for (const a of assocs) {
-        if (skippedIds.has(a.from_engram_id) || skippedIds.has(a.to_engram_id)) continue;
-        const fromId = idMap.get(a.from_engram_id);
-        const toId = idMap.get(a.to_engram_id);
-        if (!fromId || !toId) continue;
-        if (!dryRun) {
+    }
+    for (const a of assocs) {
+      if (skippedIds.has(a.from_engram_id) || skippedIds.has(a.to_engram_id)) continue;
+      const fromId = idMap.get(a.from_engram_id);
+      const toId = idMap.get(a.to_engram_id);
+      if (!fromId || !toId) continue;
+      if (!dryRun) {
+        try {
           insertAssoc.run(randomUUID(), fromId, toId, a.weight, a.confidence, a.type,
             a.activation_count, a.created_at, a.last_activated);
-        }
-        assocImported++;
+        } catch { /* skip an association whose source row has an unbindable/undefined column */ }
       }
-      return { imported, skipped, assocImported };
-    })();
-
-    sourceDb.close();
+      assocImported++;
+    }
 
     const agentSet = new Set(engrams.map((e: any) => remapAgentId(e.agent_id)));
     console.log(`  Source: ${sourcePath}`);
-    console.log(`    Engrams: ${engrams.length} total, ${result.imported} imported, ${result.skipped} skipped`);
-    console.log(`    Associations: ${assocs.length} total, ${result.assocImported} imported`);
+    console.log(`    Engrams: ${engrams.length} total, ${imported} imported, ${skipped} skipped`);
+    console.log(`    Associations: ${assocs.length} total, ${assocImported} imported`);
     console.log(`    Agents: ${agentSet.size} (${[...agentSet].slice(0, 5).join(', ')}${agentSet.size > 5 ? '...' : ''})\n`);
 
-    totalMemories += result.imported;
-    totalAssociations += result.assocImported;
-    totalSkipped += result.skipped;
+    totalMemories += imported;
+    totalAssociations += assocImported;
+    totalSkipped += skipped;
   }
 
-  targetDb.close();
+  } finally {
+    try { store.close(); } catch { /* */ }
+  }
   console.log(`\nTotal: ${totalMemories} memories, ${totalAssociations} associations imported. ${totalSkipped} skipped.`);
   if (dryRun) console.log('(dry run — no data written)');
 }

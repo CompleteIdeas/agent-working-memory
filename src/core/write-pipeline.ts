@@ -220,7 +220,11 @@ export async function performWrite(
   let result: WriteResult | null = null;
   if (enableReinforcement && noveltyResult.matchedEngramId) {
     const matched = await store.getEngram(noveltyResult.matchedEngramId);
-    if (matched) {
+    // Agent-scope guard: NEVER reinforce/supersede an engram that belongs to a DIFFERENT agent. A
+    // workspace/hive recall can surface another agent's same-concept engram as the match; mutating it
+    // (merge content, re-embed, bump confidence, or supersede) would corrupt that agent's memory. A
+    // cross-agent match falls through to createNewEngram so this agent gets its own copy.
+    if (matched && matched.agentId === input.agentId) {
       const newConcept = (input.concept ?? '').toLowerCase().trim();
       const matchedConcept = (matched.concept ?? '').toLowerCase().trim();
       const sameConcept = newConcept === matchedConcept && newConcept.length > 0;

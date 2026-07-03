@@ -493,12 +493,21 @@ export async function computeNoveltyWithMatch(
         : typeof created === 'number' ? created : Date.parse(created);
       return Number.isFinite(createdMs) && createdMs >= cutoffMs;
     };
+    // Novelty PENALTY: an exact-concept recent match on EITHER channel (including cross-agent workspace
+    // results) is a near-duplicate for novelty-scoring purposes.
     const exactConceptRecent = allBm25.some(r => checkExactConcept(r.engram))
       || (topCosine ? checkExactConcept(topCosine.engram) : false);
+    // REINFORCE redirect: prefer an exact same-concept match as the matched engram so a true duplicate
+    // REINFORCES it (R1) instead of creating a new one even when a different-concept engram out-scores it.
+    // CRUCIALLY, only consider AGENT-SCOPED candidates — bm25Results and the cosine channel are scoped to
+    // this agent, but `wsResults` are OTHER agents' engrams; redirecting to one would make the write
+    // pipeline reinforce/supersede a foreign agent's memory (cross-agent contamination).
+    const exactMatch = bm25Results.find(r => checkExactConcept(r.engram))?.engram
+      ?? (topCosine && checkExactConcept(topCosine.engram) ? topCosine.engram : undefined);
     const conceptPenalty = exactConceptRecent ? 0.3 : 0;
 
     const novelty = Math.max(0.05, Math.min(0.95, baseNovelty - conceptPenalty));
-    return { novelty, matchedEngramId: combinedTop.engramId, matchScore: topScore };
+    return { novelty, matchedEngramId: exactMatch?.id ?? combinedTop.engramId, matchScore: topScore };
   } catch {
     return { novelty: 0.8, matchedEngramId: null, matchScore: 0 };
   }

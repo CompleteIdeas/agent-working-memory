@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Cognitive memory layer for AI agents â€” activation-based retrieval, salience filtering, associative connections",
   "type": "module",
   "main": "dist/index.js",
@@ -48,11 +48,13 @@
     "@toon-format/toon": "^2.3.0",
     "better-sqlite3": "^12.6.2",
     "fastify": "^5.8.2",
+    "pg": "^8.13.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.3.5",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

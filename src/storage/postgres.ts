@@ -1,21 +1,35 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
 /**
- * PGlite-backed EngramStore (AWM 0.8.x P4a).
+ * Postgres-server-backed EngramStore (AWM 0.8.x — real-server backend for scale).
  *
- * Uses @electric-sql/pglite — Postgres compiled to WASM, single-file
- * persistence (or in-memory), pgvector built in. Same SQL surface as
- * Postgres server, just a different driver.
+ * A near-clone of the PGlite adapter (pglite.ts) over node-postgres (`pg`) +
+ * pgvector. Same SQL surface and the same `pglite-schema.ts` DDL — PGlite IS
+ * Postgres compiled to WASM, so the schema, placeholders ($1…), and row shapes
+ * are identical; only the driver and connection lifecycle differ. Selected via
+ * `AWM_STORE_BACKEND=postgres`, connection from `AWM_DATABASE_URL`.
  *
- * The full IEngramStore contract is implemented as async methods. Cognitive
- * engines call store methods with await; the existing SQLite sync path
- * continues to work via SqliteEngramStore (unchanged).
+ * Driver differences handled here (vs. the embedded single-connection PGlite):
+ *   - `pg.Pool` instead of an embedded WASM instance.
+ *   - `ivfflat.probes` is a per-SESSION GUC; it's persisted once as a
+ *     per-DATABASE default during bootstrap (before the pool opens), so every
+ *     pooled connection inherits it at startup with no per-connection query.
+ *   - Transactions must run on ONE client. `withTransaction` checks out a
+ *     dedicated client and binds it to an AsyncLocalStorage scope; `this.q()`
+ *     routes to that client only for queries issued inside the transaction's
+ *     async context (so `fn()`'s store calls join the tx), else to the pool.
+ *     Mirrors PGlite's single-connection serialization without sending unrelated
+ *     concurrent queries to the tx client.
+ *   - int8/numeric are coerced to JS numbers (pg returns them as strings by
+ *     default) to match PGlite's number-returning behavior.
+ *
+ * The full IEngramStore contract is implemented as async methods, identical to
+ * the PGlite adapter.
  */
 
-import { PGlite } from '@electric-sql/pglite';
-import { vector } from '@electric-sql/pglite/vector';
+import pg from 'pg';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-
 import type {
   Engram, EngramCreate, EngramStage, Association, AssociationType,
   SearchQuery, ActivationEvent, StagingEvent,
@@ -23,6 +37,19 @@ import type {
   ConsciousState, CheckpointRow,
 } from '../types/index.js';
 import { PGLITE_SCHEMA_DDL, PGLITE_VECTOR_DIMENSIONS } from './pglite-schema.js';
+
+const { Pool, Client, types } = pg;
+type Pool = pg.Pool;
+type PoolClient = pg.PoolClient;
+
+// Coerce Postgres int8 (OID 20) and numeric (OID 1700) to JS numbers so result
+// rows match PGlite's number-returning shape (pg returns them as strings). The
+// store already wraps COUNT(*) in Number(), so this is defense-in-depth for any
+// raw `as number` cast on an aggregate/bigint column.
+types.setTypeParser(20, (v) => (v == null ? null : Number(v)) as any);
+types.setTypeParser(1700, (v) => (v == null ? null : Number(v)) as any);
+
+let warnedNoCoordPg = false; // one-time warning when workspace/hive recall falls back (coord_agents absent)
 
 function toISO(d: Date | string | null | undefined): string | null {
   if (d == null) return null;
@@ -141,41 +168,105 @@ function extractTagValue(tags: string[], prefix: string): string | null {
   return null;
 }
 
-let warnedNoCoordPglite = false; // one-time warning when workspace/hive recall falls back (coord_agents absent)
-
-export class PGliteEngramStore {
-  private db!: PGlite;
+export class PostgresEngramStore {
+  private pool!: Pool;
+  /**
+   * The transaction's dedicated client, scoped to the withTransaction() callback's
+   * async context. q() reads it via getStore() so ONLY queries issued from inside
+   * the transaction route to that client — background callers (the activation-flush
+   * timer, an overlapping recall) keep using the pool. A pg client serves one query
+   * at a time, so without this scoping a background query could collide with the
+   * in-flight tx query ("client is already executing a query"). PGlite sidestepped
+   * this by queuing on its single connection; the pool path needs explicit scoping.
+   */
+  private readonly txCtx = new AsyncLocalStorage<PoolClient>();
   private readyPromise: Promise<void>;
 
-  // Activation-event batching — recall path writes one event per call. On
-  // PGlite that's a full transaction per recall, adding ~20-50ms. We queue
-  // events in memory and flush every 5s or when buffer reaches 100.
+  // Activation-event batching — recall path writes one event per call. On a
+  // network-backed server that's a round-trip per recall; we queue events in
+  // memory and flush every 5s or when buffer reaches 100.
   // Buffer is best-effort — crash loses last batch (eval data only, not state).
   private activationEventBuffer: ActivationEvent[] = [];
   private activationFlushTimer: ReturnType<typeof setInterval> | null = null;
   private static readonly ACTIVATION_FLUSH_INTERVAL_MS = 5_000;
   private static readonly ACTIVATION_FLUSH_BATCH_SIZE = 100;
 
-  constructor(dbPath: string = './memory.db') {
-    this.readyPromise = this.init(dbPath);
+  /**
+   * @param connectionString  Postgres URL (postgres://user:pass@host:port/db).
+   *   Falls back to AWM_DATABASE_URL, then a localhost default. The PGlite
+   *   adapter takes a directory path here; this one takes a connection string —
+   *   that's the only constructor-signature difference.
+   */
+  constructor(connectionString?: string) {
+    const url = connectionString || process.env.AWM_DATABASE_URL || 'postgres://localhost:5432/awm';
+    this.readyPromise = this.init(url);
   }
 
-  private async init(dataDir: string): Promise<void> {
-    this.db = await PGlite.create(dataDir, { extensions: { vector } });
-    await this.db.exec(PGLITE_SCHEMA_DDL);
-    // ivfflat probes: at lists=100 (set in pglite-schema.ts), default probes=1
-    // scans only 1 cluster which misses neighbors on sparse query distributions.
-    // probes=5 trades ~10-20ms latency for ~5x better recall on top-K — the
-    // sweet spot for our 1K–100K engram range. Tunable via AWM_IVFFLAT_PROBES.
+  private async init(connectionString: string): Promise<void> {
+    // ivfflat.probes is a per-SESSION GUC. At lists=100 (pglite-schema.ts) the
+    // default probes=1 scans a single cluster and misses neighbors; probes=5
+    // trades ~10-20ms for ~5x better top-K recall in our 1K–100K engram range.
+    // Tunable via AWM_IVFFLAT_PROBES.
     const probes = parseInt(process.env.AWM_IVFFLAT_PROBES ?? '5', 10);
-    if (probes > 1) {
-      await this.db.exec(`SET ivfflat.probes = ${probes}`);
+
+    // Bootstrap on a DEDICATED client, BEFORE the pool opens any connection:
+    //   (1) run the schema DDL (shared with PGlite; CREATE EXTENSION vector is the
+    //       first statement — pgvector image / superuser provides it), and
+    //   (2) persist ivfflat.probes as a per-DATABASE default so every pooled
+    //       connection inherits it at startup with NO per-connection query.
+    // The earlier approach (a pool 'connect' hook firing an un-awaited `SET`)
+    // raced the pool handing the same client to the real query → "client is
+    // already executing a query". A per-database default removes that path
+    // entirely. ivfflat.probes is a dotted (placeholder) GUC, so ALTER DATABASE
+    // accepts it even though the vector module isn't loaded in the bootstrap
+    // session; new sessions apply it once the module loads.
+    const boot = new Client({ connectionString });
+    await boot.connect();
+    try {
+      // Serialize bootstrap across ALL connections/processes. Concurrent
+      // CREATE EXTENSION / CREATE TABLE IF NOT EXISTS / ALTER DATABASE on shared
+      // system catalogs race in Postgres ("tuple concurrently updated", duplicate
+      // pg_type rows) — MWA news up a MwaMemory per serve endpoint, so two stores
+      // can bootstrap at once. A session-level advisory lock makes only one run
+      // the DDL at a time; the rest wait, then see everything already exists.
+      // (Auto-released on boot.end() / disconnect.)
+      await boot.query('SELECT pg_advisory_lock($1)', [4915001]); // const key: AWM schema bootstrap
+      await boot.query(PGLITE_SCHEMA_DDL);
+      if (probes > 1) {
+        const { rows } = await boot.query<{ db: string }>('SELECT current_database() AS db');
+        const db = String(rows[0]?.db ?? '');
+        if (db) {
+          try {
+            await boot.query(`ALTER DATABASE "${db.replace(/"/g, '""')}" SET ivfflat.probes = ${probes}`);
+          } catch { /* best-effort: recall still works at the default probes=1 */ }
+        }
+      }
+    } finally {
+      await boot.end();
     }
+
+    // All pooled connections are created AFTER the per-database default is in
+    // place, so they inherit ivfflat.probes at startup — no connect hook needed.
+    this.pool = new Pool({ connectionString, max: Number(process.env.AWM_PG_POOL_MAX ?? 10) });
+    // A swallowed pool error event would otherwise crash the process on an idle
+    // client disconnect. Log-and-continue; the next query re-establishes.
+    this.pool.on('error', () => {/* idle-client error; pool recovers on next checkout */});
+
     // Periodic flush for batched activation events.
     this.activationFlushTimer = setInterval(
       () => { void this.flushActivationEvents().catch(() => {/* best-effort */}); },
-      PGliteEngramStore.ACTIVATION_FLUSH_INTERVAL_MS,
+      PostgresEngramStore.ACTIVATION_FLUSH_INTERVAL_MS,
     );
+  }
+
+  /**
+   * Single funnel for every data query. Routes to the tx client bound in the
+   * `txCtx` AsyncLocalStorage scope when called inside a withTransaction() callback
+   * (so inner store calls join the tx), else to the pool. Returns the same `{ rows }`
+   * shape the PGlite adapter relies on.
+   */
+  private q<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }> {
+    return (this.txCtx.getStore() ?? this.pool).query<any>(sql, params) as unknown as Promise<{ rows: T[] }>;
   }
 
   async ready(): Promise<void> { return this.readyPromise; }
@@ -187,7 +278,7 @@ export class PGliteEngramStore {
       this.activationFlushTimer = null;
     }
     await this.flushActivationEvents();
-    await this.db.close();
+    await this.pool.end();
   }
 
   /**
@@ -210,7 +301,10 @@ export class PGliteEngramStore {
       );
     }
     try {
-      await this.db.query(
+      // ALWAYS the pool, never this.q(): this background flush is fire-and-forget and must
+      // not route to a transaction's client (a future caller that logs an activation inside a
+      // withTransaction would otherwise collide with the tx's in-flight query on one pg client).
+      await this.pool.query(
         `INSERT INTO activation_events (id, agent_id, timestamp, context, results_returned, top_score, latency_ms, engram_ids)
          VALUES ${values.join(',')}`,
         params,
@@ -223,21 +317,29 @@ export class PGliteEngramStore {
   /**
    * Async-aware transaction wrapper that matches IEngramStore.withTransaction.
    *
-   * Uses raw BEGIN/COMMIT/ROLLBACK on the shared connection so `fn` can call
-   * the regular (non-tx-context) store methods — they all funnel through
-   * `this.db.query()` which serializes on the same PGlite connection.
-   * The transaction lock is held across awaits inside fn.
+   * Checks out ONE dedicated client and binds it to the `txCtx` AsyncLocalStorage
+   * scope for the duration of `fn`, so every regular store method `fn` calls — they
+   * all funnel through `this.q()`, which reads `txCtx.getStore()` — routes to that
+   * same client and joins the transaction (a Pool would otherwise hand each query a
+   * different connection). Mirrors PGlite's single-connection serialization. Not
+   * re-entrant (no nested BEGIN), same as the PGlite adapter.
    */
   async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
     await this.readyPromise;
-    await this.db.query('BEGIN');
+    const client = await this.pool.connect();
     try {
-      const result = await fn();
-      await this.db.query('COMMIT');
+      await client.query('BEGIN');
+      // Run fn inside the async context that binds q() to THIS client, so every
+      // store call fn makes joins the transaction; callers outside this context
+      // (background flush, concurrent recall) keep using the pool.
+      const result = await this.txCtx.run(client, fn);
+      await client.query('COMMIT');
       return result;
     } catch (err) {
-      try { await this.db.query('ROLLBACK'); } catch { /* best-effort */ }
+      try { await client.query('ROLLBACK'); } catch { /* best-effort */ }
       throw err;
+    } finally {
+      client.release();
     }
   }
 
@@ -250,7 +352,7 @@ export class PGliteEngramStore {
     const id = input.id ?? randomUUID();
     const now = new Date().toISOString();
 
-    await this.db.query(
+    await this.q(
       `INSERT INTO engrams (
         id, agent_id, concept, content, embedding, embedding_model,
         confidence, salience, access_count, last_accessed, created_at,
@@ -298,7 +400,7 @@ export class PGliteEngramStore {
 
   async getEngram(id: string): Promise<Engram | null> {
     await this.readyPromise;
-    const result = await this.db.query<any>(`SELECT * FROM engrams WHERE id = $1`, [id]);
+    const result = await this.q<any>(`SELECT * FROM engrams WHERE id = $1`, [id]);
     if (result.rows.length === 0) return null;
     return rowToEngram(result.rows[0]);
   }
@@ -313,7 +415,7 @@ export class PGliteEngramStore {
     }
     if (!includeRetracted) sql += ` AND retracted = FALSE`;
     sql += ` ORDER BY created_at DESC`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.map(rowToEngram);
   }
 
@@ -330,7 +432,7 @@ export class PGliteEngramStore {
       params.push(stage);
     }
     if (!includeRetracted) sql += ` AND retracted = FALSE`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.map((r) => ({
       id: r.id as string,
       concept: r.concept as string,
@@ -353,7 +455,7 @@ export class PGliteEngramStore {
       params.push(stage);
     }
     if (!includeRetracted) sql += ` AND retracted = FALSE`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.map((r) => ({
       id: r.id as string,
       concept: r.concept as string,
@@ -364,7 +466,7 @@ export class PGliteEngramStore {
   async getEngramsByIds(ids: string[]): Promise<Engram[]> {
     if (ids.length === 0) return [];
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM engrams WHERE id = ANY($1::text[])`,
       [ids],
     );
@@ -382,14 +484,14 @@ export class PGliteEngramStore {
       params.push(stage);
     }
     if (!includeRetracted) sql += ` AND retracted = FALSE`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.map(rowToEngram);
   }
 
   async getWorkspaceAgentIds(agentId: string, workspace: string): Promise<string[]> {
     await this.readyPromise;
     try {
-      const result = await this.db.query<any>(
+      const result = await this.q<any>(
         `SELECT DISTINCT name FROM coord_agents WHERE workspace = $1 AND status != 'dead'`,
         [workspace],
       );
@@ -397,11 +499,11 @@ export class PGliteEngramStore {
       if (!names.includes(agentId)) names.push(agentId);
       return names;
     } catch {
-      // coord_agents isn't provisioned on PGlite — workspace/hive coordination is currently SQLite-only.
-      // Warn ONCE so this degrades VISIBLY (recall scoped to self) instead of silently.
-      if (!warnedNoCoordPglite) {
-        warnedNoCoordPglite = true;
-        console.warn('[awm:pglite] workspace/hive coordination is not available on the PGlite backend ' +
+      // coord_agents isn't provisioned on Postgres — workspace/hive coordination is currently
+      // SQLite-only. Warn ONCE so this degrades VISIBLY (recall scoped to self) instead of silently.
+      if (!warnedNoCoordPg) {
+        warnedNoCoordPg = true;
+        console.warn('[awm:postgres] workspace/hive coordination is not available on the Postgres backend ' +
           '(coord_agents not provisioned) — recall is scoped to THIS agent only. Hive coordination is SQLite-only for now.');
       }
       return [agentId];
@@ -410,7 +512,7 @@ export class PGliteEngramStore {
 
   async touchEngram(id: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(
+    await this.q(
       `UPDATE engrams
        SET access_count = access_count + 1,
            last_accessed = $1,
@@ -422,7 +524,7 @@ export class PGliteEngramStore {
 
   async updateStage(id: string, stage: EngramStage): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET stage = $1 WHERE id = $2`, [stage, id]);
+    await this.q(`UPDATE engrams SET stage = $1 WHERE id = $2`, [stage, id]);
   }
 
   /**
@@ -433,24 +535,24 @@ export class PGliteEngramStore {
    */
   async updateContent(id: string, content: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET content = $1 WHERE id = $2`, [content, id]);
+    await this.q(`UPDATE engrams SET content = $1 WHERE id = $2`, [content, id]);
   }
 
   async updateConfidence(id: string, confidence: number): Promise<void> {
     await this.readyPromise;
     const clamped = Math.max(0, Math.min(1, confidence));
-    await this.db.query(`UPDATE engrams SET confidence = $1 WHERE id = $2`, [clamped, id]);
+    await this.q(`UPDATE engrams SET confidence = $1 WHERE id = $2`, [clamped, id]);
   }
 
   async updateEmbedding(id: string, embedding: number[], modelId?: string): Promise<void> {
     await this.readyPromise;
     if (modelId) {
-      await this.db.query(
+      await this.q(
         `UPDATE engrams SET embedding = $1::vector, embedding_model = $2 WHERE id = $3`,
         [vectorToLiteral(embedding), modelId, id],
       );
     } else {
-      await this.db.query(
+      await this.q(
         `UPDATE engrams SET embedding = $1::vector WHERE id = $2`,
         [vectorToLiteral(embedding), id],
       );
@@ -459,7 +561,7 @@ export class PGliteEngramStore {
 
   async retractEngram(id: string, retractedBy: string | null): Promise<void> {
     await this.readyPromise;
-    await this.db.query(
+    await this.q(
       `UPDATE engrams SET retracted = TRUE, retracted_by = $1, retracted_at = $2 WHERE id = $3`,
       [retractedBy, new Date().toISOString(), id],
     );
@@ -467,7 +569,7 @@ export class PGliteEngramStore {
 
   async deleteEngram(id: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`DELETE FROM engrams WHERE id = $1`, [id]);
+    await this.q(`DELETE FROM engrams WHERE id = $1`, [id]);
   }
 
   /**
@@ -477,16 +579,16 @@ export class PGliteEngramStore {
   async timeWarp(agentId: string, ms: number): Promise<number> {
     await this.readyPromise;
     const seconds = Math.round(ms / 1000);
-    const r1 = await this.db.query(
+    const r1 = await this.q(
       `UPDATE engrams SET
          created_at = to_char(($1::timestamptz - interval '1 second' * $2), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
          last_accessed = to_char(($3::timestamptz - interval '1 second' * $2), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
        WHERE agent_id = $4`,
       ['now', seconds, 'now', agentId],
     );
-    // Simpler: just update with relative arithmetic on stored ISO strings.
-    // PGlite doesn't support all date ops cleanly; fall through to JS-side calculation.
-    return (r1 as any).affectedRows ?? 0;
+    // node-postgres reports the affected-row count as `rowCount` (PGlite called it
+    // `affectedRows` — the one result-shape field that differs between the drivers).
+    return (r1 as any).rowCount ?? 0;
   }
 
   async getLatestEngram(agentId: string, excludeId?: string): Promise<Engram | null> {
@@ -498,7 +600,7 @@ export class PGliteEngramStore {
       params.push(excludeId);
     }
     sql += ` ORDER BY created_at DESC LIMIT 1`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.length > 0 ? rowToEngram(result.rows[0]) : null;
   }
 
@@ -511,7 +613,7 @@ export class PGliteEngramStore {
     // Restrict to active + fading. Faded engrams (Paper 1: storage degradation)
     // retain their embedding so they still participate in semantic recall, even
     // though their content has been trimmed. Excludes staging/consolidated/archived.
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT *, (embedding <=> $2::vector) AS distance
        FROM engrams
        WHERE agent_id = $1
@@ -540,7 +642,7 @@ export class PGliteEngramStore {
     const tokens = query.replace(/[^\w\s]/g, ' ').trim().split(/\s+/).filter(t => t.length > 1);
     if (tokens.length === 0) return [];
     const websearchQuery = tokens.join(' OR ');
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT *, ts_rank_cd(fts, websearch_to_tsquery('english', $2)) AS rank
        FROM engrams
        WHERE agent_id = $1 AND retracted = FALSE
@@ -559,7 +661,7 @@ export class PGliteEngramStore {
     const tokens = query.replace(/[^\w\s]/g, ' ').trim().split(/\s+/).filter(t => t.length > 1);
     if (tokens.length === 0) return [];
     const websearchQuery = tokens.join(' OR ');
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT *, ts_rank_cd(fts, websearch_to_tsquery('english', $2)) AS rank
        FROM engrams
        WHERE agent_id = ANY($1::text[]) AND retracted = FALSE
@@ -622,7 +724,7 @@ export class PGliteEngramStore {
     sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(query.limit ?? 50, query.offset ?? 0);
 
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.map(rowToEngram);
   }
 
@@ -632,17 +734,17 @@ export class PGliteEngramStore {
 
   async updateTaskStatus(id: string, status: TaskStatus): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET task_status = $1 WHERE id = $2`, [status, id]);
+    await this.q(`UPDATE engrams SET task_status = $1 WHERE id = $2`, [status, id]);
   }
 
   async updateTaskPriority(id: string, priority: TaskPriority): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET task_priority = $1 WHERE id = $2`, [priority, id]);
+    await this.q(`UPDATE engrams SET task_priority = $1 WHERE id = $2`, [priority, id]);
   }
 
   async updateBlockedBy(id: string, blockedBy: string | null): Promise<void> {
     await this.readyPromise;
-    await this.db.query(
+    await this.q(
       `UPDATE engrams SET blocked_by = $1, task_status = $2 WHERE id = $3`,
       [blockedBy, blockedBy ? 'blocked' : 'open', id],
     );
@@ -665,13 +767,13 @@ export class PGliteEngramStore {
         ELSE 4
       END,
       created_at DESC`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.map(rowToEngram);
   }
 
   async getNextTask(agentId: string): Promise<Engram | null> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM engrams
        WHERE agent_id = $1 AND task_status IN ('open', 'in_progress') AND retracted = FALSE
        ORDER BY
@@ -696,8 +798,8 @@ export class PGliteEngramStore {
 
   async supersedeEngram(oldId: string, newId: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET superseded_by = $1 WHERE id = $2`, [newId, oldId]);
-    await this.db.query(`UPDATE engrams SET supersedes = $1 WHERE id = $2`, [oldId, newId]);
+    await this.q(`UPDATE engrams SET superseded_by = $1 WHERE id = $2`, [newId, oldId]);
+    await this.q(`UPDATE engrams SET supersedes = $1 WHERE id = $2`, [oldId, newId]);
   }
 
   async findActiveMatchByConcept(
@@ -720,13 +822,13 @@ export class PGliteEngramStore {
       }
     }
     sql += ` ORDER BY created_at DESC LIMIT 1`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     return result.rows.length > 0 ? rowToEngram(result.rows[0]) : null;
   }
 
   async isSuperseded(id: string): Promise<boolean> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT superseded_by FROM engrams WHERE id = $1`,
       [id],
     );
@@ -735,12 +837,12 @@ export class PGliteEngramStore {
 
   async updateMemoryClass(id: string, memoryClass: MemoryClass): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET memory_class = $1 WHERE id = $2`, [memoryClass, id]);
+    await this.q(`UPDATE engrams SET memory_class = $1 WHERE id = $2`, [memoryClass, id]);
   }
 
   async updateTags(id: string, tags: string[]): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET tags = $1 WHERE id = $2`, [JSON.stringify(tags), id]);
+    await this.q(`UPDATE engrams SET tags = $1 WHERE id = $2`, [JSON.stringify(tags), id]);
   }
 
   // ============================================================
@@ -754,7 +856,7 @@ export class PGliteEngramStore {
     await this.readyPromise;
     const id = randomUUID();
     const now = new Date().toISOString();
-    await this.db.query(
+    await this.q(
       `INSERT INTO associations (id, from_engram_id, to_engram_id, weight, confidence, type, activation_count, created_at, last_activated)
        VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $7)
        ON CONFLICT (from_engram_id, to_engram_id) DO UPDATE SET
@@ -771,7 +873,7 @@ export class PGliteEngramStore {
 
   async getAssociation(fromId: string, toId: string): Promise<Association | null> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM associations WHERE from_engram_id = $1 AND to_engram_id = $2`,
       [fromId, toId],
     );
@@ -780,7 +882,7 @@ export class PGliteEngramStore {
 
   async getAssociationsFor(engramId: string): Promise<Association[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM associations WHERE from_engram_id = $1 OR to_engram_id = $1`,
       [engramId],
     );
@@ -791,7 +893,7 @@ export class PGliteEngramStore {
     const result = new Map<string, { count: number; sumWeight: number }>();
     if (engramIds.length === 0) return result;
     await this.readyPromise;
-    const r = await this.db.query<any>(
+    const r = await this.q<any>(
       `SELECT id, SUM(cnt) AS count, SUM(sw) AS sum_weight FROM (
          SELECT from_engram_id AS id, 1 AS cnt, weight AS sw FROM associations WHERE from_engram_id = ANY($1::text[])
          UNION ALL
@@ -814,7 +916,7 @@ export class PGliteEngramStore {
     const result = new Map<string, Association[]>();
     if (engramIds.length === 0) return result;
     await this.readyPromise;
-    const r = await this.db.query<any>(
+    const r = await this.q<any>(
       `SELECT * FROM associations
        WHERE from_engram_id = ANY($1::text[]) OR to_engram_id = ANY($1::text[])`,
       [engramIds],
@@ -838,7 +940,7 @@ export class PGliteEngramStore {
 
   async getOutgoingAssociations(engramId: string): Promise<Association[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM associations WHERE from_engram_id = $1`,
       [engramId],
     );
@@ -847,7 +949,7 @@ export class PGliteEngramStore {
 
   async countAssociationsFor(engramId: string): Promise<number> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT COUNT(*) AS count FROM associations WHERE from_engram_id = $1`,
       [engramId],
     );
@@ -856,7 +958,7 @@ export class PGliteEngramStore {
 
   async getWeakestAssociation(engramId: string): Promise<Association | null> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM associations WHERE from_engram_id = $1 ORDER BY weight ASC LIMIT 1`,
       [engramId],
     );
@@ -865,12 +967,12 @@ export class PGliteEngramStore {
 
   async deleteAssociation(id: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`DELETE FROM associations WHERE id = $1`, [id]);
+    await this.q(`DELETE FROM associations WHERE id = $1`, [id]);
   }
 
   async getAllAssociations(agentId: string): Promise<Association[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT a.* FROM associations a
        JOIN engrams e ON a.from_engram_id = e.id
        WHERE e.agent_id = $1`,
@@ -885,7 +987,7 @@ export class PGliteEngramStore {
 
   async getEvictionCandidates(agentId: string, limit: number): Promise<Engram[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM engrams
        WHERE agent_id = $1 AND stage = 'active' AND retracted = FALSE
        ORDER BY (salience * 0.3 + confidence * 0.3
@@ -899,7 +1001,7 @@ export class PGliteEngramStore {
 
   async getActiveCount(agentId: string): Promise<number> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT COUNT(*) AS count FROM engrams WHERE agent_id = $1 AND stage = 'active'`,
       [agentId],
     );
@@ -908,7 +1010,7 @@ export class PGliteEngramStore {
 
   async getStagingCount(agentId: string): Promise<number> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT COUNT(*) AS count FROM engrams WHERE agent_id = $1 AND stage = 'staging'`,
       [agentId],
     );
@@ -917,7 +1019,7 @@ export class PGliteEngramStore {
 
   async getExpiredStaging(): Promise<Engram[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM engrams WHERE stage = 'staging' AND ttl IS NOT NULL`,
     );
     const now = Date.now();
@@ -934,14 +1036,14 @@ export class PGliteEngramStore {
     // Queue rather than write synchronously — removes activation INSERT from
     // the recall hot path. Flushed on timer (5s) or when buffer hits 100.
     this.activationEventBuffer.push(event);
-    if (this.activationEventBuffer.length >= PGliteEngramStore.ACTIVATION_FLUSH_BATCH_SIZE) {
+    if (this.activationEventBuffer.length >= PostgresEngramStore.ACTIVATION_FLUSH_BATCH_SIZE) {
       void this.flushActivationEvents().catch(() => {/* best-effort */});
     }
   }
 
   async logStagingEvent(event: StagingEvent): Promise<void> {
     await this.readyPromise;
-    await this.db.query(
+    await this.q(
       `INSERT INTO staging_events (engram_id, agent_id, action, resonance_score, timestamp, age_ms)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [
@@ -953,7 +1055,7 @@ export class PGliteEngramStore {
 
   async logRetrievalFeedback(activationEventId: string | null, engramId: string, useful: boolean, context: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(
+    await this.q(
       `INSERT INTO retrieval_feedback (id, activation_event_id, engram_id, useful, context, timestamp)
        VALUES ($1, $2, $3, $4, $5, $6)`,
       [randomUUID(), activationEventId, engramId, useful, context, new Date().toISOString()],
@@ -963,7 +1065,7 @@ export class PGliteEngramStore {
   async getRetrievalPrecision(agentId: string, windowHours: number = 24): Promise<number> {
     await this.readyPromise;
     const since = new Date(Date.now() - windowHours * 3600_000).toISOString();
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT
          COUNT(CASE WHEN useful = TRUE THEN 1 END) AS useful_count,
          COUNT(*) AS total_count
@@ -981,7 +1083,7 @@ export class PGliteEngramStore {
 
   async getStagingMetrics(agentId: string): Promise<{ promoted: number; discarded: number; expired: number }> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT
          COUNT(CASE WHEN action = 'promoted' THEN 1 END) AS promoted,
          COUNT(CASE WHEN action = 'discarded' THEN 1 END) AS discarded,
@@ -1002,7 +1104,7 @@ export class PGliteEngramStore {
     // Flush any buffered activation events so stats reflect the latest writes.
     await this.flushActivationEvents();
     const since = new Date(Date.now() - windowHours * 3600_000).toISOString();
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT latency_ms FROM activation_events
        WHERE agent_id = $1 AND timestamp > $2
        ORDER BY latency_ms ASC`,
@@ -1021,7 +1123,7 @@ export class PGliteEngramStore {
 
   async getConsolidatedCount(agentId: string): Promise<number> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT COUNT(*) AS cnt FROM engrams WHERE agent_id = $1 AND stage = 'consolidated'`,
       [agentId],
     );
@@ -1036,7 +1138,7 @@ export class PGliteEngramStore {
     await this.readyPromise;
     const id = randomUUID();
     const now = new Date().toISOString();
-    await this.db.query(
+    await this.q(
       `INSERT INTO episodes (id, agent_id, label, embedding, engram_count, start_time, end_time, created_at)
        VALUES ($1, $2, $3, $4::vector, 0, $5, $5, $5)`,
       [id, input.agentId, input.label, vectorToLiteral(input.embedding ?? null), now],
@@ -1048,13 +1150,13 @@ export class PGliteEngramStore {
 
   async getEpisode(id: string): Promise<Episode | null> {
     await this.readyPromise;
-    const result = await this.db.query<any>(`SELECT * FROM episodes WHERE id = $1`, [id]);
+    const result = await this.q<any>(`SELECT * FROM episodes WHERE id = $1`, [id]);
     return result.rows.length > 0 ? rowToEpisode(result.rows[0]) : null;
   }
 
   async getEpisodesByAgent(agentId: string): Promise<Episode[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM episodes WHERE agent_id = $1 ORDER BY end_time DESC`,
       [agentId],
     );
@@ -1064,7 +1166,7 @@ export class PGliteEngramStore {
   async getActiveEpisode(agentId: string, windowMs: number = 3600_000): Promise<Episode | null> {
     await this.readyPromise;
     const cutoff = new Date(Date.now() - windowMs).toISOString();
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM episodes WHERE agent_id = $1 AND end_time > $2 ORDER BY end_time DESC LIMIT 1`,
       [agentId, cutoff],
     );
@@ -1073,8 +1175,8 @@ export class PGliteEngramStore {
 
   async addEngramToEpisode(engramId: string, episodeId: string): Promise<void> {
     await this.readyPromise;
-    await this.db.query(`UPDATE engrams SET episode_id = $1 WHERE id = $2`, [episodeId, engramId]);
-    await this.db.query(
+    await this.q(`UPDATE engrams SET episode_id = $1 WHERE id = $2`, [episodeId, engramId]);
+    await this.q(
       `UPDATE episodes SET
          engram_count = engram_count + 1,
          end_time = GREATEST(end_time, $1)
@@ -1085,7 +1187,7 @@ export class PGliteEngramStore {
 
   async getEngramsByEpisode(episodeId: string): Promise<Engram[]> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM engrams WHERE episode_id = $1 AND retracted = FALSE ORDER BY created_at ASC`,
       [episodeId],
     );
@@ -1094,7 +1196,7 @@ export class PGliteEngramStore {
 
   async updateEpisodeEmbedding(id: string, embedding: number[]): Promise<void> {
     await this.readyPromise;
-    await this.db.query(
+    await this.q(
       `UPDATE episodes SET embedding = $1::vector WHERE id = $2`,
       [vectorToLiteral(embedding), id],
     );
@@ -1102,7 +1204,7 @@ export class PGliteEngramStore {
 
   async getEpisodeCount(agentId: string): Promise<number> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT COUNT(*) AS cnt FROM episodes WHERE agent_id = $1`,
       [agentId],
     );
@@ -1119,7 +1221,7 @@ export class PGliteEngramStore {
     const conditions = tags.map((_, i) => `tags LIKE $${i + 2}`).join(' OR ');
     const params: any[] = [agentId, ...tags.map(tagLike)];
     const sql = `SELECT * FROM engrams WHERE agent_id = $1 AND retracted = FALSE AND (${conditions})`;
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     const engrams = result.rows.map(rowToEngram);
     if (excludeIds) return engrams.filter((e) => !excludeIds.has(e.id));
     return engrams;
@@ -1132,7 +1234,7 @@ export class PGliteEngramStore {
   async updateAutoCheckpointWrite(agentId: string, engramId: string): Promise<void> {
     await this.readyPromise;
     const now = new Date().toISOString();
-    await this.db.query(
+    await this.q(
       `INSERT INTO conscious_state (agent_id, last_write_id, last_activity_at, write_count_since_consolidation, updated_at)
        VALUES ($1, $2, $3, 1, $3)
        ON CONFLICT(agent_id) DO UPDATE SET
@@ -1147,7 +1249,7 @@ export class PGliteEngramStore {
   async updateAutoCheckpointRecall(agentId: string, context: string, engramIds: string[]): Promise<void> {
     await this.readyPromise;
     const now = new Date().toISOString();
-    await this.db.query(
+    await this.q(
       `INSERT INTO conscious_state (agent_id, last_recall_context, last_recall_ids, last_activity_at, recall_count_since_consolidation, updated_at)
        VALUES ($1, $2, $3, $4, 1, $4)
        ON CONFLICT(agent_id) DO UPDATE SET
@@ -1163,7 +1265,7 @@ export class PGliteEngramStore {
   async touchActivity(agentId: string): Promise<void> {
     await this.readyPromise;
     const now = new Date().toISOString();
-    await this.db.query(
+    await this.q(
       `INSERT INTO conscious_state (agent_id, last_activity_at, updated_at)
        VALUES ($1, $2, $2)
        ON CONFLICT(agent_id) DO UPDATE SET
@@ -1176,7 +1278,7 @@ export class PGliteEngramStore {
   async saveCheckpoint(agentId: string, state: ConsciousState): Promise<void> {
     await this.readyPromise;
     const now = new Date().toISOString();
-    await this.db.query(
+    await this.q(
       `INSERT INTO conscious_state (agent_id, execution_state, checkpoint_at, last_activity_at, updated_at)
        VALUES ($1, $2, $3, $3, $3)
        ON CONFLICT(agent_id) DO UPDATE SET
@@ -1190,7 +1292,7 @@ export class PGliteEngramStore {
 
   async getCheckpoint(agentId: string): Promise<CheckpointRow | null> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT * FROM conscious_state WHERE agent_id = $1`,
       [agentId],
     );
@@ -1218,12 +1320,12 @@ export class PGliteEngramStore {
     await this.readyPromise;
     const now = new Date().toISOString();
     if (mini) {
-      await this.db.query(
+      await this.q(
         `UPDATE conscious_state SET last_mini_consolidation_at = $1, updated_at = $1 WHERE agent_id = $2`,
         [now, agentId],
       );
     } else {
-      await this.db.query(
+      await this.q(
         `UPDATE conscious_state SET
            last_consolidation_at = $1,
            last_mini_consolidation_at = $1,
@@ -1239,7 +1341,7 @@ export class PGliteEngramStore {
 
   async getActiveAgents(): Promise<Array<{ agentId: string; lastActivityAt: Date; writeCount: number; recallCount: number; lastConsolidationAt: Date | null }>> {
     await this.readyPromise;
-    const result = await this.db.query<any>(`SELECT * FROM conscious_state`);
+    const result = await this.q<any>(`SELECT * FROM conscious_state`);
     return result.rows.map((row) => ({
       agentId: row.agent_id,
       lastActivityAt: new Date(row.last_activity_at),
@@ -1251,7 +1353,7 @@ export class PGliteEngramStore {
 
   async getConsolidationCycleCount(agentId: string): Promise<number> {
     await this.readyPromise;
-    const result = await this.db.query<any>(
+    const result = await this.q<any>(
       `SELECT consolidation_cycle_count FROM conscious_state WHERE agent_id = $1`,
       [agentId],
     );
@@ -1285,7 +1387,7 @@ export class PGliteEngramStore {
     }
     if (opts.sortBy === 'sequence') sql += ` AND sequence IS NOT NULL`;
     sql += ` ORDER BY ` + (opts.sortBy === 'sequence' ? 'sequence DESC, created_at DESC' : 'created_at DESC');
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     const engrams = result.rows.map(rowToEngram);
     const seen = new Map<string, Engram>();
     for (const e of engrams) {
@@ -1330,7 +1432,7 @@ export class PGliteEngramStore {
       sql += ` AND NOT (${ors})`;
       for (const tag of opts.filterTagsNone) params.push(tagLike(tag));
     }
-    const result = await this.db.query<any>(sql, params);
+    const result = await this.q<any>(sql, params);
     const engrams = result.rows.map(rowToEngram);
     const valued = engrams.map((e) => {
       const raw = extractTagValue(e.tags, opts.sortField);
@@ -1350,23 +1452,24 @@ export class PGliteEngramStore {
   }
 
   /**
-   * Atomically allocate the next sequence number for an agent.
-   *
-   * Uses PGlite's transaction API — the callback receives a `tx` context
-   * that must be used for queries; calling `this.db.query` from inside
-   * the callback bypasses the transaction and deadlocks the connection.
+   * Allocate the next sequence number for an agent (a soft ordering aid, not a
+   * hard uniqueness guarantee). Runs the read inside withTransaction() to mirror
+   * the PGlite adapter, but note the caller's INSERT happens AFTER this returns —
+   * so two concurrent allocations can read the same MAX and collide. This
+   * read-then-external-insert window is identical in the PGlite/SQLite paths; if a
+   * hard guarantee is ever needed, switch to `SELECT … FOR UPDATE` or a DB sequence.
    */
   async allocateNextSequence(agentId: string): Promise<number> {
     await this.readyPromise;
-    return this.db.transaction(async (tx: any) => {
-      const result = await tx.query(
+    return this.withTransaction(async () => {
+      const result = await this.q(
         `SELECT MAX(sequence) AS max_seq FROM engrams WHERE agent_id = $1`,
         [agentId],
       );
       const max = result.rows[0]?.max_seq;
       return (max != null ? Number(max) : 0) + 1;
-    }) as Promise<number>;
+    });
   }
 }
 
-export const PGLITE_DIMENSIONS = PGLITE_VECTOR_DIMENSIONS;
+export const POSTGRES_DIMENSIONS = PGLITE_VECTOR_DIMENSIONS;
