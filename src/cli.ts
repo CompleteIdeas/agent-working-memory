@@ -13,11 +13,12 @@
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join, dirname, basename } from 'node:path';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
+import { runOnboard } from './onboard/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -712,6 +713,48 @@ async function migrateCmd() {
   }
 }
 
+// ─── ONBOARD ──────────────────────────────────────
+
+function onboardCmd() {
+  const docs: string[] = [];
+  let repo: string | undefined;
+  let project = '';
+  let agentId = '';
+  let purpose: string | undefined;
+  let outDir = resolve(process.cwd(), '.awm');
+
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--repo' && args[i + 1]) repo = args[++i];
+    else if (a === '--project' && args[i + 1]) project = args[++i];
+    else if (a === '--agent' && args[i + 1]) agentId = args[++i];
+    else if (a === '--purpose' && args[i + 1]) purpose = args[++i];
+    else if (a === '--out' && args[i + 1]) outDir = resolve(args[++i]);
+    else if (!a.startsWith('--')) docs.push(a);
+  }
+
+  // Default docs to the repo (or cwd) so a bare `awm onboard --repo .` works.
+  if (docs.length === 0) docs.push(repo ?? process.cwd());
+  if (!project) project = basename(repo ? resolve(repo) : (docs[0] ? resolve(docs[0]) : process.cwd()));
+  if (!agentId) agentId = project;
+
+  const { packPath, reviewPath, count } = runOnboard({ docs, repo, project, agentId, purpose, outDir });
+  console.log(`
+AWM onboard — warm-start pack for "${project}"
+
+  Scanned:   ${docs.join(', ')}${repo ? `  (+repo ${repo})` : ''}
+  Extracted: ${count} candidate memories (agent: ${agentId})
+
+  Review:    ${reviewPath}
+  Pack:      ${packPath}
+
+Next:
+  1. Edit the review file / pack as needed (delete noise, answer the interview questions).
+  2. Load it:  awm import ${packPath} --db <path> --dedupe
+     (embeddings backfill on the first consolidation — recall is warm immediately after)
+`.trimEnd());
+}
+
 // ─── Dispatch ──────────────────────────────────────
 
 switch (command) {
@@ -741,6 +784,9 @@ switch (command) {
     break;
   case 'migrate':
     await migrateCmd();
+    break;
+  case 'onboard':
+    onboardCmd();
     break;
   case '--help':
   case '-h':
