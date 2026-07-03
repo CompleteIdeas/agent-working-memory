@@ -18,7 +18,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from './version.js';
-import { runOnboard } from './onboard/index.js';
+import { runOnboard, ONBOARD_SKILL } from './onboard/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -141,6 +141,9 @@ async function setup() {
   const instructionsAction = adapter.writeInstructions(ctx, skipInstructions);
   const hooksAction = adapter.writeHooks(ctx, skipHooks);
 
+  // Seed the onboarding skill so a cold store can teach the agent how to warm itself.
+  const skillAction = await seedOnboardSkill(ctx.dbPath, ctx.agentId);
+
   console.log(`
 AWM configured for ${adapter.name}${isGlobal ? ' (global)' : ''}
 
@@ -149,6 +152,7 @@ AWM configured for ${adapter.name}${isGlobal ? ' (global)' : ''}
   ${configAction}
   ${instructionsAction}
   ${hooksAction}
+  ${skillAction}
 
 Next steps:
   1. Restart ${adapter.name} to pick up the MCP server
@@ -714,6 +718,30 @@ async function migrateCmd() {
 }
 
 // ─── ONBOARD ──────────────────────────────────────
+
+/**
+ * Seed the onboarding skill as a canonical memory (idempotent). This is what lets
+ * a cold store teach the host agent how to warm-start itself — the agent recalls
+ * the skill and follows it. Best-effort: a seeding failure never fails `awm setup`.
+ */
+async function seedOnboardSkill(dbPath: string, agentId: string): Promise<string> {
+  try {
+    const { store, close } = await openCliStore(dbPath);
+    try {
+      const existing = await store.findActiveMatchByConcept(agentId, ONBOARD_SKILL.concept);
+      if (existing) return 'Onboarding skill: already present';
+      await store.createEngram({
+        agentId, concept: ONBOARD_SKILL.concept, content: ONBOARD_SKILL.content,
+        tags: ONBOARD_SKILL.tags, confidence: 0.9, salience: 0.9, memoryClass: 'canonical',
+      });
+      return 'Onboarding skill: seeded (recall it on a cold store to warm-start)';
+    } finally {
+      await close();
+    }
+  } catch (e: any) {
+    return `Onboarding skill: skipped (${e?.message ?? 'store unavailable'})`;
+  }
+}
 
 function onboardCmd() {
   const docs: string[] = [];

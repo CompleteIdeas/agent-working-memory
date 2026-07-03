@@ -80,6 +80,27 @@ export const INTERVIEW_QUESTIONS: string[] = [
   'What does "done right" look like here — the definition of quality?',
 ];
 
+/**
+ * The onboarding skill — a procedure stored AS a canonical memory so a host agent
+ * (Codex, Claude Code, MWA) can *recall* it and run the interview itself. This is
+ * how the "LLM-assisted" tier works without AWM ever calling a model: the agent
+ * that's already there is the brain; AWM provides the procedure + the tools.
+ * Seeded by `awm setup`; recalled on a cold store (see the restore nudge).
+ */
+export const ONBOARD_SKILL = {
+  concept: 'Skill: onboard a new project (warm-start protocol)',
+  content: [
+    'When the memory store is empty or you are new to this project, warm-start it before doing other work:',
+    '1. Call the `onboard_scan` tool with the docs dir + repo path to get candidate memories (a deterministic scan — real file contents, not guesses).',
+    '2. Refine each candidate into an ATOMIC, recall-shaped memory: lead with the fact, keep it to one idea, and include concrete identifiers (file paths, table columns, function names, ticket IDs). Split fat sections into 2-3 crisp facts; drop noise.',
+    '3. Run the interview: call `onboard_questions`, then ask the user ONE question at a time starting with "What is the goal of this memory system?". Ask follow-ups for clarity when an answer is vague.',
+    '4. Propose the memory set you intend to save and get the user\'s confirmation (edit/drop as they direct).',
+    '5. Save each with `memory_write`, memory_class="canonical", tagged with project + topic + source. Stamp facts from the owner\'s own docs as verified/observed; mark your own inferences lower.',
+    'Result: recall is useful from the next turn on. Re-run when the docs change to keep the seed fresh (supersede, don\'t duplicate).',
+  ].join('\n'),
+  tags: ['topic=skill', 'name=onboard', 'src=onboarding', 'intent=context'],
+};
+
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 }

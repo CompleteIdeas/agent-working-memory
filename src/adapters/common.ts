@@ -222,7 +222,11 @@ directly — but **DO NOT fall back to markdown files**. Files drift the moment
 you write them; AWM stays current because every agent reads + writes the same store.
 
 ### Lifecycle (always do these, in this order)
-1. **Session start**: call \`memory_restore\` to recover previous context.
+1. **Session start**: call \`memory_restore\` to recover previous context. If it reports the
+   store is empty/new (or recall keeps returning nothing), **warm-start first**: recall the
+   \`onboard a new project\` skill and follow it — or call \`onboard_scan\` on the project's
+   docs/repo, refine the candidates, run \`onboard_questions\`, and save the good ones with
+   \`memory_write\` (canonical). A cold store is nearly useless until it's seeded.
 2. **Starting a task**: call \`memory_task_begin\` (checkpoints + recalls relevant memories).
 3. **During work**: call \`memory_recall\` BEFORE stating any fact, BEFORE searching
    the filesystem, BEFORE making architectural decisions. Recall is ~300ms — cheaper

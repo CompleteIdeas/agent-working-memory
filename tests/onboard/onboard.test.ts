@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildPack, INTERVIEW_QUESTIONS } from '../../src/onboard/index.js';
+import { buildPack, INTERVIEW_QUESTIONS, ONBOARD_SKILL } from '../../src/onboard/index.js';
 import { EngramStore } from '../../src/storage/sqlite.js';
 import { ActivationEngine } from '../../src/engine/activation.js';
 import { embedBatch } from '../../src/core/embeddings.js';
@@ -80,6 +80,48 @@ describe('awm onboard — scan', () => {
     const b = buildPack(opts()).memories.map((m) => m.id).sort();
     expect(a).toEqual(b);
     expect(new Set(a).size).toBe(a.length); // no dupes within a pack
+  });
+});
+
+describe('awm onboard — skill (the instruction from working memory)', () => {
+  it('the onboarding skill is well-formed and references the tools + the anchor question', () => {
+    expect(ONBOARD_SKILL.concept.toLowerCase()).toContain('onboard');
+    expect(ONBOARD_SKILL.tags).toContain('topic=skill');
+    expect(ONBOARD_SKILL.tags).toContain('name=onboard');
+    for (const needle of ['onboard_scan', 'onboard_questions', 'memory_write', 'goal of this memory system']) {
+      expect(ONBOARD_SKILL.content).toContain(needle);
+    }
+  });
+
+  it('seeding is idempotent, and the seeded skill is recallable (agent can recall its own how-to)', async () => {
+    const dbPath = join(dir, `skill-${Date.now()}.db`);
+    const store = new EngramStore(dbPath);
+    const activation = new ActivationEngine(store);
+    try {
+      // Mirror seedOnboardSkill: create only if not already present.
+      const seed = async () => {
+        const existing = await store.findActiveMatchByConcept('acme', ONBOARD_SKILL.concept);
+        if (existing) return false;
+        const [emb] = await embedBatch([`${ONBOARD_SKILL.concept} ${ONBOARD_SKILL.content}`]);
+        store.createEngram({
+          agentId: 'acme', concept: ONBOARD_SKILL.concept, content: ONBOARD_SKILL.content,
+          tags: ONBOARD_SKILL.tags, embedding: emb, memoryClass: 'canonical',
+        });
+        return true;
+      };
+      expect(await seed()).toBe(true);   // first seed writes
+      expect(await seed()).toBe(false);  // second is a no-op (idempotent)
+      expect((await store.getEngramsByAgent('acme')).length).toBe(1);
+
+      // The agent asks how to warm-start; recall surfaces the skill it was seeded with.
+      const results = await activation.activate({
+        agentId: 'acme', context: 'how do I onboard a new project and warm-start memory', limit: 3, internal: true,
+      });
+      expect(results.some((r) => r.engram.concept === ONBOARD_SKILL.concept)).toBe(true);
+    } finally {
+      store.close();
+      for (const s of ['', '-wal', '-shm']) { try { unlinkSync(dbPath + s); } catch { /* */ } }
+    }
   });
 });
 

@@ -29,7 +29,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, basename } from 'node:path';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Load .env file if present (no external dependency)
@@ -76,6 +76,7 @@ import { embed } from './core/embeddings.js';
 import { startSidecar } from './hooks/sidecar.js';
 import { initLogger, log, getLogPath } from './core/logger.js';
 import { VERSION } from './version.js';
+import { buildPack, INTERVIEW_QUESTIONS } from './onboard/index.js';
 import { liteCompress, retrieveOriginal } from './core/lite-compress.js';
 import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-decisions.js';
 
@@ -640,6 +641,15 @@ Use this at the start of every session or after compaction to pick up where you 
   async () => {
     const checkpoint = await store.getCheckpoint(AGENT_ID);
 
+    // Cold-store nudge: an empty store means the agent has nothing to recall — offer to warm-start.
+    let coldStoreNudge = '';
+    try {
+      const activeCount = (await store.getEngramsByAgent(AGENT_ID)).length;
+      if (activeCount < 3) {
+        coldStoreNudge = `🌱 **This memory store is nearly empty (${activeCount} ${activeCount === 1 ? 'memory' : 'memories'}).** Warm-start it before other work: recall the "onboard a new project" skill and follow it — or call \`onboard_scan\` on this project's docs/repo, refine the results, and save them with \`memory_write\` (canonical). Recall becomes useful immediately.`;
+      }
+    } catch { /* count is best-effort */ }
+
     const now = Date.now();
     const idleMs = checkpoint
       ? now - checkpoint.auto.lastActivityAt.getTime()
@@ -718,6 +728,7 @@ Use this at the start of every session or after compaction to pick up where you 
         : '';
     log(AGENT_ID, 'restore', `idle=${idleMin}min checkpoint=${!!checkpoint?.executionState} recalled=${recalledMemories.length} lastWrite=${lastWrite?.concept ?? 'none'}${fullConsolidationTriggered ? ' FULL_CONSOLIDATION' : ''}`);
     parts.push(`Idle: ${idleMin}min${consolidationNote}`);
+    if (coldStoreNudge) parts.push(`\n${coldStoreNudge}`);
 
     if (checkpoint?.executionState) {
       const s = checkpoint.executionState;
@@ -773,6 +784,53 @@ Use this at the start of every session or after compaction to pick up where you 
       }],
     };
   }
+);
+
+// --- Onboarding Tools (warm-start a cold store) ---
+
+server.tool(
+  'onboard_scan',
+  `Scan a project's documentation + repository and return CANDIDATE memories to seed a cold store.
+
+Use this when the store is empty / you're new to a project. The scan is deterministic
+(real file contents, not guesses) — YOUR job is to refine the candidates into atomic,
+recall-shaped memories, run the interview (onboard_questions), confirm with the user, then
+save the good ones with memory_write (memory_class="canonical"). Nothing is saved by this tool.`,
+  {
+    docs: z.array(z.string()).optional()
+      .describe('Doc files/dirs to scan (Markdown/text). Defaults to the repo (or cwd).'),
+    repo: z.string().optional()
+      .describe('Repo root — also derives stack (package.json) + layout memories.'),
+    project: z.string().optional()
+      .describe('Project name (becomes a tag). Defaults to the repo/dir name.'),
+    purpose: z.string().optional()
+      .describe('The goal of this memory system, if known — becomes the anchor memory.'),
+  },
+  async (params) => {
+    const repo = params.repo;
+    const docs = params.docs && params.docs.length ? params.docs : [repo ?? process.cwd()];
+    const project = params.project ?? basename(resolve(repo ?? docs[0] ?? process.cwd()));
+    const pack = buildPack({ docs, repo, project, agentId: AGENT_ID, purpose: params.purpose });
+    log(AGENT_ID, 'onboard', `scan ${docs.join(',')}${repo ? ' +repo' : ''} → ${pack.memories.length} candidates`);
+    const text = [
+      `Scanned ${docs.join(', ')}${repo ? ` (+repo ${repo})` : ''} → ${pack.memories.length} CANDIDATE memories (NOT saved).`,
+      `Next: refine each into an atomic memory (lead with the fact + identifiers), run onboard_questions,`,
+      `confirm with the user, then save the good ones with memory_write (memory_class="canonical").`,
+      ``,
+      JSON.stringify({ project, candidates: pack.memories, questions: pack.questions }, null, 2),
+    ].join('\n');
+    return { content: [{ type: 'text' as const, text }] };
+  }
+);
+
+server.tool(
+  'onboard_questions',
+  `Return the onboarding interview questions. Ask the user ONE at a time, starting with the
+goal of the memory system, and ask follow-ups for clarity. Turn each answer into a canonical memory.`,
+  {},
+  async () => ({
+    content: [{ type: 'text' as const, text: INTERVIEW_QUESTIONS.map((q, i) => `${i + 1}. ${q}`).join('\n') }],
+  })
 );
 
 // --- Task Management Tools ---
