@@ -551,6 +551,17 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.10.1
+
+A patch — no functional or recall-behavior change.
+
+- **Reported version is now the truth.** Hand-maintained version strings had drifted
+  (a 0.10.0 build announced `0.8.5`/`0.8.8`/`0.9.2` on the banner, `/health`, the MCP
+  server, and the export payload). A new `src/version.ts` reads `version` from
+  `package.json` at runtime, so the reported number can never diverge from the build.
+- README now documents the v0.10.0 Postgres backend (below) + `AWM_STORE_BACKEND=postgres`
+  / `AWM_DATABASE_URL`.
+
 ## What's New in v0.10.0
 
 A networked **Postgres** backend + backend-agnostic memory portability, plus
@@ -583,9 +594,6 @@ callers keep working unmodified.
 - **Hive degradation is visible** — `getWorkspaceAgentIds` on Postgres/PGlite emits a
   one-time warning (workspace coordination is SQLite-only) instead of silently
   returning self-only.
-- **Reported version is now the truth.** `/health`, the startup banner, and the MCP
-  server version read from `package.json` at runtime (a single source of truth), so a
-  build can no longer announce a stale hand-maintained version number.
 
 ## What's New in v0.9.0
 

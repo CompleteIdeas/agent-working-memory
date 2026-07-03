@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.1 (2026-07-03) — version reporting reads package.json (no more stale literals) + README refresh
+
+Patch: no functional/API change, no recall-behavior change. Fixes version-reporting drift and
+documents 0.10.0's Postgres backend in the README.
+
+- **Reported version is now the truth.** Hand-maintained version strings had drifted — a 0.10.0
+  build announced itself as `0.8.5` (startup banner), `0.8.8` (`/health` + MCP server), and `0.9.2`
+  (`awm export` payload). New `src/version.ts` reads `version` from `package.json` at runtime;
+  `index.ts`, `api/routes.ts` (`/health`), `mcp.ts` (MCP server, both paths), and `cli.ts` (export
+  envelope) now use it, so the reported number can never diverge from the build again.
+- **README refresh.** Adds a "What's New in v0.10.0" section (Postgres backend, backend-agnostic
+  import/export, merge/import data-integrity fixes, cross-agent contamination guard) and documents
+  `AWM_STORE_BACKEND=postgres` + `AWM_DATABASE_URL`.
+
 ## 0.10.0 (2026-07-02) — networked Postgres backend + backend-agnostic import/export + data-movement/write-pipeline fixes
 
 First public 0.10.0 (npm was at 0.9.1). Correctness/stability fixes surfaced by a deep audit
