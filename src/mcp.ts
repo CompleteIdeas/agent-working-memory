@@ -75,6 +75,7 @@ import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { embed } from './core/embeddings.js';
 import { startSidecar } from './hooks/sidecar.js';
 import { initLogger, log, getLogPath } from './core/logger.js';
+import { VERSION } from './version.js';
 import { liteCompress, retrieveOriginal } from './core/lite-compress.js';
 import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-decisions.js';
 
@@ -86,7 +87,7 @@ const INCOGNITO = process.env.AWM_INCOGNITO === '1' || process.env.AWM_INCOGNITO
 
 if (INCOGNITO) {
   console.error('AWM: incognito mode — all memory tools disabled, nothing will be recorded');
-  const server = new McpServer({ name: 'agent-working-memory', version: '0.8.8' });
+  const server = new McpServer({ name: 'agent-working-memory', version: VERSION });
   const transport = new StdioServerTransport();
   server.connect(transport).catch(err => {
     console.error('MCP server failed:', err);
@@ -141,7 +142,7 @@ let coordDb: import('better-sqlite3').Database | null = null;
 
 const server = new McpServer({
   name: 'agent-working-memory',
-  version: '0.8.8',
+  version: VERSION,
 });
 
 server.registerResource(

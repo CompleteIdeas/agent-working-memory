@@ -17,6 +17,7 @@ import { resolve, join, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { VERSION } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -352,7 +353,7 @@ async function exportMemories() {
     }
 
     const exportData = {
-      version: '0.9.2',
+      version: VERSION,
       exported_at: new Date().toISOString(),
       source_backend: backend,
       agent_filter: agentFilter,

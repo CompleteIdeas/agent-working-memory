@@ -49,6 +49,7 @@ import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 import { embed, embedBatch } from '../core/embeddings.js';
+import { VERSION } from '../version.js';
 
 export interface MemoryDeps {
   store: EngramStore;
@@ -952,7 +953,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     const base: Record<string, unknown> = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '0.8.8',
+      version: VERSION,
       coordination: coordEnabled,
     };
     if (coordEnabled && typeof (deps.store as any).getDb === 'function') {

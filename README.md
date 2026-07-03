@@ -520,8 +520,9 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | `AWM_DISABLE_RERANK_SKIP` | *(unset)* | Set to `1` to disable the reranker skip on clear-winner queries (0.7.10+). Forces every recall through the cross-encoder |
 | `AWM_DISABLE_EXPANSION_CACHE` | *(unset)* | Set to `1` to disable the query expansion skip heuristic + LRU cache (0.7.11+). Forces every recall through the flan-t5-small expander |
 | `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
-| `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (better-sqlite3 + FTS5) or `pglite` (PGlite + pgvector + pgroonga). 0.8.x. |
-| `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path. Directory for PGlite, file for SQLite. |
+| `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (better-sqlite3 + FTS5), `pglite` (PGlite + pgvector + pgroonga), or `postgres` (node-postgres + pgvector, networked/multi-connection — **experimental**, 0.10.0). |
+| `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path. Directory for PGlite, file for SQLite. Ignored for `postgres` (uses `AWM_DATABASE_URL`). |
+| `AWM_DATABASE_URL` | *(unset)* | Postgres connection string when `AWM_STORE_BACKEND=postgres` (0.10.0). |
 | `AWM_CONF_SHARPNESS_W` | `0.4` | Weight of `top1 / mean(top5)` in recall confidence (PR-1, v0.8.5) |
 | `AWM_CONF_CLIFF_W` | `0.3` | Weight of `(top1 - top10) / top1` in recall confidence (PR-1, v0.8.5) |
 | `AWM_CONF_FLOOR_W` | `0.3` | Weight of `top1` absolute score in recall confidence (PR-1, v0.8.5) |
@@ -549,6 +550,42 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | Validation | Zod 4 |
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
+
+## What's New in v0.10.0
+
+A networked **Postgres** backend + backend-agnostic memory portability, plus
+correctness/stability fixes from a deep audit. No API changes — existing SQLite
+callers keep working unmodified.
+
+- **New `postgres` backend** (`AWM_STORE_BACKEND=postgres`, `AWM_DATABASE_URL=…`).
+  A real-server adapter over node-postgres (`pg`) + pgvector — the first backend
+  that is multi-**connection** safe (vs SQLite's single-machine WAL and PGlite's
+  single-process WASM), for cloud / multi-replica deployments. Sub-1.0 on purpose:
+  the backend is **experimental** until the remaining SQLite-only paths
+  (coordination, hot backups, integrity check) are ported and cross-backend
+  recall-quality parity is confirmed.
+- **Backend-agnostic `awm import` / `awm export`.** Both route through `openStore()`,
+  so you can export from any backend and **import INTO Postgres or PGlite** (import
+  was previously SQLite-only). **Export now includes embedding vectors** — a faithful,
+  recall-ready port with no re-embed when source/target embedding models match
+  (`--no-embeddings` to skip for a model mismatch). New flags: `--all-stages`,
+  `--include-retracted`; associations + supersession links are preserved.
+- **`awm merge` no longer silently drops data.** The old hand-rolled merge used a
+  truncated schema (no `embedding`, `memory_class`, task/supersession columns) and
+  never populated FTS — killing both vector and BM25 recall for merged rows. Rewritten
+  to route every source engram through the authoritative `EngramStore`/`createEngram`
+  path (+ stage/retracted/supersession restore), wrapped in `try/finally`.
+- **`awm import` preserves stage + retracted** — previously `--include-retracted`
+  resurrected retracted memories and flattened all stages to `active`.
+- **Cross-agent contamination guard (write pipeline)** — a workspace/hive recall can
+  surface another agent's same-concept engram; the reinforce/supersede branch now
+  refuses to mutate an engram whose `agentId` differs from the writer's.
+- **Hive degradation is visible** — `getWorkspaceAgentIds` on Postgres/PGlite emits a
+  one-time warning (workspace coordination is SQLite-only) instead of silently
+  returning self-only.
+- **Reported version is now the truth.** `/health`, the startup banner, and the MCP
+  server version read from `package.json` at runtime (a single source of truth), so a
+  build can no longer announce a stale hand-maintained version number.
 
 ## What's New in v0.9.0
 
@@ -837,6 +874,8 @@ daily in production coding workflows.
 - Coherence-weighted retraction + counter-narrative inheritance: **stable** (v0.8.5)
 - Content fade stage + adaptive output granularity: **stable** (v0.8.5)
 - PGlite backend (alternative to SQLite, with pgvector + ivfflat): **stable** (v0.8.x)
+- Networked Postgres backend (`pg` + pgvector, multi-connection): **experimental** (v0.10.0)
+- Backend-agnostic `import`/`export` (embeddings included, cross-backend port): **stable** (v0.10.0)
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

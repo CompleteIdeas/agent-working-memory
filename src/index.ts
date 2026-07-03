@@ -3,6 +3,7 @@
 import { readFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import Fastify from 'fastify';
+import { VERSION } from './version.js';
 
 // Load .env file if present (no external dependency)
 try {
@@ -202,7 +203,7 @@ async function main() {
 
   // Start server
   await app.listen({ port: PORT, host: '0.0.0.0' });
-  console.log(`AgentWorkingMemory v0.8.5 listening on port ${PORT}`);
+  console.log(`AgentWorkingMemory v${VERSION} listening on port ${PORT}`);
 
   // Graceful shutdown
   const shutdown = async () => {
