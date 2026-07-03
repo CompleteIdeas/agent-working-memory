@@ -44,7 +44,11 @@ Restart Claude Code after upgrading. Your existing memory database is preserved 
 
 First conversation will be ~30 seconds slower while ML models download (~200MB total, cached locally). After that, everything runs on your machine.
 
-> For isolated memory per folder, see [Separate Memory Pools](#separate-memory-pools). For team onboarding, see [docs/quickstart.md](docs/quickstart.md).
+> For isolated memory per folder, see [Separate Memory Pools](#separate-memory-pools). For team onboarding, see [docs/quickstart.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/quickstart.md).
+
+> **Starting on an existing project?** Warm-start the store from its own docs so recall is
+> useful immediately: `awm onboard ./docs --repo . --project <name>` → review the pack →
+> `awm import <pack> --db <path> --dedupe`. See [What's New in v0.11.0](#whats-new-in-v0110).
 
 ---
 
@@ -82,13 +86,13 @@ Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM
 | **Noise rejection** | None | Multi-channel agreement gate: requires 2+ retrieval channels to agree before returning results |
 | **Duplicates** | Stored repeatedly | Reinforce-on-duplicate: near-exact matches boost existing memory instead of creating copies |
 
-The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](docs/cognitive-model.md) for details.
+The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/cognitive-model.md) for details.
 
-> **New to AWM?** [`docs/pipeline-walkthrough.html`](docs/pipeline-walkthrough.html) is a visual, plain-language walkthrough (no background required) — what happens when AWM learns and recalls a fact, why it's built this way, and how it differs from a plain vector store. Open it in a browser.
+> **New to AWM?** [`docs/pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html) is a visual, plain-language walkthrough (no background required) — what happens when AWM learns and recalls a fact, why it's built this way, and how it differs from a plain vector store. Open it in a browser.
 
-> **Build an agent on it:** the [AWM-Native Agent Harness pattern](docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
+> **Build an agent on it:** the [AWM-Native Agent Harness pattern](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
 
-> **For builders & researchers:** [`docs/awm-for-agents.html`](docs/awm-for-agents.html) is the agent playbook — why AWM exists (the context-window wall), the PRIME→ACT→VERIFY→LEARN harness, the full agent feature surface (workspace, session IDs, bearer-token hooks, supersede/feedback), how multi-hop is solved in the harness, and the honest gauntlet findings (where AWM wins, ties, and what isn't measured yet). Open it in a browser.
+> **For builders & researchers:** [`docs/awm-for-agents.html`](https://completeideas.github.io/agent-working-memory/awm-for-agents.html) is the agent playbook — why AWM exists (the context-window wall), the PRIME→ACT→VERIFY→LEARN harness, the full agent feature surface (workspace, session IDs, bearer-token hooks, supersede/feedback), how multi-hop is solved in the harness, and the honest gauntlet findings (where AWM wins, ties, and what isn't measured yet). Open it in a browser.
 
 ---
 
@@ -367,7 +371,7 @@ curl -X POST http://localhost:8400/memory/activate \
 For long-running structured projects — novels, codebases, investigations,
 design docs — where the agent needs to track typed state across hundreds
 of writes without polluting cognitive retrieval. Full reference at
-[`docs/reference.md`](docs/reference.md).
+[`docs/reference.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md).
 
 ```bash
 # "Latest emotional state per character" — one round trip
@@ -400,7 +404,7 @@ curl http://localhost:8400/memory/sequence/novel-x/next
 New `memory_class: "structural"` keeps high-volume system-written records
 (chapter analyses, promise advancements, commit logs) out of cognitive
 `/activate` while preserving them with canonical-level salience. See the
-[CHANGELOG entry for 0.8.0](CHANGELOG.md) for the full design.
+[CHANGELOG entry for 0.8.0](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for the full design.
 
 ---
 
@@ -460,7 +464,7 @@ src/
   index.ts          - HTTP server entry point (auto-backup on startup)
 ```
 
-For detailed architecture including pipeline phases, database schema, and system diagrams, see [docs/architecture.md](docs/architecture.md).
+For detailed architecture including pipeline phases, database schema, and system diagrams, see [docs/architecture.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/architecture.md).
 
 ---
 
@@ -551,6 +555,25 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New in v0.11.0
+
+**`awm onboard` — warm-start a cold store from a project's own knowledge.** A fresh store
+knows nothing, so recall returns nothing until interactions accumulate; onboarding seeds it up
+front so an agent is useful from the first turn.
+
+- **Scan:** `awm onboard <docs> --repo <path> --project <name>` extracts atomic, recall-shaped
+  memories from docs (one per heading) + the repo (stack, layout) → an `awm import`-compatible
+  pack + a human review file. Edit, then `awm import --dedupe`. Model-free, no API keys.
+- **Agent-driven interview (no AWM→LLM calls):** two MCP tools — `onboard_scan` (candidate
+  memories to refine) and `onboard_questions` (anchored on "what is the goal of this memory
+  system?"). The host agent (Codex, Claude Code) refines, confirms with you, and writes them.
+  Works air-gapped.
+- **The skill is a memory:** `awm setup` seeds a canonical "onboard a new project" skill the
+  agent can recall; a cold-store nudge in `memory_restore` reminds it to warm-start.
+
+Also folds in the **0.10.1** version-reporting fix (below) and fixes the npm README links
+(absolute GitHub / Pages URLs + the `repository` field).
+
 ## What's New in v0.10.1
 
 A patch — no functional or recall-behavior change.
@@ -616,7 +639,7 @@ edge 32/34, workday = old config).
   out-of-domain abstention gate judges only the **post-rerank top-K**
   (`AWM_ABSTAIN_GATE_K=5`) so widening for recall doesn't inflate the in-domain
   signal. Reverses the v0.7.13 "pool reduction" change. See
-  [reference.md → Recall tuning](docs/reference.md#recall-tuning-env-overrides).
+  [reference.md → Recall tuning](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md#recall-tuning-env-overrides).
 
 - **Tunable similarity floors.** `AWM_SIM_FLOOR_TARGETED` / `_EXPLORATORY`
   (defaults 0.50 / 0.35, unchanged) and the candidate-entry floors are now env
@@ -629,13 +652,13 @@ edge 32/34, workday = old config).
   (in-engine spreading activation) is **parked** — it regressed recall by
   displacing gold; multi-hop is solved harness-side instead (see the playbook).
 
-- **New docs for builders & researchers.** [`docs/awm-for-agents.html`](docs/awm-for-agents.html)
+- **New docs for builders & researchers.** [`docs/awm-for-agents.html`](https://completeideas.github.io/agent-working-memory/awm-for-agents.html)
   — the agent playbook (why AWM exists, the PRIME→ACT→VERIFY→LEARN harness, the
   full agent feature surface, how multi-hop is solved, and the honest gauntlet
-  findings). [`docs/pipeline-walkthrough.html`](docs/pipeline-walkthrough.html)
+  findings). [`docs/pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html)
   redesigned for devs/researchers. Both are published on GitHub Pages. A new
   **Storage Backends + Postgres roadmap** section in
-  [architecture.md](docs/architecture.md) documents SQLite (default) vs PGlite
+  [architecture.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/architecture.md) documents SQLite (default) vs PGlite
   and the path to a networked-Postgres backend (v1 target).
 
 ## What's New in v0.8.5
@@ -821,7 +844,7 @@ callers keep working without modification. Full validation at the milestone:
 - **Eval harness** — `npm run eval` benchmarks retrieval, associative, redundancy, and temporal performance.
 - **DB hardening** — busy_timeout, integrity check on startup, hot backups every 10 min, WAL checkpoint on shutdown.
 
-See [CHANGELOG.md](CHANGELOG.md) for full details.
+See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for full details.
 
 ## Integrations
 
@@ -862,7 +885,7 @@ one cognitive memory.
 
 Full recipe — model-provider examples, the Azure GPT-5.x `/openai/v1` note, and
 gotchas (incl. the Windows CRLF/s6 clone fix) — is in
-[docs/integrations/hermes.md](docs/integrations/hermes.md).
+[docs/integrations/hermes.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/integrations/hermes.md).
 
 ## Project Status
 
@@ -872,7 +895,7 @@ daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
 - MCP tools and Claude Code integration: **stable**
-- Other MCP hosts (e.g. [Hermes Agent](docs/integrations/hermes.md)): **supported** — AWM drops in as an MCP memory server with no adapter code
+- Other MCP hosts (e.g. [Hermes Agent](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/integrations/hermes.md)): **supported** — AWM drops in as an MCP memory server with no adapter code
 - Multi-agent coordination: **stable** (v0.8.1 hardening)
 - Task management: **stable**
 - Hook sidecar and auto-checkpoint: **stable**
@@ -885,10 +908,10 @@ daily in production coding workflows.
 - Networked Postgres backend (`pg` + pgvector, multi-connection): **experimental** (v0.10.0)
 - Backend-agnostic `import`/`export` (embeddings included, cross-backend port): **stable** (v0.10.0)
 
-See [CHANGELOG.md](CHANGELOG.md) for version history.
+See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for version history.
 
 ---
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache 2.0 — see [LICENSE](https://github.com/CompleteIdeas/agent-working-memory/blob/master/LICENSE) and [NOTICE](https://github.com/CompleteIdeas/agent-working-memory/blob/master/NOTICE).

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.11.0 (2026-07-03) — `awm onboard`: warm-start a cold store from docs + repo
+
+The cold-start problem: a fresh store knows nothing, so recall returns nothing until enough
+interactions accumulate. Onboarding derives a seed set of memories up front so an agent is
+useful on a project from the first turn. Includes the 0.10.1 version-reporting fix (below),
+which was never separately published to npm.
+
+- **`awm onboard <docs> [--repo <path>] [--project <name>] [--purpose "…"]`** — scans docs
+  (Markdown, one atomic memory per heading section) + the repo (package.json stack, layout)
+  into **recall-shaped** memories (concept/content/tags), not raw chunks. Emits an
+  `awm import`-compatible pack (JSON) + a human review file (Markdown): the review file is the
+  edit/approve surface, then `awm import --dedupe` loads it. Seed facts are `canonical` (they
+  bypass the salience filter, which would otherwise drop low-novelty seed). Model-free +
+  deterministic (content-hashed ids → idempotent re-runs), no API keys.
+- **Agent-driven interactive tier (no AWM→LLM calls).** The host agent (Codex, Claude Code,
+  MWA) drives the interview using two new MCP tools — `onboard_scan` (deterministic docs+repo
+  scan → candidate memories to refine) and `onboard_questions` (the interview, anchored on
+  "what is the goal of this memory system?"). The agent refines, confirms with the user, then
+  saves via `memory_write`. Works air-gapped/locked-down (local models, local MCP).
+- **The onboarding skill is a memory.** `awm setup` seeds a canonical "onboard a new project"
+  skill (idempotent) so the agent can *recall its own how-to*. A cold-store nudge in
+  `memory_restore` prompts the agent to warm-start when the store has <3 memories.
+- **npm README links fixed.** Added the `repository`/`homepage`/`bugs` fields (npm needs
+  `repository` to resolve README links) and rewrote all in-README doc links to **absolute**
+  GitHub / GitHub Pages URLs, so they resolve on npmjs.com (relative links were breaking there).
+
 ## 0.10.1 (2026-07-03) — version reporting reads package.json (no more stale literals) + README refresh
 
 Patch: no functional/API change, no recall-behavior change. Fixes version-reporting drift and

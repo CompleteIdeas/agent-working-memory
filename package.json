@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Cognitive memory layer for AI agents â€” activation-based retrieval, salience filtering, associative connections",
   "type": "module",
   "main": "dist/index.js",
@@ -58,5 +58,13 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CompleteIdeas/agent-working-memory.git"
+  },
+  "homepage": "https://github.com/CompleteIdeas/agent-working-memory#readme",
+  "bugs": {
+    "url": "https://github.com/CompleteIdeas/agent-working-memory/issues"
   }
 }
