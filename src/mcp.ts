@@ -6,13 +6,14 @@
  * Runs as a stdio-based MCP server that Claude Code connects to directly.
  * Uses the storage and engine layers in-process (no HTTP overhead).
  *
- * Tools exposed (16):
+ * Tools exposed (19):
  *   memory_write       — store a memory (salience filter decides disposition)
  *   memory_recall      — activate memories by context (cognitive retrieval)
  *   memory_feedback    — report whether a recalled memory was useful
  *   memory_retract     — invalidate a wrong memory with optional correction
  *   memory_supersede   — replace an outdated memory with a current one
  *   memory_stats       — get memory health metrics
+ *   memory_whoami      — identify this instance, mode, store, and sibling agent spaces
  *   memory_checkpoint  — save structured execution state (survives compaction)
  *   memory_restore     — restore state + targeted recall after compaction
  *   memory_task_add    — create a prioritized task
@@ -79,6 +80,9 @@ import { VERSION } from './version.js';
 import { buildPack, INTERVIEW_QUESTIONS } from './onboard/index.js';
 import { liteCompress, retrieveOriginal } from './core/lite-compress.js';
 import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-decisions.js';
+import { startLoopLagMonitor } from './core/write-telemetry.js';
+import { buildWhoami, formatWhoami } from './core/whoami.js';
+import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
 
 // --- Incognito Mode ---
 // When AWM_INCOGNITO=1, register zero tools. Claude won't see memory tools at all.
@@ -137,6 +141,7 @@ const consolidationScheduler = new ConsolidationScheduler(store, consolidationEn
 
 stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
 consolidationScheduler.start();
+startLoopLagMonitor();
 
 // Coordination DB handle — set when AWM_COORDINATION=true, used by memory_write for decision propagation
 let coordDb: import('better-sqlite3').Database | null = null;
@@ -263,6 +268,14 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('Confidence: verified (tested), observed (read in code), assumed (reasoning).'),
     session_id: z.string().optional()
       .describe('Session/conversation grouping ID. Memories with same session_id are associated.'),
+    origin_class: z.enum(['user-stated', 'tool-output', 'inference', 'recipe']).optional()
+      .describe('Provenance (D5, log-only): where this knowledge came from. user-stated = the human said it; tool-output = read from a tool/system; inference = your reasoning; recipe = produced by a cognition recipe.'),
+    recipe_id: z.string().optional()
+      .describe('Cognition-recipe id+version when origin_class is recipe.'),
+    valid_from: z.string().optional()
+      .describe('ISO date when the FACT becomes valid (temporal validity, not ingestion time).'),
+    valid_to: z.string().optional()
+      .describe('ISO date when the FACT stops being valid (e.g., a deadline or a superseding change).'),
     intent: z.enum(['decision', 'question', 'todo', 'finding', 'context']).optional()
       .describe('What kind of memory this is.'),
   },
@@ -276,6 +289,34 @@ The concept should be a short label (3-8 words). The content should be the full 
     if (params.confidence_level) metaTags.push(`conf=${params.confidence_level}`);
     if (params.session_id) metaTags.push(`sid=${params.session_id}`);
     if (params.intent) metaTags.push(`intent=${params.intent}`);
+
+    // D14 (2026-07-30): recipe write-backs are contract-checked. Provenance
+    // must never claim a recipe that does not exist, and malformed
+    // derivations are rejected with the contract echoed back so the host
+    // can self-correct in one retry.
+    if (params.origin_class === 'recipe') {
+      if (!params.recipe_id) {
+        return { content: [{ type: 'text' as const, text: "Recipe write rejected: origin_class 'recipe' requires recipe_id (e.g. 'skill-derivation@1')." }] };
+      }
+      const v = validateRecipeWrite(params.recipe_id, params.concept, params.content);
+      if (!v.ok) {
+        const contract = getRecipe(params.recipe_id)?.writeBack ?? 'unknown recipe';
+        return { content: [{ type: 'text' as const, text: `Recipe write rejected (${params.recipe_id}): ${v.errors.join('; ')}\nContract: ${contract}` }] };
+      }
+      // Standardize recipe write-backs: canonical class, standard tags.
+      const slug = recipeSlug(params.concept);
+      const ensure = (tag: string) => { if (!userTags.includes(tag) && !metaTags.includes(tag)) metaTags.push(tag); };
+      if (params.recipe_id.startsWith('skill-derivation')) {
+        ensure('topic=skill'); ensure(`skill=${slug}`);
+        params.memory_type = params.memory_type ?? 'procedural';
+      } else if (params.recipe_id.startsWith('friction-lesson')) {
+        ensure('topic=friction'); ensure(`about=${slug}`);
+        // zod defaults event_type to 'observation', so force the recipe's
+        // contract value rather than ??-guarding against undefined.
+        params.event_type = 'friction';
+      }
+      params.memory_class = 'canonical';
+    }
 
     const memoryType = params.memory_type ?? classifyMemoryType(params.content);
 
@@ -292,6 +333,11 @@ The concept should be a short label (3-8 words). The content should be the full 
       memoryClass: params.memory_class,
       memoryType,
       supersedes: params.supersedes,
+      originClass: params.origin_class,
+      writerSession: params.session_id,
+      recipeId: params.recipe_id,
+      validFrom: params.valid_from,
+      validTo: params.valid_to,
     });
 
     // Auto-checkpoint — covers create/reinforce/supersede uniformly
@@ -333,7 +379,10 @@ The concept should be a short label (3-8 words). The content should be the full 
     return {
       content: [{
         type: 'text' as const,
-        text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`,
+        text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
+          + (isLowSalience
+            ? `\nNOTE: low salience — this memory is kept but demoted and may fade first. If it MUST survive and be recallable, retry with memory_class: 'canonical'. (Discards are audited: reason codes ${JSON.stringify(salience.reasonCodes.slice(0, 4))})`
+            : ''),
       }],
     };
   }
@@ -417,7 +466,16 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       // requested 'compact' or 'auto' granularity, surface the engine-computed
       // summary instead of the full content — same engram, less to read.
       const body = r.summary ?? r.engram.content;
-      return `${i + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}): ${body}`;
+      // D8 (2026-07-30): conflict surfacing — a superseded memory that still
+      // ranks is shown WITH its replacement pointer instead of silently
+      // down-ranked. The model should trust the successor.
+      const chain = r.engram.supersededBy
+        ? ` ⚠ SUPERSEDED by ${r.engram.supersededBy} — treat as historical; recall/fetch the successor before relying on this.`
+        : '';
+      const validity = r.engram.validTo
+        ? ` [valid until ${r.engram.validTo}]`
+        : '';
+      return `${i + 1}. **${r.engram.concept}** (${r.score.toFixed(3)})${validity}: ${body}${chain}`;
     });
 
     return {
@@ -537,6 +595,16 @@ The old memory stays in the database (searchable for history) but is heavily dow
       }],
     };
   }
+);
+
+server.tool(
+  'memory_whoami',
+  `Identify THIS AWM instance — agent id, mode (standalone/hive), backend, store path, code provenance, ports, and the sibling agent spaces present in the same store. Call when unsure which AWM instance or memory space you are talking to.`,
+  {},
+  async () => {
+    const info = await buildWhoami(store, AGENT_ID, 'mcp');
+    return { content: [{ type: 'text', text: formatWhoami(info) }] };
+  },
 );
 
 server.tool(
@@ -1151,7 +1219,10 @@ This captures what was accomplished so future sessions can recall it.`,
     return {
       content: [{
         type: 'text' as const,
-        text: `Completed: "${completedTask}" [${salience.score.toFixed(2)}]${supersededNote}`,
+        // D14 (2026-07-30): task end is the recipe moment — invite the host
+        // to distill a skill and/or a failure lesson in separate focused
+        // passes. The host owns the gates; AWM validates the write-backs.
+        text: `Completed: "${completedTask}" [${salience.score.toFixed(2)}]${supersededNote}\n${renderTaskEndInvitation()}`,
       }],
     };
   }

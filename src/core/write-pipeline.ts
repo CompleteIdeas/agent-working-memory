@@ -48,6 +48,8 @@ import {
 } from './salience.js';
 import { embed } from './embeddings.js';
 import { extractMetaTags } from './auto-tagger.js';
+import { extractEntitiesFromTags } from './entity-extract.js';
+import { reportWrite } from './write-telemetry.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 
 /** Confidence floor below which a matched engram is treated as "decaying out". */
@@ -98,6 +100,15 @@ export interface WriteInput {
    *  because it's deterministically retrieved; opt in if a caller wants
    *  cognitive recall over a structural engram. (0.8 Cluster A) */
   embed?: boolean;
+  /** Provenance (D5, log-only): 'user-stated' | 'tool-output' | 'inference' | 'recipe'. */
+  originClass?: string;
+  /** Provenance (D5): session/conversation id performing the write. */
+  writerSession?: string;
+  /** Provenance (D5): cognition-recipe id+version when originClass is 'recipe'. */
+  recipeId?: string;
+  /** Temporal validity (D8): ISO bounds on when the FACT holds. */
+  validFrom?: string;
+  validTo?: string;
 }
 
 export interface WriteResult {
@@ -163,7 +174,10 @@ export async function performWrite(
   // Profiling: AWM_PROFILE_WRITE=1 logs ms-per-phase to stderr (v0.8.2).
   // Off by default; zero cost when unset.
   const profile = process.env.AWM_PROFILE_WRITE === '1';
-  const startTotal = profile ? performance.now() : 0;
+  // Timings are collected unconditionally since D1 (2026-07-30): a handful of
+  // performance.now() calls are free, and the always-on slow-write telemetry
+  // (write-telemetry.ts) needs them to explain stalls in production.
+  const startTotal = performance.now();
   let tNovelty = 0, tCreate = 0, tEmbed = 0;
 
   // Pre-embed once (v0.8.5): the embedding is needed for cosine-based novelty
@@ -177,22 +191,22 @@ export async function performWrite(
   // hook below will retry).
   // Disable via AWM_NOVELTY_EMBED=0 to keep writes ultra-fast at the cost
   // of cross-backend novelty consistency.
-  const tStartEmbed = profile ? performance.now() : 0;
+  const tStartEmbed = performance.now();
   let prewriteEmbedding: number[] | null = null;
   if (process.env.AWM_NOVELTY_EMBED !== '0') {
     try {
       prewriteEmbedding = await embed(`${input.concept} ${input.content}`);
     } catch { /* fall through — async embed will retry later */ }
   }
-  if (profile) tEmbed = performance.now() - tStartEmbed;
+  tEmbed = performance.now() - tStartEmbed;
 
-  const tStartNovelty = profile ? performance.now() : 0;
+  const tStartNovelty = performance.now();
   const noveltyResult = await computeNoveltyWithMatch(
     store, input.agentId, input.concept, input.content,
     input.workspace ?? null,
     prewriteEmbedding,
   );
-  if (profile) tNovelty = performance.now() - tStartNovelty;
+  tNovelty = performance.now() - tStartNovelty;
 
   // Effective event type — auto-promote user-feedback content.
   const effectiveEventType: SalienceEventType =
@@ -216,8 +230,10 @@ export async function performWrite(
   });
 
   // -- Reinforce / Supersede branching --
-  const tStartCreate = profile ? performance.now() : 0;
+  const tStartCreate = performance.now();
+  let busyHit = false;
   let result: WriteResult | null = null;
+  try {
   if (enableReinforcement && noveltyResult.matchedEngramId) {
     const matched = await store.getEngram(noveltyResult.matchedEngramId);
     // Agent-scope guard: NEVER reinforce/supersede an engram that belongs to a DIFFERENT agent. A
@@ -285,10 +301,34 @@ export async function performWrite(
       supersedesId: input.supersedes,
     }, prewriteEmbedding);
   }
-  if (profile) tCreate = performance.now() - tStartCreate;
+  } catch (e) {
+    const es = `${(e as { code?: unknown })?.code ?? ''} ${(e as Error)?.message ?? ''}`;
+    busyHit = /busy/i.test(es);
+    reportWrite({
+      totalMs: performance.now() - startTotal,
+      embedMs: tEmbed,
+      noveltyMs: tNovelty,
+      persistMs: performance.now() - tStartCreate,
+      action: 'error',
+      agentId: input.agentId,
+      busyHit,
+    });
+    throw e;
+  }
+  tCreate = performance.now() - tStartCreate;
+
+  const total = performance.now() - startTotal;
+  reportWrite({
+    totalMs: total,
+    embedMs: tEmbed,
+    noveltyMs: tNovelty,
+    persistMs: tCreate,
+    action: result.action,
+    agentId: input.agentId,
+    busyHit,
+  });
 
   if (profile) {
-    const total = performance.now() - startTotal;
     // Single-line stderr log; cheap to grep, easy to disable.
     // Format: [write] action=create novelty=42.1ms create=18.3ms total=60.4ms agent=x id=y
     // eslint-disable-next-line no-console
@@ -478,6 +518,11 @@ async function createNewEngram(
     supersedes: meta.supersedesId,
     sequence: input.sequence,
     references: input.references,
+    originClass: input.originClass,
+    writerSession: input.writerSession,
+    recipeId: input.recipeId,
+    validFrom: input.validFrom,
+    validTo: input.validTo,
     embedding: prewriteEmbedding && prewriteEmbedding.length > 0
       ? prewriteEmbedding
       : undefined,
@@ -486,6 +531,13 @@ async function createNewEngram(
   if (salience.disposition === 'staging') {
     await store.updateStage(engram.id, 'staging');
   }
+
+  // Entity inverted index (D9): index structured entities from tags at write
+  // time. Best-effort — retrieval does not depend on it yet (D11).
+  try {
+    const entities = extractEntitiesFromTags(tags);
+    if (entities.length > 0) await store.recordEntityMentions(engram.id, input.agentId, entities);
+  } catch { /* non-fatal */ }
 
   // Supersession side-effects: mark the old engram, add causal edge.
   if (meta.supersedesId) {

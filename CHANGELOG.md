@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.12.0 (2026-07-30) — eval-driven hardening: telemetry, security defaults, memory spine, cognition recipes, entity index
+
+The D1–D16 design-proposal implementation waves (see `docs/design-proposals-2026-07-30.md`),
+grounded in a full-stack eval and accepted end-to-end on the memory gauntlet
+(`docs/gauntlet-baseline-2026-07-30.md`: 74%±5pp memory-dependent vs 0% no-memory control).
+All changes additive; 599/599 tests.
+
+### Added (D1/D3 — 2026-07-30 Wave 1)
+- **Write-path telemetry (D1):** always-on slow-write attribution — any write over `AWM_SLOW_WRITE_MS` (default 250ms, `0` disables) logs one stderr line with embed/novelty/persist phase times, event-loop lag, in-process consolidation state, SQLITE_BUSY flag, and embed-model cold-load ms. Consolidation cycles >5s log their duration. New module `src/core/write-telemetry.ts`; loop-lag monitor started in both `mcp.ts` and `index.ts`.
+- **Instance identity (D3):** `memory_whoami` MCP tool + `GET /whoami` HTTP route — agent id, workspace, mode (standalone/hive), backend, store path, code provenance, ports, and sibling agent spaces in the same store (new `listAgentIds()` on all three backends).
+
+### Changed (D4 — config-over-code + truth-in-docs, 2026-07-30)
+- **Salience feedback detection is configurable:** `AWM_FEEDBACK_NAMES` / `AWM_FEEDBACK_VERBS` (comma lists) replace the hardcoded staff-name regex. Built-in default preserves existing installs; 1.0 will flip the default to empty with installer seeding.
+- **`AWM_DISABLE_POOL_FILTER=1` is now implemented** (documented since 0.7.x, unread since the 0.8.x native-vector refactor): scores ALL active candidates — no vector top-K cut, no similarity floor.
+- **Honest pipeline header:** `activation.ts` now documents phases as shipped, with default-OFF phases (spread/graph walk, query bridge) marked.
+- Narrative sweep: "Removed in 2.0" → actual version; MCP tool list corrected to 19 incl. `memory_whoami`; adapter template documents `AWM_SLOW_WRITE_MS` and `whoami`.
+
+### Added (Wave 2: D5/D8/D12/D15 — 2026-07-30)
+- **Memory spine — provenance (D5, log-only):** every engram can carry `origin_class` (`user-stated | tool-output | inference | recipe`), `writer_session`, and `recipe_id`. Recorded on write across all three backends (idempotent migrations); never used in ranking until an eval proves benefit (D6).
+- **Temporal validity + conflict surfacing (D8):** `valid_from`/`valid_to` bi-temporal fields; MCP recall now shows `[valid until …]` and flags superseded memories that still rank with "⚠ SUPERSEDED by <id>" instead of silently down-ranking them.
+- **Discard audit (D12):** low-salience discards keep their reason codes in the write response with an actionable advisory ("retry with memory_class: 'canonical' if this must survive"); `discardRegret` metric implemented — low-salience engrams later accessed (the filter demoted something the agent needed).
+- **Consolidation visibility (D15):** `GET /health` reports `consolidation.schedulerDisabled` / `cycleRunning` / active-cycle age — finishing the long-unwired May "DMN endpoint" (P2).
+
+### Added (Wave 3: D14/D9 — 2026-07-30)
+- **Cognition Recipe Contract (D14):** AWM stays a memory space for an LLM, not containing one. New `src/recipes/` ships versioned recipes (prompt + strict output contract) the HOST agent runs as a separate focused pass: `skill-derivation@1` (procedural distillation, ported from memory-working-agent #14) and `friction-lesson@1` (Reflexion-style failure lessons). `memory_task_end` responses append the recipe invitations with gates; `memory_write` validates recipe-attributed write-backs (`origin_class: 'recipe'` + `recipe_id`) — unknown recipes and malformed shapes are rejected with the contract echoed, well-formed ones get standardized tags (`topic=skill`/`skill=<slug>`, `topic=friction`/`about=<slug>`) and `canonical` class. Adapter template documents the flow.
+- **Entity inverted index (D9, write-time only):** new `entity_mentions` + `entity_aliases` tables on all three backends. Entities are extracted ONLY from structured sources (prefix tags like `person=`, `ticket=`, `event=`; auto-tagger `entity:` tags) — normalized `key:value`, no free-text guessing. Populated best-effort on every write; `getEngramIdsByEntity()` with alias resolution. Retrieval ranking is intentionally unchanged until D11 re-tests graph features against the index. No backfill of pre-existing engrams yet (planned alongside D11).
+
+### Added (D11 — entity-index retrieval + spread guards, 2026-07-30)
+- **Entity-index candidate injection (`AWM_ENTITY_INDEX_FETCH=1`, default-off pending eval):** query-named entities (proper nouns, bare numeric ids) resolve through the D9 inverted index — including `entity_aliases`, so an alias query reaches facts no lexical/vector channel can ("Starbox" → `horse:thunder`). Injected candidates get NO score boost but a guaranteed cross-encoder audition (exempt from topN cut, minScore floor, rerank-pool slice, and the rerank-skip heuristic); the index also vouches for weak in-pool candidates it confirms. Bounded by `AWM_ENTITY_INDEX_CAP` (12). New `searchEntities()` on all three backends (mentions ∪ aliases).
+- **SYNAPSE-style lateral inhibition in spreading activation (`AWM_SPREAD_INHIBIT`, default 0=off):** divisive normalization within each iteration — competing receivers suppress each other, the published fix for the displacing-gold regression that parked `AWM_SPREAD`. Staged for the tracer-judged re-test.
+- Gauntlet acceptance (MWA memory suite, k=3): 74%±5pp memory-dependent with the highest floor and tightest CI of six measured configs; entity index live-populated (215–311 mentions/store) via write-time D9 extraction.
+
+### Changed (D2 — security defaults, 2026-07-30)
+- **HTTP server binds `127.0.0.1` by default** (was `0.0.0.0`). Widen with `AWM_BIND`. **BREAKING for remote consumers:** widening beyond loopback without `AWM_API_KEY` now refuses to start (fail-closed); override on trusted networks with `AWM_ALLOW_INSECURE=1`.
+- **Coordination session tokens:** `AWM_COORD_REQUIRE_TOKENS=1` closes the omit-the-header bypass (absent token → 403). Default remains backward-compatible with a startup notice; the network perimeter is the bind + API-key gate.
+- Removed `.env.bak` from the repo.
+
 ## 0.11.0 (2026-07-03) — `awm onboard`: warm-start a cold store from docs + repo
 
 The cold-start problem: a fresh store knows nothing, so recall returns nothing until enough

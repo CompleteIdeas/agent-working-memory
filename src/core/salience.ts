@@ -30,10 +30,25 @@ export type SalienceEventType = 'decision' | 'friction' | 'surprise' | 'causal' 
  * 2026-05-06T19:08:47). Detecting "Robert said X" → canonical class bypasses
  * the salience filter entirely.
  *
- * Tune the name list as new staff join. Pattern requires word boundary at
+ * Tune via AWM_FEEDBACK_NAMES (comma list). Pattern requires word boundary at
  * start so "Roberta" or "Hannahs" don't match.
  */
-const USER_FEEDBACK_PATTERN = /^(Robert|Katherine|Catherine|Nancy|Brandy|Brandi|Hannah|Marilyn|Kaylee|Pete|Abby|Tom|Wendy|Sita|Nick|Rob|Joan|Jennifer|Cindy|Jason|Alex|Molly)\s+(said|verbatim|feedback|asked|wants|prefers|requested|requested|directed|decided|confirmed|clarified|chose|specified|explained)\b/i;
+// D4 (2026-07-30): names/verbs are configurable so the library is not coupled
+// to one organization's staff list. AWM_FEEDBACK_NAMES / AWM_FEEDBACK_VERBS
+// take comma-separated lists. The built-in default preserves existing installs;
+// a future 1.0 flips the default to empty with the installer seeding values.
+const DEFAULT_FEEDBACK_NAMES = 'Robert,Katherine,Catherine,Nancy,Brandy,Brandi,Hannah,Marilyn,Kaylee,Pete,Abby,Tom,Wendy,Sita,Nick,Rob,Joan,Jennifer,Cindy,Jason,Alex,Molly';
+const DEFAULT_FEEDBACK_VERBS = 'said,verbatim,feedback,asked,wants,prefers,requested,directed,decided,confirmed,clarified,chose,specified,explained';
+function csvToAlternation(env: string | undefined, fallback: string): string {
+  return (env ?? fallback).split(',').map(x => x.trim()).filter(Boolean)
+    .map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+}
+const USER_FEEDBACK_PATTERN = new RegExp(
+  '^(' + csvToAlternation(process.env.AWM_FEEDBACK_NAMES, DEFAULT_FEEDBACK_NAMES) + ')\\s+(' +
+  csvToAlternation(process.env.AWM_FEEDBACK_VERBS, DEFAULT_FEEDBACK_VERBS) + ')\\b',
+  'i',
+);
 
 /** Returns true if the content looks like direct user feedback that should auto-promote to canonical. */
 export function detectUserFeedback(content: string): boolean {

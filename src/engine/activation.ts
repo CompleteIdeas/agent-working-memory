@@ -3,18 +3,28 @@
 /**
  * Activation Pipeline — the core retrieval engine.
  *
- * 10-phase cognitive retrieval pipeline:
- *   0. Query expansion (flan-t5-small synonym generation)
- *   1. Vector embedding (MiniLM 384d)
- *   2. Parallel retrieval (FTS5/BM25 + vector pool)
- *   3. Scoring (BM25, Jaccard, z-score vector, entity-bridge boost)
- *   4. Rocchio pseudo-relevance feedback (expand + re-search BM25)
- *   5. ACT-R temporal decay
- *   6. Hebbian boost (co-activation strength)
- *   7. Composite scoring with confidence gating
- *   8. Beam search graph walk (depth 2, hop penalty)
- *   9. Cross-encoder reranking (ms-marco-MiniLM, adaptive blend)
- *  10. Abstention gate
+ * Cognitive retrieval pipeline — phases as shipped (D4 honesty pass 2026-07-30;
+ * default-OFF phases are marked, since operators tune from this header):
+ *   -1. Coreference expansion (conditional: query contains pronouns)
+ *   0. Query expansion (flan-t5-small; caller-gated, MCP default ON)
+ *   1. Vector embedding (bge-small 384d)
+ *   2. Parallel retrieval (dual FTS5/BM25 + native vector top-K)
+ *   3. Per-candidate scoring (BM25, Jaccard, cosine floor, ACT-R decay,
+ *      Hebbian boost, confidence gate — computed together in phase 3b)
+ *   3.5 Rocchio pseudo-relevance feedback (conditional on BM25 signal)
+ *   3.7 Entity-bridge boost (default ON; AWM_DISABLE_ENTITY_BRIDGE=1)
+ *   3.5  Entity-index candidate injection (DEFAULT OFF; AWM_ENTITY_INDEX_FETCH=1 —
+ *        D11 2026-07-30: D9 inverted-index lookup of query-named entities; injected
+ *        candidates get no boost but a guaranteed rerank audition)
+ *   3.75 Query-conditioned entity bridge (DEFAULT OFF; AWM_QUERY_BRIDGE=1)
+ *   4/5 Spreading-activation graph walk (DEFAULT OFF; AWM_SPREAD=1 — parked
+ *       after displacing-gold regressions; see design-proposals D11)
+ *   6. Filter + sort into rerank pool (wide pool since 0.9.0)
+ *   7. Cross-encoder rerank (ms-marco; clear-winner skip unless
+ *      AWM_DISABLE_RERANK_SKIP=1)
+ *   8. Multi-channel OOD detection + agreement gate; supersession penalty;
+ *      abstention enforced only when caller passes require_confidence
+ *   9. Final sort, granularity, confidence attach
  *
  * Logs activation events for eval metrics.
  */
@@ -272,7 +282,12 @@ export class ActivationEngine {
     // its slim cache + JS cosine (same as before but encapsulated). Z-score
     // normalization is replaced with a mode-adaptive raw-cosine floor —
     // simpler, faster, model-tuned for BGE-small embeddings.
-    const VECTOR_TOP_K = Math.max(50, limit * 5);
+    // D4 (2026-07-30): AWM_DISABLE_POOL_FILTER=1 was documented since 0.7.x but
+    // never implemented after the 0.8.x native-vector refactor absorbed the
+    // pool pre-filter. Honor its documented semantics: score ALL active
+    // candidates (no top-K cut, no similarity floor).
+    const POOL_FILTER_DISABLED = process.env.AWM_DISABLE_POOL_FILTER === '1';
+    const VECTOR_TOP_K = POOL_FILTER_DISABLED ? Number.MAX_SAFE_INTEGER : Math.max(50, limit * 5);
 
     // Tokenize query once (used by scoring)
     const queryTokens = tokenize(query.context);
@@ -290,9 +305,9 @@ export class ActivationEngine {
     // entirely. The vectorMatch scoring floor (0.50 targeted / 0.35 exploratory)
     // still suppresses low-confidence matches in the final score.
     // Env override: AWM_SIM_CANDIDATE_FLOOR_TARGETED, AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY.
-    const SIM_CANDIDATE_FLOOR = adaptive.zScoreGate > 0.5
+    const SIM_CANDIDATE_FLOOR = POOL_FILTER_DISABLED ? -1 : (adaptive.zScoreGate > 0.5
       ? Number(process.env.AWM_SIM_CANDIDATE_FLOOR_TARGETED ?? 0.40)
-      : Number(process.env.AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY ?? 0.30);
+      : Number(process.env.AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY ?? 0.30));
     const rawCosineSims = new Map<string, number>();
     const vectorHits: Engram[] = [];
     if (queryEmbedding) {
@@ -384,6 +399,62 @@ export class ActivationEngine {
           if (added > 0) candidates = Array.from(candidateMap.values());
         } catch { /* best-effort: entity fetch never breaks recall */ }
       }
+    }
+
+    // ── D11 (2026-07-30): ENTITY-INDEX CANDIDATE INJECTION (default-OFF, AWM_ENTITY_INDEX_FETCH=1) ──
+    // The D9 inverted index resolves query-NAMED entities ("Seetha", "ticket 18999") to every
+    // engram indexed under them — deterministic exact lookup, immune to embedding/BM25 vocabulary
+    // mismatch. Injected candidates get NO score boost; instead they are GUARANTEED a rerank
+    // audition (exempt from the topN cut, the minScore pool filter, the rerank-pool slice, and
+    // the rerank-skip heuristic) and the cross-encoder alone decides whether they surface.
+    // This is the guarded successor to AWM_ENTITY_FETCH above, whose failure mode was measured:
+    // injected gold entered the pool but was cut before the reranker ever scored it. Bounded
+    // (AWM_ENTITY_INDEX_CAP, default 12) so the audition costs at most one extra rerank batch.
+    const injectedIds = new Set<string>();
+    if (process.env.AWM_ENTITY_INDEX_FETCH === '1') {
+      try {
+        const IDX_CAP = Number(process.env.AWM_ENTITY_INDEX_CAP ?? 12);
+        const IDX_QSTOP = new Set(['what', 'who', 'when', 'where', 'why', 'how', 'which', 'whose',
+          'the', 'this', 'that', 'and', 'but', 'for', 'did', 'does', 'is', 'are', 'was', 'were',
+          'tell', 'about', 'they', 'them', 'write', 'reply', 'list', 'please', 'remember', 'confirm']);
+        const terms = new Set<string>();
+        for (const m of query.context.matchAll(/\b[A-Z][A-Za-z]{2,}\b/g)) {
+          const w = m[0].toLowerCase();
+          if (!IDX_QSTOP.has(w)) terms.add(w);
+        }
+        for (const m of query.context.matchAll(/\b\d{4,}\b/g)) terms.add(m[0]); // bare ids: tickets, members, events
+        let added = 0;
+        for (const term of Array.from(terms).slice(0, 4)) {
+          if (added >= IDX_CAP) break;
+          const entities = await this.store.searchEntities(term, 6);
+          for (const entity of entities) {
+            if (added >= IDX_CAP) break;
+            for (const agentId of agentIds) {
+              if (added >= IDX_CAP) break;
+              for (const id of await this.store.getEngramIdsByEntity(entity, agentId)) {
+                if (added >= IDX_CAP) break;
+                if (injectedIds.has(id)) continue;
+                // Already a candidate via BM25/vector? Still VOUCH for it: a weak in-pool
+                // candidate the index confirms would otherwise die at the minScore/topN
+                // cuts unguarded. The audition guarantee is about the index match, not
+                // about how the candidate entered the pool.
+                const inPool = candidateMap.get(id);
+                if (inPool) {
+                  if (inPool.stage === 'active' && !(inPool as any).retracted && !inPool.supersededBy) { injectedIds.add(id); added++; }
+                  continue;
+                }
+                const n = await this.store.getEngram(id);
+                if (!n || n.stage !== 'active' || (n as any).retracted || n.supersededBy) continue;
+                if (query.memoryType && n.memoryType !== query.memoryType) continue;
+                candidateMap.set(id, n);
+                injectedIds.add(id);
+                added++;
+              }
+            }
+          }
+        }
+        if (added > 0) candidates = Array.from(candidateMap.values());
+      } catch { /* index injection never breaks recall */ }
     }
 
     if (candidates.length === 0) return [];
@@ -719,6 +790,13 @@ export class ActivationEngine {
     // Tunable via AWM_TOPN_MULT.
     const topNMult = Number(process.env.AWM_TOPN_MULT ?? 8);
     const topN = sorted.slice(0, limit * topNMult);
+    // D11 guard 1/4: injected entity-index candidates ride into the graph/rerank stages even
+    // when their (boost-free) composite fell below the topN cut.
+    if (injectedIds.size > 0) {
+      for (const item of sorted.slice(limit * topNMult)) {
+        if (injectedIds.has(item.engram.id)) topN.push(item);
+      }
+    }
     if (process.env.AWM_SPREAD === '1' && query.spread !== false) {
       await this.spreadActivation(topN);
     } else {
@@ -726,8 +804,9 @@ export class ActivationEngine {
     }
 
     // Phase 6: Initial filter and sort for re-ranking pool
+    // (D11 guard 2/4: injected entity-index candidates are exempt from the minScore floor.)
     const pool = topN
-      .filter(r => r.score >= minScore)
+      .filter(r => r.score >= minScore || injectedIds.has(r.engram.id))
       .sort((a, b) => b.score - a.score);
 
     // Phase 7: Cross-encoder re-ranking — scores (query, passage) pairs directly
@@ -741,6 +820,12 @@ export class ActivationEngine {
     // the reranker does discrimination on a wide pool. Tunable via AWM_RERANK_POOL.
     const rerankPoolSize = Number(process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 40));
     const rerankPool = pool.slice(0, rerankPoolSize);
+    // D11 guard 3/4: injected entity-index candidates always reach the cross-encoder.
+    if (injectedIds.size > 0) {
+      for (const item of pool.slice(rerankPoolSize)) {
+        if (injectedIds.has(item.engram.id)) rerankPool.push(item);
+      }
+    }
 
     // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
     // strong absolute score AND a meaningful gap to the runner-up, the cross-encoder
@@ -755,7 +840,9 @@ export class ActivationEngine {
     // Ambiguous queries (close BM25 scores, weak top-1, large pool) still go through
     // the reranker. Disable this heuristic via AWM_DISABLE_RERANK_SKIP=1.
     let rerankSkipped = false;
-    if (useReranker && rerankPool.length >= 2 && process.env.AWM_DISABLE_RERANK_SKIP !== '1') {
+    // (D11 guard 4/4: never skip the reranker when entity-index candidates were injected —
+    // the audition IS the rerank; skipping would return them unjudged or drop them.)
+    if (useReranker && rerankPool.length >= 2 && injectedIds.size === 0 && process.env.AWM_DISABLE_RERANK_SKIP !== '1') {
       const top1 = rerankPool[0];
       const top2 = rerankPool[1];
       const t1Text = top1.phaseScores.textMatch;
@@ -1245,6 +1332,18 @@ export class ActivationEngine {
           const share = Math.max(0, e.weight) / fan; // fan-effect normalization
           inflow.set(v, (inflow.get(v) ?? 0) + au * share);
         }
+      }
+      // D11: SYNAPSE-style lateral inhibition (divisive normalization) — competing
+      // receivers suppress each other WITHIN an iteration: a node keeps its inflow in
+      // proportion to how much of the iteration's total it earned, so a few strongly-
+      // reached nodes stay strong while diffuse spread mass is crushed. This is the
+      // published fix for the displacing-gold regression that parked AWM_SPREAD.
+      // λ=0 (default) disables; enable for the re-test with AWM_SPREAD_INHIBIT=0.3.
+      const INHIBIT = Number(process.env.AWM_SPREAD_INHIBIT ?? 0);
+      if (INHIBIT > 0 && inflow.size > 1) {
+        let total = 0;
+        for (const f of inflow.values()) total += f;
+        for (const [v, f] of inflow) inflow.set(v, f * (f / (f + INHIBIT * (total - f))));
       }
       for (const [v, f] of inflow) graphActivation.set(v, (graphActivation.get(v) ?? 0) + f);
 

@@ -34,6 +34,8 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { buildWhoami } from '../core/whoami.js';
+import { getConsolidationState } from '../core/write-telemetry.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ActivationEngine } from '../engine/activation.js';
 import type { ConnectionEngine } from '../engine/connections.js';
@@ -116,6 +118,11 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       confidenceLevel?: string;
       sessionId?: string;
       intent?: string;
+      // Memory spine (D5/D8, 2026-07-30) — camelCase and snake_case accepted.
+      originClass?: string; origin_class?: string;
+      recipeId?: string; recipe_id?: string;
+      validFrom?: string; valid_from?: string;
+      validTo?: string; valid_to?: string;
     };
 
     if (!body.agentId || typeof body.agentId !== 'string' ||
@@ -166,6 +173,11 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       sequence: body.sequence,
       embed: body.embed,
       references: resolvedRefs.length > 0 ? resolvedRefs : undefined,
+      originClass: body.originClass ?? body.origin_class,
+      writerSession: body.sessionId,
+      recipeId: body.recipeId ?? body.recipe_id,
+      validFrom: body.validFrom ?? body.valid_from,
+      validTo: body.validTo ?? body.valid_to,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
@@ -948,6 +960,12 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
 
   // ─── Health ─────────────────────────────────────────────────────────────
 
+  // D3 (2026-07-30): instance identity — which AWM is this?
+  app.get('/whoami', async (req) => {
+    const agentId = (req.query as { agent?: string })?.agent ?? process.env.AWM_AGENT_ID ?? 'default';
+    return buildWhoami(store, agentId, 'http');
+  });
+
   app.get('/health', async () => {
     const coordEnabled = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
     const base: Record<string, unknown> = {
@@ -955,6 +973,16 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       timestamp: new Date().toISOString(),
       version: VERSION,
       coordination: coordEnabled,
+      // D15 (2026-07-30): consolidation visibility — finishes the long-unwired
+      // "DMN endpoint" (May P2). Answers "is a sleep cycle running right now
+      // and is the scheduler even on" without reading logs.
+      consolidation: {
+        schedulerDisabled: consolidationScheduler.isDisabled(),
+        cycleRunning: consolidationScheduler.isRunning(),
+        ...getConsolidationState().active
+          ? { activeCycle: getConsolidationState() }
+          : {},
+      },
     };
     if (coordEnabled && typeof (deps.store as any).getDb === 'function') {
       try {

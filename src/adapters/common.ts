@@ -393,6 +393,24 @@ when the default doesn't match what you actually need.
   drifts out of date. The system relies on you to keep it current. This is the #1
   failure mode.**
 
+### Cognition recipes — YOU do the thinking, AWM keeps the result (0.11.x)
+AWM contains no LLM. When memory needs real thinking — distilling a repeatable
+procedure, reflecting on a failure — AWM hands YOU a versioned recipe (prompt +
+strict output shape) and you run it as a SEPARATE focused pass, then write the
+result back as an ordinary memory with provenance.
+
+- \`memory_task_end\` responses include the recipe invitations. Honor the gates:
+  skill-derivation only after a genuinely procedural task (3+ tool calls or a
+  delegated sub-task); friction-lesson only after a failure/retry/wrong assumption.
+- Run each recipe as its own focused pass — do NOT bundle it with other
+  reasoning; bundled passes reliably drop the output.
+- Write back exactly per the recipe's contract: \`origin_class: 'recipe'\` +
+  \`recipe_id\` (e.g. \`skill-derivation@1\`), concept prefixed \`skill: \` or
+  \`lesson: \`. AWM validates the shape and rejects malformed or unknown-recipe
+  writes with the contract echoed back — fix and retry, don't drop the insight.
+- Re-deriving the same skill name reinforces the existing memory instead of
+  duplicating it, so don't fear writing a skill you may have written before.
+
 ### Content fade — write-and-forget is safe (0.8.x)
 Un-recalled engrams gradually fade their content while preserving cue pathways
 (concept + tags + embedding stay intact). This is Paper 1 — storage
@@ -482,6 +500,11 @@ for A/B testing if a regression appears in your workload:
 Recall pipeline (0.7.x):
 - \`AWM_DISABLE_POOL_FILTER=1\` — disables the candidate pool reduction
   pre-filter in recall. Reverts to scoring all active candidates.
+- \`AWM_SLOW_WRITE_MS\` — slow-write telemetry threshold in ms (default 250;
+  0 disables the always-on slow-write stderr line).
+- \`memory_whoami\` (MCP) / \`GET /whoami\` — identify the instance (agent, mode,
+  backend, store path, code provenance, sibling agent spaces) when unsure
+  which AWM you are talking to.
 - \`AWM_DISABLE_SLIM_CACHE=1\` — disables the in-memory slim cache.
   Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
 - \`AWM_DISABLE_RERANK_SKIP=1\` — disables the cross-encoder skip on

@@ -59,6 +59,19 @@ export interface Engram {
   supersededBy: string | null;   // ID of the engram that replaced this one
   supersedes: string | null;     // ID of the engram this one replaces
 
+  // Memory spine — provenance (D5, 2026-07-30). LOG-ONLY: recorded on write,
+  // never used in ranking until an eval proves benefit (design-proposals D6).
+  // Optional so pre-D5 code paths and fixtures stay valid; readers treat
+  // undefined and null identically.
+  originClass?: string | null;    // 'user-stated' | 'tool-output' | 'inference' | 'recipe'
+  writerSession?: string | null;  // session/conversation id that wrote this
+  recipeId?: string | null;       // cognition-recipe id+version when origin is 'recipe'
+
+  // Memory spine — temporal validity (D8, 2026-07-30). Bi-temporal fields:
+  // created_at is ingestion time; these bound when the FACT holds. Null = open.
+  validFrom?: string | null;      // ISO date/datetime
+  validTo?: string | null;        // ISO date/datetime — set when a fact expires/superseded by time
+
   // Task management (null = not a task)
   taskStatus: TaskStatus | null;
   taskPriority: TaskPriority | null;
@@ -158,6 +171,15 @@ export interface EngramCreate {
   sequence?: number;
   /** Typed cross-record links (0.8 Cluster A schema; HTTP in Cluster D). */
   references?: EngramReference[];
+  /** Provenance (D5, log-only): 'user-stated' | 'tool-output' | 'inference' | 'recipe'. */
+  originClass?: string;
+  /** Provenance (D5): session/conversation id that performed the write. */
+  writerSession?: string;
+  /** Provenance (D5): cognition-recipe id+version when originClass is 'recipe'. */
+  recipeId?: string;
+  /** Temporal validity (D8): ISO bounds on when the FACT holds (not ingestion time). */
+  validFrom?: string;
+  validTo?: string;
 }
 
 /**

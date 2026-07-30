@@ -13,6 +13,41 @@ import { join, dirname, basename } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
 import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection } from './common.js';
 
+/**
+ * DB-mutation reminder hook (PostToolUse on Bash|PowerShell).
+ * Fires when a shell command runs sqlcmd/mysql/psql with mutation keywords and
+ * injects a reminder that the mutation must be recorded via memory_write.
+ * Origin: 2026-07-29 tblOSCMPImportDivisionMatch incident — an unrecorded
+ * script INSERT broke a production upload six days later, and no recall could
+ * surface a cause that was never written.
+ */
+const DB_MUTATION_HOOK_SCRIPT = `#!/usr/bin/env node
+// AWM DB-mutation reminder hook (PostToolUse on Bash|PowerShell). Installed by awm setup.
+let raw = '';
+process.stdin.on('data', (d) => (raw += d));
+process.stdin.on('end', () => {
+  try {
+    const j = JSON.parse(raw || '{}');
+    const cmd = (j.tool_input && j.tool_input.command) || '';
+    const isDbClient = /\\b(sqlcmd|mysql|psql)\\b/i.test(cmd) || /(sqlcmd|mysql|psql)\\.exe/i.test(cmd);
+    const isMutation = /\\b(INSERT|UPDATE|DELETE|ALTER|TRUNCATE|DROP|MERGE)\\b/i.test(cmd);
+    if (isDbClient && isMutation) {
+      console.log(JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUse',
+          additionalContext:
+            'AWM REMINDER: this command contains a production DB mutation (INSERT/UPDATE/DELETE/ALTER/DROP/TRUNCATE/MERGE). ' +
+            'The change is NOT complete until it is recorded: call memory_write NOW with the table, what changed, row counts, date, and why ' +
+            '(memory_class canonical if other agents must recall it), and confirm a rollback/backup exists. ' +
+            'If the keywords were only in a string/comment or on temp tables (#...), no write is needed.',
+        },
+      }));
+    }
+  } catch (e) { /* never block the tool result */ }
+  process.exit(0);
+});
+`;
+
 const adapter: CLIAdapter = {
   id: 'claude-code',
   name: 'Claude Code',
@@ -116,13 +151,38 @@ const adapter: CLIAdapter = {
       }],
     }];
 
+    // PostToolUse — DB-mutation reminder: a production data change is not
+    // complete until it is memory_written. Deploy the script, then merge the
+    // hook entry (preserve any unrelated PostToolUse groups the user has).
+    const hooksDir = join(homedir(), '.claude', 'hooks');
+    if (!existsSync(hooksDir)) {
+      mkdirSync(hooksDir, { recursive: true });
+    }
+    const mutationHookPath = join(hooksDir, 'awm-db-mutation-reminder.cjs');
+    writeFileSync(mutationHookPath, DB_MUTATION_HOOK_SCRIPT);
+    const mutationHookCmd = `node "${mutationHookPath.replace(/\\/g, '/')}"`;
+    const otherPostToolUse = (settings.hooks.PostToolUse || []).filter(
+      (g: any) => !JSON.stringify(g).includes('awm-db-mutation-reminder')
+    );
+    settings.hooks.PostToolUse = [
+      ...otherPostToolUse,
+      {
+        matcher: 'Bash|PowerShell',
+        hooks: [{
+          type: 'command',
+          command: mutationHookCmd,
+          timeout: 10,
+        }],
+      },
+    ];
+
     const settingsDir = dirname(settingsPath);
     if (!existsSync(settingsDir)) {
       mkdirSync(settingsDir, { recursive: true });
     }
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 
-    return `Hooks: Stop + PreCompact + SessionEnd (port ${ctx.hookPort})`;
+    return `Hooks: Stop + PreCompact + SessionEnd (port ${ctx.hookPort}) + PostToolUse DB-mutation reminder`;
   },
 
   diagnose(ctx: SetupContext): DiagnosticResult[] {
@@ -199,8 +259,11 @@ const adapter: CLIAdapter = {
       try {
         const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
         const hasHooks = settings.hooks?.PreCompact && settings.hooks?.SessionEnd;
-        if (hasHooks) {
-          results.push({ check: 'Hooks', status: 'ok', message: 'PreCompact + SessionEnd configured' });
+        const hasMutationHook = JSON.stringify(settings.hooks?.PostToolUse || []).includes('awm-db-mutation-reminder');
+        if (hasHooks && hasMutationHook) {
+          results.push({ check: 'Hooks', status: 'ok', message: 'PreCompact + SessionEnd + DB-mutation reminder configured' });
+        } else if (hasHooks) {
+          results.push({ check: 'Hooks', status: 'warn', message: 'Checkpoint hooks ok; DB-mutation reminder missing (re-run awm setup)' });
         } else {
           results.push({ check: 'Hooks', status: 'warn', message: 'Hooks partially configured' });
         }

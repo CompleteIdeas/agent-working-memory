@@ -81,7 +81,12 @@ function createChannelMetrics(): ChannelMetrics {
  */
 function sessionTokenOk(db: Database.Database, agentId: string, req: import('fastify').FastifyRequest): boolean {
   const provided = req.headers['x-session-token'];
-  if (!provided) return true;
+  if (!provided) {
+    // D2 (2026-07-30): AWM_COORD_REQUIRE_TOKENS=1 closes the omit-the-header
+    // bypass. Default stays backward-compatible (registered workers that never
+    // send tokens keep working); the network perimeter is the bind+API-key gate.
+    return process.env.AWM_COORD_REQUIRE_TOKENS !== '1';
+  }
   const row = db.prepare(`SELECT session_token FROM coord_agents WHERE id = ?`).get(agentId) as { session_token: string | null } | undefined;
   if (!row || !row.session_token) return true; // not found or no token stored — backward compat
   return row.session_token === provided;

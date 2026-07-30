@@ -29,6 +29,24 @@ Each eval creates a fresh SQLite database, seeds it with test data, and runs str
 | Workday | 86.7% (14 challenges) | GOOD |
 | Token Savings | 64.5% savings, 65% recall | GOOD |
 | Production retrieval cost | 9.8× lower aggregate vs file_retrieval | EXCELLENT |
+| **Memory gauntlet** (end-to-end ablation, 2026-07-30) | **AWM 74%±5 vs no-memory 0%** on memory-dependent tasks | BASELINE |
+
+## Memory Gauntlet (end-to-end acceptance suite)
+
+The gauntlet is the standing **acceptance test for retrieval changes**: a single-factor
+ablation in the `memory-working-agent` repo (`src/gauntlet/`) where the agent harness, model,
+tasks, and budgets are held constant, the working dir is wiped between sessions, and only the
+memory substrate varies (`awm` / `off` / `notes` / `longctx` / `rag`). Probes target one
+mechanism each: single-hop recall, 3-hop chaining, supersession, distractor disambiguation,
+sparse-cue vocabulary mismatch, procedural rule application, cross-session assembly
+(enumeration), standing-policy adherence, and abstention. A second suite measures **context
+bleed** across four parallel-shaped client accounts.
+
+**2026-07-30 baseline (0.11.x, Waves 1–3 + D11):** memory-dependent pass-rate 74%±5pp
+(k=3, reps 78/67/78) with `AWM_AUTOTAG=1 AWM_ENTITY_INDEX_FETCH=1` + the MWA harness
+fixes — six of nine probes at 100%; no-memory control 0%. Full methodology, per-probe
+mechanism table, six-config flag ablation, known-gap signatures, and repro commands:
+[`docs/gauntlet-baseline-2026-07-30.md`](gauntlet-baseline-2026-07-30.md).
 
 ## Eval Details
 

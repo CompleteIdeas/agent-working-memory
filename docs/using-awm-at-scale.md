@@ -93,7 +93,14 @@ regression elsewhere — entirely via follow-up single-hop recalls, AWM unchange
 | `AWM_SIM_CANDIDATE_FLOOR_*` | vector candidate floor (lower = more recall, more noise/cost) |
 | `AWM_DISABLE_RERANK_SKIP=1` | force the cross-encoder rerank even on clear-winner queries |
 | `AWM_REINFORCE_MERGE_CONTENT=0` | disable content merge on reinforce |
+| `AWM_ENTITY_INDEX_FETCH=1` | D11 (2026-07-30): entity-index candidate injection — query-named entities resolve via the inverted index (incl. aliases) and get a guaranteed rerank audition; pair with `AWM_AUTOTAG=1` so free-text writes populate the index |
+| `AWM_SLOW_WRITE_MS` | slow-write telemetry threshold (default 250 ms; `0` disables) |
+| `AWM_BIND` / `AWM_ALLOW_INSECURE` | HTTP bind (default loopback; non-loopback without an API key fails closed) |
 | diagnostics | leave unset in production; flip only to A/B a suspected regression |
+
+**Validated (gauntlet 2026-07-30):** the entity-index config scored 74%±5pp memory-dependent
+(best floor and tightest CI of six configs; six of nine probes at 100%) — see
+`docs/gauntlet-baseline-2026-07-30.md` for the ablation and known-gap signatures.
 
 ---
 

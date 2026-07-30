@@ -53,8 +53,21 @@ export const PGLITE_SCHEMA_DDL = `
     blocked_by           TEXT,
     sequence             INTEGER,
     references_json      TEXT,
+    origin_class         TEXT,
+    writer_session       TEXT,
+    recipe_id            TEXT,
+    valid_from           TEXT,
+    valid_to             TEXT,
     fts                  TSVECTOR
   );
+
+  -- Memory-spine migration (D5/D8, 2026-07-30): idempotent column adds so
+  -- pre-existing stores gain provenance + temporal-validity fields.
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS origin_class   TEXT;
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS writer_session TEXT;
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS recipe_id      TEXT;
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_from     TEXT;
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_to       TEXT;
 
   CREATE INDEX IF NOT EXISTS idx_engrams_agent           ON engrams(agent_id);
   CREATE INDEX IF NOT EXISTS idx_engrams_stage           ON engrams(agent_id, stage);
@@ -162,5 +175,19 @@ export const PGLITE_SCHEMA_DDL = `
     last_mini_consolidation_at          TEXT,
     consolidation_cycle_count           INTEGER NOT NULL DEFAULT 0,
     updated_at                          TEXT NOT NULL DEFAULT (to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+  );
+
+  CREATE TABLE IF NOT EXISTS entity_mentions (
+    entity    TEXT NOT NULL,
+    engram_id TEXT NOT NULL,
+    agent_id  TEXT NOT NULL,
+    PRIMARY KEY (entity, engram_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_entity_mentions_agent ON entity_mentions(agent_id, entity);
+
+  CREATE TABLE IF NOT EXISTS entity_aliases (
+    alias  TEXT PRIMARY KEY,
+    entity TEXT NOT NULL
   );
 `;

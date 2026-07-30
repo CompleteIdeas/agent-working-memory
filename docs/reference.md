@@ -556,9 +556,57 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 | Env var | Meaning | Status |
 |---------|---------|--------|
 | `AWM_QUERY_BRIDGE` | Query-named entities boost in-pool candidates tagged with them (relevance-modulated). Lifts **attribution** ("what does X think") strongly; small adversarial cost. | Validated, opt-in |
-| `AWM_AUTOTAG` | Write-time `entity:`/`cat:` meta-tags (feeds the entity-bridge + BM25). | Neutral on recall; opt-in |
+| `AWM_AUTOTAG` | Write-time `entity:`/`cat:` meta-tags (feeds the entity-bridge, BM25, and the D9 entity index). | Neutral on recall alone; **required to populate the entity index** for free-text writes; opt-in |
 | `AWM_BROAD_EDGES` | Form entity-co-occurrence edges (not just high-cosine) at write time. | Enabler; opt-in |
-| `AWM_SPREAD` / `AWM_SPREAD_INJECT` | Iterative PPR/SYNAPSE-style spreading activation over the graph. | **Parked** — regressed recall (displaces gold); kept for research |
+| `AWM_ENTITY_INDEX_FETCH` | **D11 (2026-07-30):** query-named entities (proper nouns, bare numeric ids) resolve through the `entity_mentions`/`entity_aliases` inverted index; matched engrams get NO score boost but a **guaranteed cross-encoder audition** (exempt from the topN cut, minScore floor, rerank-pool slice, and rerank-skip). The alias table lets a query reach facts no lexical/vector channel can ("Starbox" → `horse:thunder`). Cap: `AWM_ENTITY_INDEX_CAP` (12). | Gauntlet-accepted (74%±5pp, best floor of 6 configs); opt-in pending k≥10 confirmation |
+| `AWM_SPREAD` / `AWM_SPREAD_INJECT` | Iterative PPR/SYNAPSE-style spreading activation over the graph. | **Parked** — regressed recall (displaces gold); re-test staged behind `AWM_SPREAD_INHIBIT` |
+| `AWM_SPREAD_INHIBIT` | **D11:** SYNAPSE-style divisive normalization inside spread iterations — competing receivers suppress each other (the published fix for the displacing-gold regression). `0` (default) = off; `0.3` = re-test value. | Staged for tracer-judged re-test |
+
+**2026-07-30 flag ablation (MWA gauntlet, memory suite, k=3 each — see
+`docs/gauntlet-baseline-2026-07-30.md`):** defaults 67%±18 · bridge/autotag/edges 59%±5 ·
+expansion-only 63%±14 · all-four 74%±10 · entity-index config 74%±5. No single-factor cell
+reproduced the combined wins; all CIs overlap at k=3 — no default flip without a k≥10 run.
+
+### 0.11.x additions (Waves 1–3 + D11, 2026-07-30)
+
+**Write-path telemetry (D1)** — always-on slow-write attribution:
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_SLOW_WRITE_MS` | `250` | Any write slower than this logs one stderr line with embed/novelty/persist phase times, event-loop lag, in-process consolidation state, `SQLITE_BUSY` flag, and embed-model cold-load ms. `0` disables. |
+
+**Security defaults (D2):**
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_BIND` | `127.0.0.1` | HTTP server bind address. Widening beyond loopback **without** `AWM_API_KEY` refuses to start (fail-closed). |
+| `AWM_ALLOW_INSECURE` | unset | `1` overrides the fail-closed gate on trusted networks. |
+| `AWM_COORD_REQUIRE_TOKENS` | unset | `1` makes coordination endpoints reject requests with an absent session token (closes the omit-the-header bypass). |
+
+**Instance identity (D3):** `memory_whoami` MCP tool / `GET /whoami` — agent id, workspace,
+mode, backend, store path, code provenance, ports, and sibling agent spaces in the store.
+`GET /health` now also reports `consolidation.schedulerDisabled` / `cycleRunning` / active-cycle age (D15).
+
+**Configurable salience feedback detection (D4):** `AWM_FEEDBACK_NAMES` / `AWM_FEEDBACK_VERBS`
+(comma lists) replace the hardcoded staff-name regex used for user-feedback auto-promotion.
+
+**Memory spine (D5/D8, log-only):** writes accept `origin_class`
+(`user-stated | tool-output | inference | recipe`), `writer_session`, `recipe_id`,
+`valid_from`, `valid_to`. Recorded on every backend; **never used in ranking** until an eval
+proves benefit (D6). Recall output flags superseded-but-still-ranking memories
+(`⚠ SUPERSEDED by <id>`) and shows `[valid until …]`.
+
+**Cognition recipes (D14):** AWM contains no LLM — `src/recipes/` ships versioned prompt+contract
+pairs (`skill-derivation@1`, `friction-lesson@1`) the HOST agent runs as a separate focused pass;
+`memory_task_end` responses carry the invitations, and `memory_write` validates recipe-attributed
+write-backs (unknown recipe ids and malformed shapes rejected with the contract echoed).
+
+**Entity index (D9):** `entity_mentions(entity, engram_id, agent_id)` +
+`entity_aliases(alias, entity)` tables on all three backends, populated at write time from
+structured sources only (prefix tags like `person=`/`ticket=`, auto-tagger `entity:` tags),
+normalized `key:value` lowercase. Store API: `recordEntityMentions()`, `getEngramIdsByEntity()`
+(alias-resolving), `searchEntities()` (mentions ∪ aliases). Retrieval uses it only behind
+`AWM_ENTITY_INDEX_FETCH` (see the flag table above).
 
 ---
 
@@ -678,6 +726,11 @@ Default half-life: 7 days
 | task_status | TEXT | open/in_progress/blocked/done (null if not a task) |
 | task_priority | TEXT | urgent/high/medium/low (null if not a task) |
 | blocked_by | TEXT | FK to blocking task engram |
+| origin_class | TEXT | Memory spine (D5, 2026-07-30): `user-stated` / `tool-output` / `inference` / `recipe` — log-only |
+| writer_session | TEXT | Session id that wrote this engram (D5) |
+| recipe_id | TEXT | Cognition recipe that produced it, e.g. `skill-derivation@1` (D14) |
+| valid_from | TEXT | Bi-temporal validity start (D8) |
+| valid_to | TEXT | Bi-temporal validity end — shown as `[valid until …]` in recall (D8) |
 
 ### associations
 | Column | Type | Notes |
@@ -691,6 +744,22 @@ Default half-life: 7 days
 | activation_count | INTEGER | Times used in retrieval |
 | created_at | TEXT | ISO datetime |
 | last_activated | TEXT | ISO datetime |
+
+### entity_mentions (D9, 2026-07-30)
+| Column | Type | Notes |
+|--------|------|-------|
+| entity | TEXT | Normalized `key:value` (e.g. `person:seetha`, `ticket:18999`) — PK with engram_id |
+| engram_id | TEXT | Engram mentioning the entity |
+| agent_id | TEXT | Agent scope (indexed with entity) |
+
+Populated best-effort on every write from structured sources only (prefix tags,
+auto-tagger `entity:` tags). Retrieval reads it only behind `AWM_ENTITY_INDEX_FETCH`.
+
+### entity_aliases (D9)
+| Column | Type | Notes |
+|--------|------|-------|
+| alias | TEXT PK | Alternate name, normalized lowercase |
+| entity | TEXT | Target entity in entity_mentions |
 
 ### engrams_fts (FTS5 virtual table)
 Full-text search index on concept, content, tags. Auto-synced via triggers.

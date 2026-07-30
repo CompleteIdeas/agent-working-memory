@@ -25,6 +25,7 @@ import { strengthenAssociation, decayAssociation } from '../core/hebbian.js';
 import type { Engram } from '../types/index.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConnectionEngine } from './connections.js';
+import { setConsolidationActive } from '../core/write-telemetry.js';
 
 /** Cosine similarity for initial candidate detection (single-link entry gate) */
 const SIMILARITY_THRESHOLD = 0.65;
@@ -177,6 +178,23 @@ export class ConsolidationEngine {
    * Phase 7: Sweep — check staging buffer for resonance
    */
   async consolidate(agentId: string): Promise<ConsolidationResult> {
+    // D1 telemetry (2026-07-30): flag the cycle so slow-write reports can
+    // attribute stalls to in-process consolidation. try/finally guarantees
+    // the flag clears even when a phase throws.
+    setConsolidationActive(true, agentId);
+    const tCycleStart = performance.now();
+    try {
+      return await this.consolidateInner(agentId);
+    } finally {
+      setConsolidationActive(false);
+      const ms = Math.round(performance.now() - tCycleStart);
+      if (ms > 5000) {
+        process.stderr.write(`[awm] consolidation cycle for ${agentId} took ${ms}ms\n`);
+      }
+    }
+  }
+
+  private async consolidateInner(agentId: string): Promise<ConsolidationResult> {
     // --- Phase 0: Connection drain ---
     // Discover associations for engrams enqueued by writes since the last
     // consolidation. Per-write inline discovery was removed in v0.8.2

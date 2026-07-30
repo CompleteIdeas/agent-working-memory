@@ -14,7 +14,7 @@
  * Kill switch: AWM_DISABLE_SCHEDULER=1 skips both triggers. Manual
  * consolidation via POST /system/consolidate still works.
  *
- * Removed in 2.0: in-band idle/volume/time/precision triggers that fired
+ * Removed in 0.8.5 (the "AWM 2.0" work): in-band idle/volume/time/precision triggers that fired
  * during active hours and blocked HTTP.
  *
  * Tick granularity: 1 minute (sufficient for cron-at-the-minute precision

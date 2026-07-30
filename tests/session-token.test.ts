@@ -327,3 +327,26 @@ describe('session token validation', () => {
     expect(status).toBe(403);
   });
 });
+
+describe('D2: AWM_COORD_REQUIRE_TOKENS strict mode', () => {
+  it('absent token is rejected when strict mode is on, accepted when off', async () => {
+    const { data } = await http('/checkin', {
+      method: 'POST',
+      body: { name: 'D2-Strict', role: 'worker', workspace: 'TEST' },
+    });
+    const agentId = data.agentId;
+    process.env.AWM_COORD_REQUIRE_TOKENS = '1';
+    try {
+      const strict = await http('/checkout', { method: 'POST', body: { agentId } });
+      expect(strict.status).toBe(403);
+    } finally {
+      delete process.env.AWM_COORD_REQUIRE_TOKENS;
+    }
+    const { data: d2 } = await http('/checkin', {
+      method: 'POST',
+      body: { name: 'D2-Legacy', role: 'worker', workspace: 'TEST' },
+    });
+    const legacy = await http('/checkout', { method: 'POST', body: { agentId: d2.agentId } });
+    expect(legacy.status).toBe(200);
+  });
+});

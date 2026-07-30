@@ -555,6 +555,35 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
+## What's New (Unreleased — 2026-07-30 wave)
+
+A design-proposal implementation pass (D1–D15 waves 1–3 + D11) grounded in a full-stack
+eval and gauntlet-tested end to end. All additive; 599/599 tests. Highlights:
+
+- **Write-path telemetry (D1):** always-on slow-write attribution (`AWM_SLOW_WRITE_MS`,
+  default 250 ms) — one stderr line names the phase (embed / novelty / persist), event-loop
+  lag, consolidation state, and `SQLITE_BUSY` when a write is slow.
+- **Local-first security defaults (D2):** HTTP binds `127.0.0.1` by default; widening
+  beyond loopback without `AWM_API_KEY` fails closed (`AWM_BIND`, `AWM_ALLOW_INSECURE`,
+  `AWM_COORD_REQUIRE_TOKENS`).
+- **Instance identity (D3):** `memory_whoami` / `GET /whoami` — agent id, workspace,
+  backend, store path, sibling agent spaces; `/health` reports consolidation state (D15).
+- **Memory spine (D5/D8, log-only):** `origin_class` / `writer_session` / `recipe_id` /
+  `valid_from` / `valid_to` provenance on every write; superseded-but-ranking results are
+  flagged, never silently down-ranked. Not used in ranking until an eval proves it (D6).
+- **Cognition recipes (D14):** AWM contains no LLM — versioned prompt+contract pairs
+  (`skill-derivation@1`, `friction-lesson@1`) the host agent runs as a separate focused
+  pass, with validated write-backs.
+- **Entity inverted index (D9) + index-backed retrieval (D11):** `entity_mentions` +
+  `entity_aliases` on all three backends, populated at write time from structured sources;
+  behind `AWM_ENTITY_INDEX_FETCH=1`, query-named entities inject candidates with a
+  **guaranteed cross-encoder audition** (no score boost — the reranker decides), including
+  alias hops no lexical/vector channel can make.
+- **Gauntlet baseline:** the end-to-end memory ablation now anchors acceptance —
+  **74%±5pp memory-dependent vs 0% no-memory control**, six of nine probes at 100%.
+  Methodology, per-probe mechanism table, and the six-config flag ablation:
+  [`docs/gauntlet-baseline-2026-07-30.md`](docs/gauntlet-baseline-2026-07-30.md).
+
 ## What's New in v0.11.0
 
 **`awm onboard` — warm-start a cold store from a project's own knowledge.** A fresh store

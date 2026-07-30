@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { evaluateSalience, detectVerifiedFinding } from '../../src/core/salience.js';
 
 describe('Salience Filter', () => {
@@ -252,5 +252,26 @@ describe('detectVerifiedFinding', () => {
       novelty: 0.1,
     });
     expect(result.disposition).toBe('discard');
+  });
+});
+
+describe('D4: AWM_FEEDBACK_NAMES override', () => {
+  it('replaces the built-in name list (module reload picks up env)', async () => {
+    process.env.AWM_FEEDBACK_NAMES = 'Zork,Ada';
+    vi.resetModules();
+    try {
+      const m = await import('../../src/core/salience.js');
+      expect(m.detectUserFeedback('Zork said use the blue theme')).toBe(true);
+      expect(m.detectUserFeedback('Ada decided to ship it')).toBe(true);
+      expect(m.detectUserFeedback('Robert said use the blue theme')).toBe(false);
+    } finally {
+      delete process.env.AWM_FEEDBACK_NAMES;
+      vi.resetModules();
+    }
+  });
+
+  it('default list still detects the built-in names', async () => {
+    const m = await import('../../src/core/salience.js');
+    expect(m.detectUserFeedback('Robert said keep it local')).toBe(true);
   });
 });

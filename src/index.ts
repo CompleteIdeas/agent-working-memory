@@ -23,6 +23,7 @@ import { EngramStore } from './storage/sqlite.js';
 import { ActivationEngine } from './engine/activation.js';
 import { ConnectionEngine } from './engine/connections.js';
 import { StagingBuffer } from './engine/staging.js';
+import { startLoopLagMonitor } from './core/write-telemetry.js';
 import { EvictionEngine } from './engine/eviction.js';
 import { RetractionEngine } from './engine/retraction.js';
 import { EvalEngine } from './engine/eval.js';
@@ -41,6 +42,22 @@ const PORT = parseInt(process.env.AWM_PORT ?? '8400', 10);
 const BACKEND: StoreBackend = getConfiguredBackend();
 const DB_PATH = process.env.AWM_DB_PATH ?? (BACKEND === 'pglite' ? 'memory-pglite' : 'memory.db');
 const API_KEY = process.env.AWM_API_KEY ?? null;
+
+// D2 (2026-07-30) security defaults: bind loopback unless AWM_BIND widens it.
+// Widening without an API key is refused (fail-closed) — a local-first store
+// on hotel Wi-Fi must not be one env var away from an open network listener.
+// Escape hatch for trusted networks: AWM_ALLOW_INSECURE=1.
+const HOST = process.env.AWM_BIND ?? '127.0.0.1';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+if (!LOOPBACK_HOSTS.has(HOST)
+  && !(API_KEY && API_KEY !== 'NONE' && API_KEY.length > 1)
+  && process.env.AWM_ALLOW_INSECURE !== '1') {
+  console.error(
+    `AWM refusing to start: AWM_BIND=${HOST} exposes the API beyond loopback with no AWM_API_KEY set. ` +
+    'Set AWM_API_KEY, or AWM_ALLOW_INSECURE=1 to override on a trusted network.',
+  );
+  process.exit(1);
+}
 
 async function main() {
   // Auto-backup: copy DB to backups/ on startup (SQLite-only; PGlite is a
@@ -136,6 +153,9 @@ async function main() {
   const { isCoordinationEnabled, initCoordination, stopCoordinationCleanup } = await import('./coordination/index.js');
   if (isCoordinationEnabled() && BACKEND === 'sqlite') {
     initCoordination(app, store.getDb(), store);
+    if (process.env.AWM_COORD_REQUIRE_TOKENS !== '1') {
+      console.log('  Coordination: session tokens optional (set AWM_COORD_REQUIRE_TOKENS=1 to require them)');
+    }
   } else if (isCoordinationEnabled()) {
     console.log(`  Coordination requested but disabled — requires SQLite backend (current: ${BACKEND})`);
   } else {
@@ -145,6 +165,7 @@ async function main() {
   // Background tasks
   stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
   consolidationScheduler.start();
+  startLoopLagMonitor();
 
   // Periodic hot backup every 10 minutes (keep last 6 = 1hr coverage)
   const dbDir = dirname(resolve(DB_PATH));
@@ -202,8 +223,8 @@ async function main() {
   }
 
   // Start server
-  await app.listen({ port: PORT, host: '0.0.0.0' });
-  console.log(`AgentWorkingMemory v${VERSION} listening on port ${PORT}`);
+  await app.listen({ port: PORT, host: HOST });
+  console.log(`AgentWorkingMemory v${VERSION} listening on ${HOST}:${PORT}`);
 
   // Graceful shutdown
   const shutdown = async () => {

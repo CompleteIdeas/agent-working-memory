@@ -86,7 +86,12 @@ export class EvalEngine {
       promotedCount: stagingMetrics.promoted,
       discardedCount: stagingMetrics.discarded,
       promotionPrecision,
-      discardRegret: 0, // Requires tracking discarded-then-rediscovered items
+      // D12 (2026-07-30): discarded writes persist as 'low-salience'-tagged
+      // engrams (confidence 0.25). Regret = the filter demoted something the
+      // agent later actually needed — measured as low-salience engrams that
+      // were subsequently accessed at least once.
+      discardRegret: activeEngrams.filter(e =>
+        e.tags.includes('low-salience') && e.accessCount > 0).length,
 
       activeEngramCount: activeEngrams.length,
       stagingEngramCount: stagingEngrams.length,

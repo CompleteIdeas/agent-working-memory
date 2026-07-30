@@ -127,6 +127,11 @@ function rowToEngram(row: any): Engram {
     blockedBy: (row.blocked_by as string | null) ?? null,
     sequence: row.sequence == null ? null : Number(row.sequence),
     references: row.references_json ? JSON.parse(row.references_json as string) : null,
+    originClass: (row.origin_class as string | null) ?? null,
+    writerSession: (row.writer_session as string | null) ?? null,
+    recipeId: (row.recipe_id as string | null) ?? null,
+    validFrom: (row.valid_from as string | null) ?? null,
+    validTo: (row.valid_to as string | null) ?? null,
   } as Engram;
 }
 
@@ -358,13 +363,15 @@ export class PostgresEngramStore {
         confidence, salience, access_count, last_accessed, created_at,
         salience_features, reason_codes, stage, ttl, retracted,
         tags, memory_type, memory_class, supersedes, episode_id,
-        task_status, task_priority, blocked_by, sequence, references_json
+        task_status, task_priority, blocked_by, sequence, references_json,
+        origin_class, writer_session, recipe_id, valid_from, valid_to
       ) VALUES (
         $1, $2, $3, $4, $5::vector, $6,
         $7, $8, 0, $9, $10,
         $11, $12, 'active', $13, FALSE,
         $14, $15, $16, $17, $18,
-        $19, $20, $21, $22, $23
+        $19, $20, $21, $22, $23,
+        $24, $25, $26, $27, $28
       )`,
       [
         id,
@@ -390,6 +397,11 @@ export class PostgresEngramStore {
         (input as any).sequence ?? null,
         input.references && input.references.length > 0
           ? JSON.stringify(input.references) : null,
+        input.originClass ?? null,
+        input.writerSession ?? null,
+        input.recipeId ?? null,
+        input.validFrom ?? null,
+        input.validTo ?? null,
       ],
     );
 
@@ -1288,6 +1300,42 @@ export class PostgresEngramStore {
          updated_at = EXCLUDED.updated_at`,
       [agentId, JSON.stringify(state), now],
     );
+  }
+
+  /** Distinct agent ids present in this store (D3 whoami; includes all stages). */
+  async listAgentIds(): Promise<string[]> {
+    const res = await this.pool.query('SELECT DISTINCT agent_id FROM engrams ORDER BY agent_id');
+    return (res.rows as Array<{ agent_id: string }>).map(r => r.agent_id);
+  }
+
+  async recordEntityMentions(engramId: string, agentId: string, entities: string[]): Promise<void> {
+    if (!entities || entities.length === 0) return;
+    for (const entity of entities) {
+      await this.pool.query(
+        'INSERT INTO entity_mentions (entity, engram_id, agent_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [entity, engramId, agentId],
+      );
+    }
+  }
+
+  async searchEntities(term: string, limit: number = 8): Promise<string[]> {
+    const t = term.toLowerCase().replace(/[%_]/g, '');
+    if (!t) return [];
+    const res = await this.pool.query(
+      `SELECT DISTINCT entity FROM (
+         SELECT entity FROM entity_mentions WHERE entity LIKE $1
+         UNION SELECT entity FROM entity_aliases WHERE alias LIKE $1
+       ) u LIMIT $2`, [`%${t}%`, limit]);
+    return (res.rows as Array<{ entity: string }>).map(r => r.entity);
+  }
+
+  async getEngramIdsByEntity(entity: string, agentId?: string): Promise<string[]> {
+    const alias = await this.pool.query('SELECT entity FROM entity_aliases WHERE alias = $1', [entity.toLowerCase()]);
+    const resolved = (alias.rows as Array<{ entity: string }>)[0]?.entity ?? entity.toLowerCase();
+    const res = agentId
+      ? await this.pool.query('SELECT engram_id FROM entity_mentions WHERE entity = $1 AND agent_id = $2', [resolved, agentId])
+      : await this.pool.query('SELECT engram_id FROM entity_mentions WHERE entity = $1', [resolved]);
+    return (res.rows as Array<{ engram_id: string }>).map(r => r.engram_id);
   }
 
   async getCheckpoint(agentId: string): Promise<CheckpointRow | null> {

@@ -116,12 +116,19 @@ Key tables:
 - `task_status`, `task_priority`, `blocked_by` (task management)
 - `stage` (`staging` / `active` / `fading` / `consolidated` / `archived`) — `fading` added in v0.8.5
 - `retracted` (boolean), `retracted_by`, `retracted_at` (soft-delete metadata)
+- `origin_class`, `writer_session`, `recipe_id`, `valid_from`, `valid_to` — memory-spine
+  provenance + bi-temporal validity (2026-07-30, log-only: never used in ranking)
 
 **associations** — Edges between memories
 - `from_engram_id`, `to_engram_id`, `weight`, `type` (hebbian / connection / invalidation / temporal / causal)
 
 **episodes** — Grouping of related memories
 - `id`, `agent_id`, `name`, `created_at`
+
+**entity_mentions / entity_aliases** — Inverted entity index (D9, 2026-07-30). Normalized
+`key:value` entities (from prefix tags + auto-tagger `entity:` tags) → engram ids, with an
+alias table for alternate names. Write-time bookkeeping on all three backends; retrieval
+reads it only behind `AWM_ENTITY_INDEX_FETCH` (D11 guarded injection).
 
 **engrams_fts** — FTS5 virtual table on concept + content + tags. Auto-synced via triggers.
 

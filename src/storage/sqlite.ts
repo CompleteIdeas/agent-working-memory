@@ -340,6 +340,35 @@ export class EngramStore {
       this.db.exec(`ALTER TABLE engrams ADD COLUMN embedding_model TEXT`);
     }
 
+    // Entity inverted index + alias table (D9, 2026-07-30) — write-time
+    // bookkeeping only; retrieval unchanged until D11. Idempotent CREATEs.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS entity_mentions (
+        entity    TEXT NOT NULL,
+        engram_id TEXT NOT NULL,
+        agent_id  TEXT NOT NULL,
+        PRIMARY KEY (entity, engram_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_entity_mentions_agent ON entity_mentions(agent_id, entity);
+      CREATE TABLE IF NOT EXISTS entity_aliases (
+        alias  TEXT PRIMARY KEY,
+        entity TEXT NOT NULL
+      );
+    `);
+
+    // Migration: memory-spine provenance + temporal validity (D5/D8, 2026-07-30)
+    try {
+      this.db.prepare('SELECT origin_class FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`
+        ALTER TABLE engrams ADD COLUMN origin_class TEXT;
+        ALTER TABLE engrams ADD COLUMN writer_session TEXT;
+        ALTER TABLE engrams ADD COLUMN recipe_id TEXT;
+        ALTER TABLE engrams ADD COLUMN valid_from TEXT;
+        ALTER TABLE engrams ADD COLUMN valid_to TEXT;
+      `);
+    }
+
     // Migration: add conscious_state table for checkpointing
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS conscious_state (
@@ -405,8 +434,8 @@ export class EngramStore {
       INSERT INTO engrams (id, agent_id, concept, content, embedding, confidence, salience,
         access_count, last_accessed, created_at, salience_features, reason_codes, stage, tags, episode_id,
         ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type,
-        sequence, references_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sequence, references_json, origin_class, writer_session, recipe_id, valid_from, valid_to)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.agentId, input.concept, input.content, embeddingBlob,
       input.confidence ?? 0.5,
@@ -426,6 +455,11 @@ export class EngramStore {
       input.sequence ?? null,
       input.references && input.references.length > 0
         ? JSON.stringify(input.references) : null,
+      input.originClass ?? null,
+      input.writerSession ?? null,
+      input.recipeId ?? null,
+      input.validFrom ?? null,
+      input.validTo ?? null,
     );
 
     // Add to slim cache (skip if not yet populated — first slim fetch will load it)
@@ -1365,6 +1399,11 @@ export class EngramStore {
       blockedBy: row.blocked_by ?? null,
       sequence: row.sequence == null ? null : Number(row.sequence),
       references: row.references_json ? JSON.parse(row.references_json) : null,
+      originClass: row.origin_class ?? null,
+      writerSession: row.writer_session ?? null,
+      recipeId: row.recipe_id ?? null,
+      validFrom: row.valid_from ?? null,
+      validTo: row.valid_to ?? null,
     };
   }
 
@@ -1538,6 +1577,42 @@ export class EngramStore {
         last_activity_at = excluded.last_activity_at,
         updated_at = excluded.updated_at
     `).run(agentId, JSON.stringify(state), now, now, now);
+  }
+
+  /** Record entity mentions for an engram (D9 inverted index; idempotent). */
+  recordEntityMentions(engramId: string, agentId: string, entities: string[]): void {
+    if (!entities || entities.length === 0) return;
+    const stmt = this.db.prepare('INSERT OR IGNORE INTO entity_mentions (entity, engram_id, agent_id) VALUES (?, ?, ?)');
+    for (const entity of entities) stmt.run(entity, engramId, agentId);
+  }
+
+  /** Indexed entities whose normalized key:value — or a registered alias — contains the term
+   *  (D11 query-side lookup). Alias matches resolve to their target entity. */
+  searchEntities(term: string, limit: number = 8): string[] {
+    const t = term.toLowerCase().replace(/[%_]/g, '');
+    if (!t) return [];
+    const rows = this.db.prepare(`
+      SELECT DISTINCT entity FROM (
+        SELECT entity FROM entity_mentions WHERE entity LIKE ?
+        UNION SELECT entity FROM entity_aliases WHERE alias LIKE ?
+      ) LIMIT ?`).all(`%${t}%`, `%${t}%`, limit) as Array<{ entity: string }>;
+    return rows.map(r => r.entity);
+  }
+
+  /** Engram ids mentioning an entity (alias-resolved), optionally agent-scoped. */
+  getEngramIdsByEntity(entity: string, agentId?: string): string[] {
+    const resolved = (this.db.prepare('SELECT entity FROM entity_aliases WHERE alias = ?')
+      .get(entity.toLowerCase()) as { entity: string } | undefined)?.entity ?? entity.toLowerCase();
+    const rows = agentId
+      ? this.db.prepare('SELECT engram_id FROM entity_mentions WHERE entity = ? AND agent_id = ?').all(resolved, agentId)
+      : this.db.prepare('SELECT engram_id FROM entity_mentions WHERE entity = ?').all(resolved);
+    return (rows as Array<{ engram_id: string }>).map(r => r.engram_id);
+  }
+
+  /** Distinct agent ids present in this store (D3 whoami; includes all stages). */
+  listAgentIds(): string[] {
+    const rows = this.db.prepare('SELECT DISTINCT agent_id FROM engrams ORDER BY agent_id').all() as Array<{ agent_id: string }>;
+    return rows.map(r => r.agent_id);
   }
 
   getCheckpoint(agentId: string): CheckpointRow | null {
