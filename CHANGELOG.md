@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.12.1 (2026-08-21) — recall results carry engram ids
+
+- **`memory_recall` result lines now include `[id: <engram-id>]`**, right after the score.
+  Previously the id existed on every result internally (and was logged to `activation_events`),
+  but the MCP text response never surfaced it — so a recalled-but-not-yet-written memory could
+  not be fed into `memory_feedback` or `memory_supersede` without a separate lookup. Those two
+  tools' parameter descriptions already claimed the id comes "from memory_recall results";
+  0.12.1 makes that true. `memory_supersede`'s `old_engram_id` description also now says so
+  explicitly.
+- Formatting logic extracted from an inline closure in `mcp.ts` into `core/format-recall.ts`
+  (`formatRecallResultLine`), so it is unit-testable without booting the MCP server. New
+  `tests/format-recall.test.ts` (5 tests). No behavior change beyond the id.
+- 604/604 tests, MCP smoke test verified end-to-end against a live server.
+
 ## 0.12.0 (2026-07-30) — eval-driven hardening: telemetry, security defaults, memory spine, cognition recipes, entity index
 
 The D1–D16 design-proposal implementation waves (see `docs/design-proposals-2026-07-30.md`),

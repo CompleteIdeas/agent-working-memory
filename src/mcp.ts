@@ -83,6 +83,7 @@ import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-dec
 import { startLoopLagMonitor } from './core/write-telemetry.js';
 import { buildWhoami, formatWhoami } from './core/whoami.js';
 import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
+import { formatRecallResultLine } from './core/format-recall.js';
 
 // --- Incognito Mode ---
 // When AWM_INCOGNITO=1, register zero tools. Claude won't see memory tools at all.
@@ -461,22 +462,11 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       };
     }
 
-    const lines = results.map((r, i) => {
-      // Confidence-adaptive output (Paper 3: cognitive teaming). When the caller
-      // requested 'compact' or 'auto' granularity, surface the engine-computed
-      // summary instead of the full content — same engram, less to read.
-      const body = r.summary ?? r.engram.content;
-      // D8 (2026-07-30): conflict surfacing — a superseded memory that still
-      // ranks is shown WITH its replacement pointer instead of silently
-      // down-ranked. The model should trust the successor.
-      const chain = r.engram.supersededBy
-        ? ` ⚠ SUPERSEDED by ${r.engram.supersededBy} — treat as historical; recall/fetch the successor before relying on this.`
-        : '';
-      const validity = r.engram.validTo
-        ? ` [valid until ${r.engram.validTo}]`
-        : '';
-      return `${i + 1}. **${r.engram.concept}** (${r.score.toFixed(3)})${validity}: ${body}${chain}`;
-    });
+    // Confidence-adaptive output (Paper 3: cognitive teaming) and D8
+    // (2026-07-30) conflict surfacing both live in the shared formatter now —
+    // see core/format-recall.ts for why it's extracted (0.12.1: unit-testable
+    // without booting the server) and why the id sits after the score.
+    const lines = results.map(formatRecallResultLine);
 
     return {
       content: [{
@@ -564,7 +554,7 @@ Use this when:
 
 The old memory stays in the database (searchable for history) but is heavily down-ranked in recall so the current version dominates.`,
   {
-    old_engram_id: z.string().describe('ID of the outdated memory'),
+    old_engram_id: z.string().describe('ID of the outdated memory (from memory_recall results, or memory_write\'s own response if you just wrote it)'),
     new_engram_id: z.string().describe('ID of the replacement memory'),
     reason: z.string().optional().describe('Why the old memory is outdated'),
   },
