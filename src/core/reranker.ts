@@ -35,7 +35,7 @@ async function ensureLoaded(): Promise<void> {
   initPromise = (async () => {
     tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID);
     model = await AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: 'fp32' });
-    console.log(`Re-ranker model loaded in-process: ${MODEL_ID}`);
+    console.error(`Re-ranker model loaded in-process: ${MODEL_ID}`);
   })();
   return initPromise;
 }

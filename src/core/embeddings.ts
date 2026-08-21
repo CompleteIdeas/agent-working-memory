@@ -37,7 +37,7 @@ async function loadInProcess(): Promise<FeatureExtractionPipeline> {
   inProcessInitPromise = pipeline('feature-extraction', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
     inProcessInstance = pipe;
     noteModelLoad(performance.now() - tLoadStart);
-    console.log(`Embedding model loaded in-process: ${MODEL_ID} (${DIMENSIONS}d)`);
+    console.error(`Embedding model loaded in-process: ${MODEL_ID} (${DIMENSIONS}d)`);
     return pipe;
   });
   return inProcessInitPromise;

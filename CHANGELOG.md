@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.12.2 (2026-08-21) — eager warm at MCP startup + sidecar warm recall for hooks
+
+Both changes come from a measured latency decomposition on a live 29,750-engram store
+(cold ~3.0s = slim-cache warm 0.9s + three model loads ~1.8s; warm recall 897ms, ~90% of
+which is cross-encoder compute over the 40-candidate pool).
+
+- **`mcp.ts` now eager-warms at startup** (fire-and-forget: three ML models + SQLite slim
+  cache), mirroring what `index.ts` has done since 0.7.14. Previously every MCP session paid
+  the full ~3s cold cost on its *first recall* — the "first recall is slow, so recall gets
+  avoided" failure mode. The cost now overlaps session startup. Escape hatch:
+  `AWM_NO_EAGER_WARM=1`.
+- **Hook sidecar: `POST /memory/activate`** — warm recall for Claude Code hooks. The sidecar
+  runs in the same process as the activation engine and its loaded models, so a
+  UserPromptSubmit hook gets ~0.8s warm recall with **no standing server**; the process
+  lifecycle is owned by the session that spawned it. Bearer-auth gated; returns a trimmed
+  subset of the HTTP API's response shape (no embeddings/phase scores). `SidecarDeps.activate`
+  is optional, so older callers are unaffected. New `tests/sidecar-activate.test.ts` (6 tests,
+  first sidecar coverage).
+- **Model-load log lines moved to stderr** (`embeddings.ts`, `reranker.ts`,
+  `query-expander.ts`): they previously wrote to stdout, which inside the stdio MCP server is
+  the JSON-RPC channel. Pre-existing lazily-triggered behavior; eager warm made fixing it
+  mandatory. Verified: 0 bytes on stdout at startup.
+- 610/610 tests; live end-to-end verified (fresh `dist/mcp.js` on the live store: eager warm
+  fires stderr-only, sidecar route answers warm in ~0.8s, auth 401 without token, confidence
+  abstention passes through as empty results).
+
 ## 0.12.1 (2026-08-21) — recall results carry engram ids
 
 - **`memory_recall` result lines now include `[id: <engram-id>]`**, right after the score.

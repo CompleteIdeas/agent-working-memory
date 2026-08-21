@@ -30,7 +30,7 @@ async function loadInProcess(): Promise<Text2TextGenerationPipeline> {
   if (inProcessInitPromise) return inProcessInitPromise;
   inProcessInitPromise = pipeline('text2text-generation', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
     inProcessInstance = pipe as Text2TextGenerationPipeline;
-    console.log(`Query expander loaded in-process: ${MODEL_ID}`);
+    console.error(`Query expander loaded in-process: ${MODEL_ID}`);
     return inProcessInstance;
   });
   return inProcessInitPromise;

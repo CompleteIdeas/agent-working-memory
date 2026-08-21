@@ -73,7 +73,9 @@ import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority } from './types/engram.js';
 import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
-import { embed } from './core/embeddings.js';
+import { embed, getEmbedder } from './core/embeddings.js';
+import { getReranker } from './core/reranker.js';
+import { getExpander } from './core/query-expander.js';
 import { startSidecar } from './hooks/sidecar.js';
 import { initLogger, log, getLogPath } from './core/logger.js';
 import { VERSION } from './version.js';
@@ -1278,6 +1280,35 @@ async function main() {
     agentId: AGENT_ID,
     secret: HOOK_SECRET,
     port: HOOK_PORT,
+    // 0.12.2: warm recall for hooks — the sidecar shares this process's
+    // activation engine and loaded models, so a UserPromptSubmit hook can get
+    // warm-latency recall without any standing server. Trimmed result shape
+    // (no embeddings/phase scores — hooks don't need them and the vectors
+    // alone would 10x the payload).
+    activate: async (q) => {
+      const results = await activationEngine.activate({
+        agentId: AGENT_ID,
+        context: q.context,
+        limit: q.limit,
+        requireConfidence: q.requireConfidence,
+        granularity: q.granularity,
+      });
+      return results.map(r => ({
+        engram: {
+          id: r.engram.id,
+          concept: r.engram.concept,
+          content: r.engram.content,
+          createdAt: r.engram.createdAt instanceof Date
+            ? r.engram.createdAt.toISOString()
+            : (r.engram.createdAt as unknown as string | undefined),
+          memoryClass: r.engram.memoryClass,
+          validTo: r.engram.validTo,
+        },
+        score: r.score,
+        summary: r.summary,
+        confidence: r.confidence,
+      }));
+    },
     onConsolidate: async (agentId, reason) => {
       console.error(`[mcp] consolidation triggered: ${reason}`);
       const result = await consolidationEngine.consolidate(agentId);
@@ -1285,6 +1316,31 @@ async function main() {
       console.error(`[mcp] consolidation done: ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
     },
   });
+
+  // 0.12.2: eager warm — fire-and-forget, mirrors index.ts:208-218. Without
+  // this, every Claude Code session paid the full cold cost (~3s measured on
+  // a 29.7k-engram store: slim cache ~0.9s + three model loads ~1.8s) on its
+  // FIRST recall, which is exactly the "first recall is slow → recall gets
+  // avoided" failure mode. Warming here overlaps session startup instead.
+  // All output is stderr-safe (stdout carries JSON-RPC frames).
+  // Escape hatch: AWM_NO_EAGER_WARM=1 restores lazy loading.
+  if (process.env.AWM_NO_EAGER_WARM !== '1') {
+    getEmbedder().catch(err => console.error('Embedding model unavailable:', err.message));
+    getReranker().catch(err => console.error('Reranker model unavailable:', err.message));
+    getExpander().catch(err => console.error('Query expander model unavailable:', err.message));
+    if (BACKEND === 'sqlite') {
+      setImmediate(() => {
+        try {
+          const t0 = Date.now();
+          (store as unknown as EngramStore).warmSlimCache();
+          const stats = (store as unknown as EngramStore).getSlimCacheStats();
+          console.error(`Slim cache warmed: ${stats.size} entries in ${Date.now() - t0}ms`);
+        } catch (err) {
+          console.error(`Slim cache warm failed: ${(err as Error).message}`);
+        }
+      });
+    }
+  }
 
   // Coordination MCP tools (opt-in via AWM_COORDINATION=true)
   // AWM 0.8.x: coordination requires SQLite (uses store.getDb()). On PGlite,

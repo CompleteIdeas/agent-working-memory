@@ -28,6 +28,28 @@ export interface SidecarDeps {
   secret: string | null;
   port: number;
   onConsolidate?: (agentId: string, reason: string) => void;
+  /**
+   * 0.12.2: warm recall for hooks. The sidecar runs in the same process as
+   * the MCP server's activation engine and its loaded ML models, so exposing
+   * recall here gives Claude Code hooks (e.g. a UserPromptSubmit PRIME hook)
+   * warm-latency recall with no standing server — the process lifecycle is
+   * owned by the session that spawned it. Optional so older callers and
+   * tests keep working unchanged.
+   */
+  activate?: (q: {
+    context: string;
+    limit?: number;
+    requireConfidence?: number;
+    granularity?: 'full' | 'compact' | 'auto';
+  }) => Promise<Array<{
+    engram: {
+      id: string; concept: string; content: string;
+      createdAt?: string; memoryClass?: string; validTo?: string | null;
+    };
+    score: number;
+    summary?: string;
+    confidence?: number;
+  }>>;
 }
 
 interface HookInput {
@@ -183,6 +205,39 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
         json(res, 200, { date: today, agentId, writes, recalls, restores, hooks, checkpoints, total });
       } catch {
         json(res, 500, { error: 'Failed to read log' });
+      }
+      return;
+    }
+
+    // POST /memory/activate — warm recall for hooks (0.12.2). Behind the auth
+    // gate above. Returns a trimmed subset of the HTTP API's response shape
+    // ({results: [{engram, score, summary, confidence}]}) so a hook written
+    // against either endpoint needs no branching.
+    if (req.url === '/memory/activate' && req.method === 'POST') {
+      if (!deps.activate) {
+        json(res, 501, { error: 'activate not wired on this sidecar' });
+        return;
+      }
+      try {
+        const body = JSON.parse((await readBody(req)) || '{}') as {
+          context?: string; query?: string; limit?: number;
+          requireConfidence?: number; granularity?: 'full' | 'compact' | 'auto';
+        };
+        const context = body.context ?? body.query;
+        if (!context) {
+          json(res, 400, { error: 'context (or query) is required' });
+          return;
+        }
+        const results = await deps.activate({
+          context,
+          limit: body.limit,
+          requireConfidence: body.requireConfidence,
+          granularity: body.granularity,
+        });
+        log(agentId, 'hook:recall', `"${context.slice(0, 80)}" → ${results.length} results (sidecar)`);
+        json(res, 200, { results });
+      } catch (err) {
+        json(res, 500, { error: (err as Error).message });
       }
       return;
     }
