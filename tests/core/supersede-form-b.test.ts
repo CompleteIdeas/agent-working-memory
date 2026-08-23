@@ -70,7 +70,12 @@ describe('Form B atomic write-and-supersede + references (0.8 Cluster D)', () =>
     const e1 = store.createEngram({
       agentId: AGENT, concept: "Mara's deferred disclosure", content: 'first',
     });
-    // Slight delay via a second creation to differentiate createdAt
+    // NOTE: these two are created back-to-back with NO delay, so on a fast machine
+    // they land in the SAME millisecond and created_at TIES. That is deliberate — it
+    // is the regression test for the 2026-08-23 tiebreak fix. Before that fix this
+    // passed on Windows (coarse timer separated them) and failed on Linux (same ms),
+    // because ORDER BY created_at DESC had no secondary key. Do not "fix" this by
+    // adding a sleep; that would stop exercising the tie path.
     const e2 = store.createEngram({
       agentId: AGENT, concept: "mara's deferred disclosure", content: 'second',
     });

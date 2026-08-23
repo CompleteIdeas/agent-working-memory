@@ -512,7 +512,11 @@ export class PGliteEngramStore {
       sql += ` AND id != $${params.length + 1}`;
       params.push(excludeId);
     }
-    sql += ` ORDER BY created_at DESC LIMIT 1`;
+    // FIX 2026-08-23: created_at is millisecond-resolution, so two engrams written in
+    // the same millisecond TIE and "most recent" became whichever row the engine
+    // happened to return. Postgres has no stable insert-order column (ctid moves on
+    // update/vacuum), so id is the tiebreak: deterministic, though not chronological.
+    sql += ` ORDER BY created_at DESC, id DESC LIMIT 1`;
     const result = await this.db.query<any>(sql, params);
     return result.rows.length > 0 ? rowToEngram(result.rows[0]) : null;
   }
@@ -734,7 +738,11 @@ export class PGliteEngramStore {
         params.push(tagLike(tag));
       }
     }
-    sql += ` ORDER BY created_at DESC LIMIT 1`;
+    // FIX 2026-08-23: created_at is millisecond-resolution, so two engrams written in
+    // the same millisecond TIE and "most recent" became whichever row the engine
+    // happened to return. Postgres has no stable insert-order column (ctid moves on
+    // update/vacuum), so id is the tiebreak: deterministic, though not chronological.
+    sql += ` ORDER BY created_at DESC, id DESC LIMIT 1`;
     const result = await this.db.query<any>(sql, params);
     return result.rows.length > 0 ? rowToEngram(result.rows[0]) : null;
   }

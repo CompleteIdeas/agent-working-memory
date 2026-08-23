@@ -956,7 +956,12 @@ export class EngramStore {
       sql += ' AND id != ?';
       params.push(excludeId);
     }
-    sql += ' ORDER BY created_at DESC LIMIT 1';
+    // FIX 2026-08-23: created_at is millisecond-resolution ISO text, so two engrams
+    // written in the same millisecond TIE and "most recent" became whichever row the
+    // engine happened to return. Surfaced on Linux (same-ms writes) while passing on
+    // Windows, whose coarser timer separated them. rowid is monotonic with insert
+    // order, so it is both deterministic AND chronologically correct as a tiebreak.
+    sql += ' ORDER BY created_at DESC, rowid DESC LIMIT 1';
     const row = this.db.prepare(sql).get(...params) as any;
     return row ? this.rowToEngram(row) : null;
   }
@@ -1058,7 +1063,12 @@ export class EngramStore {
         params.push(`%"${tag}"%`);
       }
     }
-    sql += ' ORDER BY created_at DESC LIMIT 1';
+    // FIX 2026-08-23: created_at is millisecond-resolution ISO text, so two engrams
+    // written in the same millisecond TIE and "most recent" became whichever row the
+    // engine happened to return. Surfaced on Linux (same-ms writes) while passing on
+    // Windows, whose coarser timer separated them. rowid is monotonic with insert
+    // order, so it is both deterministic AND chronologically correct as a tiebreak.
+    sql += ' ORDER BY created_at DESC, rowid DESC LIMIT 1';
     const row = this.db.prepare(sql).get(...params) as any;
     return row ? this.rowToEngram(row) : null;
   }

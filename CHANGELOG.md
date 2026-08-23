@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.13.2 (2026-08-23) — deterministic "most recent" lookups (cross-platform correctness)
+
+Found by running the full suite inside a Linux container for the first time. One test failed on
+Linux that passes on Windows, and the underlying defect turned out to affect two functions
+across all three storage backends — six sites in total, only one of which any test covered.
+
+- **Root cause:** `created_at` is millisecond-resolution, and both `findActiveMatchByConcept()`
+  and `getLatestEngram()` ended their queries with `ORDER BY created_at DESC LIMIT 1` and **no
+  secondary sort key**. Two engrams written in the same millisecond therefore TIE, and which row
+  came back was left to the engine. Windows' coarser timer resolution happened to separate
+  back-to-back writes, which is why this was invisible there; on Linux they land in the same
+  millisecond and the result is arbitrary.
+- **Why it matters beyond the failing test:** `findActiveMatchByConcept()` is the write path's
+  "does this concept already exist?" check (`src/api/routes.ts:151`, `:470`) — a wrong answer
+  means **supersede/reinforce can target the wrong engram**. `getLatestEngram()` builds
+  **temporal adjacency edges**, so a nondeterministic "latest" wires up **wrong associative
+  links** in the graph. Neither had a test covering the tie.
+- **Fix:** added a deterministic tiebreak at all six sites. SQLite uses `rowid DESC` — monotonic
+  with insert order, so it is both deterministic *and* chronologically correct. PGlite and
+  Postgres use `id DESC`: deterministic, though not chronological, because Postgres has no
+  stable insert-order column (`ctid` moves on update/vacuum). The asymmetry is documented inline.
+- **Test note:** the regression test creates its two engrams back-to-back with no delay, so they
+  genuinely tie. Its old comment claimed "Slight delay via a second creation to differentiate
+  createdAt" — there was no delay, which is exactly why it caught this. The comment now says so,
+  with a warning not to "fix" it by adding a sleep.
+- **Verified:** Linux container 51/51 test files passing (was 50/51) and the MCP stdio smoke test
+  fully green; Windows re-run of the affected files still passing, so no regression.
+
+
 ## 0.13.1 (2026-08-23) — `HF_HOME`/`AWM_CACHE_DIR` actually work now
 
 Follow-up finding from the 0.13.0 Docker side-by-side comparison: the flan-t5 query-expander
