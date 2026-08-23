@@ -22,14 +22,14 @@ Use it through Claude Code via MCP or as a local HTTP service for custom agents.
 
 ## Quick Start
 
-**Node.js 20+** required — check with `node --version`.
+**Node.js 22 LTS+** required — check with `node --version`. (Node 20 reached EOL 2026-04-30; AWM 0.8.6+ requires 22.)
 
 ```bash
 npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. That's it — 17 memory tools appear automatically.
+Restart Claude Code. That's it — 19 tools appear automatically (17 memory + 2 onboarding).
 
 ### Upgrading
 
@@ -70,12 +70,17 @@ First conversation will be ~30 seconds slower while ML models download (~200MB t
 
 ## Why it's different
 
+> **New to the vocabulary?** Terms like *engram, salience, activation, Hebbian, staging*
+> are defined plainly, one paragraph each, in
+> [`docs/onboarding-vocabulary.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/onboarding-vocabulary.md) — a 5-minute read if any of the table below is unfamiliar.
+
 Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM goes further:
 
 | | Typical RAG / Vector Store | AWM |
 |---|---|---|
 | **Storage** | Everything | Salience-filtered with low-confidence fallback (novel events go active, borderline enter staging, low-salience stored at reduced confidence) |
 | **Retrieval** | Cosine similarity | 10-phase pipeline: dual BM25 (keyword + expanded) + vectors + reranking + graph walk + decay + coref expansion |
+| **Named things** | Vocabulary-dependent — misses if the query doesn't lexically match | Entity inverted index: exact lookup on named entities ("ticket 19252", a person's name), immune to phrasing mismatch |
 | **Connections** | None | Hebbian edges that strengthen when memories co-activate |
 | **Over time** | Grows forever, gets noisier | Consolidation: diameter-enforced clustering, cross-topic bridges, synaptic-tagged decay |
 | **Forgetting** | Manual cleanup | Cognitive forgetting: unused memories fade, reinforced knowledge persists (access-count modulated) |
@@ -132,7 +137,13 @@ Two structural advantages a file or a flat vector store cannot match:
 Two kinds of tests, both reproducible (see [Testing & Evaluation](#testing--evaluation)).
 First, **recall quality** — does the pipeline return the right memory? Second,
 **behavior under stress** — does it stay honest, filter noise, and hold up as the
-store grows and ages? Numbers below were re-run on the 0.9-staged line (2026-06-17).
+store grows and ages? Numbers below were last re-run on the 0.9-staged line
+(2026-06-17) — the retrieval pipeline itself is unchanged since, but re-run these
+yourself (`npm run eval`) if you want current-build numbers; 0.12.x added
+reliability/telemetry/entity-index work on top, not retrieval-scoring changes.
+See [`docs/gauntlet-baseline-2026-07-30.md`](docs/gauntlet-baseline-2026-07-30.md)
+for the newer end-to-end memory-ablation acceptance test (74%±5pp memory-dependent
+vs 0% no-memory control).
 
 ### 1 · Recall quality (eval harness)
 
@@ -221,7 +232,7 @@ even on a corpus far too small to play to its strengths.
 
 ## Features
 
-### Memory Tools (16)
+### Memory Tools (17 + 2 onboarding = 19)
 
 | Tool | Purpose |
 |------|---------|
@@ -231,6 +242,7 @@ even on a corpus far too small to play to its strengths.
 | `memory_retract` | Invalidate a wrong memory with optional correction |
 | `memory_supersede` | Replace outdated memory with current version |
 | `memory_stats` | View memory health metrics and activity |
+| `memory_whoami` | Identify the instance — agent id, workspace, backend, store path, sibling agent spaces |
 | `memory_checkpoint` | Save execution state (survives context compaction) |
 | `memory_restore` | Recover state + relevant context at session start |
 | `memory_task_add` | Create a prioritized task |
@@ -241,6 +253,15 @@ even on a corpus far too small to play to its strengths.
 | `memory_task_end` | End a task — writes summary and checkpoints |
 | `compress_output` | Encode a structured tool output as TOON — ~50-65% fewer tokens, lossless, output-only |
 | `retrieve_original` | Get the verbatim source back for a `compress_output` ref |
+
+### Onboarding Tools (2)
+
+For warm-starting a cold store from a project's own docs/repo — see [What's New in v0.11.0](#whats-new-in-v0110).
+
+| Tool | Purpose |
+|------|---------|
+| `onboard_scan` | Extract candidate memories from a project's docs/repo for review |
+| `onboard_questions` | Anchored interview questions to refine what a cold store should know |
 
 ### Separate Memory Pools
 
@@ -459,7 +480,7 @@ src/
     sqlite.ts         - SQLite + FTS5 persistence layer
   api/
     routes.ts         - HTTP endpoints (memory + task + system)
-  mcp.ts            - MCP server (17 tools, incognito support)
+  mcp.ts            - MCP server (19 tools: 17 memory + 2 onboarding, incognito support)
   cli.ts            - CLI (setup, serve, hook config)
   index.ts          - HTTP server entry point (auto-backup on startup)
 ```
@@ -524,6 +545,9 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 | `AWM_DISABLE_RERANK_SKIP` | *(unset)* | Set to `1` to disable the reranker skip on clear-winner queries (0.7.10+). Forces every recall through the cross-encoder |
 | `AWM_DISABLE_EXPANSION_CACHE` | *(unset)* | Set to `1` to disable the query expansion skip heuristic + LRU cache (0.7.11+). Forces every recall through the flan-t5-small expander |
 | `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
+| `AWM_SLOW_WRITE_MS` | `250` | Slow-write telemetry threshold in ms; any write over this logs one stderr line with a phase-time breakdown (embed/novelty/persist, event-loop lag, cold-load ms). `0` disables (v0.12.0) |
+| `AWM_ENTITY_INDEX_FETCH` | *(unset)* | Set to `1` to let query-named entities ("ticket 19252", a person's name) resolve through the entity inverted index for a guaranteed reranker audition, including alias hops. Default off pending broader eval (v0.12.0) |
+| `AWM_ENTITY_INDEX_CAP` | `12` | Max entity-index candidates injected per recall when `AWM_ENTITY_INDEX_FETCH=1` (v0.12.0) |
 | `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (better-sqlite3 + FTS5), `pglite` (PGlite + pgvector + pgroonga), or `postgres` (node-postgres + pgvector, networked/multi-connection — **experimental**, 0.10.0). |
 | `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path. Directory for PGlite, file for SQLite. Ignored for `postgres` (uses `AWM_DATABASE_URL`). |
 | `AWM_DATABASE_URL` | *(unset)* | Postgres connection string when `AWM_STORE_BACKEND=postgres` (0.10.0). |
@@ -555,323 +579,42 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New (Unreleased — 2026-07-30 wave)
+## What's New in v0.12.x (latest)
 
-A design-proposal implementation pass (D1–D15 waves 1–3 + D11) grounded in a full-stack
-eval and gauntlet-tested end to end. All additive; 599/599 tests. Highlights:
+Three releases (0.12.0-0.12.2), eval-driven. All additive, no breaking API changes.
 
-- **Write-path telemetry (D1):** always-on slow-write attribution (`AWM_SLOW_WRITE_MS`,
-  default 250 ms) — one stderr line names the phase (embed / novelty / persist), event-loop
-  lag, consolidation state, and `SQLITE_BUSY` when a write is slow.
-- **Local-first security defaults (D2):** HTTP binds `127.0.0.1` by default; widening
-  beyond loopback without `AWM_API_KEY` fails closed (`AWM_BIND`, `AWM_ALLOW_INSECURE`,
-  `AWM_COORD_REQUIRE_TOKENS`).
-- **Instance identity (D3):** `memory_whoami` / `GET /whoami` — agent id, workspace,
-  backend, store path, sibling agent spaces; `/health` reports consolidation state (D15).
-- **Memory spine (D5/D8, log-only):** `origin_class` / `writer_session` / `recipe_id` /
-  `valid_from` / `valid_to` provenance on every write; superseded-but-ranking results are
-  flagged, never silently down-ranked. Not used in ranking until an eval proves it (D6).
-- **Cognition recipes (D14):** AWM contains no LLM — versioned prompt+contract pairs
-  (`skill-derivation@1`, `friction-lesson@1`) the host agent runs as a separate focused
-  pass, with validated write-backs.
-- **Entity inverted index (D9) + index-backed retrieval (D11):** `entity_mentions` +
-  `entity_aliases` on all three backends, populated at write time from structured sources;
-  behind `AWM_ENTITY_INDEX_FETCH=1`, query-named entities inject candidates with a
-  **guaranteed cross-encoder audition** (no score boost — the reranker decides), including
-  alias hops no lexical/vector channel can make.
-- **Gauntlet baseline:** the end-to-end memory ablation now anchors acceptance —
+- **Instance identity (`memory_whoami`)** — agent id, workspace, mode, backend, store
+  path, code provenance, sibling agent spaces. Call it first whenever you're unsure
+  which store or which running code you're talking to.
+- **Entity inverted index** — structured identifier tags (`ticket=`, `person=`, bare
+  ids) feed an exact-match index. A query naming an entity resolves through it even
+  when the wording doesn't lexically match. Default off (`AWM_ENTITY_INDEX_FETCH=1`),
+  guaranteed reranker audition, no score boost.
+- **Local-first security defaults** — HTTP binds `127.0.0.1` by default; widening
+  beyond loopback without `AWM_API_KEY` fails closed.
+- **Write-path telemetry** — always-on slow-write attribution (`AWM_SLOW_WRITE_MS`,
+  default 250ms) names the phase, event-loop lag, and cold-load cost on any write
+  that's slow enough to matter.
+- **Memory spine (provenance)** — `origin_class`, `recipe_id`, `valid_from`/`valid_to`
+  on every write. `valid_to` expires operational facts instead of relying on the
+  reader to notice they're stale; recall renders `[valid until ...]` on results
+  carrying it.
+- **Cognition recipes** — AWM contains no LLM. When memory needs real thinking
+  (distilling a procedure, reflecting on a failure), `memory_task_end` hands the host
+  agent a versioned prompt+contract pair (`skill-derivation@1`, `friction-lesson@1`)
+  to run as its own focused pass, then validates the write-back.
+- **Recall results carry engram ids** (`[id: <uuid>]`) — feed a recalled memory
+  straight into `memory_supersede`/`memory_feedback` with no separate lookup.
+- **Eager warm at MCP startup + sidecar warm recall** — model load overlaps session
+  start instead of your first message; the hook sidecar gained `POST /memory/activate`
+  for ~0.8s warm recall from a hook, with no standing server needed.
+- **Gauntlet baseline** — end-to-end memory ablation now anchors acceptance:
   **74%±5pp memory-dependent vs 0% no-memory control**, six of nine probes at 100%.
-  Methodology, per-probe mechanism table, and the six-config flag ablation:
-  [`docs/gauntlet-baseline-2026-07-30.md`](docs/gauntlet-baseline-2026-07-30.md).
-
-## What's New in v0.11.0
-
-**`awm onboard` — warm-start a cold store from a project's own knowledge.** A fresh store
-knows nothing, so recall returns nothing until interactions accumulate; onboarding seeds it up
-front so an agent is useful from the first turn.
-
-- **Scan:** `awm onboard <docs> --repo <path> --project <name>` extracts atomic, recall-shaped
-  memories from docs (one per heading) + the repo (stack, layout) → an `awm import`-compatible
-  pack + a human review file. Edit, then `awm import --dedupe`. Model-free, no API keys.
-- **Agent-driven interview (no AWM→LLM calls):** two MCP tools — `onboard_scan` (candidate
-  memories to refine) and `onboard_questions` (anchored on "what is the goal of this memory
-  system?"). The host agent (Codex, Claude Code) refines, confirms with you, and writes them.
-  Works air-gapped.
-- **The skill is a memory:** `awm setup` seeds a canonical "onboard a new project" skill the
-  agent can recall; a cold-store nudge in `memory_restore` reminds it to warm-start.
-
-Also folds in the **0.10.1** version-reporting fix (below) and fixes the npm README links
-(absolute GitHub / Pages URLs + the `repository` field).
-
-## What's New in v0.10.1
-
-A patch — no functional or recall-behavior change.
-
-- **Reported version is now the truth.** Hand-maintained version strings had drifted
-  (a 0.10.0 build announced `0.8.5`/`0.8.8`/`0.9.2` on the banner, `/health`, the MCP
-  server, and the export payload). A new `src/version.ts` reads `version` from
-  `package.json` at runtime, so the reported number can never diverge from the build.
-- README now documents the v0.10.0 Postgres backend (below) + `AWM_STORE_BACKEND=postgres`
-  / `AWM_DATABASE_URL`.
-
-## What's New in v0.10.0
-
-A networked **Postgres** backend + backend-agnostic memory portability, plus
-correctness/stability fixes from a deep audit. No API changes — existing SQLite
-callers keep working unmodified.
-
-- **New `postgres` backend** (`AWM_STORE_BACKEND=postgres`, `AWM_DATABASE_URL=…`).
-  A real-server adapter over node-postgres (`pg`) + pgvector — the first backend
-  that is multi-**connection** safe (vs SQLite's single-machine WAL and PGlite's
-  single-process WASM), for cloud / multi-replica deployments. Sub-1.0 on purpose:
-  the backend is **experimental** until the remaining SQLite-only paths
-  (coordination, hot backups, integrity check) are ported and cross-backend
-  recall-quality parity is confirmed.
-- **Backend-agnostic `awm import` / `awm export`.** Both route through `openStore()`,
-  so you can export from any backend and **import INTO Postgres or PGlite** (import
-  was previously SQLite-only). **Export now includes embedding vectors** — a faithful,
-  recall-ready port with no re-embed when source/target embedding models match
-  (`--no-embeddings` to skip for a model mismatch). New flags: `--all-stages`,
-  `--include-retracted`; associations + supersession links are preserved.
-- **`awm merge` no longer silently drops data.** The old hand-rolled merge used a
-  truncated schema (no `embedding`, `memory_class`, task/supersession columns) and
-  never populated FTS — killing both vector and BM25 recall for merged rows. Rewritten
-  to route every source engram through the authoritative `EngramStore`/`createEngram`
-  path (+ stage/retracted/supersession restore), wrapped in `try/finally`.
-- **`awm import` preserves stage + retracted** — previously `--include-retracted`
-  resurrected retracted memories and flattened all stages to `active`.
-- **Cross-agent contamination guard (write pipeline)** — a workspace/hive recall can
-  surface another agent's same-concept engram; the reinforce/supersede branch now
-  refuses to mutate an engram whose `agentId` differs from the writer's.
-- **Hive degradation is visible** — `getWorkspaceAgentIds` on Postgres/PGlite emits a
-  one-time warning (workspace coordination is SQLite-only) instead of silently
-  returning self-only.
-
-## What's New in v0.9.0
-
-A recall-quality default + new tuning knobs + a builder/researcher doc set.
-Every change is an **env-revertible default** with no API changes — existing
-callers keep working unmodified. Validated: official LoCoMo **22.7% → 25.7%**
-(every category up) **and** adversarial precision **73.4 → 74.9** (strictly
-better on each axis); recall latency ~35 → ~77ms (sub-100ms, tunable); zero
-regression across the standard suite (eval 4-suite identical, 569/569 unit,
-edge 32/34, workday = old config).
-
-- **Wide rerank pool + top-K abstention (the win).** A pipeline-attribution
-  study (new tracer, `tests/locomo-eval/trace.ts`) found the dominant recall
-  loss wasn't candidate generation *or* the reranker — it was the stage between:
-  ~50% of answerable queries had gold that *cleared the candidate floor* but was
-  squeezed out of the rerank pool by the decay-compressed composite **before the
-  high-lift (+3.29) reranker saw it**. Fix: the composite becomes a cheap **wide
-  pre-filter** (`AWM_TOPN_MULT=8`, was 3×), the reranker discriminates on a wider
-  pool (`AWM_RERANK_POOL=max(limit*4,40)`, was `max(limit*2,15)`), and the
-  out-of-domain abstention gate judges only the **post-rerank top-K**
-  (`AWM_ABSTAIN_GATE_K=5`) so widening for recall doesn't inflate the in-domain
-  signal. Reverses the v0.7.13 "pool reduction" change. See
-  [reference.md → Recall tuning](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md#recall-tuning-env-overrides).
-
-- **Tunable similarity floors.** `AWM_SIM_FLOOR_TARGETED` / `_EXPLORATORY`
-  (defaults 0.50 / 0.35, unchanged) and the candidate-entry floors are now env
-  overrides for retuning against a different embedder.
-
-- **Opt-in / experimental flags (default-off).** `AWM_QUERY_BRIDGE`
-  (query-named-entity boost — lifts attribution "what does X think" 36% → 92% on
-  a controlled eval; small adversarial cost, so opt-in), `AWM_AUTOTAG`
-  (write-time `entity:`/`cat:` meta-tags), `AWM_BROAD_EDGES`. `AWM_SPREAD`
-  (in-engine spreading activation) is **parked** — it regressed recall by
-  displacing gold; multi-hop is solved harness-side instead (see the playbook).
-
-- **New docs for builders & researchers.** [`docs/awm-for-agents.html`](https://completeideas.github.io/agent-working-memory/awm-for-agents.html)
-  — the agent playbook (why AWM exists, the PRIME→ACT→VERIFY→LEARN harness, the
-  full agent feature surface, how multi-hop is solved, and the honest gauntlet
-  findings). [`docs/pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html)
-  redesigned for devs/researchers. Both are published on GitHub Pages. A new
-  **Storage Backends + Postgres roadmap** section in
-  [architecture.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/architecture.md) documents SQLite (default) vs PGlite
-  and the path to a networked-Postgres backend (v1 target).
-
-## What's New in v0.8.5
-
-A research-grounded hardening pass on recall quality, retraction propagation,
-and lifecycle management. Every change is **fully additive** — existing
-callers keep working without modification. Full validation at the milestone:
-`vitest run` 549/549 pass; `test:self` 97.6% EXCELLENT (was 91.4% on 0.8.0);
-`test:ab` AWM 89.3% vs Baseline 83.0% (+6.4 points); `test:perf` 4/4 PASS.
-
-- **Recall confidence as data (PR-1).** Every `ActivationResult` now carries
-  a `confidence` field in [0, 1] — a score-distribution-aware signal
-  (sharpness + cliff + floor blended via weighted geometric mean) that tells
-  the caller how trustworthy the recall set is. Same value on every result
-  in a recall — it describes the *set*, not the individual. Research grounding:
-  Geifman & El-Yaniv (NeurIPS 2017), Roitero et al (SIGIR 2022). Default
-  behavior unchanged; this is data, not a gate.
-
-- **Opt-in confidence-based abstention (PR-2).** Callers can pass
-  `requireConfidence` (typical values: 0.10 strict, 0.25 balanced, 0.40
-  aggressive). When set, the engine returns `[]` on recalls whose
-  distribution shape falls below the threshold — defeats the
-  "best-of-bad-bunch" leak where a noisy recall returns a weak top result
-  that the agent then trusts.
-
-- **Coherence-weighted retraction (#18).** Retraction penalty propagation
-  is no longer uniform. Multiplier scales with local neighborhood cohesion:
-  dense topically-coherent clusters (a narrative) get heavier penalties when
-  the seed is wrong; hub structures (popular node with heterogeneous edges)
-  get lighter penalties. Implements Carrillo et al, "Continued Influence
-  Effect" (ICCM 2025).
-
-- **Counter-narrative replacement on supersede/correction (#19).** When
-  retraction creates a counter-content correction, the new engram inherits
-  the original's `'connection'` edges (scaled 0.7×, capped at 10
-  inheritances, with `invalidation` / `causal` / `temporal` skipped). The
-  corrected fact takes over the graph role of the wrong fact rather than
-  leaving the corrected fact disconnected.
-
-- **Content fade stage (#20) — Paper 1.** New intermediate `'fading'`
-  lifecycle stage between `'active'` and `'archived'`. Engrams accessed
-  before but stale (no access in 45+ days, content > 250 chars) get content
-  trimmed to 150 chars + `… [faded]` marker. Concept, tags, and embedding
-  preserved — the engram still participates in BM25 + vector recall, just
-  with less body to score against. Models human memory's loss of surface
-  detail while retaining cue-association pathways (PLOS Comp Biology on
-  storage degradation). Heavily-used (`accessCount >= 10`), `canonical`,
-  `structural`, and retracted engrams excluded.
-
-- **Adaptive output granularity (#21) — Paper 3.** New
-  `granularity: 'full' | 'compact' | 'auto'` on `ActivationQuery`.
-  `'compact'` attaches a 200-char `summary` to every result. `'auto'` is
-  confidence-adaptive: when recall confidence ≥ 0.4, the top result gets
-  a long-form summary and the rest are compact; when confidence is low,
-  everything is compact so the agent can scan a diverse set without
-  drowning in content. Engram body never modified — just the response shape.
-  Models cognitive teaming (Brill 2018 ACT-R collaboration).
-
-## What's New in v0.8.1
-
-- **Coordination control layer** — `FailureMode` classifier + mutation-hint
-  retry on `cleanupStale`, per-worker `CircuitBreaker`, and voluntary
-  `POST /assignment/:id/fail` endpoint. Designed to reduce the 11.5%
-  failure-with-no-retry rate observed in production hive runs (81/703).
-  Two new schema columns on `coord_assignments` plus a `coord_circuit_state`
-  table — both additive `CREATE IF NOT EXISTS` migrations.
-
-## What's New in v0.8.0
-
-- **Substrate primitives for long-running structured projects** — four new
-  HTTP endpoints (`/memory/latest-by-tag`, `/memory/top-by`,
-  `/memory/resolve`, `/memory/supersede` Form B), three query operators
-  (`tagsAll`, `tagsAny`, `tagsNone`), and a fourth `memory_class` value
-  (`structural`). Optional engram columns `sequence` + `references_json`
-  enable race-free chronology and typed cross-record links. Designed against
-  the NovelForge 36,000-word "Drawdown" test bed.
-
-## What's New in v0.7.16
-
-- **`awm setup --global` template now teaches *write quality*.** Two new sections in `AWM_INSTRUCTION_CONTENT`:
-  - **Writing for recall** — explicit guidance that recall quality is determined at write time. Lead with the rule/fact, pick the most specific topic, include 2+ retrievable identifiers (file paths, function names, IDs), write in the vocabulary of the future query, reserve canonical for stable invariants, include the *why* for feedback memories.
-  - **Recall strategy** — formalizes the multi-query reformulation pattern observed in practice. When one query returns nothing, agents reformulate (synonyms, more specific nouns, exact identifiers). Recall is ~300ms — two-three reformulations cost less than one filesystem search. Cap at three to prevent loops.
-
-  These document the writer + reader behaviors AWM was always designed around but were previously implicit. No retriever change — pure system-prompt improvement. Run `npm install -g agent-working-memory@latest && awm setup --global` to apply.
-
-- **LongMemEval headline number updated.** Re-running the benchmark on 0.7.16 (single-session-user, 50 questions, same adapter as the original 0.7.1 baseline): **68% accuracy with gpt-4o-mini**, up from the original 40-50%. Recall latency 0.12s avg (was 7-11s on 0.7.2). Multi-tier reader sweep on the same memory inputs:
-  - gpt-4o-mini (cheap, non-thinking): 68%
-  - gpt-4o (strong, non-thinking): 68%
-  - o4-mini (cheap, thinking): 78%
-  - gpt-5-mini (mid, thinking): 80%
-
-  Non-thinking models cap at 68% on this category — the bottleneck is reasoning over recalled context, not raw scale. Thinking models add 10-12pp. Memory quality is fixed; reader determines the ceiling.
-
-## What's New in v0.7.15
-
-- **Documentation refresh** — `awm setup --global` now writes a CLAUDE.md template that documents all four perf env-var escape hatches (`AWM_DISABLE_POOL_FILTER`, `AWM_DISABLE_SLIM_CACHE`, `AWM_DISABLE_RERANK_SKIP`, `AWM_DISABLE_EXPANSION_CACHE`) instead of just the first one. Troubleshooting / quickstart / user-guide docs updated to reflect the current ~300ms recall floor. No code change — version bumped solely so the new template ships via `npm install -g agent-working-memory@latest`.
-
-## What's New in v0.7.14
-
-- **Recall latency 0.4-0.8s → 0.3-0.6s (~25-50% on top of 0.7.13)** — three fixes:
-  1. **Batched cross-encoder inference** — reranker now tokenizes + runs all query-passage pairs in one batched forward pass. 15-passage rerank: 210ms → 27ms (~7×).
-  2. **Truncate passages to 400 chars before rerank** — cross-encoder has 512-token max anyway and pads to the longest passage; full content (5000+ chars) meant everything padded to max length. Truncation drops tokenization + inference 3-4× on long memory pools.
-  3. **Eager slim-cache populate at startup** — first user recall no longer pays the ~600ms cache populate cost.
-
-  Recall quality A/B: 8/8 top-1, 4.50/5 top-5. **Cumulative since 0.7.4 baseline: 11s → 0.3-0.6s (~25-37× faster).**
-
-## What's New in v0.7.13
-
-- **Reranker pool size reduction** — cross-encoder pool dropped from `max(limit*3, 30)` to `max(limit*2, 15)`. For typical agent queries (limit=5 or 10), that's 15-20 candidates reranked instead of 30, halving the cross-encoder cost. Top-K quality preserved (8/8 top-1, identical top-5/top-10 overlap) — reranking the 21st-30th candidates was wasted when the user only wants top-5 anyway.
-  > **⚠️ Superseded in 0.9.0 — this reduction was reversed.** A pipeline-attribution study found that "wasted" tail was actually where ~50% of retrievable answers were being squeezed out *before* the reranker saw them (the small 8-query A/B above missed it). 0.9.0 widens the pool back to `max(limit*4, 40)` and adds a top-K abstention gate — lifting LoCoMo recall 22.7%→25.7% **and** adversarial precision 73.4→74.9, with no regression. See the CHANGELOG and `docs/reference.md` → "Recall tuning."
-
-## What's New in v0.7.12
-
-- **Recall latency 0.9s → 0.4-0.8s (~40-60% on top of 0.7.11)** — phase-breakdown showed `getAssociationsForBatch` over ~300 survivors was 222ms (25% of remaining floor) but the scoring loop only reads `count` + `sumWeight` from each engram's edges. New `getAssociationStatsForBatch` returns scalar stats via a single GROUP BY aggregate. Graph walk still uses full associations, but only on top-N (~30) so its lookups are cheap. Recall quality A/B: 8/8 top-1, 4.50/5 top-5. **Cumulative since 0.7.4 baseline: 11-23s → 0.4-0.8s (~25× faster median).**
-
-## What's New in v0.7.11
-
-- **Query expansion skip + LRU cache** — flan-t5-small was 164ms per recall (18% of post-0.7.10 floor). Two fixes in `core/query-expander.ts`: (1) skip heuristic for long/specific queries (>50 chars OR ≥5 distinct meaningful tokens), and (2) 500-entry LRU cache for repeated queries. ~30% of typical agent recalls hit the skip; repeated recalls hit the cache. Avg savings: ~100-150ms per recall. Recall quality A/B: 8/8 top-1, 4.63/5 top-5. Disable via `AWM_DISABLE_EXPANSION_CACHE=1`.
-
-## What's New in v0.7.10
-
-- **Recall latency 1.4s → 0.9s median (~35% on top of 0.7.9)** — two more fixes after phase-breakdown showed the slim fetch was still 310ms (Buffer→Float32Array on every recall) and the reranker was 354ms (40% of remaining cost):
-  1. **In-memory slim cache** — `Map<id, SlimCacheEntry>` populated once per process, mutated in lock-step with engram writes/updates/retracts. Slim fetch 306ms → **5ms** with warm cache (~60×). Disable via `AWM_DISABLE_SLIM_CACHE=1`. Memory cost ~15MB at 10K engrams.
-  2. **Reranker skip on clear winners** — when BM25 has a clear top-1 (textMatch ≥ 0.8, ≥1.5× the next score, small pool), skip the cross-encoder. Saves ~300ms on confident queries. Disable via `AWM_DISABLE_RERANK_SKIP=1`.
-
-  Quality preserved: 8/8 top-1, 4.63/5 top-5, 9.75/10 top-10 on the A/B suite. **Cumulative since 0.7.4 baseline: 11s → 0.9s (~12-15× faster).**
-
-## What's New in v0.7.9
-
-- **Recall latency 1.6s → 1.0s end-to-end (~30% on top of 0.7.7)** — phase-breakdown showed the fullSELECT-over-10K-engrams was the new bottleneck (440ms / 40% of recall) due to row materialization of content/tags/JSON for rows the pre-filter doesn't read. Two-pass fetch: slim `(id, concept, embedding)` for the cosine + filter pass, then hydrate only the survivors via `getEngramsByIds`. Recall quality A/B verified 8/8 top-1 identical, top-K overlap slightly improved (4.75/5 vs 4.50). **Cumulative since 0.7.4 baseline: 11-23s → 1.0-1.6s (~10-20× faster).**
-
-## What's New in v0.7.8
-
-- **Install template updated for the 0.7.5/0.7.6/0.7.7 behaviors** — `awm setup` now writes a richer CLAUDE.md that teaches agents about memory classes (`canonical | working | ephemeral`), salience auto-promotion patterns (`detectUserFeedback` for stakeholder quotes, `detectVerifiedFinding` for operational records with action-verb + concrete IDs), and the new env-var escape hatches. Existing installs upgrade via `npm install -g agent-working-memory@latest && awm setup --global` then restart Claude Code. No functional code change in this release — version bumped solely so the new template ships.
-
-## What's New in v0.7.7
-
-- **Recall latency 2.5s → 1.0s end-to-end (~50% on top of 0.7.6)** — phase-breakdown spike showed that after the 0.7.6 BM25 fix, the new bottleneck was `getAssociationsForBatch` over all ~10K candidates (68% of recall latency). Added a cheap pre-filter before deep scoring: candidates survive only if they have a BM25 hit, a cosine z-score above the gate, or concept-token overlap with the query. From ~10K candidates → typically 100-300 survivors. Graph-walk correctness preserved (it only boosts neighbors with `textMatch >= 0.05`, which would also pass this filter). Recall quality A/B verified: 8/8 top-1 matches, 90% top-5 overlap, 94% top-10 overlap on diverse queries. Set `AWM_DISABLE_POOL_FILTER=1` to revert. **Cumulative since 0.7.4 baseline: 11-23s → 0.9-1.6s (~10-15× faster).**
-
-## What's New in v0.7.6
-
-- **Recall latency 11-23s → 2.5s end-to-end (~5× faster)** — measurement spike found the slow path was a SQLite query-plan trap, not vector search. The BM25 query `JOIN engrams_fts ON e.rowid + WHERE MATCH + ORDER BY rank LIMIT N` materialized all matching rows (with 1.5KB embedding blobs) before the LIMIT applied. CTE prefilter forces FTS5 LIMIT first, then joins only the top-K rowids. Same SQLite, same data, same results — 567× faster for wide OR queries (3682ms → 6.5ms verified). Also added `getAssociationsForBatch` to replace the per-candidate N+1 in the activation scoring loop. Top-K results are byte-identical to the old query (verified by the equivalence test in `spike/`).
-- **Salience filter — auto-promote verified operational records** — operational batch summaries (e.g., "Submitted 6 events 2026-05-07 — IDs 18969, 18971…") were being discarded at salience 0.14 because BM25 novelty couldn't distinguish "useful new operational record" from "duplicate observation" when topic terminology repeated. New `detectVerifiedFinding()` pattern detector parallel to `detectUserFeedback()`: requires action-verb header (Submitted/Finalized/Completed/Reconciled/Triaged/etc.) plus ≥2 concrete identifiers (ISO date or contextual numeric ID). Matched memories get a 0.45 salience floor (active disposition, not canonical). 7 new tests, 23 salience tests pass.
-
-## What's New in v0.7.4
-
-- **Channel push telemetry** — new `GET /telemetry/channels` JSON endpoint and Prometheus counters (`coord_channel_push_attempts_total`, `..._delivered_total`, `..._failed_total{reason}`, `..._no_session_total`, `..._fallback_mailbox_total`, `..._session_disconnects_total`). Surfaces real delivery rate so coordination reliability can be measured rather than guessed.
-- **Role-based `/channel/push` addressing** — accepts `{role, workspace, message}` as alternative to `{agentId, message}`. Server resolves role+workspace to most-recently-seen alive agent. Lets workers notify the coordinator without hardcoding its UUID (which changes across coordinator restarts). Enables event-driven worker → coordinator hand-off in place of fragile coordinator self-polling.
-- **`/checkin` writes role on every call** — previously the UPDATE on existing rows preserved a stale role from initial registration; now agents can correct their own role via re-checkin.
-- **`/workers` JOINs channel sessions** — `alive` field is now `recent_pulse OR connected_channel_session`. Stops false-dead duplicate-spawn loops where a busy worker's `/pulse` went stale during long tool sequences while their channel-server stayed reachable.
-- **`cleanupStale` runs on a 5-minute schedule** — was only invoked manually; now zombie agents get marked dead automatically with a 600s threshold (forgiving for long edits).
-- **`user_feedback` salience event type** — new event type with bonus 0.3 (highest of any). Auto-detect heuristic on `memory_write` content matching `^(Robert|Katherine|Nancy|...) (said|verbatim|directed|decided|...)` forces `memoryClass='canonical'` so user-stated decisions can't be discarded by the BM25 novelty floor in populated DBs.
-
-### v0.7.3
-
-- **Salience filter production tuning** — fixed BM25 novelty floor that was discarding ~17% salience for most writes in 10K+ engram DBs. Quadratic dampening curve (`max(0.05, 1 - topScore²)`); concept-match penalty scoped to last 30 days; floor lowered 0.10 → 0.05.
-- Maintenance scripts for backup pruning + lme/bench database cleanup.
-
-### v0.7.2
-
-- Workspace recall fix (was returning UUIDs not names in v0.7.1 release).
-
-### v0.7.1
-
-- **Agent-provided metadata tags** — `memory_write` accepts `project`, `topic`, `source`, `confidence_level`, `session_id`, `intent`. Stored as searchable prefixed tags (`proj=X`, `sid=Z`). Session ID tags alone improved LongMemEval recall 3x.
-- **Dual synthesis** — consolidation creates two types of summary memories: session summaries (tag-based, for perfect recall) and pattern syntheses (cross-session, for novel recall/creative connections).
-- **Bulk write + supersession** — `POST /memory/write-batch` for batch ingestion with `POST /memory/supersede` for knowledge updates.
-- **LongMemEval benchmark** — adapter built, baseline established at 40-50% with gpt-4o-mini.
-
-### v0.7.0
-
-- Workspace-scoped recall, validation-gated Hebbian (Kairos), multi-graph traversal (MAGMA), power-law edge decay (DASH).
-
-### v0.6.1
-
-- Embedding version tracking, batch backfill, deeper retraction propagation, retrieval timeouts, channel push delivery.
-
-### v0.6.0
-
-- **Memory taxonomy** — memories classified as `episodic`, `semantic`, `procedural`, or `unclassified`. Auto-classified on write. Filter by type on recall.
-- **Query-adaptive retrieval** — pipeline adapts to query type: `targeted` | `exploratory` | `balanced` | `auto`.
-- **Decision propagation** — decisions broadcast to coordination layer for cross-agent discovery.
-- **Eval harness** — `npm run eval` benchmarks retrieval, associative, redundancy, and temporal performance.
-- **DB hardening** — busy_timeout, integrity check on startup, hot backups every 10 min, WAL checkpoint on shutdown.
+  See [`docs/gauntlet-baseline-2026-07-30.md`](docs/gauntlet-baseline-2026-07-30.md).
+
+Full version-by-version history — every release back to v0.6.0, including the
+0.7.6→0.7.14 latency work (11s→300ms) and the 0.8.5 recall-quality hardening pass —
+lives in the changelog, not here:
 
 See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for full details.
 
@@ -918,24 +661,26 @@ gotchas (incl. the Windows CRLF/s6 clone fix) — is in
 
 ## Project Status
 
-AWM is in active development (v0.8.5). The core memory pipeline, consolidation
+AWM is in active development (v0.12.2). The core memory pipeline, consolidation
 system, multi-agent coordination, and MCP integration are stable and used
 daily in production coding workflows.
 
 - Core retrieval and consolidation: **stable**
-- MCP tools and Claude Code integration: **stable**
+- MCP tools and Claude Code integration: **stable** (19 tools: 17 memory + 2 onboarding)
 - Other MCP hosts (e.g. [Hermes Agent](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/integrations/hermes.md)): **supported** — AWM drops in as an MCP memory server with no adapter code
 - Multi-agent coordination: **stable** (v0.8.1 hardening)
 - Task management: **stable**
-- Hook sidecar and auto-checkpoint: **stable**
+- Hook sidecar and auto-checkpoint: **stable** — plus `POST /memory/activate` warm recall for hooks (v0.12.2)
 - HTTP API: **stable** (for custom agents)
-- Eval harness: **stable** (v0.6.0, extended through 0.8.x)
+- Eval harness: **stable** (v0.6.0, extended through 0.8.x); gauntlet acceptance test added (v0.12.0)
 - Recall confidence + opt-in abstention (PR-1, PR-2): **stable** (v0.8.5)
 - Coherence-weighted retraction + counter-narrative inheritance: **stable** (v0.8.5)
 - Content fade stage + adaptive output granularity: **stable** (v0.8.5)
 - PGlite backend (alternative to SQLite, with pgvector + ivfflat): **stable** (v0.8.x)
 - Networked Postgres backend (`pg` + pgvector, multi-connection): **experimental** (v0.10.0)
 - Backend-agnostic `import`/`export` (embeddings included, cross-backend port): **stable** (v0.10.0)
+- Instance identity (`memory_whoami`), local-first security defaults, write-path telemetry, memory-spine provenance (`origin_class`/`valid_from`/`valid_to`), cognition recipes: **stable** (v0.12.0)
+- Entity inverted index + guarded index-backed retrieval: **stable, opt-in** (`AWM_ENTITY_INDEX_FETCH=1`, default off pending broader eval) (v0.12.0)
 
 See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for version history.
 

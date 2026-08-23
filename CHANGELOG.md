@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.12.3 (2026-08-22) — documentation reconciliation: the installer template, tool counts, and a readability pass
+
+No code/behavior change outside one content string (`AWM_INSTRUCTION_CONTENT`, the
+template every `awm setup` writes into a fresh install). Everything else is docs.
+Prompted by an audit that found the docs had drifted six releases behind the code —
+some claims dated back to v0.7.x/v0.8.5 while the build was at v0.12.2.
+
+- **The installed CLAUDE.md/AGENTS.md template was missing 0.12.0 features
+  entirely** (`src/adapters/common.ts`, shared by all four adapters: Claude Code,
+  Codex, Cursor, HTTP): the entity inverted index (D9/D11) was never mentioned, so
+  a new install never learned identifier tags feed an exact-match index or that
+  `AWM_ENTITY_INDEX_FETCH` exists; `valid_from`/`valid_to` temporal expiry was never
+  taught anywhere. Two features were also miscategorized — `memory_whoami` filed as
+  a "diagnostic env var" under a "Recall pipeline (0.7.x)" heading (it's an MCP tool
+  from 0.12.0, not an env var) and `AWM_SLOW_WRITE_MS` under the same wrong heading
+  (it's write-pipeline telemetry, not recall). Both fixed.
+- **The real tool count is 19, not 16/17** — `onboard_scan` and `onboard_questions`
+  (warm-start tools) were missing from every count across every doc, including one
+  the author caught only after running `tests/mcp-smoke.ts` directly and getting a
+  different number than what a source grep had produced. Fixed everywhere: 17 core
+  memory tools + 2 onboarding tools = 19. `README.md` had disagreed with *itself*
+  (16 in one section, 14 in its own architecture diagram) before this pass.
+- **`README.md`'s changelog dump trimmed from ~320 lines to a current-release
+  summary + a pointer to `CHANGELOG.md`.** Nothing lost — full history was always in
+  CHANGELOG.md — but a reader landing on the README to evaluate the project had to
+  scroll past nine versions of patch notes before reaching Integrations/Project
+  Status/License. The "## What's New (Unreleased — 2026-07-30 wave)" section was
+  also mislabeled: that work shipped as 0.12.0 three weeks ago.
+- **A real functional bug**: `team-setup-guide.md` (and README's own Quick Start)
+  said "Node.js 20+", while `quickstart.md` and `user-guide.md` correctly said
+  Node 22+ is required (Node 20 hit EOL 2026-04-30, AWM 0.8.6+ requires 22). A
+  reader following the team guide specifically could have installed the wrong
+  runtime. Fixed in both places.
+- **`architecture.md`'s PGlite roadmap** named 0.9.x/1.0 version targets that are
+  now three-plus releases overdue (SQLite is still the default; the actual plan
+  shipped a networked Postgres backend directly in 0.10.0 instead). Annotated as
+  historical rather than left as a live-looking schedule, since the real plan
+  wasn't reconstructable without guessing.
+- **Smaller accuracy fixes**: `user-guide.md` had a hardcoded `"version":"0.7.16"`
+  in an example response and claimed `47 tests`/`test:mcp # 7 tests` — vitest is
+  now 610 tests; `test:mcp` was independently re-verified by running it (7 checks,
+  confirming that number and correcting a wrong "5" this same pass had introduced
+  before the tool-count investigation caught the real 19). Missing environment
+  variables added to README's table (`AWM_SLOW_WRITE_MS`, `AWM_ENTITY_INDEX_FETCH`,
+  `AWM_ENTITY_INDEX_CAP`). Stale benchmark numbers (last re-run 2026-06-17 on the
+  0.9-staged line) annotated rather than silently implied current — re-measuring
+  them was out of scope for a docs pass.
+- **Readability**: added an `onboarding-vocabulary.md` pointer to README's dense
+  differentiator table (product-overview.md and user-guide.md already had one;
+  README, the most-read entry point, didn't) and a "Named things" row calling out
+  the entity index as a concrete differentiator vs. plain vector stores.
+
+No test asserted the exact shape of any changed content; 610/610 pass after a clean
+rebuild, confirmed before and after this entry was written.
+
 ## 0.12.2 (2026-08-21) — eager warm at MCP startup + sidecar warm recall for hooks
 
 Both changes come from a measured latency decomposition on a live 29,750-engram store

@@ -37,7 +37,7 @@ Verify the server is running:
 
 ```bash
 curl http://localhost:8400/health
-# {"status":"ok","timestamp":"...","version":"0.7.16","coordination":false,"agents_alive":0,...}
+# {"status":"ok","timestamp":"...","version":"0.12.2","coordination":false,"agents_alive":0,...}
 ```
 
 ### 3. Write Your First Memory
@@ -130,7 +130,7 @@ The project includes a `.mcp.json` that registers the MCP server:
 }
 ```
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with **17 memory tools**.
+After restarting Claude Code, check `/mcp` to verify the server is connected with **19 tools** (17 memory + 2 onboarding).
 
 ### MCP Tools
 
@@ -142,6 +142,7 @@ After restarting Claude Code, check `/mcp` to verify the server is connected wit
 | `memory_retract` | Invalidate a wrong memory |
 | `memory_supersede` | Replace outdated memory with a current version |
 | `memory_stats` | View memory health metrics |
+| `memory_whoami` | Identify the instance — agent id, workspace, backend, store path, sibling agent spaces |
 | `memory_checkpoint` | Save execution state (survives context compaction) |
 | `memory_restore` | Recover state + relevant context at session start |
 | `memory_task_add` | Create a prioritized task |
@@ -152,6 +153,8 @@ After restarting Claude Code, check `/mcp` to verify the server is connected wit
 | `memory_task_end` | End a task — writes summary and checkpoints |
 | `compress_output` | Encode a structured tool output as TOON — ~50-65% fewer tokens, lossless, output-only |
 | `retrieve_original` | Get the verbatim source back for a `compress_output` ref |
+| `onboard_scan` | Extract candidate memories from a project's docs/repo for review |
+| `onboard_questions` | Anchored interview questions to refine what a cold store should know |
 
 For substrate-style structured projects (chapter analyses, plot beats, etc.) the HTTP API also exposes `latest-by-tag`, `top-by`, `resolve`, `supersede` Form B, and a race-free `sequence/next` allocator — see [`reference.md`](reference.md) for full details.
 
@@ -192,10 +195,10 @@ npm run dev                 # Same thing via npm script
 
 ```bash
 # Unit tests (no server required)
-npx vitest run              # 47 tests, ~1.5s
+npx vitest run              # 610 tests, ~30-45s
 
 # MCP protocol test (no server required)
-npm run test:mcp            # 7 tests
+npm run test:mcp            # 7 checks
 
 # Self-test (requires live server)
 npm run test:self           # 31 dimensions, scored report

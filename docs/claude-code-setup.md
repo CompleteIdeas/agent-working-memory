@@ -19,7 +19,7 @@
 
 ### Prerequisites
 
-- **Node.js 20+** — `node --version`
+- **Node.js 22 LTS+** — `node --version` (Node 20 reached EOL 2026-04-30; AWM 0.8.6+ requires 22)
 - **Claude Code** installed and working
 
 ### Install & configure
@@ -29,7 +29,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. Done — 17 memory tools appear automatically.
+Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboarding: `onboard_scan`, `onboard_questions`).
 
 > First install takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
 
@@ -47,7 +47,7 @@ Start a new conversation:
 
 > "What memory tools do you have?"
 
-Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_whoami`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `compress_output`, `retrieve_original`.
+Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_whoami`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `compress_output`, `retrieve_original`, `onboard_scan`, `onboard_questions`.
 
 ---
 
@@ -322,7 +322,7 @@ Zero memory tools are registered — Claude can't see or call any of them, not e
 ## Architecture Quick Reference
 
 ```
-Claude Code ←stdio→ AWM MCP (17 tools)
+Claude Code ←stdio→ AWM MCP (19 tools)
                         ↓
                    AWM Engine
                    ├── Salience filter (write-time)

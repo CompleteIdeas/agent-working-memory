@@ -30,7 +30,7 @@ Everything runs locally on your machine. No cloud, no API keys, no data leaves y
 
 ### Requirements
 
-- **Node.js 20+** — check with `node --version`
+- **Node.js 22 LTS+** — check with `node --version` (Node 20 reached EOL 2026-04-30; AWM 0.8.6+ requires 22)
 - **Claude Code** — the CLI tool from Anthropic
 
 ### Install (2 minutes)
@@ -71,7 +71,7 @@ Open PowerShell as Administrator and run:
 winget install OpenJS.NodeJS.LTS
 
 # Then close and reopen PowerShell, verify:
-node --version   # should show v20+ or v22+
+node --version   # should show v22+ (Node 20 reached EOL 2026-04-30)
 npm --version
 ```
 
@@ -183,7 +183,7 @@ Start a new conversation and ask:
 
 > "What memory tools do you have?"
 
-Claude should mention `memory_write`, `memory_recall`, `memory_restore`, `memory_task_begin`, `memory_task_end`, etc. — 17 tools total.
+Claude should mention `memory_write`, `memory_recall`, `memory_restore`, `memory_task_begin`, `memory_task_end`, etc. — 19 tools total (17 memory + 2 onboarding).
 
 ### 2. Check the activity log
 

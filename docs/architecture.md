@@ -10,7 +10,7 @@ AWM is a single-process system: one Node.js process runs the MCP server (stdio),
 │                                                         │
 │  ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
 │  │  MCP (stdio) │   │  HTTP API    │   │  Hooks     │  │
-│  │  17 tools    │   │  18 routes   │   │  (curl)    │  │
+│  │  19 tools    │   │  18 routes   │   │  (curl)    │  │
 │  └──────┬───────┘   └──────┬───────┘   └─────┬──────┘  │
 │         │                  │                  │         │
 │         └──────────┬───────┘                  │         │
@@ -57,7 +57,7 @@ src/
     sqlite.ts         SQLite + FTS5 persistence (~650 lines)
   api/
     routes.ts         HTTP endpoints (memory + task + system)
-  mcp.ts            MCP server (17 tools, incognito support)
+  mcp.ts            MCP server (19 tools: 17 memory + 2 onboarding, incognito support)
   cli.ts            CLI (setup, serve, hook config)
   index.ts          HTTP server entry point
 ```
@@ -174,16 +174,21 @@ what's on disk prints a warning; it never silently switches.
 
 ### Roadmap
 
-- **0.8.x** — SQLite default; PGlite opt-in; auto-detect + warnings.
-- **0.9.x** — recall-quality + agent-feature improvements (this line); PGlite
-  the default for *new* installs (target); existing `memory.db` stays on SQLite.
-- **1.0** — coordination plugin + `/memory/export` ported to async PGlite;
-  SQLite still supported.
-- **Post-1.0 (v1 target)** — a **networked Postgres backend for scale**: same
-  engine code as PGlite, swap the connection layer (`AWM_STORE_URL`). Remaining
-  work before it ships: cognitive engines made fully `await`-correct at every
-  call site, an async adapter for the SQLite path, ported export/coordination,
-  and a server-DB backup/integrity story. A deliberate milestone, not a flag flip.
+> **Status as of v0.12.2:** the 0.9.x/1.0 targets below were written at v0.8.x and
+> have not tracked actual version numbers since — SQLite is still the default for
+> new installs (unchanged), and the plan shifted to shipping a **networked Postgres
+> backend** (below) directly rather than making PGlite the default first. Left as
+> a record of the original plan; treat the version labels as historical, not a
+> live schedule.
+
+- **0.8.x** — SQLite default; PGlite opt-in; auto-detect + warnings. (shipped)
+- **0.10.0** — networked Postgres backend shipped as **experimental**
+  (`AWM_STORE_BACKEND=postgres`) — see "What's New in v0.12.x" in the README and
+  CHANGELOG.md for what actually shipped between 0.9.0 and 0.12.2. SQLite remains
+  the default; PGlite and Postgres are both opt-in.
+- **Still open** — coordination plugin + `/memory/export` on PGlite/Postgres,
+  cross-backend recall-quality parity confirmation, a server-DB backup/integrity
+  story for Postgres. No committed version for these.
 
 ## ML Models
 
