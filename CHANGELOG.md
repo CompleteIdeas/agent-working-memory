@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.13.3 (2026-08-23) — token-aware recall
+
+AWM's benchmark has always shown a 9.8:1 aggregate token win over file retrieval, but that number
+hides the shape of it: AWM needs far fewer calls, while each call costs MORE — 4,514 tokens against
+2,106. Per-call cost was the exposed flank and callers had no way to bound it. This release makes
+recall token-aware in both directions: bounded on request, and always accounted for.
+
+- **`memory_recall` gains `max_tokens`.** `limit` is a COUNT and is token-blind — five results may
+  cost 400 tokens or 4,000. `max_tokens` bounds the whole reply. Results are packed by
+  value-per-token (a greedy knapsack heuristic) with one deliberate exception: the top-scored
+  result gets first refusal, because pure density packing will drop the single most relevant memory
+  for the crime of being long. Selection is by density; output stays in score order. Omitting
+  `max_tokens` preserves the old behaviour exactly.
+- **Every recall now reports its own cost** — `[awm: ~412 tok · 3/8 results · budget 500 · ~900 tok
+  withheld]`. Roughly 20 tokens to say what a call spent, which is what makes per-call cost visible
+  outside an offline benchmark. A budget too small for even the best match now says so, rather than
+  looking like "no memories found" — a different fact, and one that would send the caller off to
+  read code AWM could have answered.
+- **New `POST /hooks/prime`** — ready-to-inject context for a Claude Code `UserPromptSubmit` hook,
+  so recall stops depending on the agent remembering to ask for it (AWM's own documented #1 failure
+  mode). It runs on every prompt, so its defaults are deliberately timid: it abstains below 0.25
+  confidence, hard-caps at 600 tokens using the same packer as `memory_recall`, and returns an
+  empty injection rather than an error on any failure — a hook that errors on every prompt is worse
+  than no hook. See `docs/integrations/claude-code-prime-hook.md`.
+- **Measured** (8 seeded memories, identical query, Windows and Linux): budgets of 1000/600/400/250/150
+  produced 681/504/337/179/100 tokens at 8/6/4/2/1 results, with the top-scored result retained in 5
+  of 6 squeezes. Priming injected 161 tokens on an on-topic prompt and stayed silent on an off-topic
+  one.
+- **Three defects were caught by the end-to-end evals that the unit tests did not**, all of the same
+  shape — components correct in isolation, assembled behaviour wrong: the accounting footer was
+  itself unbudgeted (600/250/80 came back as 601/256/95); after fixing that, a zero effective budget
+  fell through the "unbudgeted" guard and returned the FULL result set on the tightest budgets; and
+  the first token-cap test passed while injecting nothing at all, because a diffuse prompt tripped
+  abstention and an empty string fits any cap. The evals now fail loudly on the last one.
+
+
 ## 0.13.2 (2026-08-23) — deterministic "most recent" lookups (cross-platform correctness)
 
 Found by running the full suite inside a Linux container for the first time. One test failed on
