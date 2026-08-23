@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.13.1 (2026-08-23) — `HF_HOME`/`AWM_CACHE_DIR` actually work now
+
+Follow-up finding from the 0.13.0 Docker side-by-side comparison: the flan-t5 query-expander
+model was re-downloading on every fresh container instead of hitting a warm cache, even in a
+container with a volume mounted specifically for that purpose. Traced past the Docker test
+artifact to the real root cause, which turned out to be a production defect, not a test
+artifact.
+
+- **Root cause:** `@huggingface/transformers` (the ONNX runtime AWM uses for its three local
+  models) has no environment-variable support for its cache directory — only a code-set
+  `env.cacheDir`, which AWM never set. Left unset, it defaults to a path inside
+  `@huggingface/transformers`'s own `node_modules` install directory
+  (`DEFAULT_CACHE_DIR` in `node_modules/@huggingface/transformers/src/env.js`), which is wiped
+  by every `npm install`/`npm ci` — i.e. every Docker rebuild and every global AWM upgrade,
+  in any deployment, re-downloads all three models (~124MB combined) from scratch.
+- **`docs/deployment.md` has instructed `HF_HOME=/data/models` for Railway/Fly/Render/systemd
+  persistence since it was written.** That variable was a silent no-op the entire time —
+  nothing in AWM ever read it. Any real deployment that followed AWM's own documented advice
+  was still re-downloading models on every cold start. This is fixed with zero config changes
+  required on the deploying side; existing `HF_HOME` settings now simply start working.
+- **Fix:** new `src/core/model-cache.ts`, `ensureModelCacheDir()`, called once before the first
+  model load in each of the three loading modules (`embeddings.ts`, `reranker.ts`,
+  `query-expander.ts`). Precedence: `AWM_CACHE_DIR` (AWM-specific override, previously
+  referenced in `docs/architecture.md` but also never actually implemented) > `HF_HOME`
+  (standard Hugging Face convention) > `<package-root>/data/models` (new default — previously
+  the effective default was ephemeral too, just less visibly so, since it lived inside
+  `node_modules`).
+- **Verified three ways**, not just a passing typecheck: (1) full test suite, 610/610 passing,
+  no regressions — this only changes *where* models land, not model behavior; (2) a live MCP
+  boot with `HF_HOME` set to a scratch directory exactly as `docs/deployment.md` instructs,
+  confirming all three models' ONNX/config/tokenizer files land under that directory and the
+  old `node_modules/@huggingface/transformers/.cache` path stays empty; (3) read the actual
+  `@huggingface/transformers` source (`src/env.js`, `src/utils/hub.js`) to confirm `env.cacheDir`
+  is the only consumed setting and a plain path string is all `FileCache` expects — no special
+  formatting needed.
+- Docs: `docs/architecture.md`'s ML Models section corrected (previously claimed
+  `~/.cache/huggingface/`, which was never actually true); `docs/deployment.md`'s existing
+  `HF_HOME` guidance required no content change — it was already correct advice that the code
+  just wasn't honoring — added a one-line note confirming it's live as of this version.
+
 ## 0.13.0 (2026-08-22) — PGlite bumped to 0.5.6, fixing the native-Windows crash
 
 `@electric-sql/pglite` upgraded from the long-pinned `0.4.6` to `^0.5.6`, plus a new

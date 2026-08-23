@@ -20,6 +20,7 @@
 import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
 import { dispatchEmbed, registerInProcessHandlers } from './ml-worker.js';
 import { noteModelLoad } from './write-telemetry.js';
+import { ensureModelCacheDir } from './model-cache.js';
 
 const MODEL_ID = process.env.AWM_EMBED_MODEL ?? 'Xenova/bge-small-en-v1.5';
 const DIMENSIONS = parseInt(process.env.AWM_EMBED_DIMS ?? '384', 10);
@@ -34,6 +35,7 @@ async function loadInProcess(): Promise<FeatureExtractionPipeline> {
   if (inProcessInstance) return inProcessInstance;
   if (inProcessInitPromise) return inProcessInitPromise;
   const tLoadStart = performance.now();
+  ensureModelCacheDir();
   inProcessInitPromise = pipeline('feature-extraction', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
     inProcessInstance = pipe;
     noteModelLoad(performance.now() - tLoadStart);

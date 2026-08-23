@@ -19,6 +19,7 @@ import {
   type PreTrainedModel,
 } from '@huggingface/transformers';
 import { dispatchRerank, registerInProcessHandlers } from './ml-worker.js';
+import { ensureModelCacheDir } from './model-cache.js';
 
 const DEFAULT_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
 const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
@@ -33,6 +34,7 @@ async function ensureLoaded(): Promise<void> {
   if (tokenizer && model) return;
   if (initPromise) return initPromise;
   initPromise = (async () => {
+    ensureModelCacheDir();
     tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID);
     model = await AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: 'fp32' });
     console.error(`Re-ranker model loaded in-process: ${MODEL_ID}`);

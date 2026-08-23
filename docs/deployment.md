@@ -64,6 +64,10 @@ Optional but useful:
 | `AWM_DB_PATH=/data/memory.db` | Explicit — survives docker rebuilds because the volume mount is `/data` |
 | `HF_HOME=/data/models` | Keep model cache on the persistent volume so cold restarts don't re-download |
 
+`HF_HOME` (and the AWM-specific `AWM_CACHE_DIR`, which takes precedence over it) is honored as of 0.13.1. If
+you set this on an earlier version, upgrade — it was silently ignored before then and models were re-downloaded
+on every cold start regardless.
+
 See [reference.md](reference.md#environment-variables) for the full env-var
 list including the four diagnostic `AWM_DISABLE_*` flags (don't set these
 in prod unless A/B testing a regression).

@@ -17,6 +17,7 @@
 
 import { pipeline, type Text2TextGenerationPipeline } from '@huggingface/transformers';
 import { dispatchExpand, registerInProcessHandlers } from './ml-worker.js';
+import { ensureModelCacheDir } from './model-cache.js';
 
 const MODEL_ID = 'Xenova/flan-t5-small';
 
@@ -28,6 +29,7 @@ let inProcessInitPromise: Promise<Text2TextGenerationPipeline> | null = null;
 async function loadInProcess(): Promise<Text2TextGenerationPipeline> {
   if (inProcessInstance) return inProcessInstance;
   if (inProcessInitPromise) return inProcessInitPromise;
+  ensureModelCacheDir();
   inProcessInitPromise = pipeline('text2text-generation', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
     inProcessInstance = pipe as Text2TextGenerationPipeline;
     console.error(`Query expander loaded in-process: ${MODEL_ID}`);

@@ -200,7 +200,17 @@ All models run locally via ONNX Runtime (no API calls):
 | `Xenova/ms-marco-MiniLM-L-6-v2` | ~23MB | Cross-encoder reranking |
 | `Xenova/flan-t5-small` | ~78MB | Query expansion |
 
-Models are downloaded on first use and cached in `~/.cache/huggingface/` (or `AWM_CACHE_DIR`).
+Models are downloaded on first use and cached in `<package-root>/data/models/` by default. Override with
+`AWM_CACHE_DIR` (AWM-specific) or `HF_HOME` (also respected — the standard Hugging Face convention, useful for
+sharing a cache across multiple tools). Precedence: `AWM_CACHE_DIR` > `HF_HOME` > the built-in default. Set one of
+these to a persistent volume path (e.g. `/data/models`) in ephemeral/container deployments so models survive
+rebuilds instead of re-downloading on every cold start — see `docs/deployment.md`.
+
+Before 0.13.1, `HF_HOME`/`AWM_CACHE_DIR` were both silently ignored (the underlying `@huggingface/transformers`
+library has no env-var support of its own — this required an explicit `env.cacheDir` set in code, added in
+`src/core/model-cache.ts`), and models defaulted to a path inside `node_modules/@huggingface/transformers/`,
+which is wiped on every `npm install`/`npm ci`. If you deployed with the documented `HF_HOME` setting before
+0.13.1, upgrade — it now actually takes effect.
 
 ## Concurrency Model
 
