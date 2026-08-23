@@ -13,7 +13,10 @@
  */
 
 import { PGlite } from '@electric-sql/pglite';
-import { vector } from '@electric-sql/pglite/vector';
+// pglite 0.5.0 moved contrib extensions to their own npm packages — the './vector'
+// subpath export was removed from @electric-sql/pglite itself. Same extensions:{vector}
+// usage pattern, new package.
+import { vector } from '@electric-sql/pglite-pgvector';
 import { randomUUID } from 'node:crypto';
 
 import type {

@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.13.0 (2026-08-22) — PGlite bumped to 0.5.6, fixing the native-Windows crash
+
+`@electric-sql/pglite` upgraded from the long-pinned `0.4.6` to `^0.5.6`, plus a new
+dependency `@electric-sql/pglite-pgvector@^0.0.7`. Minor bump, not a patch: real
+dependency change, a real bug fix, and a required import-path change for anyone
+who imported `@electric-sql/pglite/vector` directly (unlikely outside AWM itself,
+but noted).
+
+- **Fixes the PGlite MCP crash on native Windows** (`RuntimeError: Aborted()` from
+  the WASM module during init, surfacing as MCP `-32000: Connection closed` —
+  previously the only known fix was "switch back to SQLite"). Confirmed two ways:
+  (1) direct repro on the exact machine/Node version that originally hit it — clean
+  boot, full JSON-RPC write/recall roundtrip, zero crash; (2) a controlled Docker
+  side-by-side (old-pglite / new-pglite / SQLite reference) showing **zero
+  functional regression** — all four eval-harness scores bit-identical across all
+  three backends (Recall@5 0.980, associative 1.000, dedup-F1 0.966, temporal-ρ
+  0.932), full vitest 601/610 in both PGlite versions with the *same* 9 pre-existing
+  environment-flaky tests (ML model loading in a fresh container, unrelated to
+  PGlite), PGlite-specific subset 38/38 in both. Full comparison data on file.
+- **Required fix, not optional:** upstream PGlite `0.5.0` moved `pgvector` out of
+  the core package into its own `@electric-sql/pglite-pgvector` package — the old
+  `@electric-sql/pglite/vector` subpath export no longer exists. `src/storage/pglite.ts`
+  and `src/cli/migrate.ts` updated to import from the new package. Same
+  `extensions: { vector }` usage pattern at the call site — nothing else changes.
+- **Upstream context:** PGlite `0.5.0` also upgraded its embedded engine to real
+  **Postgres 18.3** — the actual parity-relevant milestone, and the reason this was
+  worth chasing down rather than leaving the version pinned indefinitely.
+- **Separately surfaced, not fixed here:** the `flan-t5` query-expander model failed
+  to load in ephemeral Docker containers during testing — root-caused to the model
+  cache path not matching where Node's HuggingFace client actually caches to in a
+  container. Backend-independent (reproduced identically regardless of PGlite
+  version), so it didn't block this release, but it's a real gap for anyone
+  deploying AWM in Docker/Railway. Tracked for a follow-up.
+
+610/610 tests pass (native), typecheck clean, full rebuild verified before tagging.
+
 ## 0.12.3 (2026-08-22) — documentation reconciliation: the installer template, tool counts, and a readability pass
 
 No code/behavior change outside one content string (`AWM_INSTRUCTION_CONTENT`, the

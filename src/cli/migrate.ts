@@ -24,7 +24,7 @@
 
 import Database from 'better-sqlite3';
 import { PGlite } from '@electric-sql/pglite';
-import { vector } from '@electric-sql/pglite/vector';
+import { vector } from '@electric-sql/pglite-pgvector';
 import { PGLITE_SCHEMA_DDL } from '../storage/pglite-schema.js';
 import { existsSync, mkdirSync } from 'node:fs';
 

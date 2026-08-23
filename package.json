@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "description": "Cognitive memory layer for AI agents â€” activation-based retrieval, salience filtering, associative connections",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,8 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@electric-sql/pglite": "^0.4.6",
+    "@electric-sql/pglite": "^0.5.6",
+    "@electric-sql/pglite-pgvector": "^0.0.7",
     "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@toon-format/toon": "^2.3.0",
