@@ -300,6 +300,29 @@ and entity-bridge boosts at recall time.
 - \`person=<Name>\` for stakeholder quotes / decisions
 - \`version=<X.Y.Z>\` for release-specific findings
 
+### Entity index — exact-match recall for named things (default off)
+Structured identifier tags (\`ticket=\`, \`person=\`, \`horse=\`, \`member=\`, bare 4+ digit
+ids, etc.) feed a dedicated entity inverted index, separate from BM25/embedding scoring.
+A query naming an entity ("ticket 19252", "Kaleigh Collett") can reach the memory through
+this index even when the wording doesn't lexically match — it's a deterministic exact
+lookup, immune to vocabulary mismatch. Keep identifier tags exact and consistent for
+this reason, not just for the BM25 boost described above.
+
+Off by default; opt in with \`AWM_ENTITY_INDEX_FETCH=1\` (bounded by
+\`AWM_ENTITY_INDEX_CAP\`, default 12). Matched entities get no score boost — they're
+guaranteed a reranker audition instead, so the cross-encoder alone decides whether they
+surface. Worth trialing on identifier-heavy workloads (ticket/event numbers, named
+people/things you refer to by name often); not yet the default pending evaluation.
+
+### Temporal validity — memories that expire or start in the future
+\`memory_write\` accepts \`valid_from\` / \`valid_to\` (ISO dates). Use \`valid_to\` on
+**operational** facts with a real shelf life — a deploy state, "waiting on X's reply",
+a ticket status — so the memory expires instead of relying on you to remember it's
+stale. Recall renders \`[valid until …]\` on results carrying this field. Use
+\`valid_from\` for a fact that becomes true on a known future date (a policy change, a
+season that hasn't started yet). Don't set either for durable facts — most memories
+don't need them.
+
 ### Memory classes (controls how strictly the salience filter gates the write)
 - \`memory_class: canonical\` — source-of-truth memories. Floor 0.7 salience, never staged.
   Use for: user-stated decisions, project requirements, verified architectural facts,
@@ -456,8 +479,14 @@ memory_write(
 
 ### Also:
 - To track work items: memory_task_add, memory_task_update, memory_task_list, memory_task_next
+- \`memory_whoami\` (MCP tool) / \`GET /whoami\` — identify the instance you're actually
+  talking to: agent id, workspace, mode, backend, store path, code provenance, sibling
+  agent spaces sharing the store. Call this FIRST whenever you're unsure which store,
+  which agent identity, or which running code you're dealing with — before reasoning
+  about AWM's own state from a stale memory or an assumed port number.
 - AWM is shared across all agents in real time. When any agent writes or supersedes a
-  memory, every other agent can recall it immediately.
+  memory, every other agent can recall it immediately — but only within the same
+  workspace and agent scope.
 
 ### Output compression (token efficiency, output-only)
 When a tool returns a LARGE STRUCTURED result you need to keep in context — a JSON
@@ -500,11 +529,7 @@ for A/B testing if a regression appears in your workload:
 Recall pipeline (0.7.x):
 - \`AWM_DISABLE_POOL_FILTER=1\` — disables the candidate pool reduction
   pre-filter in recall. Reverts to scoring all active candidates.
-- \`AWM_SLOW_WRITE_MS\` — slow-write telemetry threshold in ms (default 250;
-  0 disables the always-on slow-write stderr line).
-- \`memory_whoami\` (MCP) / \`GET /whoami\` — identify the instance (agent, mode,
-  backend, store path, code provenance, sibling agent spaces) when unsure
-  which AWM you are talking to.
+- \`AWM_ENTITY_INDEX_FETCH=1\` — see "Entity index" above (0.12.x, default off).
 - \`AWM_DISABLE_SLIM_CACHE=1\` — disables the in-memory slim cache.
   Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
 - \`AWM_DISABLE_RERANK_SKIP=1\` — disables the cross-encoder skip on
@@ -512,7 +537,11 @@ Recall pipeline (0.7.x):
 - \`AWM_DISABLE_EXPANSION_CACHE=1\` — disables the query expansion skip
   heuristic + LRU cache. Forces every recall through flan-t5-small.
 
-Write pipeline + lifecycle (0.8.x):
+Write pipeline + lifecycle (0.8.x, plus 0.12.x telemetry):
+- \`AWM_SLOW_WRITE_MS=250\` (0.12.x) — any write slower than this logs one stderr
+  line with a phase-time breakdown (embed/novelty/persist, event-loop lag,
+  embed-model cold-load ms). \`0\` disables. Useful for diagnosing why a session's
+  first write/recall feels slow.
 - \`AWM_REINFORCE_MAX_CONTENT_LEN=1500\` — max chars an engram's content
   can grow to via merge-on-reinforce (drop-oldest on overflow). Higher =
   preserves more reinforced detail; lower = leaner recall output.
