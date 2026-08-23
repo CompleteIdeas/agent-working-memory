@@ -130,7 +130,7 @@ The project includes a `.mcp.json` that registers the MCP server:
 }
 ```
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with **16 memory tools**.
+After restarting Claude Code, check `/mcp` to verify the server is connected with **17 memory tools**.
 
 ### MCP Tools
 

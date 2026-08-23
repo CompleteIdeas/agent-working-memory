@@ -29,7 +29,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. That's it — 16 memory tools appear automatically.
+Restart Claude Code. That's it — 17 memory tools appear automatically.
 
 ### Upgrading
 
@@ -459,7 +459,7 @@ src/
     sqlite.ts         - SQLite + FTS5 persistence layer
   api/
     routes.ts         - HTTP endpoints (memory + task + system)
-  mcp.ts            - MCP server (14 tools, incognito support)
+  mcp.ts            - MCP server (17 tools, incognito support)
   cli.ts            - CLI (setup, serve, hook config)
   index.ts          - HTTP server entry point (auto-backup on startup)
 ```
