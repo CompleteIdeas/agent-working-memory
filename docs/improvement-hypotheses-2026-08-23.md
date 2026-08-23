@@ -200,3 +200,49 @@ honestly, and "% savings" is the wrong yardstick for a system whose real weaknes
 - [The Missing Layer in Every Agent Harness (Hindsight)](https://hindsight.vectorize.io/blog/2026/05/04/agent-harness-needs-memory)
 - [Awesome Harness Engineering](https://github.com/ai-boost/awesome-harness-engineering)
 - [Microsoft Agent Framework at BUILD 2026](https://devblogs.microsoft.com/agent-framework/microsoft-agent-framework-at-build-2026-announce/)
+
+---
+
+## Addendum (same day) — H3 was wrong, and the measurement says something better
+
+H3 above proposed making abstention the default, reasoning that at ~65% recall accuracy a third of
+every recall's tokens are wasted. `tests/abstention-eval/runner.ts` sweeps the threshold against
+ground truth (6 memories, 6 on-topic queries with a known correct answer, 6 off-topic queries where
+silence is correct). The result contradicts the hypothesis:
+
+| threshold | hit rate | answers an off-topic query | **net tokens saved** |
+|---|---|---|---|
+| 0 (today) | 100% | 67% | 9,280 |
+| **0.05** | **100%** | **50%** | **9,351** |
+| 0.15 | 83% | 17% | 8,343 |
+| 0.20+ | 67% | 0% | **6,965** |
+
+**Aggressive abstention destroys value.** At 0.20 the answers are perfectly clean — and 25% of the
+token saving is gone. The reason is that my first metric ("efficiency" = useful ÷ (useful + wasted))
+treats a miss as free. It isn't: when AWM abstains the agent goes and reads the codebase, which
+AWM's own benchmark measures at ~2,106 tokens. Optimising purity drives the system toward muteness,
+and muteness is expensive.
+
+### The real finding: the correct threshold is inverted between PULL and PUSH
+
+| | `memory_recall` (PULL) | prime hook (PUSH) |
+|---|---|---|
+| Who asked? | the agent did | nobody |
+| Cost of a **miss** | **high** — agent falls back to reading files (~2,106 tok) | **zero** — nothing happens, the agent can still recall explicitly |
+| Cost of a **wrong answer** | moderate — wasted tokens, agent moves on | **high** — noise injected into *every* prompt |
+| Therefore | **light** threshold (0.05) | **aggressive** threshold (0.25) |
+
+The asymmetry is exactly reversed, which is why one global default would be wrong either way. Both
+are now set accordingly.
+
+### What this changes about the roadmap
+
+The bigger lesson is that **misses cost more than false answers**, so raising hit rate is worth
+considerably more than filtering. That moves **H1 (write-time work)** and **H5 (PPR multi-hop)** up
+the list and moves precision-filtering down. The headline metric should be **net tokens saved**, not
+"% savings" and not "efficiency" — both of the latter can be improved by returning less, which is
+the opposite of the goal.
+
+**Caveat:** measured on a 6-memory store. Confidence is a distribution shape, so the absolute
+numbers will not transfer to a 22k-engram store — the *shape* of the curve is the finding, and the
+threshold should be re-swept against the real store before being trusted.
