@@ -29,9 +29,9 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. Done — 16 memory tools appear automatically.
+Restart Claude Code. Done — 17 memory tools appear automatically.
 
-> First conversation takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that.
+> First install takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
 
 ### What `awm setup --global` creates
 
@@ -47,7 +47,7 @@ Start a new conversation:
 
 > "What memory tools do you have?"
 
-Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `compress_output`, `retrieve_original`.
+Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_whoami`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `compress_output`, `retrieve_original`.
 
 ---
 
@@ -79,6 +79,20 @@ Claude uses these tools based on what's happening in the conversation:
 | After failed attempt | `memory_recall` | Checks if prior knowledge exists for the problem |
 | Recalled memory was helpful | `memory_feedback` | Marks as useful → boosts confidence |
 | Recalled memory was wrong | `memory_retract` | Invalidates it → penalties propagate |
+| Unsure which AWM instance/store you're talking to | `memory_whoami` | Reports agent id, workspace, mode, backend, store path, ports, sibling agent spaces |
+| Finished a task, and it earned a reusable pattern or a standing lesson | `memory_task_end` | May invite a **cognition recipe** (`skill-derivation@1`, `friction-lesson@1`) — a guided pass that turns the task into a standardized, validated write-back |
+
+---
+
+## Recall tuning (opt-in)
+
+Default `memory_recall` is tuned for the common case. Three parameters change the cost/quality tradeoff when the default doesn't fit:
+
+| Param | Values | Use when |
+|-------|--------|----------|
+| `granularity` | `full` (default) / `compact` / `auto` | `compact` puts a short query-aware summary on every result — cheaper to scan when you expect 5+ hits. `auto` gives the top result a longer summary only when it's a clear winner. |
+| `require_confidence` | `0.10` / `0.25` / `0.40` | Opt-in abstention — recall returns `[]` instead of low-confidence noise. Use right before acting on a recalled fact. Higher = more willing to say "I don't know." |
+| `workspace` | a workspace name | Hive-mode recall across every agent in that workspace, not just this one. Use when another agent may hold canonical knowledge you need. |
 
 ---
 
@@ -123,7 +137,18 @@ When Claude recalls something useful, say so: *"That memory was helpful"* → tr
 
 When it recalls something wrong: *"That's outdated"* → triggers `memory_retract` → invalidates with propagating penalties.
 
-### 6. Start sessions with restore
+Since 0.12.1, every `memory_recall` result line carries `[id: <engram-id>]` — that's the id `memory_supersede` and `memory_feedback` need, so a recalled-but-not-yet-corrected memory can be fixed without a separate lookup step.
+
+### 6. Mark memories that must survive or expire
+
+Most memories should stay at the default (`memory_class: working`) and let the salience filter and consolidation manage their lifecycle. Two cases are worth being explicit about:
+
+- **Decisions and standing facts** — pass `memory_class: "canonical"` on `memory_write`. Canonical memories get a 0.7 salience floor and are never silently staged. Don't overuse it; it's for things that should survive indefinitely, not for every finding.
+- **Facts with a shelf life** (a deploy state, "waiting on X's reply", a ticket status) — pass `valid_to` (an ISO date) on `memory_write`. The memory expires instead of relying on you to remember it's stale, and recall renders `[valid until …]` on results that carry it.
+
+`origin_class` (`user-stated` / `tool-output` / `inference` / `recipe`) records provenance — where the knowledge came from — and is worth setting on writes where that distinction matters later.
+
+### 7. Start sessions with restore
 
 The CLAUDE.md installed by `awm setup` instructs Claude to call `memory_restore` at session start. If Claude seems to have forgotten context, say:
 
@@ -276,7 +301,7 @@ For conversations where you don't want memory involved:
 AWM_INCOGNITO=1 claude
 ```
 
-All 13 tools are hidden. Claude operates without memory. Other MCP servers still work.
+Zero memory tools are registered — Claude can't see or call any of them, not even a reduced set. Other MCP servers still work.
 
 ---
 
@@ -297,7 +322,7 @@ All 13 tools are hidden. Claude operates without memory. Other MCP servers still
 ## Architecture Quick Reference
 
 ```
-Claude Code ←stdio→ AWM MCP (13 tools)
+Claude Code ←stdio→ AWM MCP (17 tools)
                         ↓
                    AWM Engine
                    ├── Salience filter (write-time)
@@ -311,18 +336,21 @@ Claude Code ←stdio→ AWM MCP (13 tools)
 Hook Sidecar ←HTTP:8401→ Claude Code hooks
                           ├── Stop (memory reminder)
                           ├── PreCompact (auto-checkpoint)
-                          └── SessionEnd (checkpoint + consolidate)
+                          ├── SessionEnd (checkpoint + consolidate)
+                          └── POST /memory/activate (0.12.2 — warm recall for e.g. a
+                              UserPromptSubmit hook; ~0.8s, no standing server needed,
+                              runs in the sidecar's own process/model lifecycle)
 ```
 
 All local. No cloud. No API keys. One SQLite file holds everything.
 
 ---
 
-## Appendix: Recommended DB Telemetry & Stats Columns
+## Appendix: DB Telemetry & Stats Columns
 
-AWM's current schema tracks core memory operations but lacks system health telemetry that would help evaluate long-term performance, diagnose issues, and tune behavior. These recommendations add observability without changing existing tool behavior.
+**Status as of 0.12.2:** this section originally proposed A and B below as future work (written 2026-06-10, against the ~0.7.x schema). **A shipped in 0.12.0** as write-path telemetry (D1); **B shipped partially** — D1 also logs when a consolidation cycle exceeds 5s, but not the before/after counts or edge stats the proposal below describes. See the [0.12.0 CHANGELOG entry](../CHANGELOG.md) for the actual shape, which is a slow-write stderr log gated by `AWM_SLOW_WRITE_MS`, not a `write_events` table. C–F remain open proposals, not yet implemented.
 
-### A. Write Pipeline Telemetry
+### A. Write Pipeline Telemetry — ✅ shipped 0.12.0 (D1), different shape than proposed below
 
 **Problem:** No visibility into why memories are discarded, what salience scores look like over time, or how the filter is performing.
 
@@ -353,7 +381,7 @@ CREATE INDEX idx_write_events_disposition ON write_events(agent_id, disposition)
 - Duplicate detection rate (is noise increasing?)
 - Write latency trends
 
-### B. Consolidation Telemetry
+### B. Consolidation Telemetry — 🟡 partially shipped (duration only)
 
 **Problem:** Consolidation (the "sleep cycle") runs silently. No way to know if it's helping, how long it takes, or what it changed.
 
