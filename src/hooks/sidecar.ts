@@ -21,6 +21,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { log, getLogPath } from '../core/logger.js';
+import { buildPrimeInjection } from './prime.js';
 
 export interface SidecarDeps {
   store: EngramStore;
@@ -238,6 +239,48 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
         json(res, 200, { results });
       } catch (err) {
         json(res, 500, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    // POST /hooks/prime — ready-to-inject context for a UserPromptSubmit hook
+    // (0.13.3). /memory/activate returns raw JSON and leaves every hook author
+    // to re-solve what-to-inject, how-to-format and how-to-bound. This returns
+    // the finished string, already abstained and already budgeted.
+    //
+    // It NEVER fails the prompt: any error yields an empty injection, because a
+    // hook that errors on every prompt is worse than no hook at all.
+    if (req.url === '/hooks/prime' && req.method === 'POST') {
+      try {
+        if (!deps.activate) {
+          json(res, 200, { inject: '', kept: 0, total: 0, tokens: 0, reason: 'activate-not-wired' });
+          return;
+        }
+        const body = JSON.parse((await readBody(req)) || '{}') as HookInput & {
+          prompt?: string; context?: string; query?: string;
+          maxTokens?: number; minConfidence?: number; minScore?: number;
+        };
+        const context = body.prompt ?? body.context ?? body.query ?? '';
+        if (!context.trim()) {
+          json(res, 200, { inject: '', kept: 0, total: 0, tokens: 0, reason: 'no-prompt' });
+          return;
+        }
+        const candidates = await deps.activate({
+          context,
+          limit: 8,
+          granularity: 'compact',   // priming is a brief note, not a report
+        });
+        const primed = buildPrimeInjection(candidates as any, {
+          maxTokens: body.maxTokens,
+          minConfidence: body.minConfidence,
+          minScore: body.minScore,
+        });
+        log(agentId, 'hook:prime',
+          `"${context.slice(0, 60)}" → ${primed.kept}/${primed.total} injected, ~${primed.tokens} tok${primed.reason ? ` (${primed.reason})` : ''}`);
+        json(res, 200, { ...primed });
+      } catch (err) {
+        // Deliberately 200 with an empty injection — see the note above.
+        json(res, 200, { inject: '', kept: 0, total: 0, tokens: 0, reason: 'error' });
       }
       return;
     }

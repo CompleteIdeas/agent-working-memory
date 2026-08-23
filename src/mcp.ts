@@ -86,6 +86,7 @@ import { startLoopLagMonitor } from './core/write-telemetry.js';
 import { buildWhoami, formatWhoami } from './core/whoami.js';
 import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
 import { formatRecallResultLine } from './core/format-recall.js';
+import { packRecallByBudget, formatTokenFooter, estimateTokens } from './core/token-budget.js';
 
 // --- Incognito Mode ---
 // When AWM_INCOGNITO=1, register zero tools. Claude won't see memory tools at all.
@@ -415,6 +416,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     workspace: z.string().optional().describe('Search across all agents in this workspace (hive mode). Omit for agent-scoped recall only.'),
     require_confidence: z.number().optional().describe('Opt-in: abstain (return []) when recall confidence is below this threshold. Typical values: 0.10 (strict), 0.25 (balanced), 0.40 (aggressive). Confidence is the shape of the result-score distribution; low confidence indicates a noisy or best-of-bad-bunch recall.'),
     granularity: z.enum(['full', 'compact', 'auto']).optional().describe('Output granularity (Paper 3: cognitive teaming). "full" (default): no change. "compact": every result carries a short summary field. "auto": confidence-adaptive — top result gets a longer summary when there is a clear winner, otherwise everything is compact for scanning.'),
+    max_tokens: z.number().optional().describe('Token budget for the response. `limit` is a COUNT and is token-blind — 5 results may cost 400 tokens or 4,000. Use this when context is tight: results are packed by value-per-token until the budget is reached, the top-scored match always gets first refusal, and the reply reports what it cost and what was withheld. Omit for no budget (everything is returned, still with accounting).'),
   },
   async (params) => {
     const queryText = params.query ?? params.context;
@@ -468,12 +470,40 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     // (2026-07-30) conflict surfacing both live in the shared formatter now —
     // see core/format-recall.ts for why it's extracted (0.12.1: unit-testable
     // without booting the server) and why the id sits after the score.
-    const lines = results.map(formatRecallResultLine);
+    // 0.13.3: pack to a token budget (if given) and always report the spend.
+    // `limit` is a count and is token-blind; max_tokens bounds what this call
+    // actually costs the caller's context. See core/token-budget.ts for why the
+    // top-scored result gets first refusal rather than pure density packing.
+    // Reserve what the rest of the reply will cost, so max_tokens bounds the
+    // WHOLE response and not just the result lines. FOOTER_ALLOWANCE is a
+    // fixed upper bound on the accounting line (measured at ~15-25 tokens; the
+    // unit test asserts it stays under 40).
+    const FOOTER_ALLOWANCE = 40;
+    const reserved = estimateTokens(peerSuffix) + FOOTER_ALLOWANCE;
+    const packed = packRecallByBudget(
+      results, formatRecallResultLine, params.max_tokens, reserved,
+    );
+
+    // A budget too small to admit even the best match must not look like "no
+    // memories found" — that is a different fact and would send the caller off
+    // to read code that AWM could have answered. Say what actually happened so
+    // the fix (raise the budget) is obvious.
+    if (packed.kept === 0 && packed.total > 0) {
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${packed.total} memories matched, but none fit a ${params.max_tokens}-token budget `
+              + `(smallest result is ~${packed.withheldTokens} tok across ${packed.total}). `
+              + `Raise max_tokens, or use granularity: 'compact' to shrink each result.`
+              + peerSuffix,
+        }],
+      };
+    }
 
     return {
       content: [{
         type: 'text' as const,
-        text: lines.join('\n') + peerSuffix,
+        text: packed.lines.join('\n') + peerSuffix + formatTokenFooter(packed, params.max_tokens),
       }],
     };
   }
