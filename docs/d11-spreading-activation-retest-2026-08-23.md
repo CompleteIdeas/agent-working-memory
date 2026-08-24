@@ -146,3 +146,38 @@ All under `C:\Users\robert\Personal-Projects\AgentWorkingMemory\tests\locomo-eva
 - `run-arms.sh` — the four-arm driver
 - `analyze.mjs` — paired McNemar analysis
 - `{baseline,spread,spread-inhibit,spread-inject-inhib}.txt` / `.jsonl` — reports + per-query records
+
+---
+
+## Post-hoc integrity verification (2026-08-24)
+
+A harness bug found the next day — two benchmark arms sharing a port, with
+teardown leaving the first server alive, so the second arm measured the
+survivor — raised a fair question: **did that contaminate this re-test?**
+
+**It did not, and this is now verified rather than argued.**
+
+Structural reason: that failure mode requires a shared long-running server.
+This re-test never had one. `run-arms.sh` invokes `env <flags> npx tsx
+tests/locomo-eval/trace.ts` — a **fresh OS process per arm** — and the tracer
+runs fully in-process against its own `new EngramStore(DB)`, wiping the DB at
+start. There is no port, no server, and nothing to go stale between arms.
+
+Corroborating evidence: contamination makes arms *identical* (that is exactly
+how the benchmark bug announced itself). These arms differed materially
+(37.8 / 35.7 / 37.2 / 36.9).
+
+But "the arms differed" only proves they ran *different* configs, not their
+*intended* ones — and at the time the tracer's arm label omitted
+`AWM_SPREAD_INHIBIT`, so arms 2 and 3 both printed `arm=spread`. That
+ambiguity is now removed: the label derives from `recallConfigFingerprint()`
+(`src/core/recall-config.ts`). Re-running the **unchanged driver** yields:
+
+| arm | self-reported config |
+|---|---|
+| baseline | `default` |
+| spread | `spread=1` |
+| spread-inhibit | `spread=1,spread_inhibit=0.3` |
+| spread-inject-inhib | `spread=1,spread_inhibit=0.3,spread_inject=1` |
+
+Each arm ran exactly the configuration intended. **The verdict stands.**
