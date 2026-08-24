@@ -46,6 +46,9 @@ export const RECALL_FLAGS = [
   // Project-dialect alias expansion
   'AWM_ALIASES',
   'AWM_ALIAS_QUERY_CAP',
+  // Embedding model — changes every stored vector, so it belongs here
+  'AWM_EMBED_MODEL',
+  'AWM_EMBED_DIMS',
   'AWM_DISABLE_RERANK_SKIP',
   // Spreading activation (D11 — parked)
   'AWM_SPREAD',
