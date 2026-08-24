@@ -423,9 +423,15 @@ async function main() {
   }
   console.log(`Server: OK (${health.version})`);
 
-  const allConversations = await ensureDataset();
+  const allData = await ensureDataset();
+  // Optional subset for faster A/B arms. Defaults to the FULL dataset, so the
+  // official benchmark number is unchanged when this is unset. A subset is a
+  // valid arm-vs-arm comparison but is NOT the official score — say so when
+  // reporting one.
+  const convLimit = Number(process.env.LOCOMO_CONVS ?? allData.length);
+  const allConversations = allData.slice(0, Math.max(1, Math.min(convLimit, allData.length)));
   const totalQA = allConversations.reduce((s, c) => s + c.qa.length, 0);
-  console.log(`Dataset: ${allConversations.length} conversations, ${totalQA} total QA pairs`);
+  console.log(`Dataset: ${allConversations.length}${allConversations.length < allData.length ? ` of ${allData.length} (SUBSET — not the official score)` : ''} conversations, ${totalQA} total QA pairs`);
 
   // Evaluate each conversation
   const convResults: ConvResult[] = [];

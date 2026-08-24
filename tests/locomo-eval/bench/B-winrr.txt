@@ -1,0 +1,68 @@
+AgentWorkingMemory LOCOMO Eval (all conversations)
+Target: http://127.0.0.1:8542
+Time: 2026-08-24T03:43:36.474Z
+Server: OK (0.13.3)
+Dataset: 2 of 10 (SUBSET — not the official score) conversations, 304 total QA pairs
+
+--- Conversation 0: 199 QA pairs, 191 turns ---
+  conv0: 50/191 seeded...  conv0: 100/191 seeded...  conv0: 150/191 seeded...  Seeded: 191 turns (105 active)
+  conv0: 25/199 queries...  conv0: 50/199 queries...  conv0: 75/199 queries...  conv0: 100/199 queries...  conv0: 125/199 queries...  conv0: 150/199 queries...  conv0: 175/199 queries...  Conv 0 overall: 35.2%
+
+--- Conversation 1: 105 QA pairs, 176 turns ---
+  conv1: 50/176 seeded...  conv1: 100/176 seeded...  conv1: 150/176 seeded...  Seeded: 176 turns (73 active)
+  conv1: 25/105 queries...  conv1: 50/105 queries...  conv1: 75/105 queries...  conv1: 100/105 queries...  Conv 1 overall: 30.3%
+
+======================================================================
+LOCOMO EVAL REPORT — ALL CONVERSATIONS
+======================================================================
+
+Per-conversation overall scores:
+  Conv 0: 35.2% (199 queries, 191 turns seeded)
+  Conv 1: 30.3% (105 queries, 176 turns seeded)
+
+Per-category aggregates (mean ± stddev):
+
+  1. Multi-hop (43 queries across 2 convos)
+     Recall@5:  23.5% ± 32.9%
+     Recall@10: 26.9% ± 33.2%
+     MRR:       34.9% ± 44.9%
+     nDCG@10:   25.8% ± 33.2%
+     Composite: 29.6% ± 2.1%
+
+  2. Single-hop (63 queries across 2 convos)
+     Recall@5:  44.4% ± 50.1%
+     Recall@10: 46.0% ± 50.2%
+     MRR:       41.1% ± 47.9%
+     nDCG@10:   42.3% ± 47.9%
+     Composite: 42.8% ± 2.3%
+
+  3. Temporal (13 queries across 2 convos)
+     Recall@5:  23.1% ± 38.8%
+     Recall@10: 26.9% ± 43.9%
+     MRR:       3.5% ± 8.5%
+     nDCG@10:   20.7% ± 37.7%
+     Composite: 8.7% ± 12.3%
+
+  4. Open-domain (114 queries across 2 convos)
+     Recall@5:  30.7% ± 45.8%
+     Recall@10: 32.5% ± 46.6%
+     MRR:       28.1% ± 43.3%
+     nDCG@10:   28.7% ± 42.8%
+     Composite: 29.6% ± 0.2%
+
+  5. Adversarial (71 queries across 2 convos)
+     Recall@5:  58.0% ± 45.0%
+     Recall@10: 58.0% ± 45.0%
+     MRR:       58.0% ± 45.0%
+     nDCG@10:   58.0% ± 45.0%
+     Composite: 56.5% ± 6.8%
+
+----------------------------------------------------------------------
+OVERALL: 32.7% ± 3.5% (n=2)
+  Range: 30.3% — 35.2%
+GRADE: NEEDS WORK
+
+WEAKEST: Temporal (8.7%)
+STRONGEST: Adversarial (56.5%)
+
+======================================================================

@@ -180,3 +180,77 @@ live store actually holds — rather than conversational turns. Tracked separate
 - `tests/rerank2-eval/diagnose.ts` — one-pass score capture
 - `tests/rerank2-eval/simulate.mjs` — offline policy simulator
 - `tests/rerank2-eval/retest/` — tracer arms, paired analyzer, per-query records
+
+---
+
+## Official LoCoMo benchmark (2-conversation subset)
+
+Run via the HTTP runner (`tests/locomo-eval/runner.ts`, retrieval-only:
+Recall@5/@10, MRR, nDCG@10). **2 of 10 conversations — a valid arm-vs-arm
+comparison, NOT the official score.** The full 10-conversation run was attempted
+repeatedly and killed by the environment each time.
+
+**OVERALL: 32.0% → 32.7% (+0.7pp)**
+
+| category | n | Recall@5 | Recall@10 | MRR | nDCG@10 |
+|---|---:|---:|---:|---:|---:|
+| multi-hop | 43 | +1.3 | **+0.0** | **+5.7** | +2.5 |
+| single-hop | 63 | +1.5 | **+0.0** | +0.2 | +0.2 |
+| temporal | 13 | +3.9 | **+0.0** | +0.0 | −0.1 |
+| open-domain | 114 | −1.3 | −1.3 | +1.1 | +0.3 |
+| adversarial | 71 | +0.0 | **+0.0** | +0.0 | +0.0 |
+
+**Reconciling +0.7pp here with +9.7pp on the tracer.** They are not in conflict —
+they measure different things:
+
+- **Recall@10 is +0.0 in every category.** At K=10 the second stage reorders the
+  returned set without changing its membership, so Recall@10 *cannot* move. This
+  is an internal consistency check that phase 9b is doing exactly what it claims.
+- The tracer measures **success@1**, which is precisely what reordering improves.
+  The benchmark's nearest analogue is **MRR**, and MRR moved **+5.7pp on
+  multi-hop**.
+- The composite blends ranking and recall metrics, one of which is structurally
+  invariant here — so it dilutes a reordering gain by construction.
+- ~50% of turns are staged out by the salience filter (below), diluting every
+  category further.
+
+**Adversarial is +0.0 on all four metrics**, confirming on the official runner
+what the tracer showed: phase 9b cannot touch abstention.
+
+Caveat: n=2 conversations, ±3.2–3.5% per-conversation variance. This is weak
+corroboration, not strong confirmation. The full 10-conversation run is still
+worth doing.
+
+### Harness bug that produced a false negative — worth not repeating
+
+The first benchmark comparison reported **32.4% vs 32.4%, "no effect"**. That was
+**wrong, and the cause was the harness, not AWM**:
+
+Both arms used one port, and teardown used a plain `kill`. On Windows that left
+the server alive, so the second arm never bound the port, its health check passed
+against the **surviving first-arm server**, and both arms benchmarked the same
+baseline process. Identical inputs → identical outputs.
+
+The tell was single-hop coming back at **exactly +0.0 on all four metrics** across
+63 queries — too clean to be a real effect size. Two wrong hypotheses were
+measured and discarded first (the rerank skip heuristic; `includeStaging:true`),
+and a first probe was itself invalid because its 14 near-identical passages made
+every cross-encoder score saturate at 1.00, where sorting is correctly a no-op.
+
+Fixes now in `run-arm.sh`: a distinct port per arm; refuse to start if anything
+already answers on that port; and tear down by **killing whatever holds the
+port** rather than the child PID — `npx` re-parents the real node process, so
+`taskkill /T` on the wrapper finds no children and the server survives.
+
+### The salience-filter ceiling
+
+Seeding reports only **41–55% of turns become active**; the rest land in staging
+(`salience.ts`: <0.2 discard, 0.2–0.4 staging, ≥0.4 active). `runner.ts:326`
+counts a query whose gold evidence was filtered as a miss regardless of ranking.
+
+So roughly half the corpus is unreachable before ranking runs — a hard ceiling on
+AWM's LoCoMo score that no ranking work can lift. This is the salience filter
+behaving as designed ("selectivity is the product", D12); LoCoMo simply rewards
+indiscriminate retention. **The absolute score understates ranking quality, and
+loosening the filter to chase it would trade real-store precision for benchmark
+points.**
