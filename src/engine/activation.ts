@@ -42,6 +42,7 @@ import type {
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
+import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -208,8 +209,24 @@ export class ActivationEngine {
       : [query.agentId];
     const isWorkspaceScoped = agentIds.length > 1;
 
-    // Phase -1: Coref expansion — if query has pronouns, append recent entity names
+    // ── Phase -2: temporal expression ──
+    // Nothing downstream parses dates, so "from last Thursday" was being spent
+    // as ordinary BM25 tokens: diluting the subject terms and matching `date=`
+    // tags corpus-wide. Measured on the real store, adding a temporal cue COST
+    // 3-8pp of success@1 — the most selective thing the user said was a
+    // penalty. Stripping it recovers that; the window then PREFERS (never
+    // filters) candidates from the implied period. Oracle ceiling is +36.6pp.
     let queryContext = query.context;
+    let temporal: TemporalMatch | null = null;
+    if (temporalEnabled()) {
+      temporal = parseTemporal(query.context, query.asOf ?? Date.now());
+      // Strict no-op when nothing matched, and never strip the query to nothing.
+      if (temporal && temporal.stripped.trim().length >= 3) {
+        queryContext = temporal.stripped;
+      } else if (temporal) {
+        temporal = null;
+      }
+    }
     const pronounPattern = /\b(she|he|they|her|his|him|their|it|that|this|there)\b/i;
     if (pronounPattern.test(queryContext)) {
       try {
@@ -231,7 +248,7 @@ export class ActivationEngine {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         searchContext = await Promise.race([
-          expandQuery(query.context),
+          expandQuery(queryContext),
           new Promise<string>((_, reject) => { timer = setTimeout(() => reject(new Error('expansion timeout')), 5000); }),
         ]);
       } catch {
@@ -251,7 +268,8 @@ export class ActivationEngine {
 
     // Phase 2: Parallel retrieval — dual BM25 + all active engrams
     // Two-pass BM25: (1) keyword-stripped query for precision, (2) expanded query for recall.
-    const keywordQuery = Array.from(tokenize(query.context)).join(' ');
+    // Uses queryContext, not query.context: temporal words must not reach BM25.
+    const keywordQuery = Array.from(tokenize(queryContext)).join(' ');
     const bm25Keyword = keywordQuery.length > 2
       ? await this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3)
       : [];
@@ -292,7 +310,7 @@ export class ActivationEngine {
     const VECTOR_TOP_K = POOL_FILTER_DISABLED ? Number.MAX_SAFE_INTEGER : Math.max(50, limit * 5);
 
     // Tokenize query once (used by scoring)
-    const queryTokens = tokenize(query.context);
+    const queryTokens = tokenize(queryContext);
 
     // Phase 3a: native vector search across agents — top-K by cosine.
     // Apply a candidate floor — BGE-small unit-norm vectors typically cluster
@@ -557,7 +575,21 @@ export class ActivationEngine {
       // Text/temporal weights adapt to query mode: targeted (0.75/0.25), exploratory (0.4/0.6).
       const temporalNorm = Math.min(softplus(decayScore + hebbianBoost), 3.0) / 3.0;
       const relevanceGate = textMatch > 0.1 ? textMatch : 0.0; // Proportional gate
-      const composite = (adaptive.textWeight * textMatch + adaptive.temporalWeight * temporalNorm * relevanceGate + centralityBoost * relevanceGate + feedbackBonus * relevanceGate) * confidenceGate;
+      let composite = (adaptive.textWeight * textMatch + adaptive.temporalWeight * temporalNorm * relevanceGate + centralityBoost * relevanceGate + feedbackBonus * relevanceGate) * confidenceGate;
+      // In-window preference — applied in the MAIN scoring pass, which is what
+      // decides the topN cut. (An earlier version of this sat in the Rocchio
+      // feedback re-search branch and therefore did nothing: it only ever saw
+      // candidates that path newly discovered. Same trap as D11's boost-vs-
+      // inject finding — a boost can only reorder what is already a candidate.)
+      // Additive and scaled by textMatch, so a temporally-plausible memory
+      // rises while a subject-irrelevant one cannot be dragged in on date
+      // alone; out-of-window memories stay reachable on subject strength.
+      if (temporal) {
+        const createdMs = engram.createdAt.getTime();
+        if (createdMs >= temporal.from && createdMs < temporal.to) {
+          composite += temporalBoost() * Math.max(textMatch, 0.15);
+        }
+      }
 
       const phaseScores: PhaseScores = {
         textMatch,
@@ -619,7 +651,13 @@ export class ActivationEngine {
             const rh = associations.length > 0 ? Math.min(associations.reduce((s, a) => s + a.weight, 0) / associations.length, 0.5) : 0;
             const tn = Math.min(softplus(ds + rh), 3.0) / 3.0;
             const rg = tm > 0.1 ? tm : 0.0;
-            const comp = (adaptive.textWeight * tm + adaptive.temporalWeight * tn * rg) * engram.confidence;
+            let comp = (adaptive.textWeight * tm + adaptive.temporalWeight * tn * rg) * engram.confidence;
+            // Same in-window preference as the main pass, for candidates this
+            // feedback re-search discovers.
+            if (temporal) {
+              const cms = engram.createdAt.getTime();
+              if (cms >= temporal.from && cms < temporal.to) comp += temporalBoost() * Math.max(tm, 0.15);
+            }
             scored.push({ engram, score: comp, phaseScores: { textMatch: tm, vectorMatch: vm, decayScore: ds, hebbianBoost: rh, graphBoost: 0, confidenceGate: engram.confidence, composite: comp, rerankerScore: 0 }, associations });
           }
         }
@@ -878,10 +916,10 @@ export class ActivationEngine {
         const rrBudget = rerankTruncation();
         const rrMode = rerankWindowMode();
         const passages = rerankPool.map(r =>
-          buildRerankPassage(r.engram.concept, r.engram.content, query.context, rrBudget, rrMode));
+          buildRerankPassage(r.engram.concept, r.engram.content, queryContext, rrBudget, rrMode));
         let rerankTimer: ReturnType<typeof setTimeout> | undefined;
         const rerankResults = await Promise.race([
-          rerank(query.context, passages),
+          rerank(queryContext, passages),
           new Promise<never>((_, reject) => { rerankTimer = setTimeout(() => reject(new Error('reranker timeout')), 10000); }),
         ]).finally(() => { if (rerankTimer) clearTimeout(rerankTimer); });
 

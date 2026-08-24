@@ -278,6 +278,13 @@ export interface ActivationQuery {
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default
   workspace?: string;          // Search across all agents in this workspace (hive mode). If unset, agent-scoped only.
+  /**
+   * Anchor for relative temporal expressions ("last Friday", "last week").
+   * Defaults to now. Passed explicitly by evals so a fixture stays
+   * reproducible — with the wall clock, "last week" would silently mean
+   * something different on every run.
+   */
+  asOf?: number;
   bm25Only?: boolean;          // Skip embedding — fast text-only retrieval for bulk/benchmark scenarios
   /**
    * Output granularity (Paper 3: cognitive teaming, Brill 2018 ACT-R collaboration).
