@@ -76,6 +76,10 @@ async function main() {
   };
   const byClass: Record<string, boolean[]> = {};
   let s1 = 0, s5 = 0, rr = 0, usefulTok = 0, missTok = 0, n = 0;
+  // SUFFICIENCY: retrieval is only half the job. If the delivered text does not
+  // contain the answer-bearing identifier, the agent got a pointer, not a fact —
+  // and still has to go read the code, so the token saving is illusory.
+  let sufficient = 0, retrievedForSuff = 0;
 
   for (const it of items) {
     const res: any[] = await activation.activate({
@@ -95,6 +99,12 @@ async function main() {
     // makes the economics look worse than they are.
     const text = res.map(r => `${r.engram.concept}: ${r.summary ?? r.engram.content}`).join('\n');
     if (hit5) usefulTok += est(text); else missTok += est(text);
+
+    if (idx >= 0 && it.identifier) {
+      retrievedForSuff++;
+      const delivered = String(res[idx].summary ?? res[idx].engram.content).toLowerCase();
+      if (delivered.includes(it.identifier.toLowerCase())) sufficient++;
+    }
 
     (it.beyondTruncation ? buckets['beyond (>400)'] : buckets['visible (<400)']).push(hit1);
     const c = it.memoryClass ?? 'unknown';
@@ -116,7 +126,13 @@ async function main() {
 
   const pct = (k: number, d: number) => (d ? `${(100 * k / d).toFixed(1)}%` : '—');
   console.log(`  success@1 ${pct(s1, n)}   success@5 ${pct(s5, n)}   MRR ${(rr / Math.max(n, 1) * 100).toFixed(1)}%`);
-  console.log(`  adversarial correctly silent: ${pct(abstained, advs.length)}   <- selectivity is rewarded here\n`);
+  console.log(`  adversarial correctly silent: ${pct(abstained, advs.length)}   <- selectivity is rewarded here`);
+  // Retrieval is only half the job. A summary that ranks the right memory first
+  // but omits the answer-bearing identifier leaves the agent still needing to go
+  // read the code — so the token "saving" is illusory. EFFECTIVE = both.
+  console.log(`  SUFFICIENCY ${pct(sufficient, retrievedForSuff)} of retrieved golds actually CONTAIN the answer` +
+              `  (${sufficient}/${retrievedForSuff})`);
+  console.log(`  EFFECTIVE ANSWER RATE ${pct(sufficient, n)}  (retrieved AND sufficient, of all ${n})\n`);
 
   console.log('  BY IDENTIFIER POSITION (the 400-char rerank window):');
   for (const [k, v] of Object.entries(buckets)) {
@@ -128,13 +144,24 @@ async function main() {
     console.log(`    ${k.padEnd(16)} n=${String(v.length).padStart(4)}   s@1 ${pct(v.filter(Boolean).length, v.length).padStart(6)}`);
   }
 
-  // Economics: a hit saves the fallback minus what the recall itself cost; a
-  // miss means the agent pays the fallback anyway and AWM contributed nothing.
-  const avgHitCost = s5 > 0 ? usefulTok / s5 : 0;
-  const net = Math.round(s5 * (FALLBACK_TOKENS - avgHitCost) - missTok - advWasteTok);
-  console.log('\n  TOKEN ECONOMICS (vs ~2,106-token cost of reading the code instead):');
-  console.log(`    useful ${usefulTok.toLocaleString()} tok · wasted ${(missTok + advWasteTok).toLocaleString()} tok`);
-  console.log(`    NET SAVED ${net.toLocaleString()} tok over ${n} recalls  (${Math.round(net / Math.max(n, 1))}/recall)\n`);
+  // ECONOMICS — credit only SUFFICIENT recalls.
+  //
+  // The earlier version credited any top-5 retrieval with saving the fallback.
+  // That is wrong in exactly the way the H3 "efficiency" metric was wrong: it
+  // treats a recall that ranks the right memory first but omits the answer as a
+  // win, when the agent must still go read the code and pays the fallback
+  // anyway. Only a recall that DELIVERS the fact avoids that cost.
+  //
+  //   sufficient recall  -> avoids FALLBACK_TOKENS, having spent its own tokens
+  //   retrieved-but-not-sufficient -> spent tokens AND still pays the fallback
+  //   miss               -> spent tokens AND still pays the fallback
+  const spentTok = usefulTok + missTok + advWasteTok;
+  const net = sufficient * FALLBACK_TOKENS - spentTok;
+  console.log('  TOKEN ECONOMICS (credit only recalls that DELIVER the answer):');
+  console.log(`    spent ${spentTok.toLocaleString()} tok · answers delivered ${sufficient}/${n}`);
+  console.log(`    NET ${net >= 0 ? '+' : ''}${net.toLocaleString()} tok over ${n} recalls  ` +
+              `(${net >= 0 ? '+' : ''}${Math.round(net / Math.max(n, 1))}/recall)
+`);
   process.exit(0);
 }
 main().catch(e => { console.error(e); process.exit(1); });
