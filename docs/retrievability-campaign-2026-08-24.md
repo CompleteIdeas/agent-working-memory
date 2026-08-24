@@ -164,3 +164,63 @@ with more dimensions, not a channel where the missing words become salient.
 - **Arm C's 863ms was compared against a 120-probe baseline while C ran 450
   probes.** Different query sets, not comparable. C carries no tags, so its
   latency says nothing about the change. Caught before it reached a conclusion.
+
+---
+
+## RESULT — Option 3 (guarded alias mining): **REJECT**
+
+Mined 208 categories of directional category→dialect aliases offline, with six
+guardrails. Measured on top of the current winner, so this is MARGINAL
+contribution, not standalone value.
+
+| arm | s@1 | s@5 | MRR | adversarial |
+|---|---|---|---|---|
+| option 2 (winner) | 63.8% | 68.4% | 66.0% | 90.0% |
+| + aliases | 63.6% | 68.2% | 65.8% | 90.0% |
+
+**−0.2pp — no gain, inside noise.** Prediction was recorded before measuring
+and was correct.
+
+### What the guardrails bought (a real positive inside a null)
+
+**Adversarial held at exactly 90.0%.** Codex's predicted failure mode was hub
+aliases flooding the candidate pool and starving the reranker — worse here
+because the rerank passage is 400-char truncated and phase 9b made
+rerankerScore authoritative. That did not happen.
+
+The reason is scope, not a filter: alias terms are added to the BM25 SEARCH
+STRING only, never to `queryTokens`, which drives textMatch. A candidate
+matching only alias terms therefore arrives with near-zero textMatch and is
+dropped by the existing minScore gate. Aliases buy REACH; original terms still
+decide RELEVANCE. Guardrail 4 was enforced by where terms are allowed to flow,
+which cannot be bypassed, rather than by a gate that could be.
+
+### Why it did not help
+
+The mined dialect is too noisy at this corpus size. Inspecting the map before
+measuring showed the split plainly:
+
+```
+deploy -> railway, https, build, production     <- genuine dialect
+azure  -> alerts, resource, deploy, default, scope, phase, users   <- half noise
+equihub -> drove, property, tracker, collision  <- noise
+```
+
+A hub guardrail (drop any term that is "distinctive" of more than 5 categories)
+removed 20 terms and 182 entries of session-summary boilerplate — `discussed,
+turns, topics, summary` had been learned as dialect for many unrelated
+categories. That fixed the worst of it, but PMI over 8-memory categories is a
+thin signal and roughly half the survivors are coincidence.
+
+**This is a statement about the DATA, not the technique.** With more mass per
+category the same mining could work; at 8-memory support it cannot.
+
+### Correction to a claim I made in the previous iteration
+
+I wrote that the proportionality principle "predicts option 4 (bigger embedder)
+will not fix this problem." **That over-extends it.** Proportionality says
+*adding a few words to a large input* is diluted — which is why option 1's
+embedding half failed. Option 4 does not add words; it changes the model's
+semantic capability, so it could in principle bridge "azure" ↔ "private plan"
+without any explicit vocabulary addition at all. That is a different mechanism
+and the principle does not speak to it. Option 4 must be measured, not inferred.

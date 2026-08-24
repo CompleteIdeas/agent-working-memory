@@ -43,6 +43,7 @@ import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
+import { aliasTermsFor } from '../core/alias-map.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -244,6 +245,16 @@ export class ActivationEngine {
 
     // Phase 0: Query expansion — add related terms to improve BM25 recall
     let searchContext = queryContext;
+
+    // Project-dialect aliases. Added to the BM25 SEARCH STRING ONLY — never to
+    // `queryTokens`, which drives textMatch scoring below. That scope IS
+    // guardrail 4 ("require at least one original query term"): a candidate
+    // matching only alias terms arrives with near-zero textMatch and is dropped
+    // by the existing minScore gate, while one that also matches an original
+    // term scores normally. Aliases buy REACH; original terms still decide
+    // RELEVANCE, so a hub alias cannot drag an irrelevant memory to the top.
+    const aliasAdded = aliasTermsFor(queryContext);
+    if (aliasAdded.length > 0) searchContext = `${searchContext} ${aliasAdded.join(' ')}`;
     if (useExpansion) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
