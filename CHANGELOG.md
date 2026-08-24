@@ -1,5 +1,83 @@
 # Changelog
 
+## 0.13.6 (2026-08-24) — the writing guidance was causing the problem it warned about
+
+A memory reading "private plan memory peaked 88%, scale P1v3 -> P2v3" could not be recalled by the
+words its own author used to ask for it — verified: **not in the top 40 candidates** for "azure app
+service plan capacity increase internal application". Its body contains no "azure", no "capacity",
+no "App Service Plan". Only `topic=azure`, as a tag.
+
+The shipped guidance produced that. "Pick the most specific topic. Not `auth` —
+`auth-magic-link-rate-limit`" pushes *away* from category words, and combined with "include 2+
+retrievable identifiers" it reliably yields memories that are maximally specific and categorically
+anonymous.
+
+- **Name the CATEGORY as well as the specifics.** Specifics make a memory precise; category words
+  make it *reachable*. Write the system/product/domain nouns next to the identifiers. The guidance
+  now says explicitly that this cuts against "most specific topic", which governs the `topic` TAG
+  and is not licence to omit the category from the body.
+- **Tags are NOT a substitute for body text.** Only BM25 indexes tags; the embedding
+  (`write-pipeline.ts`) and the cross-encoder rerank passage (`activation.ts`) are both built from
+  `concept + content`. A word that exists only as a tag is invisible to two of three retrieval
+  channels — including the one that decides final ordering since 0.13.4.
+
+Scale of the problem on a real 11,294-engram store: of 7,791 memories carrying topical tags,
+**94.3% are missing at least one of their own topical terms from the body**, and **66.2% of those
+terms never appear in the text at all**.
+
+## 0.13.5 (2026-08-24) — `memory_whoami` reports the effective recall configuration
+
+Version alone does not answer "what am I actually running". A current build can have the
+behaviour-changing recall flags unset, or set to something unintended. `GET /health` gained this in
+0.13.4, but HTTP is off by default, so an MCP-only session had no way to see it.
+
+- **`Recall config:` line**, driven by the same `RECALL_FLAGS` source of truth as `/health` and the
+  eval tracer — so a new flag appears in all three automatically, with no third place to keep in
+  sync.
+
+```
+Mode: standalone · Surface: mcp · Version: 0.13.5
+Recall config: rerank2=1,rerank_window=query
+```
+
+This caught a real deployment failure the day it shipped: a submodule bump reported the new version
+while the flags had silently not reached the process, because a project-level `.mcp.json` was
+overriding the config being edited. On version alone that looks like success.
+
+## 0.13.4 (2026-08-24) — second-stage rerank, and the reranker could only see 400 characters
+
+Two independent findings, which must ship together.
+
+- **Phase 9b — "rerank the rerank" (`AWM_RERANK2`).** Final order was a blend with `rerankWeight`
+  capped at 0.7, so `composite` (decay, Hebbian, salience) always kept ≥30% of the vote. Measured
+  on 616 LoCoMo probes: the blend disagrees with the cross-encoder about rank 1 on **38.6%** of
+  queries, and where the disagreement is decidable **the cross-encoder is right 77% of the time**
+  (61 vs 18). Re-sorting the returned window by `rerankerScore` alone is worth **+9.7pp success@1**
+  (paired McNemar, p<0.001), and costs no additional inference — the scores already existed and
+  were being partly discarded.
+
+  Placed after the agreement gate, after `computeRecallConfidence` and after the `requireConfidence`
+  check, so it cannot influence abstention. That predicted 0 broken / 0 fixed on adversarial;
+  **measured 0 and 0.**
+
+- **Query-aware rerank window (`AWM_RERANK_WINDOW=query`).** Passages were truncated to the first
+  400 characters. That truncation is necessary — cross-encoders pad to the longest passage in a
+  batch, and rerank is already ~90% of warm recall latency — but a PREFIX is the wrong 400 chars.
+  On a real store, canonical memories are median 1,965 chars and 98.7% exceed 400, so the reranker
+  could not see **78.8%** of their vocabulary, and **99.9%** of long canonical memories carry
+  identifiers only past char 400.
+
+  Spending the same budget on the window densest in query terms takes long-memory success@1 from
+  **25% to 87.5%**. Cost: zero added tokens (same budget, same padding), 0.574 ms CPU per
+  40-candidate pool — 0.07% of the rerank step.
+
+**They must be enabled together.** `AWM_RERANK2` alone regresses long-memory recall — s@5 91.7% →
+25.0% — because `composite` carries BM25 over *full* content and was compensating for the
+reranker's 400-char blindness. Making the blind reranker authoritative removes that cover.
+
+Also: `GET /health` now self-reports the effective recall configuration, so a benchmark can assert
+it measured the system it configured.
+
 ## 0.13.3 (2026-08-23) — token-aware recall
 
 AWM's benchmark has always shown a 9.8:1 aggregate token win over file retrieval, but that number
