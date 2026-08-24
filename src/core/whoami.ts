@@ -18,6 +18,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from '../version.js';
 import { getConfiguredBackend, getConfiguredPath } from '../storage/factory.js';
+import { activeRecallConfig, recallConfigFingerprint } from './recall-config.js';
 
 export interface WhoamiInfo {
   agentId: string;
@@ -30,6 +31,14 @@ export interface WhoamiInfo {
   codePath: string;
   pid: number;
   ports: { http: number | null; hookSidecar: number | null };
+  /**
+   * Effective recall configuration. `whoami` is the "what am I actually
+   * running" tool, and the version alone does not answer that: a build can be
+   * current while the recall flags that change its behaviour are unset, or set
+   * to something unintended. GET /health already reports this, but HTTP is off
+   * by default, so an MCP-only session had no way to see it.
+   */
+  recall: { fingerprint: string; flags: Record<string, string> };
   siblingAgents: string[];
 }
 
@@ -72,6 +81,7 @@ export async function buildWhoami(
       http: Number.isFinite(httpPort) && httpPort > 0 ? httpPort : null,
       hookSidecar: Number.isFinite(hookPort) && hookPort > 0 ? hookPort : null,
     },
+    recall: { fingerprint: recallConfigFingerprint(), flags: activeRecallConfig() },
     siblingAgents: siblings,
   };
 }
@@ -85,6 +95,7 @@ export function formatWhoami(w: WhoamiInfo): string {
     `Store: ${w.storePath}`,
     `Code: ${w.codePath} (pid ${w.pid})`,
     `Ports: http=${w.ports.http ?? 'off'} hookSidecar=${w.ports.hookSidecar ?? 'off'}`,
+    `Recall config: ${w.recall.fingerprint}`,
     w.siblingAgents.length
       ? `Sibling agent spaces in this store: ${w.siblingAgents.join(', ')} — recall is scoped to '${w.agentId}'; other spaces need workspace recall, \`awm export --agent <id>\`, or a session configured for that agent.`
       : 'Sibling agent spaces in this store: none',
