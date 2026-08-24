@@ -51,6 +51,30 @@ for i in $(seq 1 90); do
 done
 curl -s -m 2 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 || { echo "health never came up"; exit 1; }
 grep -q "EADDRINUSE" "$OUT/$NAME.server.log" && { echo "FATAL: EADDRINUSE on $PORT"; exit 2; }
+
+# (4) THE IMPORTANT ONE — make the server PROVE it is configured as asked.
+# Port hygiene stops one instance of "measured a stale server"; this stops the
+# whole class, including a server that started before an env change, a typo'd
+# flag name, or a flag the code silently ignores. Without this the failure is
+# a plausible-looking number instead of an error.
+FP=$(curl -s -m 5 "http://127.0.0.1:$PORT/health" | node -e "
+let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+  try{const j=JSON.parse(s);console.log(JSON.stringify(j.recall||{}));}catch{console.log('{}')}})")
+echo "server reports recall config: $FP"
+for kv in "$@"; do
+  case "$kv" in
+    AWM_NOOP=*) continue ;;                      # deliberate placeholder, not a real flag
+    *=*)
+      k="${kv%%=*}"; v="${kv#*=}"
+      echo "$FP" | node -e "
+let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+  const j=JSON.parse(s||'{}'); const got=(j.flags||{})['$k'];
+  if(got!=='$v'){console.error('FATAL: server reports $k='+JSON.stringify(got)+' but this arm set $v — refusing to record a measurement of a differently-configured system');process.exit(3)}})" || exit 3
+      ;;
+  esac
+done
+echo "config verified for arm $NAME"
+echo "$FP" > "$OUT/$NAME.recall-config.json"
 echo "server up (pid $SRV_PID, port $PORT)"
 
 npx tsx tests/locomo-eval/runner.ts "http://127.0.0.1:$PORT" > "$OUT/$NAME.txt" 2>&1

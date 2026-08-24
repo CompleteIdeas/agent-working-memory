@@ -52,6 +52,7 @@ import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 import { embed, embedBatch } from '../core/embeddings.js';
 import { VERSION } from '../version.js';
+import { activeRecallConfig, recallConfigFingerprint } from '../core/recall-config.js';
 
 export interface MemoryDeps {
   store: EngramStore;
@@ -973,6 +974,14 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       timestamp: new Date().toISOString(),
       version: VERSION,
       coordination: coordEnabled,
+      // Self-reported recall configuration. A benchmark arm can assert this
+      // matches what it set, turning "I measured a stale server with the wrong
+      // config" from a silent false result into a loud failure. See
+      // src/core/recall-config.ts for why this exists.
+      recall: {
+        fingerprint: recallConfigFingerprint(),
+        flags: activeRecallConfig(),
+      },
       // D15 (2026-07-30): consolidation visibility — finishes the long-unwired
       // "DMN endpoint" (May P2). Answers "is a sleep cycle running right now
       // and is the scheduler even on" without reading logs.

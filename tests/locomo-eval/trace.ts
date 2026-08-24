@@ -27,6 +27,7 @@ import { ConnectionEngine } from '../../src/engine/connections.js';
 import { ConsolidationEngine } from '../../src/engine/consolidation.js';
 import { performWrite } from '../../src/core/write-pipeline.js';
 import { embed } from '../../src/core/embeddings.js';
+import { recallConfigFingerprint } from '../../src/core/recall-config.js';
 
 // Inlined from runner.ts (avoids importing the runner module, whose top-level main() runs on import).
 interface ParsedTurn { diaId: string; speaker: string; text: string; sessionNum: number }
@@ -61,8 +62,10 @@ interface Rec {
 }
 
 async function main() {
-  const arm = ['AWM_QUERY_BRIDGE', 'AWM_AUTOTAG', 'AWM_SPREAD', 'AWM_SPREAD_INJECT', 'AWM_BROAD_EDGES', 'AWM_RERANK2']
-    .filter(k => process.env[k] === '1').map(k => k.replace('AWM_', '').toLowerCase()).join('+') || 'baseline';
+  // Derived from RECALL_FLAGS so a new flag is labelled automatically. The old
+  // hardcoded list omitted AWM_SPREAD_INHIBIT, so two materially different D11
+  // arms both printed `arm=spread` and had to be told apart by hand.
+  const arm = recallConfigFingerprint();
   for (const e of ['', '-wal', '-shm']) { try { if (existsSync(DB + e)) unlinkSync(DB + e); } catch { /* */ } }
   const data = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as any[];
   const maxConvs = Number(process.env.LOCOMO_TRACE_CONVS ?? data.length);
