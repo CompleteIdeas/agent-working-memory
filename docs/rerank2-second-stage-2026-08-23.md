@@ -105,9 +105,47 @@ scores already exist and were being partially discarded. The added work is one
 sort of ≤10 items. Given the reranker is already ~90% of warm recall latency,
 this is the rare quality win that does not buy itself with time.
 
+## Window size sweep (K)
+
+With `K = 10` (== the return limit) phase 9b is **pure reordering** of the
+already-returned set. With `K > limit` it also changes **membership** — the
+cross-encoder can pull a candidate from deeper in the 40-item pool into the
+returned top-10. That is a strictly larger behavioural change, so it was
+measured rather than assumed.
+
+| K | s@1 | s@5 | s@10 | s@1 broken/fixed | s@10 lost/gained | adversarial |
+|---|---|---|---|---|---|---|
+| baseline | 37.8% | 55.0% | 62.2% | — | — | 76.9% |
+| **10** | 47.6% | 59.9% | 62.2% | 15 / 75 | 0 / 0 | 76.9% |
+| 20 | 48.5% | 64.0% | 66.7% | 15 / 81 | 5 / 33 | 76.9% |
+| 40 | 48.5% | **65.6%** | **69.2%** | 15 / 81 | 9 / **52** | 76.9% |
+
+On the measured numbers K=40 dominates: +7.0pp success@10 on top of the success@1
+gain, breakage flat at 15 across every K, adversarial untouched throughout.
+
+**Why K=10 is still the recommended default.** At K=40 the composite score no
+longer influences *which* memories are returned at all — the cross-encoder alone
+selects from the pool. LoCoMo cannot measure what that gives up, and it is
+biased in exactly the wrong direction:
+
+- every memory is seeded in one shot, so **ACT-R decay is near-uniform** and
+  contributes almost nothing discriminative;
+- there is no retrieval history, so **Hebbian edge weights are near-uniform**;
+- there is no usage over time, so **salience reinforcement never operates**.
+
+Those three terms are most of what `composite` contributes beyond text match. On
+a static benchmark they are dead weight, and discarding them looks free. On a
+live 29k-engram store with months of usage they are doing real work — recency,
+reinforcement, and association priors that a stateless cross-encoder cannot see.
+
+So the K sweep measures the *upside* of a wider window faithfully and the
+*downside* not at all. K=40 is promising and should be trialled on the live
+store; it should not be defaulted on the strength of a benchmark that is
+structurally blind to the thing it sacrifices.
+
 ## Recommendation
 
-**Flip `AWM_RERANK2` to default ON.** The evidence is strong (+9.7pp, p<0.001),
+**Flip `AWM_RERANK2` to default ON at K=10** (the current default). The evidence is strong (+9.7pp, p<0.001),
 it improves every category, the dominant risk (abstention) is measurably
 untouched, single-hop improves with zero breakage, and it is free.
 
