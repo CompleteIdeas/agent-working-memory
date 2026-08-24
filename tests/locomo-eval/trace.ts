@@ -61,7 +61,7 @@ interface Rec {
 }
 
 async function main() {
-  const arm = ['AWM_QUERY_BRIDGE', 'AWM_AUTOTAG', 'AWM_SPREAD', 'AWM_SPREAD_INJECT', 'AWM_BROAD_EDGES']
+  const arm = ['AWM_QUERY_BRIDGE', 'AWM_AUTOTAG', 'AWM_SPREAD', 'AWM_SPREAD_INJECT', 'AWM_BROAD_EDGES', 'AWM_RERANK2']
     .filter(k => process.env[k] === '1').map(k => k.replace('AWM_', '').toLowerCase()).join('+') || 'baseline';
   for (const e of ['', '-wal', '-shm']) { try { if (existsSync(DB + e)) unlinkSync(DB + e); } catch { /* */ } }
   const data = JSON.parse(readFileSync(DATA_FILE, 'utf8')) as any[];

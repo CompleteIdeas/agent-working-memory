@@ -40,6 +40,7 @@ import type {
   Engram, ActivationResult, ActivationQuery, Association, PhaseScores, QueryMode,
 } from '../types/index.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
+import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -1067,7 +1068,16 @@ export class ActivationEngine {
       return snippet;
     };
 
-    const results: ActivationResult[] = finalRanked
+    // ── Phase 9b: SECOND-STAGE REORDER — "rerank the rerank" ──
+    // See src/core/rerank2.ts for the measurement and the safety argument.
+    // Placed here deliberately: after the agreement gate, after
+    // computeRecallConfidence, and after the requireConfidence check, so it
+    // cannot influence abstention. Default OFF (AWM_RERANK2=1).
+    const ordered = rerank2Enabled()
+      ? reorderByReranker(finalRanked, rerank2WindowSize())
+      : finalRanked;
+
+    const results: ActivationResult[] = ordered
       .slice(0, limit)
       .map((r, idx) => {
         let summary: string | undefined;

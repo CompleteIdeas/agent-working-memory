@@ -31,3 +31,4 @@ memory-pglite*/
 tests/locomo-eval/trace-log.jsonl
 tests/locomo-eval/d11-retest/*.err
 tests/locomo-eval/trace-log.jsonl
+tests/rerank2-eval/**/*.err
