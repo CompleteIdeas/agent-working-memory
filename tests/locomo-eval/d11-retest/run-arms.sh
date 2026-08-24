@@ -18,6 +18,8 @@ run () {
   grep -E "success@1|adversarial|multi-hop|single-hop" "$OUT/$name.txt" | head -8
 }
 
+# AWM_NOOP is NOT a real flag — a no-op placeholder because `env` needs an
+# assignment before the command. Baseline runs with all spread flags unset.
 run baseline            AWM_NOOP=1
 run spread              AWM_SPREAD=1
 run spread-inhibit      AWM_SPREAD=1 AWM_SPREAD_INHIBIT=0.3

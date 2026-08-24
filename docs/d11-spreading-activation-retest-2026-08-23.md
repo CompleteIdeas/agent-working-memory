@@ -28,7 +28,7 @@ D11 staged and nobody ran**. So that is what this is.
 
 `tests/locomo-eval/trace.ts` — the prescribed instrument (D11: *"judged by stage
 attribution + adversarial suite, not end-score A/B"*). LoCoMo, 10 conversations,
-**1,062 answerable + 446 adversarial probes**.
+**616 answerable + 446 adversarial probes** (1,062 total).
 
 Four arms, run sequentially (the tracer uses a fixed DB and log path). The tracer
 wipes and reseeds per arm, and `connections.ts:177` opts edge-discovery out of
@@ -82,7 +82,7 @@ The published fix is real. **This is a genuine positive finding about the
 mechanism.**
 
 **3. But it repairs by neutralising the feature, not by making it useful.** In
-both guarded arms, across **1,062 answerable probes, spreading activation fixed
+both guarded arms, across **616 answerable probes, spreading activation fixed
 exactly ZERO queries** and broke 4–6. Multi-hop — the entire point — moved *not a
 single query* out of 189, in either direction.
 
@@ -132,7 +132,11 @@ Keep the code and the `AWM_SPREAD_INHIBIT` implementation — inhibition is a re
 working mechanism that may matter if the graph ever becomes much denser (broad
 entity edges, D9/D10). It is the *premise* that failed, not the implementation.
 
-Whether that constitutes formally invoking the three-strikes park is Robert's call.
+**Decision needed from Robert (the rule is his):** D11's third-strike condition is
+met. Do you want `AWM_SPREAD` **formally parked permanently**, or **held open**
+pending D9/D10 graph density — on the theory that spreading has nothing to
+propagate through until broad entity edges exist? Either is defensible on this
+data; the practical effect today is identical (stays default-OFF).
 
 ## Artifacts
 
