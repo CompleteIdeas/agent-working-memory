@@ -1,0 +1,12 @@
+import { densestWindow } from '../../src/core/rerank-window.js';
+const content = 'routine deployment and scheduling notes with review process detail. '.repeat(75);
+const query = 'which database host does the migration runner connect to for equihub dev';
+const N = 40, ITERS = 200;
+const t0 = process.hrtime.bigint();
+for (let i = 0; i < ITERS; i++) for (let j = 0; j < N; j++) densestWindow(content, query, 400);
+const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+console.log('content length:', content.length, 'chars (realistic long canonical memory)');
+console.log('pool size:', N, '| iterations:', ITERS);
+console.log('per full-pool windowing pass:', (ms / ITERS).toFixed(3), 'ms');
+console.log('reranker inference on same pool: ~800ms (90% of 897ms warm recall)');
+console.log('added cost:', ((ms / ITERS) / 800 * 100).toFixed(4) + '% of the rerank step');

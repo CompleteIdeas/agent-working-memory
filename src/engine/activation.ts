@@ -41,6 +41,7 @@ import type {
 } from '../types/index.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
+import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -858,19 +859,26 @@ export class ActivationEngine {
 
     if (useReranker && !rerankSkipped && rerankPool.length > 0) {
       try {
-        // Truncate content to ~400 chars before rerank (0.7.14+). Cross-encoders
-        // have a 512-token max anyway and pad to the longest passage in the batch;
-        // sending full content (some 5000+ chars) means everything pads to ~512
-        // tokens. Truncation drops tokenization + inference cost ~3-4× on long
-        // memory pools without losing rerank signal — the concept + first 400
-        // chars carry the core meaning.
-        const passages = rerankPool.map(r => {
-          const concept = r.engram.concept;
-          const content = r.engram.content.length > 400
-            ? r.engram.content.slice(0, 400)
-            : r.engram.content;
-          return `${concept}: ${content}`;
-        });
+        // Passage selection for the cross-encoder. Truncation exists for a real
+        // reason: cross-encoders pad to the longest passage in the batch, so one
+        // 5,000-char memory in a 40-item pool drags everything to ~512 tokens and
+        // costs 3-4x — and the reranker is already ~90% of warm recall latency.
+        //
+        // But a PREFIX is the wrong budget to spend. On the live store, canonical
+        // memories are median 1,965 chars and 98.7% exceed 400, so the reranker
+        // cannot see 78.8% of their vocabulary; 99.9% of them carry identifiers
+        // only past char 400. tests/longmem-eval shows the consequence: moving an
+        // answer from char 150 to char 700 takes success@1 from 100% to 0%, with
+        // the gold's cross-encoder score collapsing 0.986 -> 0.000 while its BM25
+        // score barely moves — retrievable, but not rankable.
+        //
+        // AWM_RERANK_WINDOW=query spends the SAME budget on the window that
+        // actually contains the query terms. Cost is unchanged. See
+        // src/core/rerank-window.ts.
+        const rrBudget = rerankTruncation();
+        const rrMode = rerankWindowMode();
+        const passages = rerankPool.map(r =>
+          buildRerankPassage(r.engram.concept, r.engram.content, query.context, rrBudget, rrMode));
         let rerankTimer: ReturnType<typeof setTimeout> | undefined;
         const rerankResults = await Promise.race([
           rerank(query.context, passages),

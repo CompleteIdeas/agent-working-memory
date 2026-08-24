@@ -1,0 +1,27 @@
+
+══════════════════════════════════════════════════════════════════════════════
+ LoCoMo PIPELINE-ATTRIBUTION  ·  arm=rerank2  ·  1062 probes (616 answerable, 446 adversarial)
+══════════════════════════════════════════════════════════════════════════════
+ ANSWERABLE (cat 1-4):
+   success@1 47.6%   success@5 60.1%   success@10 62.3%
+   gold cleared candidate floor: 89.1%   gold entered pool (pre-rerank): 34.4%
+   mean rerank rank-lift (gold): +3.87
+ ADVERSARIAL (cat 5):  correctly abstained/returned-nothing: 76.9%
+
+ WHERE THE PIPELINE LOSES ANSWERABLE QUERIES (stage attribution):
+   ███████████████████                       47.6%  success@1
+   █████████████                             32.3%  lost@pool/scoring
+   █████                                     12.5%  found@2-5
+   ██                                         4.7%  lost@candidate-floor
+   █                                          2.3%  found@6-10
+                                              0.6%  lost@rerank
+
+ BY CATEGORY (success@1 / floor-cleared / lost-at-floor):
+   multi-hop    n= 189   s@1  37.6%   floor✓  90.5%   lost@floor   4.2%
+   single-hop   n= 125   s@1  64.8%   floor✓  88.0%   lost@floor   3.2%
+   temporal     n=  53   s@1  11.3%   floor✓  79.2%   lost@floor  17.0%
+   open-domain  n= 249   s@1  54.2%   floor✓  90.8%   lost@floor   3.2%
+
+ logged 1062 records → C:\Users\robert\Personal-Projects\AgentWorkingMemory\tests\locomo-eval\trace-log.jsonl
+══════════════════════════════════════════════════════════════════════════════
+
