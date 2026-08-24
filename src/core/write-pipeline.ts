@@ -51,6 +51,7 @@ import { extractMetaTags } from './auto-tagger.js';
 import { extractEntitiesFromTags } from './entity-extract.js';
 import { reportWrite } from './write-telemetry.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
+import { buildRetrievalText } from './retrieval-text.js';
 
 /** Confidence floor below which a matched engram is treated as "decaying out". */
 export const HEALTHY_CONFIDENCE_FLOOR = 0.3;
@@ -195,7 +196,7 @@ export async function performWrite(
   let prewriteEmbedding: number[] | null = null;
   if (process.env.AWM_NOVELTY_EMBED !== '0') {
     try {
-      prewriteEmbedding = await embed(`${input.concept} ${input.content}`);
+      prewriteEmbedding = await embed(buildRetrievalText(input.concept, input.content, input.tags));
     } catch { /* fall through — async embed will retry later */ }
   }
   tEmbed = performance.now() - tStartEmbed;
@@ -434,7 +435,9 @@ async function reinforceMatched(
         // beyond 512 tokens but the topic anchor (early content) drives
         // the vector for retrieval purposes.
         const conceptForEmbed = newConceptHint || matched.concept;
-        const newVec = await embed(`${conceptForEmbed} ${mergedContent}`);
+        // The reinforced engram's OWN tags — `input` is not in scope here, and
+        // the stored tags are the right vocabulary for the stored memory anyway.
+        const newVec = await embed(buildRetrievalText(conceptForEmbed, mergedContent, matched.tags));
         await store.updateEmbedding(matched.id, newVec);
       } catch { /* merge is best-effort — confidence bump already landed */ }
     }
@@ -574,7 +577,7 @@ async function createNewEngram(
   const alreadyEmbedded = prewriteEmbedding != null && prewriteEmbedding.length > 0;
   const shouldEmbed = (!isStructural || input.embed === true) && !alreadyEmbedded;
   if (shouldEmbed) {
-    embed(`${input.concept} ${input.content}`)
+    embed(buildRetrievalText(input.concept, input.content, input.tags))
       .then(async vec => {
         try { await store.updateEmbedding(engram.id, vec); } catch { /* engram may be evicted */ }
       })

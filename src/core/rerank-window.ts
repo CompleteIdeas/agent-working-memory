@@ -101,11 +101,49 @@ export function buildRerankPassage(
   query: string,
   budget: number,
   mode: 'prefix' | 'query',
+  tags?: string[],
 ): string {
   const body = mode === 'query'
     ? densestWindow(content, query, budget)
     : (content.length > budget ? content.slice(0, budget) : content);
-  return `${concept}: ${body}`;
+  // Topical tags, when enabled. The cross-encoder decides final order since
+  // phase 9b, and it cannot see tags at all — measured on the live store, 66.2%
+  // of topical tag terms never appear in the body, so that vocabulary is
+  // invisible to the stage that now decides ranking. Appended (not substituted)
+  // and length-capped so it cannot crowd out the content window.
+  const extra = rerankTagText(tags);
+  return extra ? `${concept}: ${body} ${extra}` : `${concept}: ${body}`;
+}
+
+/** Whether topical tags are appended to the rerank passage. Default OFF. */
+export function rerankTagsEnabled(): boolean {
+  return process.env.AWM_RERANK_TAGS === '1';
+}
+
+/** Character budget for the appended tag text. */
+export function rerankTagBudget(): number {
+  const v = Number(process.env.AWM_RERANK_TAGS_LEN ?? 80);
+  return Number.isFinite(v) && v > 0 ? v : 80;
+}
+
+/**
+ * Render topical tags as plain terms for the cross-encoder.
+ * Only `topic=` / `proj=` / `project=` carry query vocabulary; date/person/
+ * ticket tags are identifiers the body usually already contains, and adding
+ * them would spend the budget without adding reachable words.
+ */
+export function rerankTagText(tags?: string[]): string {
+  if (!rerankTagsEnabled() || !tags || tags.length === 0) return '';
+  const words = new Set<string>();
+  for (const t of tags) {
+    const m = /^(?:topic|proj|project)=(.+)$/i.exec(t);
+    if (!m) continue;
+    for (const w of m[1].toLowerCase().split(/[-_\s]+/)) {
+      if (w.length > 2) words.add(w);
+    }
+  }
+  if (words.size === 0) return '';
+  return `[${[...words].join(' ').slice(0, rerankTagBudget())}]`;
 }
 
 /** Character budget for a rerank passage. */

@@ -916,7 +916,7 @@ export class ActivationEngine {
         const rrBudget = rerankTruncation();
         const rrMode = rerankWindowMode();
         const passages = rerankPool.map(r =>
-          buildRerankPassage(r.engram.concept, r.engram.content, queryContext, rrBudget, rrMode));
+          buildRerankPassage(r.engram.concept, r.engram.content, queryContext, rrBudget, rrMode, r.engram.tags));
         let rerankTimer: ReturnType<typeof setTimeout> | undefined;
         const rerankResults = await Promise.race([
           rerank(queryContext, passages),

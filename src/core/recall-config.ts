@@ -39,6 +39,10 @@ export const RECALL_FLAGS = [
   'AWM_RERANK_WINDOW',
   'AWM_RERANK_TRUNC',
   'AWM_RERANK_POOL',
+  'AWM_RERANK_TAGS',
+  'AWM_RERANK_TAGS_LEN',
+  // Derived retrieval text (embedding side)
+  'AWM_RETRIEVAL_TEXT',
   'AWM_DISABLE_RERANK_SKIP',
   // Spreading activation (D11 — parked)
   'AWM_SPREAD',

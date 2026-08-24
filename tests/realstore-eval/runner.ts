@@ -36,8 +36,12 @@ import { EngramStore } from '../../src/storage/sqlite.js';
 import { ActivationEngine } from '../../src/engine/activation.js';
 import { recallConfigFingerprint } from '../../src/core/recall-config.js';
 
-const SNAP = join(import.meta.dirname, 'snapshot', 'store.db');
-const FIXTURE = join(import.meta.dirname, 'fixture.json');
+// Selectable so option 1 can run against a re-embedded (backfilled) copy.
+const SNAP = join(import.meta.dirname, 'snapshot', process.env.REALSTORE_SNAPSHOT ?? 'store.db');
+// Fixture is selectable: the identifier fixture cannot express options that add
+// vocabulary the body lacks (its gold contains the query term 300/300 by
+// construction), so the category fixture exists for those. Same metrics either way.
+const FIXTURE = join(import.meta.dirname, process.env.REALSTORE_FIXTURE ?? 'fixture.json');
 const WORK = join(tmpdir(), `awm-realstore-${process.pid}.db`);
 
 /** Cost the agent pays when AWM does NOT surface the fact: it reads the code. */
@@ -61,7 +65,12 @@ async function main() {
   // data it was not tuned against, or it is just overfitting.
   const offset = Number(process.env.REALSTORE_OFFSET ?? 0);
   const items: Item[] = fx.items.slice(offset, offset + limit);
-  const advs: Item[] = fx.adversarialItems;
+  // Adversarial probes are generic absent-fact queries, valid for ANY fixture —
+  // fall back to the identifier fixture's set so the selectivity guard still
+  // runs when a fixture (e.g. category) does not define its own.
+  const advs: Item[] = fx.adversarialItems
+    ?? JSON.parse(readFileSync(join(import.meta.dirname, 'fixture.json'), 'utf8')).adversarialItems
+    ?? [];
 
   for (const s of ['', '-wal', '-shm']) { try { if (existsSync(WORK + s)) unlinkSync(WORK + s); } catch {} }
   copyFileSync(SNAP, WORK);
@@ -79,16 +88,21 @@ async function main() {
   };
   const byClass: Record<string, boolean[]> = {};
   let s1 = 0, s5 = 0, rr = 0, usefulTok = 0, missTok = 0, n = 0;
+  // Read-time cost is a campaign guard: warm recall is ~900ms and already ~90%
+  // cross-encoder, so an arm that buys accuracy with latency has moved the cost.
+  const lat: number[] = [];
   // SUFFICIENCY: retrieval is only half the job. If the delivered text does not
   // contain the answer-bearing identifier, the agent got a pointer, not a fact —
   // and still has to go read the code, so the token saving is illusory.
   let sufficient = 0, retrievedForSuff = 0;
 
   for (const it of items) {
+    const _t0 = process.hrtime.bigint();
     const res: any[] = await activation.activate({
       agentId: 'work', context: it.query, limit: RECALL_LIMIT,
       granularity: GRANULARITY, internal: true,
     } as any);
+    lat.push(Number(process.hrtime.bigint() - _t0) / 1e6);
     const idx = res.findIndex(r => r.engram.id === it.goldId);
     const hit1 = idx === 0;
     const hit5 = idx >= 0 && idx < 5;
@@ -103,10 +117,11 @@ async function main() {
     const text = res.map(r => `${r.engram.concept}: ${r.summary ?? r.engram.content}`).join('\n');
     if (hit5) usefulTok += est(text); else missTok += est(text);
 
-    if (idx >= 0 && it.identifier) {
+    if (idx >= 0 && (it.identifier || (it as any).category)) {
       retrievedForSuff++;
+      const needle = String(it.identifier ?? (it as any).category).toLowerCase();
       const delivered = String(res[idx].summary ?? res[idx].engram.content).toLowerCase();
-      if (delivered.includes(it.identifier.toLowerCase())) sufficient++;
+      if (delivered.includes(needle)) sufficient++;
     }
 
     (it.beyondTruncation ? buckets['beyond (>400)'] : buckets['visible (<400)']).push(hit1);
@@ -130,6 +145,9 @@ async function main() {
   const pct = (k: number, d: number) => (d ? `${(100 * k / d).toFixed(1)}%` : '—');
   console.log(`  success@1 ${pct(s1, n)}   success@5 ${pct(s5, n)}   MRR ${(rr / Math.max(n, 1) * 100).toFixed(1)}%`);
   console.log(`  adversarial correctly silent: ${pct(abstained, advs.length)}   <- selectivity is rewarded here`);
+  const sorted = [...lat].sort((a, b) => a - b);
+  const p = (q: number) => (sorted.length ? sorted[Math.floor(sorted.length * q)] : 0);
+  console.log(`  recall latency  p50 ${p(0.5).toFixed(0)}ms  p90 ${p(0.9).toFixed(0)}ms  (n=${sorted.length})`);
   // Retrieval is only half the job. A summary that ranks the right memory first
   // but omits the answer-bearing identifier leaves the agent still needing to go
   // read the code — so the token "saving" is illusory. EFFECTIVE = both.
