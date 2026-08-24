@@ -264,6 +264,25 @@ extraction all see most strongly.
 - **Write in the vocabulary of the future question.** When you imagine asking
   this in three months, what nouns will you use? Use those nouns. Don't
   paraphrase the user's domain language into your own neutral summary.
+- **Name the CATEGORY as well as the specifics — both, always.** Specifics
+  make a memory precise; category words make it *reachable*. A memory that
+  says "private plan memory peaked 88%, scale P1v3 -> P2v3" never says
+  "Azure" or "App Service Plan", so a question asked in those words cannot
+  find it — measured on a real store, that memory was not in the top 40
+  candidates for "azure app service plan capacity increase". Write the
+  system / product / domain nouns (Azure App Service Plan, Freshdesk ticket,
+  MySQL connection pool, ShowConnect scoring) NEXT TO the identifiers.
+  Note this cuts against "pick the most specific topic" above: that rule is
+  about the \`topic\` TAG, not a licence to omit the category from the body.
+  Measured on an 11k-engram store: 94% of tagged memories are missing at
+  least one of their own topical terms from the body, and 66% of those
+  terms never appear in the text at all.
+- **Tags are NOT a substitute for body text.** Only BM25 indexes tags. The
+  embedding is built from \`concept + content\` and the cross-encoder rerank
+  passage is built from \`concept + content\` — neither sees tags. So a word
+  that exists only as a tag is invisible to two of the three retrieval
+  channels, including the one that decides final ordering. Tag it *and*
+  write it.
 - **Reserve canonical for stable invariants.** Decisions, requirements,
   hard facts, cross-agent shared context. Working class (default) is correct
   for findings, observations, and progress notes. The canonical floor is
