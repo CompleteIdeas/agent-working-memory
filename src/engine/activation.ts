@@ -1030,29 +1030,62 @@ export class ActivationEngine {
       if (snippetTokens.length === 0) return content.slice(0, len).trimEnd() + '…';
 
       const lower = content.toLowerCase();
+      // Each hit carries a WEIGHT, not a flat 1.
+      //
+      // Counting every hit equally makes the window land wherever the common
+      // concept words cluster. A real query is concept words plus a rare
+      // identifier ("... division mock d.requires_horse"); in a long memory the
+      // concept words recur throughout while the identifier appears once, so
+      // the densest-by-count window reliably misses the answer. Measured on the
+      // real store: compact@200 delivered the answer only 20.9% of the time.
+      //
+      // AWM_SNIPPET_WEIGHT=rarity weights a hit by 1/(occurrences of that token
+      // in THIS document), so one occurrence of a rare term outweighs many of a
+      // common one. Doc-local: no corpus statistics, no extra queries, no
+      // latency. Default OFF preserves the shipped behaviour exactly.
+      const rarityMode = process.env.AWM_SNIPPET_WEIGHT === 'rarity' || process.env.AWM_SNIPPET_WEIGHT === 'anchor';
       const hits: number[] = [];
+      const hitW: number[] = [];
       for (const tok of snippetTokens) {
+        const positions: number[] = [];
         let from = 0;
         while (true) {
           const idx = lower.indexOf(tok, from);
           if (idx < 0) break;
-          hits.push(idx);
+          positions.push(idx);
           from = idx + tok.length;
         }
+        const w = rarityMode && positions.length > 0 ? 1 / positions.length : 1;
+        for (const pos of positions) { hits.push(pos); hitW.push(w); }
       }
       if (hits.length === 0) return content.slice(0, len).trimEnd() + '…';
-      hits.sort((a, b) => a - b);
+      // Sort positions and weights together.
+      const order = hits.map((h, i) => i).sort((a, b) => hits[a] - hits[b]);
+      const sortedHits = order.map(i => hits[i]);
+      const sortedW = order.map(i => hitW[i]);
+      hits.length = 0; hits.push(...sortedHits);
 
-      // Find the window of size `len` that contains the most hits, by
-      // sliding a window anchored on each hit.
+      // Candidate anchors. Maximising a SUM of weights still lets a tight
+      // cluster of common-word hits outweigh the single rare hit that actually
+      // answers the query — rarity weighting alone moved sufficiency only
+      // 20.9% -> 27.0% on the real store. `anchor` mode instead GUARANTEES the
+      // rarest matched token is inside the window, then picks the best window
+      // among those, so the answer-bearing term cannot be outvoted.
+      const anchorMode = process.env.AWM_SNIPPET_WEIGHT === 'anchor';
+      let anchorIdx: number[] = hits.map((_, i) => i);
+      if (anchorMode) {
+        const rarest = Math.max(...sortedW);              // 1/occurrences: rarest == largest weight
+        const only = anchorIdx.filter(i => sortedW[i] >= rarest - 1e-9);
+        if (only.length > 0) anchorIdx = only;
+      }
+
       let bestStart = hits[0];
-      let bestCount = 0;
-      for (let i = 0; i < hits.length; i++) {
+      let bestCount = -1;
+      for (const i of anchorIdx) {
         const start = Math.max(0, hits[i] - Math.floor(len / 4));
         let count = 0;
-        for (let j = i; j < hits.length; j++) {
-          if (hits[j] - start < len) count++;
-          else break;
+        for (let j = 0; j < hits.length; j++) {
+          if (hits[j] >= start && hits[j] - start < len) count += sortedW[j];
         }
         if (count > bestCount) {
           bestCount = count;

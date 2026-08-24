@@ -57,7 +57,10 @@ async function main() {
   if (!existsSync(SNAP)) { console.error('no snapshot — run node tests/realstore-eval/snapshot.mjs'); process.exit(1); }
   const fx = JSON.parse(readFileSync(FIXTURE, 'utf8'));
   const limit = Number(process.env.REALSTORE_LIMIT ?? fx.items.length);
-  const items: Item[] = fx.items.slice(0, limit);
+  // Held-out slice support: a fix diagnosed on one slice must be confirmed on
+  // data it was not tuned against, or it is just overfitting.
+  const offset = Number(process.env.REALSTORE_OFFSET ?? 0);
+  const items: Item[] = fx.items.slice(offset, offset + limit);
   const advs: Item[] = fx.adversarialItems;
 
   for (const s of ['', '-wal', '-shm']) { try { if (existsSync(WORK + s)) unlinkSync(WORK + s); } catch {} }
