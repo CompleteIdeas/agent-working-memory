@@ -1,0 +1,12 @@
+suite	arm	s@1	s@5	MRR	adversarial	n	note
+category	baseline	56.4	66.2	60.6	90.0	450	pre-2026-08-24 defaults
+category	recommended	63.8	68.4	66.0	90.0	450	rerank2+window+tags
+identifier	baseline	67.3	70.3	68.7	90.0	400	no-regression guard
+identifier	recommended	67.3	70.3	68.7	90.0	400	unchanged as designed
+longmem	baseline	25.0	-	-	-	48	answer-position eval
+longmem	recommended	87.5	-	-	-	48	window+rerank2
+temporal	baseline	58.4	61.4	59.7	-	101	no-cue control
+longmem	baseline	25.0	-	-	-	answer-position eval
+longmem	recommended	87.5	-	-	-	answer-position eval
+temporal	baseline	51.5	-	-	-	no-cue control
+temporal	recommended	58.4	-	-	-	no-cue control

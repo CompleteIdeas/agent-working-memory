@@ -31,12 +31,14 @@ Each eval creates a fresh SQLite database, seeds it with test data, and runs str
 | Production retrieval cost | 9.8× lower aggregate vs file_retrieval | EXCELLENT |
 | **Memory gauntlet** (end-to-end ablation, 2026-07-30) | **AWM 74%±5 vs no-memory 0%** on memory-dependent tasks | BASELINE |
 | **Real-store retrieval** (0.13.x recommended flags, 2026-08-24) | **s@1 56.4% → 63.8%**, adversarial held 90.0% | IMPROVED |
+| **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 81% vs 78% baseline at k=3, CI overlapping | NULL — needs k≥10 |
 
 ## Retrieval quality — the 0.13.x wins (2026-08-24)
 
-Measured on a frozen snapshot of a **real 11,294-engram store**, not a synthetic
-fixture, using `tests/realstore-eval/`. Ground truth is a unique-identifier hold-out
-verified through FTS; correct abstention scores positively.
+**Read the provenance column before quoting a number** — the three results below were
+not measured on the same corpus. The combined figure and the tags result use
+`tests/realstore-eval/`: a frozen snapshot of a real 11,294-engram store, ground truth
+by unique-identifier hold-out verified through FTS, correct abstention scored positively.
 
 Run with all three enabled — they are default-OFF:
 
@@ -44,11 +46,18 @@ Run with all three enabled — they are default-OFF:
 AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
 ```
 
-| Change | Flag | Result |
-|---|---|---|
-| Second-stage rerank | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001 paired McNemar. No extra inference. |
-| Query-aware rerank window | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1, +0.07% CPU, zero added tokens |
-| Tags into rerank passage | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries |
+| Change | Flag | Result | Corpus |
+|---|---|---|---|
+| Second-stage rerank | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001 paired McNemar. No extra inference. | 616 LoCoMo probes (`tests/locomo-eval/`) — ⚠ since retired, see below |
+| Query-aware rerank window | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1, +0.07% CPU, zero added tokens | Generated corpus (`tests/longmem-eval/corpus.ts`), shaped to real-store statistics, answer at a controlled offset |
+| Tags into rerank passage | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries | 450 probes, frozen real-store snapshot (`tests/realstore-eval/`) |
+
+The LoCoMo-derived +9.7pp is reported as-measured rather than dropped: LoCoMo's short
+passages are precisely why it could not detect the 400-char truncation, and that blind
+spot is what made the standalone `AWM_RERANK2` recommendation wrong. The generated
+long-memory corpus is calibrated to measured real-store statistics (canonical memories
+median 1,965 chars, 98.7% over 400) but is constructed, not sampled — it isolates the
+truncation cliff by planting the answer at a known offset, which a real corpus cannot do.
 
 **Combined**, 450 category probes on `fixture-category.json`:
 
@@ -117,6 +126,25 @@ bleed** across four parallel-shaped client accounts.
 fixes — six of nine probes at 100%; no-memory control 0%. Full methodology, per-probe
 mechanism table, six-config flag ablation, known-gap signatures, and repro commands:
 [`docs/archive/gauntlet-baseline-2026-07-30.md`](archive/gauntlet-baseline-2026-07-30.md).
+
+**2026-08-25 re-run on 0.13.6 — NULL RESULT.** The 0.13.x retrieval flags
+(`AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1`) went through this
+acceptance test and did not move it:
+
+| arm | k | pass rate |
+|---|---|---|
+| baseline | 1 | 89% |
+| +flags | 1 | 78% |
+| baseline | 3 | 78% |
+| **+flags** | **3** | **81% ± 5pp, CI [78,89]** (reps 89/78/78) |
+
+Confidence intervals overlap, `multihop` scored 0/6 in **both** arms, and four probes
+flip between identical runs — so the harness variance at this sample size is larger than
+the effect being looked for. Retrieval-layer s@1 improved measurably (+7.4pp on the real
+store); whether that converts into end-to-end task success is **unresolved**. A k≥10 run
+(~$5/arm) is what would settle it, and is the outstanding follow-up. Recording this
+because a retrieval change passing through the standing acceptance test without moving
+it is exactly the result most likely to go unmentioned.
 
 ## Eval Details
 

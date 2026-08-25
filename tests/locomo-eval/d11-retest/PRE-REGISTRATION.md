@@ -77,7 +77,7 @@ Positive control required before arm 3 is interpreted at all:
 ## Adjudication
 
 If arm 4 regresses, that is the third regression under the rule recorded in
-`docs/design-proposals-2026-07-30.md` D11. **Parking the feature permanently is
+`docs/archive/design-proposals-2026-07-30.md` D11. **Parking the feature permanently is
 Robert's decision, not this run's.** Report the attribution table, state plainly
 that the rule's condition is met, and leave the call to him.
 

@@ -141,22 +141,30 @@ store grows and ages?
 
 ### 1 · The 0.13.x retrieval wins
 
-Three changes shipped in 0.13.4–0.13.6, each measured against a frozen snapshot of a
-**real 11,294-engram store** rather than a synthetic fixture. Enable all three together:
+Three changes shipped in 0.13.4–0.13.6. Each row names **the corpus it was measured
+on** — they are not the same, and the difference matters. Enable all three together:
 
 ```bash
 AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
 ```
 
-| Change | Flag | Measured result |
-|---|---|---|
-| **Second-stage rerank** — let the cross-encoder's own score decide final order, instead of a blend that capped its vote at 70% | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001, paired McNemar. Costs no extra inference — the scores already existed and were being partly discarded. |
-| **Query-aware rerank window** — spend the same 400-char budget on the window densest in query terms instead of the prefix | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1 (3.5×), at **+0.07%** CPU and **zero** added tokens. |
-| **Tags into the rerank passage** — put words that exist only as tags in front of the component that decides | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries. |
+| Change | Flag | Measured result | Measured on |
+|---|---|---|---|
+| **Second-stage rerank** — let the cross-encoder's own score decide final order, instead of a blend that capped its vote at 70% | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001, paired McNemar. Costs no extra inference — the scores already existed and were being partly discarded. | 616 LoCoMo probes — ⚠ the benchmark retired below |
+| **Query-aware rerank window** — spend the same 400-char budget on the window densest in query terms instead of the prefix | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1 (3.5×), at **+0.07%** CPU and **zero** added tokens. | Generated long-memory corpus, calibrated to real-store statistics, answer planted at a controlled offset |
+| **Tags into the rerank passage** — put words that exist only as tags in front of the component that decides | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries. | 450 probes on a **frozen real-store snapshot** |
 
-Combined, over 450 category probes: **s@1 56.4 → 63.8%**, **s@5 66.2 → 68.4%**,
-**MRR 60.6 → 66.0%** — with adversarial abstention held at **90.0%** in every arm.
-Selectivity was not traded away to buy accuracy.
+**Combined, on the real store** (450 category probes, frozen 11,294-engram snapshot):
+**s@1 56.4 → 63.8%**, **s@5 66.2 → 68.4%**, **MRR 60.6 → 66.0%** — with adversarial
+abstention held at **90.0%** in every arm. Selectivity was not traded away to buy accuracy.
+
+> **On the +9.7pp figure.** It comes from LoCoMo, which this page retires two sections
+> below. Reported as-measured rather than quietly dropped, because the provenance is part
+> of the story: LoCoMo's short passages are exactly why it could not see the 400-char
+> truncation, and that blind spot is what made the standalone `AWM_RERANK2`
+> recommendation wrong. The combined real-store number above is the one to trust.
+
+> **End-to-end, this did not move the acceptance test.** See the gauntlet row below.
 
 > **⚠ Enable them together.** `AWM_RERANK2` *alone* regresses long-memory s@5 from
 > 91.7% to 25.0%. BM25 over full content had been quietly compensating for the
@@ -180,11 +188,17 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 | **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Unit + subsystem** | `test:run` **569/569** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control**; only the memory substrate varies | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
+| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — 81% vs 78% baseline at k=3, confidence intervals overlapping | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
 | **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Token economics** | **9.8× lower** aggregate cost than the Read/Grep/Glob rediscovery it replaces | [`docs/benchmarks.md`](docs/benchmarks.md) |
 
-Two numbers are easy to misread, so they are stated plainly:
+**The retrieval gains above have not yet shown up end-to-end.** Re-running the gauntlet
+on 0.13.6 gave 81% with the flags vs 78% without at k=3 (±5pp, CI [78,89]) — a null
+result, with `multihop` at 0/6 in both arms and four probes flipping between identical
+runs. Ranking improved measurably at the retrieval layer; whether that converts into
+task success at this sample size is unresolved, and a k≥10 run is what would settle it.
+
+Two other numbers are easy to misread, so they are stated plainly:
 
 - **`test:sleep` = 78.6% is a consolidation-*quality* score**, not recall falling to
   78.6%. It asks "after the maintenance pass, is recall at least as good and the
@@ -517,7 +531,9 @@ All three ML models run locally via ONNX. No external API calls for retrieval. T
 
 ## What's New in v0.13.x (latest)
 
-Retrieval-quality releases, all measured on a real store, all additive.
+Retrieval-quality releases, all additive. Corpus provenance differs per result and is
+named in [Benchmarks](#benchmarks) — only the tags result and the combined figure come
+from a real-store snapshot.
 
 - **Second-stage rerank (`AWM_RERANK2`)** — final order was a blend that capped the
   cross-encoder at 70% of the vote. It disagrees with that blend about rank 1 on 38.6%

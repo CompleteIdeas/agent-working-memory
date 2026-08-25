@@ -1,7 +1,7 @@
 /**
  * Abstention evaluation — what should `require_confidence` default to?
  *
- * H3 in docs/improvement-hypotheses-2026-08-23.md proposes making abstention the
+ * H3 in docs/archive/improvement-hypotheses-2026-08-23.md proposes making abstention the
  * default. That is a behaviour change with a real downside — abstain too eagerly
  * and AWM goes quiet on queries it could have answered — so the threshold should
  * come from measurement, not intuition. This sweeps it and prints the trade.

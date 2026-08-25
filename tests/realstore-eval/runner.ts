@@ -64,7 +64,24 @@ async function main() {
   // Held-out slice support: a fix diagnosed on one slice must be confirmed on
   // data it was not tuned against, or it is just overfitting.
   const offset = Number(process.env.REALSTORE_OFFSET ?? 0);
-  const items: Item[] = fx.items.slice(offset, offset + limit);
+  // DETERMINISTIC SHUFFLE before slicing. The fixture is written in goldId
+  // order, so `slice(0, n)` is a biased PREFIX, not a sample — measured, 60
+  // prefix probes gave s@1 41.7% where 450 gave 56.4%, which reads as noise but
+  // is actually a different query population. A seeded shuffle makes a small n
+  // representative, so short runs are comparable to long ones and to each
+  // other. The seed is fixed, so the sample is identical across arms.
+  const seeded = (arr: Item[], seed = 1337): Item[] => {
+    const a = [...arr];
+    let x = seed;
+    for (let i = a.length - 1; i > 0; i--) {
+      x = (x * 1664525 + 1013904223) >>> 0;          // LCG — reproducible
+      const j = x % (i + 1);
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  };
+  const pool: Item[] = process.env.REALSTORE_NO_SHUFFLE === '1' ? fx.items : seeded(fx.items);
+  const items: Item[] = pool.slice(offset, offset + limit);
   // Adversarial probes are generic absent-fact queries, valid for ANY fixture —
   // fall back to the identifier fixture's set so the selectivity guard still
   // runs when a fixture (e.g. category) does not define its own.
