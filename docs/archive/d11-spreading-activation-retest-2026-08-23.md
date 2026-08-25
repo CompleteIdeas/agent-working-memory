@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-23
 **Verdict:** **Does not earn default-ON.** Under the three-strikes rule in
-`docs/design-proposals-2026-07-30.md` D11, this is the third regression.
+`design-proposals-2026-07-30.md` D11, this is the third regression.
 **The decision to park permanently is Robert's, not this run's.**
 
 ---

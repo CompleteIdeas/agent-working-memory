@@ -100,7 +100,7 @@ regression elsewhere — entirely via follow-up single-hop recalls, AWM unchange
 
 **Validated (gauntlet 2026-07-30):** the entity-index config scored 74%±5pp memory-dependent
 (best floor and tightest CI of six configs; six of nine probes at 100%) — see
-`docs/gauntlet-baseline-2026-07-30.md` for the ablation and known-gap signatures.
+`docs/archive/gauntlet-baseline-2026-07-30.md` for the ablation and known-gap signatures.
 
 ---
 

@@ -137,96 +137,72 @@ Two structural advantages a file or a flat vector store cannot match:
 Two kinds of tests, both reproducible (see [Testing & Evaluation](#testing--evaluation)).
 First, **recall quality** — does the pipeline return the right memory? Second,
 **behavior under stress** — does it stay honest, filter noise, and hold up as the
-store grows and ages? Numbers below were last re-run on the 0.9-staged line
-(2026-06-17) — the retrieval pipeline itself is unchanged since, but re-run these
-yourself (`npm run eval`) if you want current-build numbers; 0.12.x added
-reliability/telemetry/entity-index work on top, not retrieval-scoring changes.
-See [`docs/gauntlet-baseline-2026-07-30.md`](docs/gauntlet-baseline-2026-07-30.md)
-for the newer end-to-end memory-ablation acceptance test (74%±5pp memory-dependent
-vs 0% no-memory control).
+store grows and ages?
 
-### 1 · Recall quality (eval harness)
+### 1 · The 0.13.x retrieval wins
 
-Each suite has a pass threshold; all four pass.
+Three changes shipped in 0.13.4–0.13.6, each measured against a frozen snapshot of a
+**real 11,294-engram store** rather than a synthetic fixture. Enable all three together:
 
-| Suite | Score | Threshold | What it measures |
-|-------|-------|-----------|------------------|
-| Retrieval | **Recall@5 = 0.980** | ≥ 0.80 | 200 facts, 50 queries — does the BM25 + vector + reranker pipeline surface the right fact in the top 5? |
-| Associative | **success@10 = 1.000** | ≥ 0.70 | 20 multi-hop causal chains — does the graph walk find non-obvious connections? |
-| Redundancy | **dedup F1 = 0.966** | ≥ 0.80 | 50 clusters × 4 paraphrases — does consolidation merge duplicates without losing the original? |
-| Temporal | **Spearman = 0.932** | ≥ 0.75 | 25 facts with controlled age/access — does ACT-R decay rank recent/used memories ahead of stale ones? |
+```bash
+AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
+```
 
-### 2 · Behavior under stress & adversarial conditions
+| Change | Flag | Measured result |
+|---|---|---|
+| **Second-stage rerank** — let the cross-encoder's own score decide final order, instead of a blend that capped its vote at 70% | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001, paired McNemar. Costs no extra inference — the scores already existed and were being partly discarded. |
+| **Query-aware rerank window** — spend the same 400-char budget on the window densest in query terms instead of the prefix | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1 (3.5×), at **+0.07%** CPU and **zero** added tokens. |
+| **Tags into the rerank passage** — put words that exist only as tags in front of the component that decides | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries. |
 
-These are graded suites (not pass/fail). The headline risk they guard against is a
-memory system that confidently returns the *wrong* thing — so the weakest area is
-called out, not hidden.
+Combined, over 450 category probes: **s@1 56.4 → 63.8%**, **s@5 66.2 → 68.4%**,
+**MRR 60.6 → 66.0%** — with adversarial abstention held at **90.0%** in every arm.
+Selectivity was not traded away to buy accuracy.
 
-| Suite | Score | What it measures |
-|-------|-------|------------------|
-| `test:run` (unit) | **569 / 569** | Salience, decay, Hebbian, supersession, coordination, scheduler |
-| `test:self` | **93.9% (EXCELLENT)** | Every cognitive subsystem end-to-end; weakest = exact-topic retrieval |
-| `test:workday` | **85.4% (GOOD)** | A realistic mixed day — 43 memories across 4 projects, cross-cutting queries; weakest = noise filtering |
-| `test:edge` | **~32 / 34** | Named failure modes: identity collision, contradiction trapping, bridge overshoot, false generalization |
-| `test:ab` | **AWM 10 / 11 vs keyword baseline 8 / 11** | Where the cognitive pipeline beats plain keyword search |
-| `test:pilot` | **14 / 15** (5/5 noise rejected) | Production-like queries that must reject planted distractors |
-| `test:locomo` | **25.7%** | LoCoMo conversational-memory benchmark (a *chatbot* benchmark — see note) |
-| `test:mcp` | **5 / 5** | MCP protocol smoke: write, recall, feedback, retract, stats |
+> **⚠ Enable them together.** `AWM_RERANK2` *alone* regresses long-memory s@5 from
+> 91.7% to 25.0%. BM25 over full content had been quietly compensating for the
+> reranker's 400-char blindness; making a blind reranker authoritative removes that
+> cover. Ship both, or neither.
 
-> **On LoCoMo (25.7%):** LoCoMo measures *chatbot* recall ("what did we say about X"
-> across long conversations). It is not the workload AWM is tuned for (productivity /
-> engineering, staying on topic, rejecting noise), and ~66% of AWM's misses there are
-> retriever-coverage (the gold turn isn't in the top-10), not extraction. The 0.9 recall
-> work lifted it from 22.7% with every category up. We report it for comparability, not
-> as the headline.
+The finding underneath all three: **a memory is unreachable when a word it needs was
+never written into its body.** On this store, 66.2% of topical tag terms never appear
+in the text at all. Three other approaches to the same defect were tested and
+rejected — re-embedding with tags (+0.3pp), mined dialect aliases (−0.2pp), and a
+larger 768d embedder (+0.7pp alone, −1.1pp combined). You cannot recover a word that
+was never written; you can only put the word that *is* recorded in front of the ranker.
+That is also why 0.13.6 rewrote the **writing guidance**, not just the ranker.
 
-### 3 · The sleep cycle (consolidation)
+Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/README.md).
 
-The **sleep cycle** is AWM's offline maintenance pass (the term is borrowed from how
-human memory consolidates during sleep). On each cycle it **clusters** related
-memories, builds **cross-topic bridges**, **strengthens** co-used edges, **decays**
-unused ones, and **prunes** duplicates. You run it so the association graph stays
-*healthy and navigable* as the store grows — without it, edges accumulate into noise.
+### 2 · Everything else, in one table
 
-> **Reading the score:** `test:sleep` = **78.6%** is a *consolidation-quality* score —
-> it asks "after the maintenance pass, is recall at least as good and is the structure
-> better?" **It is not recall falling to 78.6%.** In this fixture recall is held flat
-> across three cycles (78.6% before = 78.6% after) while the graph reorganizes. The
-> scaling picture is the real proof:
+| What | Result | Detail |
+|---|---|---|
+| **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| **Unit + subsystem** | `test:run` **569/569** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control**; only the memory substrate varies | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
+| **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| **Token economics** | **9.8× lower** aggregate cost than the Read/Grep/Glob rediscovery it replaces | [`docs/benchmarks.md`](docs/benchmarks.md) |
 
-| Under a 100-cycle stress run | Observed |
-|---|---|
-| Recall across cycles | **holds 90–100%** (no catastrophic forgetting) |
-| Cross-topic recall | **~80%**, stable |
-| Graph self-pruning | edges grow to ~2,300 then prune back to ~1,500 as unused links decay |
-| Clusters / bridges per cycle | ~10 clusters, bridges formed early then settle |
+Two numbers are easy to misread, so they are stated plainly:
 
-So consolidation *protects* recall over the long run — the per-cycle score measures the
-health of the maintenance, and the stress run shows recall doesn't degrade.
+- **`test:sleep` = 78.6% is a consolidation-*quality* score**, not recall falling to
+  78.6%. It asks "after the maintenance pass, is recall at least as good and the
+  structure better?" Recall is held flat across three cycles while the graph reorganizes.
+- **Token savings depend entirely on the baseline you pick.** vs carrying the full
+  history (what a memoryless agent must actually do): **+67% at 97.5% accuracy**. vs an
+  oracle that pre-scoped context to the exactly-relevant task: **≈ −13%** — a
+  deliberately brutal bar that hands the baseline the very scoping retrieval exists to
+  do. 0.13.x added a third and stricter measure, **sufficiency**: does the delivered
+  text actually *contain* the answer, or merely point at it?
 
-### 4 · Token economics — honest
-
-The win that matters is **structural**: at the scale AWM targets you can't carry the
-project at all (see [Why it matters at scale](#why-it-matters-at-scale)). On real coding
-sessions, scoped recall costs **9.8× less in aggregate** than the Read/Grep/Glob
-rediscovery it replaces (`scripts/measure-claude-vs-awm.ts`).
-
-The per-turn micro-benchmark (`test:tokens`) reports against **two** baselines, because the
-baseline you pick *is* the result:
-
-- **vs carrying the full history** (what a memoryless agent must actually do — it can't know
-  which past turn matters): **+67% savings at 97.5% recall accuracy.** This is the honest,
-  apples-to-apples number.
-- **vs an oracle that pre-scoped context to the exactly-relevant task**: **≈ −13%.** A
-  deliberately brutal bar — it gives the baseline the very scoping that retrieval exists to do —
-  and on a tiny 6–8-turn task a fixed top-5 recall is break-even-to-negative *by construction*.
-
-An earlier build reported ~56% on the oracle bar, but that was an **artifact**: pre-v0.8.5,
-reinforce-on-duplicate silently *discarded* memory content, so recalls were artificially tiny.
-v0.8.5 fixed the data loss (accuracy ~72% → 97.5%); better recall now fills all five slots,
-which *lowers* the oracle-bar number while *raising* correctness. Net: the at-scale structural
-win above is the real story; the oracle bar shows AWM roughly matches perfect manual scoping
-even on a corpus far too small to play to its strengths.
+> **LoCoMo was retired in 0.13.x.** It was useful for learning how to benchmark this
+> product but does not represent it: median 115-char passages against a real store's
+> 1,965; seeded in one shot, so decay, Hebbian weights and salience contribute nothing;
+> no supersession, no cross-session use; it *rewards* indiscriminate retention, so the
+> salience filter — the product — caps its score regardless of ranking quality; and it
+> is structurally blind to the 400-char truncation that turned out to affect 79% of real
+> ground-truth identifiers. `tests/realstore-eval/` replaces it.
 
 ---
 
@@ -361,71 +337,32 @@ awm serve                    # From npm install
 npx tsx src/index.ts         # From source
 ```
 
-Write a memory:
-
 ```bash
-curl -X POST http://localhost:8400/memory/write \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agentId": "my-agent",
-    "concept": "Express error handling",
-    "content": "Use centralized error middleware as the last app.use()",
-    "eventType": "causal",
-    "surprise": 0.5,
-    "causalDepth": 0.7
-  }'
+# Write
+curl -X POST http://localhost:8400/memory/write -H "Content-Type: application/json" -d '{
+  "agentId": "my-agent",
+  "concept": "Express error handling",
+  "content": "Use centralized error middleware as the last app.use()",
+  "eventType": "causal", "surprise": 0.5, "causalDepth": 0.7
+}'
+
+# Recall
+curl -X POST http://localhost:8400/memory/activate -H "Content-Type: application/json" -d '{
+  "agentId": "my-agent",
+  "context": "How should I handle errors in my Express API?"
+}'
 ```
 
-Recall:
+**Substrate primitives (0.8+)** — for long-running structured projects (novels,
+codebases, investigations) where an agent tracks typed state across hundreds of writes
+without polluting cognitive retrieval: `/memory/latest-by-tag` (latest per tag key),
+`/memory/top-by` (native filter + sort), `/memory/supersede` (atomic write-and-supersede
+by concept match), `/memory/sequence/:agentId/next` (race-free chronology). The
+`memory_class: "structural"` class keeps high-volume system-written records out of
+cognitive `/activate` while preserving them at canonical salience.
 
-```bash
-curl -X POST http://localhost:8400/memory/activate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "agentId": "my-agent",
-    "context": "How should I handle errors in my Express API?"
-  }'
-```
-
-### Substrate primitives (new in 0.8)
-
-For long-running structured projects — novels, codebases, investigations,
-design docs — where the agent needs to track typed state across hundreds
-of writes without polluting cognitive retrieval. Full reference at
+Every endpoint, with request/response schemas and worked examples:
 [`docs/reference.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md).
-
-```bash
-# "Latest emotional state per character" — one round trip
-curl -X POST http://localhost:8400/memory/latest-by-tag -d '{
-  "agentId": "novel-x", "tagKey": "character=",
-  "scopeTagsAll": ["topic=emotional-state"], "sortBy": "sequence"
-}'
-
-# "Top 40 active promises by weight, excluding resolved" — filter + sort native
-curl -X POST http://localhost:8400/memory/top-by -d '{
-  "agentId": "novel-x", "sortField": "weight=", "order": "desc",
-  "filterTagsAll": ["topic=promise", "state=active"],
-  "filterTagsNone": ["kind=advancement"], "limit": 40
-}'
-
-# Atomic write-and-supersede by concept match (Form B)
-curl -X POST http://localhost:8400/memory/supersede -d '{
-  "agentId": "novel-x",
-  "matchConcept": "Mara's deferred disclosure",
-  "newEngram": {
-    "concept": "Mara's disclosure — RESOLVED in Ch 3",
-    "content": "...", "memory_class": "structural"
-  }
-}'
-
-# Race-free chronology
-curl http://localhost:8400/memory/sequence/novel-x/next
-```
-
-New `memory_class: "structural"` keeps high-volume system-written records
-(chapter analyses, promise advancements, commit logs) out of cognitive
-`/activate` while preserving them with canonical-level salience. See the
-[CHANGELOG entry for 0.8.0](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for the full design.
 
 ---
 
@@ -491,76 +428,75 @@ For detailed architecture including pipeline phases, database schema, and system
 
 ## Testing & Evaluation
 
-### Unit Tests
-
 ```bash
-npx vitest run    # 77 tests (salience, decay, hebbian, supersession)
+npx vitest run                      # Unit: salience, decay, hebbian, supersession
+npm run eval                        # 4 benchmark suites
+npm run eval -- --suite=retrieval   # One suite
+npm run eval -- --bm25-only         # Ablation: isolate a channel's contribution
 ```
 
-### Eval Harness (v0.6.0)
+### Real-store benchmark (0.13.x — replaces LoCoMo)
+
+Measures the pipeline against a **frozen snapshot of a real store**, so passage lengths,
+decay, supersession and Hebbian weights are all real rather than synthetic. Ground truth
+is a unique-identifier hold-out verified through FTS, so it needs no hand labeling. And
+correct **abstention scores positively** — selectivity is the product, so a benchmark
+that punishes silence is measuring the wrong system.
 
 ```bash
-npm run eval                        # All 4 benchmark suites
-npm run eval -- --suite=retrieval   # Single suite
-npm run eval -- --bm25-only         # Ablation: BM25 only
-npm run eval -- --no-graph-walk     # Ablation: disable graph walk
+node tests/realstore-eval/snapshot.mjs          # freeze a copy of the live store
+npx tsx tests/realstore-eval/runner.ts          # identifier fixture (regression guard)
+REALSTORE_FIXTURE=fixture-category.json \
+  npx tsx tests/realstore-eval/runner.ts        # category fixture (retrievability)
+bash tests/realstore-eval/campaign/full-comparison.sh   # baseline vs recommended, all suites
 ```
 
-Suites: retrieval (Recall@5), associative (multi-hop), redundancy (dedup F1), temporal (Spearman vs ACT-R). Ablation flags isolate each pipeline component's contribution.
+Each run works on a **copy** — activation mutates access counts, and a benchmark must
+not drift the thing it measures. The runner prints the active flag fingerprint, so every
+result records which configuration produced it.
 
-### Full Test Suite
-
-```bash
-npm run test:mcp      # MCP protocol smoke test (5/5)
-npm run test:self     # Pipeline component checks (94.1%)
-npm run test:edge     # 9 adversarial failure modes
-npm run test:stress   # 500 memories, 100 consolidation cycles (96.2%)
-npm run test:workday  # 4-session production simulation (93.3%)
-npm run test:ab       # AWM vs baseline comparison
-npm run test:sleep    # Consolidation impact measurement
-npm run test:tokens   # Token savings analysis (56.3% savings)
-npm run test:pilot    # Production-like query validation (14/15)
-npm run test:locomo   # LoCoMo industry benchmark (28.2%)
-```
+Per-suite methodology, scoring, and the remaining `test:*` scripts:
+[`docs/benchmarks.md`](docs/benchmarks.md).
 
 ---
 
 ## Environment Variables
 
+**Recommended recall configuration (0.13.x)** — default-OFF, but measured wins. Enable
+all three together (see [Benchmarks](#benchmarks)):
+
+```bash
+AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
+```
+
+| Variable | Effect |
+|---|---|
+| `AWM_RERANK2=1` | Second-stage reorder of the returned window by cross-encoder score alone, after the abstention gate. **+9.7pp s@1.** Must be paired with `AWM_RERANK_WINDOW=query` |
+| `AWM_RERANK_WINDOW=query` | Spend the rerank char budget on the window densest in query terms instead of the first N chars. **25% → 87.5%** long-memory s@1 |
+| `AWM_RERANK_TAGS=1` | Append structured tags to the rerank passage, so category words that exist only as tags reach the deciding stage. **+7.4pp s@1** |
+
+Verify what a running process actually has — `memory_whoami` prints a `Recall config:`
+line and `GET /health` reports the same fingerprint. A submodule bump can report a new
+version while the flags never reached the process; on version alone that looks like success.
+
+**Core settings:**
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `AWM_PORT` | `8400` | HTTP server port |
-| `AWM_DB_PATH` | `memory.db` | SQLite database path |
-| `AWM_AGENT_ID` | `claude-code` | Agent ID (memory namespace) |
-| `AWM_EMBED_MODEL` | `Xenova/bge-small-en-v1.5` | Embedding model (retrieval-optimized) |
-| `AWM_EMBED_DIMS` | `384` | Embedding dimensions |
-| `AWM_RERANKER_MODEL` | `Xenova/ms-marco-MiniLM-L-6-v2` | Reranker model |
-| `AWM_HOOK_PORT` | `8401` | Hook sidecar port |
-| `AWM_HOOK_SECRET` | *(none)* | Bearer token for hook auth |
-| `AWM_API_KEY` | *(none)* | Bearer token for HTTP API auth |
-| `AWM_INCOGNITO` | *(unset)* | Set to `1` to disable all tools |
-| `AWM_COORDINATION` | *(unset)* | Set to `true` to enable hive coordination endpoints |
-| `AWM_DISABLE_POOL_FILTER` | *(unset)* | Set to `1` to disable the candidate pool reduction (0.7.7+). Reverts recall to scoring all active candidates — slower but useful for A/B testing if a recall regression appears |
-| `AWM_DISABLE_SLIM_CACHE` | *(unset)* | Set to `1` to disable the in-memory slim cache (0.7.10+). Reverts to per-recall SQL fetch — slower but useful if cache invariants are suspected of drift |
-| `AWM_DISABLE_RERANK_SKIP` | *(unset)* | Set to `1` to disable the reranker skip on clear-winner queries (0.7.10+). Forces every recall through the cross-encoder |
-| `AWM_DISABLE_EXPANSION_CACHE` | *(unset)* | Set to `1` to disable the query expansion skip heuristic + LRU cache (0.7.11+). Forces every recall through the flan-t5-small expander |
+| `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path — file for SQLite, directory for PGlite |
+| `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (WAL, multi-process safe) · `pglite` (single-process) · `postgres` (networked, **experimental**) |
+| `AWM_AGENT_ID` | `claude-code` | Agent id — the memory namespace. Pin it explicitly; an unpinned session lands in a per-directory UUID space nothing else can recall |
 | `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
-| `AWM_SLOW_WRITE_MS` | `250` | Slow-write telemetry threshold in ms; any write over this logs one stderr line with a phase-time breakdown (embed/novelty/persist, event-loop lag, cold-load ms). `0` disables (v0.12.0) |
-| `AWM_ENTITY_INDEX_FETCH` | *(unset)* | Set to `1` to let query-named entities ("ticket 19252", a person's name) resolve through the entity inverted index for a guaranteed reranker audition, including alias hops. Default off pending broader eval (v0.12.0) |
-| `AWM_ENTITY_INDEX_CAP` | `12` | Max entity-index candidates injected per recall when `AWM_ENTITY_INDEX_FETCH=1` (v0.12.0) |
-| `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (better-sqlite3 + FTS5), `pglite` (PGlite + pgvector + pgroonga), or `postgres` (node-postgres + pgvector, networked/multi-connection — **experimental**, 0.10.0). |
-| `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path. Directory for PGlite, file for SQLite. Ignored for `postgres` (uses `AWM_DATABASE_URL`). |
-| `AWM_DATABASE_URL` | *(unset)* | Postgres connection string when `AWM_STORE_BACKEND=postgres` (0.10.0). |
-| `AWM_CONF_SHARPNESS_W` | `0.4` | Weight of `top1 / mean(top5)` in recall confidence (PR-1, v0.8.5) |
-| `AWM_CONF_CLIFF_W` | `0.3` | Weight of `(top1 - top10) / top1` in recall confidence (PR-1, v0.8.5) |
-| `AWM_CONF_FLOOR_W` | `0.3` | Weight of `top1` absolute score in recall confidence (PR-1, v0.8.5) |
-| `AWM_FADE_DAYS_SINCE_ACCESS` | `45` | Days without access before a stale active engram fades (v0.8.5) |
-| `AWM_FADE_KEEP_CHARS` | `150` | Chars retained in faded engram content (v0.8.5) |
-| `AWM_FADE_MIN_CONTENT_LEN` | `250` | Don't fade engrams shorter than this — nothing to trim (v0.8.5) |
-| `AWM_FADE_MAX_PER_CYCLE` | `25` | Max engrams faded per consolidation cycle — gradual, not sudden (v0.8.5) |
-| `AWM_GRANULARITY_COMPACT_LEN` | `200` | Char cap for `granularity: 'compact'` summaries (v0.8.5) |
-| `AWM_GRANULARITY_FULL_LEN` | `1000` | Char cap for top result under `granularity: 'auto'` when confidence ≥ threshold (v0.8.5) |
-| `AWM_GRANULARITY_AUTO_THRESHOLD` | `0.4` | Recall-confidence threshold above which `'auto'` granularity gives the top result a long-form summary (v0.8.5) |
+| `AWM_PORT` / `AWM_HOOK_PORT` | `8400` / `8401` | HTTP server and hook sidecar ports |
+| `AWM_API_KEY` / `AWM_HOOK_SECRET` | *(none)* | Bearer tokens. Binding beyond loopback without an API key fails closed |
+| `AWM_INCOGNITO` | *(unset)* | `1` disables all tools |
+| `AWM_EMBED_MODEL` / `AWM_EMBED_DIMS` | `Xenova/bge-small-en-v1.5` / `384` | ⚠ `cosineSimilarity` returns **0** on dimension mismatch — migrate the whole corpus or not at all |
+
+Every variable — including the salience, decay, fade, confidence, granularity and
+diagnostic knobs, each with its measured effect and the **rejected** experiments and why
+they lost — is documented in [`docs/reference.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md).
+
+---
 
 ## Tech Stack
 
@@ -579,44 +515,48 @@ npm run test:locomo   # LoCoMo industry benchmark (28.2%)
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.12.x (latest)
+## What's New in v0.13.x (latest)
 
-Three releases (0.12.0-0.12.2), eval-driven. All additive, no breaking API changes.
+Retrieval-quality releases, all measured on a real store, all additive.
 
-- **Instance identity (`memory_whoami`)** — agent id, workspace, mode, backend, store
-  path, code provenance, sibling agent spaces. Call it first whenever you're unsure
-  which store or which running code you're talking to.
-- **Entity inverted index** — structured identifier tags (`ticket=`, `person=`, bare
-  ids) feed an exact-match index. A query naming an entity resolves through it even
-  when the wording doesn't lexically match. Default off (`AWM_ENTITY_INDEX_FETCH=1`),
-  guaranteed reranker audition, no score boost.
-- **Local-first security defaults** — HTTP binds `127.0.0.1` by default; widening
-  beyond loopback without `AWM_API_KEY` fails closed.
-- **Write-path telemetry** — always-on slow-write attribution (`AWM_SLOW_WRITE_MS`,
-  default 250ms) names the phase, event-loop lag, and cold-load cost on any write
-  that's slow enough to matter.
-- **Memory spine (provenance)** — `origin_class`, `recipe_id`, `valid_from`/`valid_to`
-  on every write. `valid_to` expires operational facts instead of relying on the
-  reader to notice they're stale; recall renders `[valid until ...]` on results
-  carrying it.
-- **Cognition recipes** — AWM contains no LLM. When memory needs real thinking
-  (distilling a procedure, reflecting on a failure), `memory_task_end` hands the host
-  agent a versioned prompt+contract pair (`skill-derivation@1`, `friction-lesson@1`)
-  to run as its own focused pass, then validates the write-back.
-- **Recall results carry engram ids** (`[id: <uuid>]`) — feed a recalled memory
-  straight into `memory_supersede`/`memory_feedback` with no separate lookup.
-- **Eager warm at MCP startup + sidecar warm recall** — model load overlaps session
-  start instead of your first message; the hook sidecar gained `POST /memory/activate`
-  for ~0.8s warm recall from a hook, with no standing server needed.
-- **Gauntlet baseline** — end-to-end memory ablation now anchors acceptance:
-  **74%±5pp memory-dependent vs 0% no-memory control**, six of nine probes at 100%.
-  See [`docs/gauntlet-baseline-2026-07-30.md`](docs/gauntlet-baseline-2026-07-30.md).
+- **Second-stage rerank (`AWM_RERANK2`)** — final order was a blend that capped the
+  cross-encoder at 70% of the vote. It disagrees with that blend about rank 1 on 38.6%
+  of queries, and where the disagreement is decidable **the cross-encoder is right 77%
+  of the time**. Re-sorting by its score: **+9.7pp s@1**, no added inference. Placed
+  after the abstention gate so it cannot affect selectivity — predicted 0 broken / 0
+  fixed on adversarial, and measured exactly that.
+- **Query-aware rerank window (`AWM_RERANK_WINDOW=query`)** — truncating passages to
+  the first 400 chars is necessary (cross-encoders pad to the longest passage in a
+  batch), but a *prefix* is the wrong 400. Real canonical memories are median 1,965
+  chars, 98.7% exceed 400, and **99.9%** of long ones carry their identifiers only
+  past char 400. Same budget, densest window: **25% → 87.5%**.
+- **`memory_whoami` reports the effective recall config** — version alone does not
+  answer "what am I actually running". This caught a real deployment failure the day
+  it shipped: a project-level `.mcp.json` was overriding the config being edited, so
+  the new version reported success while the flags never reached the process.
+- **Tags into the rerank passage (`AWM_RERANK_TAGS`)** — **+7.4pp s@1**, with no
+  re-embed, no new model and no write-path change; existing corpora benefit immediately
+  because the tags are already stored.
+- **Writing guidance corrected at the source** — the shipped advice was *causing* the
+  problem it warned about. "Pick the most specific topic" pushed authors away from
+  category words, reliably producing memories that are maximally specific and
+  categorically anonymous. Two new rules: **name the CATEGORY as well as the
+  specifics**, and **tags are not a substitute for body text** (only BM25 indexes tags —
+  the embedding and the rerank passage are both built from `concept + content`, so a
+  tag-only word is invisible to two of three channels, including the one that now
+  decides ordering).
+
+### Previously, in v0.12.x
+
+`memory_whoami` instance identity · entity inverted index (`AWM_ENTITY_INDEX_FETCH=1`,
+opt-in) · local-first security defaults (loopback bind, fail-closed without an API key)
+· write-path slow-write telemetry · memory-spine provenance (`origin_class`,
+`valid_from`/`valid_to`) · cognition recipes at `memory_task_end` · engram ids in
+recall results · eager warm at MCP startup + sidecar warm recall.
 
 Full version-by-version history — every release back to v0.6.0, including the
 0.7.6→0.7.14 latency work (11s→300ms) and the 0.8.5 recall-quality hardening pass —
-lives in the changelog, not here:
-
-See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for full details.
+lives in [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md).
 
 ## Integrations
 
@@ -661,7 +601,7 @@ gotchas (incl. the Windows CRLF/s6 clone fix) — is in
 
 ## Project Status
 
-AWM is in active development (v0.12.2). The core memory pipeline, consolidation
+AWM is in active development (v0.13.6). The core memory pipeline, consolidation
 system, multi-agent coordination, and MCP integration are stable and used
 daily in production coding workflows.
 
@@ -681,6 +621,8 @@ daily in production coding workflows.
 - Backend-agnostic `import`/`export` (embeddings included, cross-backend port): **stable** (v0.10.0)
 - Instance identity (`memory_whoami`), local-first security defaults, write-path telemetry, memory-spine provenance (`origin_class`/`valid_from`/`valid_to`), cognition recipes: **stable** (v0.12.0)
 - Entity inverted index + guarded index-backed retrieval: **stable, opt-in** (`AWM_ENTITY_INDEX_FETCH=1`, default off pending broader eval) (v0.12.0)
+- Second-stage rerank, query-aware rerank window, tags-into-rerank: **stable, opt-in** (`AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1` — enable together) (v0.13.4-0.13.6)
+- Real-store benchmark (`tests/realstore-eval/`), replacing LoCoMo: **stable** (v0.13.x)
 
 See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for version history.
 

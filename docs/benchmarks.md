@@ -30,6 +30,76 @@ Each eval creates a fresh SQLite database, seeds it with test data, and runs str
 | Token Savings | 64.5% savings, 65% recall | GOOD |
 | Production retrieval cost | 9.8× lower aggregate vs file_retrieval | EXCELLENT |
 | **Memory gauntlet** (end-to-end ablation, 2026-07-30) | **AWM 74%±5 vs no-memory 0%** on memory-dependent tasks | BASELINE |
+| **Real-store retrieval** (0.13.x recommended flags, 2026-08-24) | **s@1 56.4% → 63.8%**, adversarial held 90.0% | IMPROVED |
+
+## Retrieval quality — the 0.13.x wins (2026-08-24)
+
+Measured on a frozen snapshot of a **real 11,294-engram store**, not a synthetic
+fixture, using `tests/realstore-eval/`. Ground truth is a unique-identifier hold-out
+verified through FTS; correct abstention scores positively.
+
+Run with all three enabled — they are default-OFF:
+
+```bash
+AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
+```
+
+| Change | Flag | Result |
+|---|---|---|
+| Second-stage rerank | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001 paired McNemar. No extra inference. |
+| Query-aware rerank window | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1, +0.07% CPU, zero added tokens |
+| Tags into rerank passage | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries |
+
+**Combined**, 450 category probes on `fixture-category.json`:
+
+| config | s@1 | s@5 | MRR | adversarial | p50 |
+|---|---|---|---|---|---|
+| baseline | 56.4% | 66.2% | 60.6% | 90.0% | 790ms |
+| **recommended** | **63.8%** | **68.4%** | **66.0%** | **90.0%** | 854ms |
+
+Adversarial abstention held at 90.0% in every arm — selectivity was not traded for
+accuracy — at roughly +5–8% recall latency.
+
+> **⚠ The first two must ship together.** `AWM_RERANK2` alone regresses long-memory s@5
+> from 91.7% to 25.0%: BM25 over full content had been compensating for the reranker's
+> 400-char blindness, and making a blind reranker authoritative removes that cover.
+
+### What was rejected, and why
+
+Three other approaches to the same defect were measured against the same fixtures,
+metrics and pre-registered bars, and lost:
+
+| approach | s@1 | verdict |
+|---|---|---|
+| Re-embed with tag terms included | 56.7% | **reject** (+0.3pp) — the embedder sees ~1,965 chars, where eight tag words barely move a 384-dim vector |
+| Mined project-dialect aliases | 63.6% | **reject** (−0.2pp) — PMI over 8-memory categories is too thin; ~half the mined dialect is coincidence |
+| Larger embedder (bge-base, 768d) | 57.1% | **reject** (+0.7pp alone, −1.1pp combined) — no model's weights encode that "private plan" means Azure in *this* store |
+
+The unifying finding: **a memory is unreachable when a word it needs was never written
+into its body** — 66.2% of topical tag terms never appear in the text. Supplying that
+word where the ranker can *see* it works; supplying it where it is *diluted* does not;
+*guessing* it from corpus statistics does not; *inferring around* it with a bigger model
+does not. This is why 0.13.6 also rewrote the memory-writing guidance.
+
+Protocol, per-option detail and the process post-mortem:
+[`archive/retrievability-final-2026-08-24.md`](archive/retrievability-final-2026-08-24.md).
+
+## Why LoCoMo was retired
+
+LoCoMo was useful for learning how to benchmark this product, but it does not represent
+it, and it was dropped in 0.13.x:
+
+- passages median **115 chars** against a real store's **1,965**
+- seeded in one shot, so ACT-R decay, Hebbian weights and salience reinforcement are
+  near-uniform and contribute nothing
+- no supersession, no staging history, no cross-session use
+- it **rewards indiscriminate retention**, so the salience filter — the product — caps
+  its score no matter how good ranking gets
+- structurally blind to the 400-char rerank truncation, which affects **79%** of real
+  ground-truth identifiers
+
+`tests/realstore-eval/` replaces it: real corpus, real query register, mechanically
+verifiable truth, and abstention scored as a positive.
 
 ## Memory Gauntlet (end-to-end acceptance suite)
 
@@ -46,7 +116,7 @@ bleed** across four parallel-shaped client accounts.
 (k=3, reps 78/67/78) with `AWM_AUTOTAG=1 AWM_ENTITY_INDEX_FETCH=1` + the MWA harness
 fixes — six of nine probes at 100%; no-memory control 0%. Full methodology, per-probe
 mechanism table, six-config flag ablation, known-gap signatures, and repro commands:
-[`docs/gauntlet-baseline-2026-07-30.md`](gauntlet-baseline-2026-07-30.md).
+[`docs/archive/gauntlet-baseline-2026-07-30.md`](archive/gauntlet-baseline-2026-07-30.md).
 
 ## Eval Details
 

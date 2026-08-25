@@ -571,7 +571,7 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 | `AWM_EMBED_MODEL` / `AWM_EMBED_DIMS` | Swap the embedding model and dimension. Storage is dimension-agnostic; `normalize: true` keeps dot-product cosine valid for any model. | **bge-base 768d rejected — +0.7pp alone, −1.1pp combined.** ⚠️ `cosineSimilarity` returns **0** on dimension mismatch, so a partial re-embed silently zeroes the vector channel — migrate the whole corpus or not at all |
 
 **2026-07-30 flag ablation (MWA gauntlet, memory suite, k=3 each — see
-`docs/gauntlet-baseline-2026-07-30.md`):** defaults 67%±18 · bridge/autotag/edges 59%±5 ·
+`docs/archive/gauntlet-baseline-2026-07-30.md`):** defaults 67%±18 · bridge/autotag/edges 59%±5 ·
 expansion-only 63%±14 · all-four 74%±10 · entity-index config 74%±5. No single-factor cell
 reproduced the combined wins; all CIs overlap at k=3 — no default flip without a k≥10 run.
 

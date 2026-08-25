@@ -4,7 +4,7 @@
 **Result:** **+9.7pp success@1** (37.8% → 47.6%), p<0.001, adversarial abstention
 provably and measurably unchanged. Costs no additional inference.
 **Status:** implemented behind `AWM_RERANK2=1`, default OFF.
-**SUPERSEDED IN PART — see `docs/rerank-truncation-2026-08-23.md`.** The
+**SUPERSEDED IN PART — see `rerank-truncation-2026-08-23.md`.** The
 recommendation below to flip this ON *by itself* is WRONG for the live store:
 alone it degrades long-memory s@5 from 91.7% to 25.0%, because it removes the
 BM25 signal that was compensating for the reranker's 400-char blindness. Ship it

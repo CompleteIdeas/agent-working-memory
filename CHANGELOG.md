@@ -316,9 +316,9 @@ which is cross-encoder compute over the 40-candidate pool).
 
 ## 0.12.0 (2026-07-30) — eval-driven hardening: telemetry, security defaults, memory spine, cognition recipes, entity index
 
-The D1–D16 design-proposal implementation waves (see `docs/design-proposals-2026-07-30.md`),
+The D1–D16 design-proposal implementation waves (see `docs/archive/design-proposals-2026-07-30.md`),
 grounded in a full-stack eval and accepted end-to-end on the memory gauntlet
-(`docs/gauntlet-baseline-2026-07-30.md`: 74%±5pp memory-dependent vs 0% no-memory control).
+(`docs/archive/gauntlet-baseline-2026-07-30.md`: 74%±5pp memory-dependent vs 0% no-memory control).
 All changes additive; 599/599 tests.
 
 ### Added (D1/D3 — 2026-07-30 Wave 1)
