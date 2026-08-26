@@ -134,9 +134,15 @@ async function main() {
     const text = res.map(r => `${r.engram.concept}: ${r.summary ?? r.engram.content}`).join('\n');
     if (hit5) usefulTok += est(text); else missTok += est(text);
 
-    if (idx >= 0 && (it.identifier || (it as any).category)) {
+    // SUFFICIENCY APPLIES ONLY TO THE IDENTIFIER FIXTURE.
+    // Its ground truth is a unique identifier the gold body provably contains, so
+    // "is the answer in the delivered text" is a real question. The CATEGORY fixture is
+    // built the opposite way — its query terms are ABSENT from the gold body, which is
+    // the defect it measures — so `delivered.includes(category)` is false by
+    // construction and would report a confident, meaningless 0.0%.
+    if (idx >= 0 && it.identifier) {
       retrievedForSuff++;
-      const needle = String(it.identifier ?? (it as any).category).toLowerCase();
+      const needle = String(it.identifier).toLowerCase();
       const delivered = String(res[idx].summary ?? res[idx].engram.content).toLowerCase();
       if (delivered.includes(needle)) sufficient++;
     }
@@ -168,9 +174,19 @@ async function main() {
   // Retrieval is only half the job. A summary that ranks the right memory first
   // but omits the answer-bearing identifier leaves the agent still needing to go
   // read the code — so the token "saving" is illusory. EFFECTIVE = both.
-  console.log(`  SUFFICIENCY ${pct(sufficient, retrievedForSuff)} of retrieved golds actually CONTAIN the answer` +
-              `  (${sufficient}/${retrievedForSuff})`);
-  console.log(`  EFFECTIVE ANSWER RATE ${pct(sufficient, n)}  (retrieved AND sufficient, of all ${n})\n`);
+  // A metric that cannot apply to this fixture must SAY so. Printing 0.0% is worse than
+  // printing nothing, because 0.0% reads as a finding and propagates into the economics.
+  const suffApplies = retrievedForSuff > 0;
+  if (suffApplies) {
+    console.log(`  SUFFICIENCY ${pct(sufficient, retrievedForSuff)} of retrieved golds actually CONTAIN the answer` +
+                `  (${sufficient}/${retrievedForSuff})`);
+    console.log(`  EFFECTIVE ANSWER RATE ${pct(sufficient, n)}  (retrieved AND sufficient, of all ${n})\n`);
+  } else {
+    console.log('  SUFFICIENCY n/a for this fixture — no item carries an `identifier`.');
+    console.log('  (The category fixture\'s queries are ABSENT from the gold body by design,');
+    console.log('   so a containment check is false by construction. Use fixture.json for');
+    console.log('   sufficiency and token economics.)\n');
+  }
 
   console.log('  BY IDENTIFIER POSITION (the 400-char rerank window):');
   for (const [k, v] of Object.entries(buckets)) {
@@ -195,6 +211,15 @@ async function main() {
   //   miss               -> spent tokens AND still pays the fallback
   const spentTok = usefulTok + missTok + advWasteTok;
   const net = sufficient * FALLBACK_TOKENS - spentTok;
+  if (!suffApplies) {
+    // Economics credit `sufficient * FALLBACK_TOKENS`. With sufficiency unmeasurable that
+    // term is 0, so NET would be a large negative number that says nothing about the
+    // system. Report the spend and stop.
+    console.log(`  TOKEN SPEND ${spentTok.toLocaleString()} tok over ${n} recalls ` +
+                `(${Math.round(spentTok / Math.max(n, 1))}/recall)`);
+    console.log('  NET economics suppressed — requires sufficiency, which this fixture cannot measure.\n');
+    process.exit(0);
+  }
   console.log('  TOKEN ECONOMICS (credit only recalls that DELIVER the answer):');
   console.log(`    spent ${spentTok.toLocaleString()} tok · answers delivered ${sufficient}/${n}`);
   console.log(`    NET ${net >= 0 ? '+' : ''}${net.toLocaleString()} tok over ${n} recalls  ` +
