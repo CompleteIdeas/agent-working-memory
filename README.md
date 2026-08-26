@@ -186,7 +186,7 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 | What | Result | Detail |
 |---|---|---|
 | **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **Unit + subsystem** | `test:run` **569/569** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| **Unit + subsystem** | `test:run` **715/715** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — 81% vs 78% baseline at k=3, confidence intervals overlapping | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
 | **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |

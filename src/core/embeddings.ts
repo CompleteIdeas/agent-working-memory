@@ -98,11 +98,68 @@ export function getModelId(): string {
 }
 
 /**
+ * Dimension-mismatch telemetry.
+ *
+ * A mismatch means the vector channel silently scores 0 for the affected memories —
+ * recall still returns results (BM25 is unaffected) but they are quietly much worse.
+ * That is invisible without this counter, and a half-migrated corpus is the realistic
+ * way it happens: change AWM_EMBED_MODEL without re-embedding, or interrupt a
+ * migration, and the un-migrated rows drop out of vector scoring with no error.
+ */
+let dimMismatchCount = 0;
+let dimMismatchWarned = false;
+let dimMismatchSample: { expected: number; got: number } | null = null;
+
+/** Observed embedding-dimension mismatches. Surfaced by /health and memory_whoami. */
+export function embeddingHealth(): {
+  dimensionMismatches: number;
+  expectedDimensions: number;
+  sample: { expected: number; got: number } | null;
+} {
+  return {
+    dimensionMismatches: dimMismatchCount,
+    expectedDimensions: DIMENSIONS,
+    sample: dimMismatchSample,
+  };
+}
+
+/** Test-only: reset the mismatch counter. */
+export function __resetEmbeddingHealth(): void {
+  dimMismatchCount = 0;
+  dimMismatchWarned = false;
+  dimMismatchSample = null;
+}
+
+/**
  * Cosine similarity between two normalized vectors.
  * Since vectors are pre-normalized, this is just the dot product.
+ *
+ * Returns 0 on a dimension mismatch — the maths is undefined otherwise — but COUNTS
+ * it and warns once, because a silent 0 here reads as "these memories are irrelevant"
+ * rather than "this corpus is half-migrated". Deliberately does not throw: this runs
+ * over every candidate on every recall, so throwing would escalate degraded quality
+ * into an outage.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
+  if (a.length !== b.length) {
+    // length 0 is a legitimate not-yet-embedded state, not a corpus mismatch
+    if (a.length !== 0 && b.length !== 0) {
+      dimMismatchCount++;
+      if (!dimMismatchSample) dimMismatchSample = { expected: a.length, got: b.length };
+      if (!dimMismatchWarned) {
+        dimMismatchWarned = true;
+        console.error(
+          `[awm] EMBEDDING DIMENSION MISMATCH: ${a.length}d vs ${b.length}d. ` +
+          `Affected memories score 0 on the vector channel and will rank far too low. ` +
+          `This usually means the corpus is half-migrated — re-embed the whole store ` +
+          `or revert AWM_EMBED_MODEL/AWM_EMBED_DIMS. Warning shown once per process; ` +
+          `see embeddingHealth() / GET /health for the running count.`
+        );
+      }
+    }
+    return 0;
+  }
+  if (a.length === 0) return 0;
   let dot = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];

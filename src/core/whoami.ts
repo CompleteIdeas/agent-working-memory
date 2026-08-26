@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { VERSION } from '../version.js';
 import { getConfiguredBackend, getConfiguredPath } from '../storage/factory.js';
 import { activeRecallConfig, recallConfigFingerprint } from './recall-config.js';
+import { embeddingHealth } from './embeddings.js';
 
 export interface WhoamiInfo {
   agentId: string;
@@ -96,6 +97,12 @@ export function formatWhoami(w: WhoamiInfo): string {
     `Code: ${w.codePath} (pid ${w.pid})`,
     `Ports: http=${w.ports.http ?? 'off'} hookSidecar=${w.ports.hookSidecar ?? 'off'}`,
     `Recall config: ${w.recall.fingerprint}`,
+    ...(embeddingHealth().dimensionMismatches > 0
+      ? [`\u26a0 EMBEDDING INTEGRITY: ${embeddingHealth().dimensionMismatches} dimension mismatches ` +
+         `(expected ${embeddingHealth().expectedDimensions}d). Affected memories score 0 on the ` +
+         `vector channel — the corpus is probably half-migrated. Re-embed the whole store or ` +
+         `revert AWM_EMBED_MODEL/AWM_EMBED_DIMS.`]
+      : []),
     w.siblingAgents.length
       ? `Sibling agent spaces in this store: ${w.siblingAgents.join(', ')} — recall is scoped to '${w.agentId}'; other spaces need workspace recall, \`awm export --agent <id>\`, or a session configured for that agent.`
       : 'Sibling agent spaces in this store: none',

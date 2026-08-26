@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.13.7 (2026-08-26) — a half-migrated corpus was silently scoring zero
+
+`cosineSimilarity` returns 0 when two vectors differ in length. The maths is right and the
+guard was correct — but it was **silent**, across 7 call sites including the recall scoring
+loop (`activation.ts:651`) and vector search (`sqlite.ts:809`).
+
+The failure that hides: change `AWM_EMBED_MODEL` without re-embedding, or interrupt a
+migration, and every un-migrated memory scores exactly 0.0 on the vector channel. Recall
+still answers — BM25 is unaffected — so nothing errors, nothing logs, and quality quietly
+collapses for part of the store. The only symptom is "results got worse".
+
+Same failure shape that read as "bge-base is catastrophic" during the retrievability
+campaign, when the real cause was a re-embed killed at 4,109/8,703. The **eval** scripts
+got a completeness assertion at the time; production had nothing.
+
+- **Mismatches are counted and warned once per process** — once, not once per call: the
+  recall loop would flood stderr, and a per-call warning is one nobody reads.
+- **Still returns 0, still never throws.** It runs over every candidate on every recall, so
+  throwing would escalate degraded quality into an outage.
+- **An empty vector does not count** — a legitimate not-yet-embedded state; counting it
+  would make the signal permanently noisy and therefore useless.
+- **Surfaced in `GET /health` (`embeddingIntegrity`) and `memory_whoami`** — the same pair
+  that caught the 0.13.5 deployment failure. Both stay silent when healthy, because a line
+  that always reads "0 mismatches" trains people to skip it.
+
+Covered by `tests/core/embedding-integrity.test.ts` (6 tests). Suite now **715 passing**.
+
 ## 0.13.6 (2026-08-24) — the writing guidance was causing the problem it warned about
 
 A memory reading "private plan memory peaked 88%, scale P1v3 -> P2v3" could not be recalled by the

@@ -50,7 +50,7 @@ import { performWrite } from '../core/write-pipeline.js';
 import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
-import { embed, embedBatch } from '../core/embeddings.js';
+import { embed, embedBatch, embeddingHealth } from '../core/embeddings.js';
 import { VERSION } from '../version.js';
 import { activeRecallConfig, recallConfigFingerprint } from '../core/recall-config.js';
 
@@ -982,6 +982,13 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         fingerprint: recallConfigFingerprint(),
         flags: activeRecallConfig(),
       },
+      // Embedding-corpus integrity. A dimension mismatch scores 0 on the vector
+      // channel for the affected memories — recall still answers, just much worse,
+      // with no error anywhere. Reported here so "why did quality drop" has somewhere
+      // to look other than guessing. Absent when healthy.
+      ...(embeddingHealth().dimensionMismatches > 0
+        ? { embeddingIntegrity: { status: 'degraded' as const, ...embeddingHealth() } }
+        : {}),
       // D15 (2026-07-30): consolidation visibility — finishes the long-unwired
       // "DMN endpoint" (May P2). Answers "is a sleep cycle running right now
       // and is the scheduler even on" without reading logs.
