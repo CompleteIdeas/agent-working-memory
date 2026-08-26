@@ -42,7 +42,7 @@ that were maximally specific and categorically anonymous.
 
 | doc | question | outcome |
 |---|---|---|
-| [d11-spreading-activation-retest-2026-08-23](d11-spreading-activation-retest-2026-08-23.md) | H5 proposed Personalized PageRank over the Hebbian graph. Does spreading activation earn default-ON? | **No — 0 queries fixed.** H5 did not need building; `spreadActivation` (`activation.ts:1274`) already implements it with every guard D11 specifies. Third regression under D11's three-strikes rule. **Permanent-park decision is Robert's, not the run's** — still open. Note the boost is *in-pool only* (`activation.ts:1386` `if (!item) continue`), so it cannot fix a gold lost at pool/scoring. |
+| [d11-spreading-activation-retest-2026-08-23](d11-spreading-activation-retest-2026-08-23.md) | H5 proposed Personalized PageRank over the Hebbian graph. Does spreading activation earn default-ON? | **No — 0 queries fixed**, 4 broken, on the best-guarded arm. H5 did not need building; `spreadActivation` (`activation.ts:1274`) already implements it with every guard D11 specifies, including out-of-pool injection — which was tested as arm 4 and also fixed 0. **PARKED PERMANENTLY 2026-08-26** (Robert's call; decision header prepended to the doc). Reopen only if D9/D10 broad entity edges ship and graph density is measured. Superseded for its actual goal by `AWM_RERANK_TAGS` (+7.4pp). Code kept, default-OFF. |
 
 ## Open decisions
 

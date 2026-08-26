@@ -1,3 +1,28 @@
+> **DECISION (2026-08-26) — `AWM_SPREAD` IS PARKED PERMANENTLY.**
+> Robert's call, on the three-strikes rule that is his. Recorded here above the original
+> report; nothing below this line has been edited.
+>
+> **Why park rather than hold open.** The doc below offered both. Three things settled it:
+> the best-guarded arm (`spread+inhibit`) **fixes 0 queries and breaks 4** — not a small
+> gain, zero; out-of-pool **injection was already built and already tested** as arm 4
+> (`AWM_SPREAD_INJECT`, `activation.ts:1397`) and also fixed 0, so the obvious next move
+> has already failed; and D11's actual goal — reaching memories whose vocabulary does not
+> match the query — **was achieved by another mechanism two days later**, at +7.4pp on the
+> real store (`AWM_RERANK_TAGS`, see `retrievability-final-2026-08-24.md`). D11 is not
+> "not working yet". It is superseded for its main use case.
+>
+> **Reopen trigger — the only one.** D9/D10 broad entity edges actually ship AND the graph
+> density they produce is measured. Then re-test with the same paired tracer and the same
+> pre-registered bars. Absent that, this is closed: "held open" with no trigger is how a
+> fourth attempt happens.
+>
+> **What is kept.** All of it. `AWM_SPREAD`, `AWM_SPREAD_INHIBIT` and `AWM_SPREAD_INJECT`
+> stay in the codebase, default-OFF, costing nothing. Lateral inhibition is a real working
+> mechanism that repaired nearly all of unguarded spread's damage — as the report says,
+> it is the *premise* that failed, not the implementation.
+
+---
+
 # D11 / H5 — Spreading activation re-test
 
 **Date:** 2026-08-23
