@@ -188,17 +188,18 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 | **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Unit + subsystem** | `test:run` **715/715** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — 24/30 (80.0%) memory probes at k=3, with `multihop` failing every rep | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
+| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — re-run at k=10: 74.3% baseline vs 76.7% with flags, Fisher p=1.000. 6 of 10 probes flip between identical runs, and `multihop` has never passed at any k | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
 | **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Token economics** | **9.8× lower** aggregate cost than the Read/Grep/Glob rediscovery it replaces | [`docs/benchmarks.md`](docs/benchmarks.md) |
 
-**The retrieval gains above have not yet shown up end-to-end.** Re-running the gauntlet
-on 0.13.6 scored **24/30 (80.0%)** on memory probes at k=3, with `multihop` failing every
-rep and four probes flipping between identical runs — harness variance larger than the
-effect being looked for. The paired baseline arm was **not retained** (the scorecard is
-overwritten per run), so treat this as "no evidence of an end-to-end gain" rather than a
-measured delta. Ranking improved measurably at the retrieval layer; whether that converts
-into task success is unresolved. See [`docs/benchmarks.md`](docs/benchmarks.md).
+**The retrieval gains above have not yet shown up end-to-end, and the reason is now
+understood.** Re-run at k=10: baseline **74.3%** against **76.7%** with the flags, Fisher
+exact **p = 1.000**. The obstacle is not sample size — **6 of 10 probes flip between
+identical runs**, with `recall-person` passing 4/7 and `composite` 3/7 under an unchanged
+configuration, and `multihop` never passing at any k. Raising k narrows the interval
+around an unstable mean; it does not make the suite able to resolve a few-point
+difference. The next step is probe determinism, not more repetitions. See
+[`docs/benchmarks.md`](docs/benchmarks.md).
 
 Two other numbers are easy to misread, so they are stated plainly:
 

@@ -31,7 +31,8 @@ Each eval creates a fresh SQLite database, seeds it with test data, and runs str
 | Production retrieval cost | 9.8× lower aggregate vs file_retrieval | EXCELLENT |
 | **Memory gauntlet** (end-to-end ablation, 2026-07-30) | **AWM 74%±5 vs no-memory 0%** on memory-dependent tasks | BASELINE |
 | **Real-store retrieval** (0.13.x recommended flags, 2026-08-24) | **s@1 56.4% → 63.8%**, adversarial held 90.0% | IMPROVED |
-| **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 24/30 = 80.0% memory probes, k=3; baseline arm not retained | NULL — needs per-arm scorecards |
+| **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 24/30 = 80.0% memory probes, k=3; baseline arm not retained | NULL |
+| **Gauntlet at k=10** (2026-08-26) | 74.3% baseline vs 76.7% +flags, Fisher p=1.000; 6/10 probes flip between identical runs | NULL — fix probe determinism, not k |
 
 ## Retrieval quality — the 0.13.x wins (2026-08-24)
 
@@ -140,6 +141,34 @@ suite, `awm` arm, k=3, 3 reps, $1.34):
 | per rep | 90% / 70% / 80% |
 | seeding steps | 30/30 = 100% |
 | failing probes | `multihop` (**0/3**), `skill-apply`, `composite`, `abstain` |
+
+**2026-08-26 re-run at k=10 — STILL NULL, and now the variance is quantified.**
+
+| arm | reps | memory probes | per-rep |
+|---|---|---|---|
+| baseline (no flags) | 7 of 10 | 52/70 = **74.3%** | 8,6,8,7,8,8,7 |
+| rerank2+window+tags | 3 of 10 | 23/30 = **76.7%** | 7,8,8 |
+
+Difference **+2.4pp**, Fisher exact two-tailed **p = 1.000**. Per-rep ranges overlap
+(6–8 against 7–8). There is no detectable end-to-end effect.
+
+**The reason is now measurable: 6 of 10 probes flip between identical runs.** In the
+baseline arm `recall-person` passed 4/7 and `composite` 3/7 — same configuration, same
+store, same tasks. `multihop` scored **0/7** and has never passed in any run at any k.
+Only `distractor-codename`, `distractor-budget`, `policy-signoff` and `abstain` were
+stable at 7/7.
+
+A suite where more than half the probes are non-deterministic cannot resolve a
+few-point difference, and raising k does not fix that — it narrows the confidence
+interval around an unstable mean. **The next useful step is making the probes
+deterministic, not running more reps.**
+
+⚠ Caveats on the table above, stated because they weaken it: the arms have unequal
+reps (7 vs 3, both runs cut short by task timeouts), and the baseline JSON was destroyed
+by the next run's startup wipe before it could be copied out — its figures come from the
+transcript, not a retained artifact. Arm 2's JSON survives at
+`memory-working-agent/gauntlet-runs/`. Re-run the baseline before quoting this delta
+anywhere.
 
 ⚠ **The baseline-vs-flags comparison is not reproducible from a retained artifact.**
 The scorecard file holds only the **last arm run** — it is overwritten each invocation —
