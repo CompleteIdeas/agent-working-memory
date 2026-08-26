@@ -1,0 +1,31 @@
+===== k=3 =====
+REAL-STORE BENCHMARK · arm=rerank2=1,rerank_tags=1,rerank_window=query
+  success@1 64.0%   success@5 67.8%   MRR 65.8%
+  adversarial correctly silent: 90.0%   <- selectivity is rewarded here
+  recall latency  p50 530ms  p90 638ms  (n=450)
+  SUFFICIENCY 0.0% of retrieved golds actually CONTAIN the answer  (0/305)
+  EFFECTIVE ANSWER RATE 0.0%  (retrieved AND sufficient, of all 450)
+    spent 646,540 tok · answers delivered 0/450
+    NET -646,540 tok over 450 recalls  (-1437/recall)
+
+===== k=5 =====
+REAL-STORE BENCHMARK · arm=rerank2=1,rerank_tags=1,rerank_window=query
+  success@1 64.4%   success@5 69.6%   MRR 66.6%
+  adversarial correctly silent: 90.0%   <- selectivity is rewarded here
+  recall latency  p50 876ms  p90 1085ms  (n=450)
+  SUFFICIENCY 0.0% of retrieved golds actually CONTAIN the answer  (0/313)
+  EFFECTIVE ANSWER RATE 0.0%  (retrieved AND sufficient, of all 450)
+    spent 982,582 tok · answers delivered 0/450
+    NET -982,582 tok over 450 recalls  (-2184/recall)
+
+===== k=7 =====
+REAL-STORE BENCHMARK · arm=rerank2=1,rerank_tags=1,rerank_window=query
+  success@1 63.8%   success@5 68.4%   MRR 66.0%
+  adversarial correctly silent: 90.0%   <- selectivity is rewarded here
+  recall latency  p50 857ms  p90 1030ms  (n=450)
+  SUFFICIENCY 0.0% of retrieved golds actually CONTAIN the answer  (0/309)
+  EFFECTIVE ANSWER RATE 0.0%  (retrieved AND sufficient, of all 450)
+    spent 1,279,812 tok · answers delivered 0/450
+    NET -1,279,812 tok over 450 recalls  (-2844/recall)
+
+SWEEP COMPLETE

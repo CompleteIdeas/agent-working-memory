@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.13.8 (2026-08-26) — the default recall limit was costing more than it returned
+
+Default `limit` on `memory_recall` drops **5 → 3**, along with the two push-style
+auto-recalls (`memory_restore`, `memory_task_begin`).
+
+Measured on 400 real-store probes with all three 0.13.x rerank flags enabled — the
+configuration the original token-economics run never recorded:
+
+| k | s@1 | s@5 | effective answer rate | NET tok/recall | p50 |
+|---|---|---|---|---|---|
+| **3** | 70.0% | 73.0% | 72.5% | **+115** | **511ms** |
+| 5 | 70.5% | 73.8% | 73.3% | −680 | 865ms |
+| 7 | 69.3% | 72.8% | 72.3% | −1381 | 905ms |
+
+**k=3 is the only token-positive setting.** Against k=5 it costs 0.5pp success@1 and
+0.8pp effective answer rate — about 3 queries in 400, inside noise — and buys 795
+tok/recall plus a 41% latency reduction. Adversarial abstention held at 90.0% and
+sufficiency at 99.3% in every arm, so neither selectivity nor answer-carrying degraded.
+
+The latency gain is mechanical: `limit` sizes the rerank pool through
+`topN = sorted.slice(0, limit * topNMult)`, and cross-encoder rerank is ~90% of warm
+recall latency.
+
+**What this does not measure.** Sufficiency asks whether the answer was *delivered*, not
+whether the 4th and 5th results helped an agent orient. Callers wanting breadth pass
+`limit` explicitly or use `mode: 'exploratory'` — only the default moved.
+
+Also fixed: the real-store runner reported `SUFFICIENCY 0.0%` on the category fixture,
+whose queries are absent from the gold body by construction, and then derived token
+economics from that zero. It now reports "n/a for this fixture" and suppresses the
+economics rather than printing a confident, meaningless number.
+
 ## 0.13.7 (2026-08-26) — a half-migrated corpus was silently scoring zero
 
 `cosineSimilarity` returns 0 when two vectors differ in length. The maths is right and the

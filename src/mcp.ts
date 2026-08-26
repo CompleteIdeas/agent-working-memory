@@ -407,7 +407,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
   {
     query: z.string().optional().describe('What to search for — describe the situation, question, or topic'),
     context: z.string().optional().describe('Alias for query (either works)'),
-    limit: z.number().optional().default(5).describe('Max memories to return (default 5)'),
+    limit: z.number().optional().default(3).describe('Max memories to return (default 3). Measured on 400 real-store probes: k=3 is the only token-POSITIVE setting (+115 tok/recall, against -680 at k=5) and is 41% faster at p50, because `limit` sizes the cross-encoder rerank pool and rerank is ~90% of warm recall time. It costs ~0.5pp success@1 versus k=5 — about 3 queries in 400, inside noise. Raise it explicitly when you want breadth for orientation rather than a specific fact; that is the case this default deliberately does not optimise for.'),
     min_score: z.number().optional().default(0.05).describe('Minimum relevance score (default 0.05)'),
     include_staging: z.boolean().optional().default(false).describe('Include weak/unconfirmed memories?'),
     use_reranker: z.boolean().optional().default(true).describe('Use cross-encoder re-ranking for better relevance (default true)'),
@@ -765,7 +765,11 @@ Use this at the start of every session or after compaction to pick up where you 
         const results = await activationEngine.activate({
           agentId: AGENT_ID,
           context: recallContext,
-          limit: 5,
+          // 3, not 5 — measured token-positive (+115/recall vs -680) and 41% faster.
+          // The case is stronger here than for explicit recall: this is push-style, so
+          // nobody asked for these results and every one of them costs context the user
+          // did not request.
+          limit: 3,
           minScore: 0.05,
           useReranker: true,
           useExpansion: true,
@@ -1124,7 +1128,8 @@ This ensures your state is saved before you start, and primes recall with releva
       const results = await activationEngine.activate({
         agentId: AGENT_ID,
         context: params.topic,
-        limit: 5,
+        // 3, not 5 — see memory_recall. Push-style auto-recall on task start.
+        limit: 3,
         minScore: 0.05,
         useReranker: true,
         useExpansion: true,
