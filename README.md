@@ -188,15 +188,17 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 | **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Unit + subsystem** | `test:run` **715/715** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — 81% vs 78% baseline at k=3, confidence intervals overlapping | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
+| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — 24/30 (80.0%) memory probes at k=3, with `multihop` failing every rep | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
 | **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Token economics** | **9.8× lower** aggregate cost than the Read/Grep/Glob rediscovery it replaces | [`docs/benchmarks.md`](docs/benchmarks.md) |
 
 **The retrieval gains above have not yet shown up end-to-end.** Re-running the gauntlet
-on 0.13.6 gave 81% with the flags vs 78% without at k=3 (±5pp, CI [78,89]) — a null
-result, with `multihop` at 0/6 in both arms and four probes flipping between identical
-runs. Ranking improved measurably at the retrieval layer; whether that converts into
-task success at this sample size is unresolved, and a k≥10 run is what would settle it.
+on 0.13.6 scored **24/30 (80.0%)** on memory probes at k=3, with `multihop` failing every
+rep and four probes flipping between identical runs — harness variance larger than the
+effect being looked for. The paired baseline arm was **not retained** (the scorecard is
+overwritten per run), so treat this as "no evidence of an end-to-end gain" rather than a
+measured delta. Ranking improved measurably at the retrieval layer; whether that converts
+into task success is unresolved. See [`docs/benchmarks.md`](docs/benchmarks.md).
 
 Two other numbers are easy to misread, so they are stated plainly:
 

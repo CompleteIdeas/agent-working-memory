@@ -31,7 +31,7 @@ Each eval creates a fresh SQLite database, seeds it with test data, and runs str
 | Production retrieval cost | 9.8× lower aggregate vs file_retrieval | EXCELLENT |
 | **Memory gauntlet** (end-to-end ablation, 2026-07-30) | **AWM 74%±5 vs no-memory 0%** on memory-dependent tasks | BASELINE |
 | **Real-store retrieval** (0.13.x recommended flags, 2026-08-24) | **s@1 56.4% → 63.8%**, adversarial held 90.0% | IMPROVED |
-| **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 81% vs 78% baseline at k=3, CI overlapping | NULL — needs k≥10 |
+| **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 24/30 = 80.0% memory probes, k=3; baseline arm not retained | NULL — needs per-arm scorecards |
 
 ## Retrieval quality — the 0.13.x wins (2026-08-24)
 
@@ -131,16 +131,26 @@ mechanism table, six-config flag ablation, known-gap signatures, and repro comma
 (`AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1`) went through this
 acceptance test and did not move it:
 
-| arm | k | pass rate |
-|---|---|---|
-| baseline | 1 | 89% |
-| +flags | 1 | 78% |
-| baseline | 3 | 78% |
-| **+flags** | **3** | **81% ± 5pp, CI [78,89]** (reps 89/78/78) |
+**Retained artifact** (`memory-working-agent/results/gauntlet/scorecard.json`, 10-probe
+suite, `awm` arm, k=3, 3 reps, $1.34):
 
-Confidence intervals overlap, `multihop` scored 0/6 in **both** arms, and four probes
-flip between identical runs — so the harness variance at this sample size is larger than
-the effect being looked for. Retrieval-layer s@1 improved measurably (+7.4pp on the real
+| measure | value |
+|---|---|
+| memory probes | **24/30 = 80.0%** |
+| per rep | 90% / 70% / 80% |
+| seeding steps | 30/30 = 100% |
+| failing probes | `multihop` (**0/3**), `skill-apply`, `composite`, `abstain` |
+
+⚠ **The baseline-vs-flags comparison is not reproducible from a retained artifact.**
+The scorecard file holds only the **last arm run** — it is overwritten each invocation —
+so the paired baseline figures were read from console output at the time and no longer
+exist on disk. Earlier drafts of this page quoted "81%, reps 89/78/78"; those are 8/9 and
+7/9, i.e. the **9-probe** suite that preceded this one, not the numbers above. Retaining
+per-arm scorecards is a prerequisite for treating any gauntlet delta as evidence.
+
+What survives that correction: `multihop` fails **every** rep, four probes flip between
+identical runs, and the retrieval-layer gains are not visible at this sample size. The
+harness variance is larger than the effect being looked for. Retrieval-layer s@1 improved measurably (+7.4pp on the real
 store); whether that converts into end-to-end task success is **unresolved**. A k≥10 run
 (~$5/arm) is what would settle it, and is the outstanding follow-up. Recording this
 because a retrieval change passing through the standing acceptance test without moving
