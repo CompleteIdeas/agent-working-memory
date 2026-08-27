@@ -196,7 +196,7 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 understood.** Re-run at k=10: baseline **74.3%** against **76.7%** with the flags, Fisher
 exact **p = 1.000**. The obstacle is not sample size — **6 of 10 probes flip between
 identical runs**, with `recall-person` passing 4/7 and `composite` 3/7 under an unchanged
-configuration, and `multihop` never passing at any k. Raising k narrows the interval
+configuration, and `multihop` — which measures whether the *agent* chains recalls, not whether AWM retrieves: it passes exactly when the agent takes 5 steps and fails when it takes 1 — never passing at any k. Raising k narrows the interval
 around an unstable mean; it does not make the suite able to resolve a few-point
 difference. The next step is probe determinism, not more repetitions. See
 [`docs/benchmarks.md`](docs/benchmarks.md).

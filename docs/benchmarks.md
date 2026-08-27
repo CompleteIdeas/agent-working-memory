@@ -158,6 +158,40 @@ store, same tasks. `multihop` scored **0/7** and has never passed in any run at 
 Only `distractor-codename`, `distractor-budget`, `policy-signoff` and `abstain` were
 stable at 7/7.
 
+### `multihop` is measuring the agent, not the memory
+
+Worth separating out, because it has been read as an AWM capability gap and it is not.
+The probe asks *"What is the codename of the project owned by my scheduler?"* — a chain
+of scheduler → Sarah Chen → owns Cygnus → codename Falcon, with the three facts seeded in
+separate tasks so no single memory contains the answer.
+
+Step counts from the k=10 run correlate perfectly with the outcome:
+
+| rep | agent steps | answer | result |
+|---|---|---|---|
+| 0 | **5** | `falcon` | pass |
+| 1 | **1** | `magpie` | fail |
+| 2 | **1** | `magpie` | fail |
+
+When the agent walked the chain it resolved correctly. When it took a single step it
+answered `magpie` — the most salient project's codename — having done one recall and
+answered from it. **Every link is retrievable; the probe fails when the caller stops
+asking.**
+
+That is the intended division of labour, not a defect. AWM is *active* memory: what you
+need in the moment. Walking to the next fact is the caller's job — recall, read, recall
+again — consistent with the standing principle that AWM is *a memory space for an LLM,
+not one containing an LLM*. A probe requiring traversal inside a single call tests
+something AWM deliberately does not do.
+
+For contrast, `distractor-codename` passes 3/3 at **steps=0**: no recall call at all,
+because the prime hook had already placed the fact in context.
+
+So `multihop` should be reclassified as an agent-chaining probe rather than a memory
+probe. It is also the largest single contributor to the flip rate above, and because the
+nondeterminism is agent-side, **no value of k can stabilise it.** Independently, multi-hop
+phrasing accounts for ~0.1% of real production queries.
+
 A suite where more than half the probes are non-deterministic cannot resolve a
 few-point difference, and raising k does not fix that — it narrows the confidence
 interval around an unstable mean. **The next useful step is making the probes
