@@ -146,17 +146,20 @@ suite, `awm` arm, k=3, 3 reps, $1.34):
 
 | arm | reps | memory probes | per-rep |
 |---|---|---|---|
-| baseline (no flags) | 7 of 10 | 52/70 = **74.3%** | 8,6,8,7,8,8,7 |
+| baseline (no flags) | **10 of 10 — complete** | 74/100 = **74.0%** | 6,8,8,8,8,4,9,7,8,8 |
 | rerank2+window+tags | 3 of 10 | 23/30 = **76.7%** | 7,8,8 |
 
-Difference **+2.4pp**, Fisher exact two-tailed **p = 1.000**. Per-rep ranges overlap
-(6–8 against 7–8). There is no detectable end-to-end effect.
+Difference **+2.7pp**, Fisher exact two-tailed **p = 1.000**. No detectable end-to-end
+effect — the same answer every attempt has given.
 
-**The reason is now measurable: 6 of 10 probes flip between identical runs.** In the
-baseline arm `recall-person` passed 4/7 and `composite` 3/7 — same configuration, same
-store, same tasks. `multihop` scored **0/7** and has never passed in any run at any k.
-Only `distractor-codename`, `distractor-budget`, `policy-signoff` and `abstain` were
-stable at 7/7.
+**The reason, measured at full k: all 10 of 10 probes flip between identical runs.** Same
+configuration, same store, same tasks. Even `distractor-codename` and `policy-signoff`,
+which looked stable at 7/7 in a shorter sample, land 9/10 over ten reps. `composite` is
+5/10 and `multihop` 2/10 — so multihop *does* pass occasionally, which an earlier 0/7
+sample hid. Per-rep totals span 4 to 9 probes out of 10.
+
+An earlier 7-rep sample suggested only 6 of 10 probes were unstable. That understated it;
+short samples make flaky probes look solid.
 
 ### `multihop` is measuring the agent, not the memory
 
@@ -197,12 +200,17 @@ few-point difference, and raising k does not fix that — it narrows the confide
 interval around an unstable mean. **The next useful step is making the probes
 deterministic, not running more reps.**
 
-⚠ Caveats on the table above, stated because they weaken it: the arms have unequal
-reps (7 vs 3, both runs cut short by task timeouts), and the baseline JSON was destroyed
-by the next run's startup wipe before it could be copied out — its figures come from the
-transcript, not a retained artifact. Arm 2's JSON survives at
-`memory-working-agent/gauntlet-runs/`. Re-run the baseline before quoting this delta
-anywhere.
+⚠ One caveat remains: the arms have unequal reps. The baseline is a **complete** 10-rep
+run retained as
+`memory-working-agent/gauntlet-runs/scorecard-awm-k10-defaults-2026-08-27T14-03-10-999.json`
+(`partial: false`); the treatment arm still has only 3 reps, cut short by a task timeout.
+Given both land inside the noise band that is unlikely to change the conclusion, but the
+treatment arm should be completed before the delta is quoted as a measurement.
+
+An earlier version of this page cited a 7-rep baseline of 74.3% taken from a transcript
+after its JSON was destroyed by the next run's startup wipe. The complete run measured
+74.0%, so that figure was accurate — it is nonetheless superseded here by the artifact,
+because a number with a file behind it is a different kind of evidence.
 
 ⚠ **The baseline-vs-flags comparison is not reproducible from a retained artifact.**
 The scorecard file holds only the **last arm run** — it is overwritten each invocation —
