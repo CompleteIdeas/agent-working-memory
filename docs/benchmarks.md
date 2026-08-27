@@ -144,13 +144,31 @@ suite, `awm` arm, k=3, 3 reps, $1.34):
 
 **2026-08-26 re-run at k=10 — STILL NULL, and now the variance is quantified.**
 
-| arm | reps | memory probes | per-rep |
-|---|---|---|---|
-| baseline (no flags) | **10 of 10 — complete** | 74/100 = **74.0%** | 6,8,8,8,8,4,9,7,8,8 |
-| rerank2+window+tags | 3 of 10 | 23/30 = **76.7%** | 7,8,8 |
+Both arms complete, 10 reps each, retained as JSON in
+`memory-working-agent/gauntlet-runs/`:
 
-Difference **+2.7pp**, Fisher exact two-tailed **p = 1.000**. No detectable end-to-end
-effect — the same answer every attempt has given.
+| arm | memory probes | per-rep | cost |
+|---|---|---|---|
+| baseline (no flags) | 74/100 = **74.0%** | 6,8,8,8,8,4,9,7,8,8 | $4.69 |
+| rerank2+window+tags | 81/100 = **81.0%** | 9,9,8,7,6,7,9,10,10,8 | $4.97 |
+
+Difference **+7.0pp**, Fisher exact two-tailed **p = 0.31** — **not significant**, but no
+longer null-looking either, and the direction now matches the fixture-level result
+(+7.4pp success@1 on the real store). Read it as *consistent with* the retrieval gains
+converting end-to-end, not as evidence that they do.
+
+Per-probe:
+
+| probe | baseline | +flags | change |
+|---|---|---|---|
+| `multihop` | 2/10 | 6/10 | **+4** |
+| `skill-apply` | 8/10 | 10/10 | +2 |
+| `distractor-codename` | 9/10 | 10/10 | +1 |
+| `distractor-budget` | 8/10 | 9/10 | +1 |
+| `policy-signoff` | 9/10 | 10/10 | +1 |
+| `supersede-due`, `composite`, `abstain` | — | — | 0 |
+| `recall-person` | 8/10 | 7/10 | −1 |
+| `sparse-cue` | 8/10 | 7/10 | −1 |
 
 **The reason, measured at full k: all 10 of 10 probes flip between identical runs.** Same
 configuration, same store, same tasks. Even `distractor-codename` and `policy-signoff`,
@@ -168,18 +186,24 @@ The probe asks *"What is the codename of the project owned by my scheduler?"* �
 of scheduler → Sarah Chen → owns Cygnus → codename Falcon, with the three facts seeded in
 separate tasks so no single memory contains the answer.
 
-Step counts from the k=10 run correlate perfectly with the outcome:
+**Corrected 2026-08-27.** An earlier version of this section claimed step counts
+correlate *perfectly* with the outcome, from a 3-rep sample where the single pass took 5
+steps and both failures took 1. **That does not replicate at 10 reps:**
 
-| rep | agent steps | answer | result |
-|---|---|---|---|
-| 0 | **5** | `falcon` | pass |
-| 1 | **1** | `magpie` | fail |
-| 2 | **1** | `magpie` | fail |
+| | mean steps when passing | mean steps when failing |
+|---|---|---|
+| baseline | 2.0 | 2.8 |
+| +flags | 3.3 | 1.8 |
 
-When the agent walked the chain it resolved correctly. When it took a single step it
-answered `magpie` — the most salient project's codename — having done one recall and
-answered from it. **Every link is retrievable; the probe fails when the caller stops
-asking.**
+At baseline the correlation *reverses*. And of the treatment arm's 6 passes, **3 came at
+2 steps or fewer** — no chaining at all; better ranking simply made the single blended
+query land on `falcon`. Ranking moved this probe from 2/10 to 6/10, its largest single gain.
+
+So multihop is **not** purely agent-side, as first reported. What holds up: resolving it
+needs either the agent to walk the chain *or* the ranker to put the chain-terminal fact
+first, and both routes are visible in the data. The design principle is unchanged — AWM
+is active memory and chaining is the caller's job — but the empirical claim that "the
+probe fails only when the caller stops asking" rested on three data points and is wrong.
 
 That is the intended division of labour, not a defect. AWM is *active* memory: what you
 need in the moment. Walking to the next fact is the caller's job — recall, read, recall
@@ -200,16 +224,9 @@ few-point difference, and raising k does not fix that — it narrows the confide
 interval around an unstable mean. **The next useful step is making the probes
 deterministic, not running more reps.**
 
-⚠ One caveat remains: the arms have unequal reps. The baseline is a **complete** 10-rep
-run retained as
-`memory-working-agent/gauntlet-runs/scorecard-awm-k10-defaults-2026-08-27T14-03-10-999.json`
-(`partial: false`); the treatment arm still has only 3 reps, cut short by a task timeout.
-Given both land inside the noise band that is unlikely to change the conclusion, but the
-treatment arm should be completed before the delta is quoted as a measurement.
-
 An earlier version of this page cited a 7-rep baseline of 74.3% taken from a transcript
 after its JSON was destroyed by the next run's startup wipe. The complete run measured
-74.0%, so that figure was accurate — it is nonetheless superseded here by the artifact,
+74.0%, so that figure was accurate — it is superseded here by the artifact anyway,
 because a number with a file behind it is a different kind of evidence.
 
 ⚠ **The baseline-vs-flags comparison is not reproducible from a retained artifact.**

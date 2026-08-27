@@ -188,14 +188,16 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 | **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Unit + subsystem** | `test:run` **715/715** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. **The 0.13.x flags did not move it** — complete 10-rep baseline 74.0% vs 76.7% with flags, Fisher p=1.000. **All 10 probes flip between identical runs**, and `multihop` has never passed at any k | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
+| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. Both arms complete at k=10: baseline **74.0%** vs **81.0%** with the flags (**+7.0pp**, Fisher p=0.31 — not significant, but directionally matching the +7.4pp fixture result). **All 10 probes flip between identical runs**, and `multihop` has never passed at any k | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
 | **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Token economics** | **9.8× lower** aggregate cost than the Read/Grep/Glob rediscovery it replaces | [`docs/benchmarks.md`](docs/benchmarks.md) |
 
 **The retrieval gains above have not yet shown up end-to-end, and the reason is now
-understood.** A complete 10-rep baseline scores **74.0%** against **76.7%** with the
-flags, Fisher exact **p = 1.000**. The obstacle is not sample size — **all 10 probes flip
-between identical runs**, with `composite` passing 5/10 under an unchanged configuration, and `multihop` — which measures whether the *agent* chains recalls, not whether AWM retrieves: it passes exactly when the agent takes 5 steps and fails when it takes 1 — never passing at any k. Raising k narrows the interval
+understood.** Both arms now run complete at k=10: baseline **74.0%** against **81.0%**
+with the flags — **+7.0pp**, Fisher exact **p = 0.31**. Not significant, but the direction
+and magnitude match the fixture-level +7.4pp, so this is consistent with the gains
+converting rather than evidence that they do. Resolving it is hard because **all 10 probes
+flip between identical runs**, with `composite` passing 5/10 under an unchanged configuration, and `multihop` moving 2/10 to 6/10 with the flags — half of those passes at 2 steps or fewer, i.e. better ranking rather than the agent chaining. Raising k narrows the interval
 around an unstable mean; it does not make the suite able to resolve a few-point
 difference. The next step is probe determinism, not more repetitions. See
 [`docs/benchmarks.md`](docs/benchmarks.md).
