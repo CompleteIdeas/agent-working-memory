@@ -132,7 +132,7 @@ mechanism table, six-config flag ablation, known-gap signatures, and repro comma
 (`AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1`) went through this
 acceptance test and did not move it:
 
-**Retained artifact** (`memory-working-agent/results/gauntlet/scorecard.json`, 10-probe
+**Retained artifact** (`memory-working-agent/gauntlet-runs/scorecard-awm-k3-2026-08-25.json`, 10-probe
 suite, `awm` arm, k=3, 3 reps, $1.34):
 
 | measure | value |
