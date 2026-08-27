@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.13.10 (2026-08-27) — `awm setup` would have deleted your own notes
+
+`upsertAwmSection` replaced everything between `## Memory (AWM)` and the next `## `
+heading. Content *above and below* the section survived; content *inside* it did not, and
+no backup was taken.
+
+Measured against a real `~/.claude/CLAUDE.md` on the author's machine: the AWM section held
+**381 non-blank lines, of which 169 (44%) were not in the shipped template** — and the
+section ran to EOF, so it was effectively the whole file. What `awm setup` would have
+silently deleted:
+
+- the HTTP API is unreliable as a bare background process (died within the hour, no
+  graceful-shutdown line; NSSM/Scheduled Task still not done)
+- **a running MCP connection does not hot-reload** — 0 of 51 real recalls in one session
+  ever picked up a same-day code change
+- call `memory_whoami` before reasoning about AWM's own state
+- only `work` and `personal` are valid workspaces — there is no "equihub" workspace
+
+Every one an operational finding that cost real debugging to establish, and none of them
+recoverable from the template.
+
+**Generated markers.** New writes wrap the template in
+`<!-- AWM:GENERATED:BEGIN … -->` / `<!-- AWM:GENERATED:END -->`. Only the marked range is
+replaced on upgrade, so notes written inside the section but outside the markers survive.
+The marker text says so in the file, addressed to whoever opens it.
+
+**Legacy sections refuse by default.** An unmarked section cannot be told apart from
+hand-written content, so it is **not replaced**: a timestamped `.awm-backup-<ts>` is
+written and the caller is told to move anything worth keeping above the heading, then
+re-run with `force`. Losing a measured finding costs far more than re-running a command.
+
+Covered by `tests/adapters/upsert-instructions.test.ts` (7 tests), including a case
+asserting the hand-written findings survive the refusal. Suite now 722.
+
 ## 0.13.9 (2026-08-26) — tell the caller to chain recalls, because that is the caller's job
 
 The gauntlet's `multihop` probe has never passed at any k, and it has been read all along

@@ -154,22 +154,50 @@ export function homedir(): string {
  *
  * Returns a short human-readable status string for the setup command output.
  */
+/** Opening marker for the generated block. Everything between the markers is replaced
+ *  on upgrade; anything outside them is preserved. The text is deliberately addressed to
+ *  whoever opens the file, because that is who needs to know. */
+export const AWM_GEN_BEGIN =
+  '<!-- AWM:GENERATED:BEGIN — this block is REPLACED by `awm setup`. ' +
+  'Put your own notes OUTSIDE these markers and they will survive upgrades. -->';
+export const AWM_GEN_END = '<!-- AWM:GENERATED:END -->';
+
+/** Wrap generated content in the markers. */
+function wrapGenerated(content: string): string {
+  return `${AWM_GEN_BEGIN}\n${content.trim()}\n${AWM_GEN_END}`;
+}
+
 export function upsertAwmSection(
   filePath: string,
   newContent: string,
-  options: { titleIfNew?: string; suffix?: string } = {},
+  options: { titleIfNew?: string; suffix?: string; force?: boolean } = {},
 ): string {
   const fname = basename(filePath);
   const suffix = options.suffix ?? '';
+  const force = options.force ?? false;
 
   if (!existsSync(filePath)) {
     const title = options.titleIfNew ?? `# ${basename(dirname(filePath))}`;
     mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, `${title}\n\n${newContent}${suffix}`);
+    writeFileSync(filePath, `${title}\n\n${wrapGenerated(newContent)}${suffix}`);
     return `${fname}: created with AWM workflow section`;
   }
 
   const existing = readFileSync(filePath, 'utf-8');
+
+  // ---- Preferred path: the file already carries generated markers, so the boundary
+  // between "ours" and "theirs" is explicit and only our block is touched.
+  const gb = existing.indexOf(AWM_GEN_BEGIN);
+  const ge = existing.indexOf(AWM_GEN_END);
+  if (gb !== -1 && ge > gb) {
+    const current = existing.slice(gb, ge + AWM_GEN_END.length);
+    const desired = wrapGenerated(newContent);
+    if (current.trimEnd() === desired.trimEnd()) {
+      return `${fname}: AWM section already up-to-date (skipped)`;
+    }
+    writeFileSync(filePath, existing.slice(0, gb) + desired + existing.slice(ge + AWM_GEN_END.length));
+    return `${fname}: AWM generated block updated (content outside the markers preserved)`;
+  }
 
   // Find section bounds: `## Memory (AWM)` (possibly with ` — MANDATORY` etc.) until next `## ` or EOF
   const startRegex = /^## Memory \(AWM\)[^\n]*$/m;
@@ -177,7 +205,7 @@ export function upsertAwmSection(
 
   if (!startMatch) {
     // Section not present — append
-    writeFileSync(filePath, existing.trimEnd() + '\n\n' + newContent + suffix);
+    writeFileSync(filePath, existing.trimEnd() + '\n\n' + wrapGenerated(newContent) + suffix);
     return `${fname}: appended AWM workflow section`;
   }
 
@@ -196,14 +224,35 @@ export function upsertAwmSection(
     return `${fname}: AWM section already up-to-date (skipped)`;
   }
 
+  // ---- LEGACY, UNMARKED SECTION.
+  // Written before generated markers existed, so hand-added notes inside it are
+  // indistinguishable from generated text. Replacing would silently delete them — on a
+  // real install this measured 169 of 381 lines (44%), every one an operational finding
+  // that cost real debugging. Back up and refuse; the caller opts in explicitly.
+  if (!force) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+    const backup = `${filePath}.awm-backup-${stamp}`;
+    try {
+      writeFileSync(backup, existing);
+    } catch {
+      return `${fname}: AWM section is out of date, but it has no generated markers and the ` +
+             `backup could not be written — REFUSING to touch it. Copy the file yourself, then re-run.`;
+    }
+    return `${fname}: NOT updated — the AWM section predates generated markers, so your own ` +
+           `notes inside it cannot be told apart from generated text and would be lost. ` +
+           `Backup written to ${basename(backup)}. To upgrade: move any notes you want to keep ` +
+           `ABOVE the '## Memory (AWM)' heading (content outside the section is always preserved), ` +
+           `then re-run with force. Nothing has been changed.`;
+  }
+
   const before = existing.slice(0, startMatch.index).trimEnd();
   const after = existing.slice(sectionEnd).replace(/^\s*\n/, '');
   const rebuilt =
     (before ? before + '\n\n' : '') +
-    desiredSection +
+    wrapGenerated(newContent) + suffix +
     (after ? '\n\n' + after : '\n');
   writeFileSync(filePath, rebuilt);
-  return `${fname}: AWM section updated (preserved surrounding content)`;
+  return `${fname}: AWM section replaced with a marked generated block (force)`;
 }
 
 export const AWM_INSTRUCTION_CONTENT = `
