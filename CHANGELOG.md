@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.13.9 (2026-08-26) — tell the caller to chain recalls, because that is the caller's job
+
+The gauntlet's `multihop` probe has never passed at any k, and it has been read all along
+as an AWM retrieval gap. It is not. Step counts from the k=10 run settle it:
+
+| rep | agent steps | answer | result |
+|---|---|---|---|
+| 0 | **5** | `falcon` | pass |
+| 1 | **1** | `magpie` | fail |
+| 2 | **1** | `magpie` | fail |
+
+The probe chains *scheduler → Sarah Chen → owns Cygnus → codename Falcon*, with the three
+facts seeded in separate tasks so no single memory holds the answer. When the agent walked
+the chain it resolved correctly; when it took one step it answered `magpie` — the most
+salient project's codename — from a single blended query. **Every link was retrievable.
+The agent stopped asking.** `skill-apply` shows the same signature, failing at 0 steps by
+using a project's name where the rule needed its codename.
+
+AWM is *active memory*: it answers the query you send and does not traverse a chain on
+your behalf, by design — "a memory space for an LLM, not one containing an LLM". Nothing
+in the shipped guidance said so.
+
+- **New `### Chain recalls — one hop per call` section** in the installed instruction
+  template: how to recognise a chain (an entity named by *role* rather than identity, or a
+  rule operating on an attribute not yet looked up), how to walk it one hop at a time, and
+  the specific failure mode of answering from the first recall.
+
+Same shape as 0.13.6: the defect was in what the caller was told to do, so it is fixed in
+the guidance rather than compensated for in the ranker.
+
+Existing installs keep their current template — re-run `awm setup` to regenerate.
+
 ## 0.13.8 (2026-08-26) — the default recall limit was costing more than it returned
 
 Default `limit` on `memory_recall` drops **5 → 3**, along with the two push-style

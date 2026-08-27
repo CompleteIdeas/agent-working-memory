@@ -380,6 +380,37 @@ If neither pattern applies and you want a memory to definitely survive, set
 
 Recall is fast (~300ms typical). Use it freely.
 
+### Chain recalls — one hop per call
+
+AWM returns what matches your query. It does **not** walk from that answer to the next
+fact, and it is not meant to: it is active memory, holding what you need right now.
+Following a chain to the next thing is **your** job — recall, read, recall again, each
+result becoming the cue for the next query.
+
+So when a question refers to something **by its role instead of its name**, you have a
+chain, not a query:
+
+> *"What is the codename of the project owned by my scheduler?"*
+
+That is three lookups, not one:
+
+1. recall \`who is my scheduler\` → a name
+2. recall \`what project does <that name> own\` → a project
+3. recall \`<that project> codename\` → the answer
+
+**The failure mode is answering from the first recall.** A single query blending all
+three terms returns the most *salient* related memory, not the correct one — measured,
+that returns the main project's codename with complete confidence, and it is wrong.
+Each hop on its own is an ordinary, reliable recall; the chain only breaks when you stop
+asking.
+
+Tells that you are looking at a chain: a possessive or relative clause naming an entity
+by role rather than identity (\`my scheduler\`, \`the owner of X\`, \`whoever signed
+off on Y\`), or a rule that operates on an attribute you have not looked up yet (\`the
+release tag of the project we discussed\` needs that project's codename first). If
+resolving the question requires a fact you would have to *derive*, recall the fact
+instead.
+
 ### Recall strategy (when one query isn't enough)
 AWM's adaptive retrieval handles most query variations natively — synonym
 expansion, multi-channel scoring, embedding + BM25 + reranker agreement.
