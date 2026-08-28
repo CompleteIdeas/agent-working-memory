@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.14.0 (2026-08-28) — retrieval quality, and two behaviour changes
+
+Consolidates everything since **0.13.1**, the last version published to npm. The
+individual 0.13.2–0.13.10 entries below remain as the detailed record.
+
+A minor rather than a patch because of what changed, not how long it took: the span
+carries two behaviour changes, and `0.13.1 → 0.13.10` would have read as nine bugfixes.
+
+### Behaviour changes — read these two
+
+- **Default recall limit is now 3, was 5.** Measured on 400 real-store probes with the
+  rerank flags enabled: k=3 is the only token-**positive** setting (**+115 tok/recall**
+  against **−680** at k=5) and is **41% faster** at p50, because `limit` sizes the
+  cross-encoder rerank pool. It costs ~0.5pp success@1 — about 3 queries in 400. Pass
+  `limit` explicitly, or `mode: 'exploratory'`, when you want breadth.
+- **`awm setup` no longer rewrites an instruction file it did not mark.** It previously
+  replaced everything between `## Memory (AWM)` and the next heading, which on a real
+  `CLAUDE.md` measured **169 of 381 lines (44%) of hand-written operational notes**. It
+  now writes generated content between explicit markers and replaces only that range; an
+  unmarked legacy section is **backed up and left untouched** unless `force` is passed.
+
+### Retrieval quality
+
+Enable together — `AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1`. Combined on
+450 real-store probes: **success@1 56.4% → 63.8%**, s@5 66.2 → 68.4, MRR 60.6 → 66.0,
+with adversarial abstention held at **90.0%**.
+
+- **Second-stage rerank** (`AWM_RERANK2`) — +9.7pp success@1, no added inference.
+- **Query-aware rerank window** (`AWM_RERANK_WINDOW=query`) — long-memory success@1
+  **25% → 87.5%**. A prefix was the wrong 400 characters.
+- **Tags into the rerank passage** (`AWM_RERANK_TAGS`) — +7.4pp. 66.2% of topical tag
+  terms never appear in the memory body, invisible to two of three retrieval channels.
+
+Three alternative approaches were tested against the same bars and **rejected**:
+re-embedding with tags (+0.3pp), mined dialect aliases (−0.2pp), a larger 768d embedder
+(+0.7pp alone, −1.1pp combined).
+
+### Correctness
+
+- **Embedding dimension mismatches are detected** instead of silently scoring 0 on the
+  vector channel. A half-migrated corpus previously degraded recall with no error
+  anywhere. Surfaced in `GET /health` and `memory_whoami`.
+- **`memory_whoami` reports the effective recall configuration**, so "what am I actually
+  running" is answerable. This caught a real deployment failure the day it shipped.
+- Deterministic "most recent" lookups; `HF_HOME`/`AWM_CACHE_DIR` honoured; PGlite 0.5.6
+  fixes the native-Windows MCP crash.
+
+### Guidance shipped to callers
+
+- **Name the category as well as the specifics**, and **tags are not a substitute for
+  body text** — the previous advice was producing memories that were maximally specific
+  and categorically unreachable.
+- **Chain recalls, one hop per call.** AWM is active memory; it answers the query you
+  send and does not traverse a chain for you.
+
+### Evaluation
+
+- **LoCoMo retired**, replaced by `tests/realstore-eval` — a frozen snapshot of a real
+  11,294-engram store with ground truth by unique-identifier hold-out, where correct
+  abstention scores positively.
+- **Gauntlet, both arms complete at k=10:** baseline 74.0% vs **81.0%** with the flags
+  (+7.0pp, Fisher p=0.31 — not significant, but directionally matching the fixture
+  result). All 10 probes flip between identical runs, which is the current ceiling on
+  what the suite can resolve.
+- `AWM_SPREAD` (D11) **parked permanently** — the best-guarded arm fixed 0 queries.
+
 ## 0.13.10 (2026-08-27) — `awm setup` would have deleted your own notes
 
 `upsertAwmSection` replaced everything between `## Memory (AWM)` and the next `## `

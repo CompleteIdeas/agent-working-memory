@@ -533,7 +533,7 @@ they lost — is documented in [`docs/reference.md`](https://github.com/Complete
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.13.x (latest)
+## What's New in v0.14.0 (latest)
 
 Retrieval-quality releases, all additive. Corpus provenance differs per result and is
 named in [Benchmarks](#benchmarks) — only the tags result and the combined figure come
@@ -621,7 +621,7 @@ gotchas (incl. the Windows CRLF/s6 clone fix) — is in
 
 ## Project Status
 
-AWM is in active development (v0.13.6). The core memory pipeline, consolidation
+AWM is in active development (v0.14.0). The core memory pipeline, consolidation
 system, multi-agent coordination, and MCP integration are stable and used
 daily in production coding workflows.
 
