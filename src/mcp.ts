@@ -71,7 +71,7 @@ import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './cor
 import { performWrite } from './core/write-pipeline.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
-import type { TaskStatus, TaskPriority } from './types/engram.js';
+import type { TaskStatus, TaskPriority, AbstentionInfo } from './types/engram.js';
 import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { embed, getEmbedder } from './core/embeddings.js';
 import { getReranker } from './core/reranker.js';
@@ -414,7 +414,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     use_expansion: z.boolean().optional().default(true).describe('Expand query with synonyms for better recall (default true)'),
     memory_type: z.enum(['episodic', 'semantic', 'procedural']).optional().describe('Filter by memory type (omit to search all types)'),
     workspace: z.string().optional().describe('Search across all agents in this workspace (hive mode). Omit for agent-scoped recall only.'),
-    require_confidence: z.number().optional().default(0.05).describe('Abstain (return nothing) when recall confidence is below this threshold. Defaults to 0.05 — a LIGHT filter, chosen from measurement: it halves the rate of answering off-topic queries at zero cost to hit rate. Raise it only for push-style use where nobody asked (0.25 is what the prime hook uses). Do NOT raise it for ordinary recall: a miss is expensive, because the agent then reads the codebase instead (~2,106 tokens), so aggressive thresholds measurably destroy value — 0.20+ cut net tokens saved by 25% in tests/abstention-eval. Pass 0 to disable.'),
+    require_confidence: z.number().optional().default(0.05).describe('Abstain (return nothing) when recall confidence is below this threshold. Defaults to 0.05 — a LIGHT filter, chosen from measurement: it halves the rate of answering off-topic queries at zero cost to hit rate. Raise it only for push-style use where nobody asked (0.25 is what the prime hook uses). Do NOT raise it for ordinary recall: a miss is expensive, because the agent then reads the codebase instead (~2,106 tokens), so aggressive thresholds measurably destroy value — 0.20+ cut net tokens saved by 25% in tests/abstention-eval. Pass 0 to disable. NOTE: this is NOT min_score — it gates on the SHAPE of the score distribution across the whole result set, not per-result relevance, so memories that pass min_score can still be withheld. When that happens the reply says RECALL ABSTAINED and reports how many were withheld; an empty result is only absence when it does not.'),
     granularity: z.enum(['full', 'compact', 'auto']).optional().describe('Output granularity (Paper 3: cognitive teaming). "full" (default): no change. "compact": every result carries a short summary field. "auto": confidence-adaptive — top result gets a longer summary when there is a clear winner, otherwise everything is compact for scanning.'),
     max_tokens: z.number().optional().describe('Token budget for the response. `limit` is a COUNT and is token-blind — 5 results may cost 400 tokens or 4,000. Use this when context is tight: results are packed by value-per-token until the budget is reached, the top-scored match always gets first refusal, and the reply reports what it cost and what was withheld. Omit for no budget (everything is returned, still with accounting).'),
   },
@@ -430,6 +430,9 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     }
     // Use workspace from param, env var, or omit for agent-scoped
     const workspace = params.workspace ?? process.env.AWM_WORKSPACE ?? undefined;
+    // Set only when a gate WITHHELD results. Distinguishes abstention from absence,
+    // which an empty array cannot.
+    let abstained: AbstentionInfo | undefined;
     const results = await activationEngine.activate({
       agentId: AGENT_ID,
       context: queryText,
@@ -442,6 +445,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       workspace,
       requireConfidence: params.require_confidence,
       granularity: params.granularity,
+      onAbstain: (info) => { abstained = info; },
     });
 
     // Auto-checkpoint: track recall
@@ -458,12 +462,29 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       : '';
 
     if (results.length === 0) {
-      return {
-        content: [{
-          type: 'text' as const,
-          text: 'No relevant memories found.' + peerSuffix,
-        }],
-      };
+      // Two very different conditions used to render identically as
+      // "No relevant memories found." — a claim of absence the system cannot make
+      // when a gate withheld matches. Callers read it as absence and stopped
+      // looking, for memories scoring well above minScore.
+      const text = abstained
+        ? [
+            `RECALL ABSTAINED — this is NOT "no memories exist".`,
+            ``,
+            `${abstained.candidates} candidate${abstained.candidates === 1 ? '' : 's'} matched ` +
+              `(best score ${abstained.topScore.toFixed(3)}) and ${abstained.candidates === 1 ? 'was' : 'were'} ` +
+              `withheld because recall confidence ` +
+              `${abstained.confidence !== undefined ? abstained.confidence.toFixed(3) + ' ' : ''}` +
+              `fell below your require_confidence of ${abstained.threshold ?? '?'}.`,
+            ``,
+            `require_confidence is NOT min_score. It gates on the SHAPE of the score` +
+              ` distribution across the whole result set, not on how relevant any single` +
+              ` memory is — so results that comfortably pass min_score can still be withheld here.`,
+            ``,
+            `To see them: re-run this query with require_confidence: 0.`,
+            `Do not conclude the memories are absent without doing that.`,
+          ].join('\n') + peerSuffix
+        : 'No relevant memories found.' + peerSuffix;
+      return { content: [{ type: 'text' as const, text }] };
     }
 
     // Confidence-adaptive output (Paper 3: cognitive teaming) and D8

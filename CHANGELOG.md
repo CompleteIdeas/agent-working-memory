@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.14.1 (2026-09-01) — an empty recall no longer claims the memories are absent
+
+`activate()` returned a bare `[]` when the confidence gate fired, and the MCP layer
+rendered it as **"No relevant memories found."** That asserts absence — something the
+system cannot know when it withheld matches it had.
+
+Observed in real use: a caller passed `require_confidence: 0.25`, read the empty result as
+"the memories are missing", and reported a retrieval failure. The memories existed and
+scored **0.268 and 0.295** — comfortably above the `min_score` of 0.05 that governs
+individual relevance. Nothing in the output could have corrected that reading.
+
+The confusion is structural, not careless. `min_score` and `require_confidence` are both
+thresholds, both default to 0.05, and both sit in the same numeric range — but one is
+per-result relevance and the other is the **shape of the whole score distribution**. A
+result that passes the first can be withheld by the second, and the naming gives no hint.
+
+- **Abstention is now reported as abstention.** `ActivationQuery.onAbstain` receives an
+  `AbstentionInfo` — reason, candidate count, top score, confidence, threshold — instead
+  of the caller getting an empty array with no explanation.
+- **The MCP reply says `RECALL ABSTAINED — this is NOT "no memories exist"`**, reports how
+  many were withheld and the best score, names the distinction from `min_score`, and gives
+  the exact remedy (`require_confidence: 0`). A genuinely empty store still says
+  "No relevant memories found."
+- **`require_confidence` docs now state it is not `min_score`.**
+
+Additive: callers that do not wire `onAbstain` are unaffected. Covered by
+`tests/engine/abstention-reporting.test.ts` (4 tests), including one asserting an empty
+store does *not* report abstention — if it did, the signal would mean nothing.
+
+Documentation alone would not have fixed this: the guidance already warned that an empty
+result may be abstention. The output has to carry it, because that is what a caller reads.
+
 ## 0.14.0 (2026-08-28) — retrieval quality, and two behaviour changes
 
 Consolidates everything since **0.13.1**, the last version published to npm. The

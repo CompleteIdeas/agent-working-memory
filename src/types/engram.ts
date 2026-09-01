@@ -254,6 +254,22 @@ export interface PhaseScores {
  */
 export type QueryMode = 'targeted' | 'exploratory' | 'balanced' | 'auto';
 
+/** Why a recall returned nothing, when the cause was a gate rather than an empty store. */
+export interface AbstentionInfo {
+  /** `confidence` = score-distribution gate (`requireConfidence`).
+   *  `agreement`  = cross-channel agreement gate (`abstentionThreshold`). */
+  reason: 'confidence' | 'agreement';
+  /** Candidates that survived scoring and were then withheld. Never 0 — a genuinely
+   *  empty result does not produce an AbstentionInfo at all. */
+  candidates: number;
+  /** Score of the best withheld candidate. Compare against `minScore`, not against
+   *  the confidence threshold — they measure different things. */
+  topScore: number;
+  /** Computed recall confidence, and the threshold it failed. */
+  confidence?: number;
+  threshold?: number;
+}
+
 export interface ActivationQuery {
   agentId: string;
   context: string;
@@ -273,6 +289,15 @@ export interface ActivationQuery {
    * 0.25 (balanced), 0.40 (aggressive — only return high-confidence recall).
    */
   requireConfidence?: number;
+  /**
+   * Called when a gate withholds results, INSTEAD of silently returning [].
+   *
+   * An empty array cannot distinguish "nothing matched" from "matches were found
+   * and withheld", and callers reliably read the second as the first — including
+   * when the withheld results scored well above `minScore`. If you act on an empty
+   * recall, wire this up.
+   */
+  onAbstain?: (info: AbstentionInfo) => void;
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
   spread?: boolean;            // R2: when AWM_SPREAD=1, set false to skip iterative spreading activation (connection-discovery uses this so edge-building doesn't recurse)
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)

@@ -1053,6 +1053,17 @@ export class ActivationEngine {
     // Independent of the channel-agreement abstention earlier — that path
     // requires the reranker; this one uses just the final composite scores.
     if (requireConfidence > 0 && confidence < requireConfidence) {
+      // Tell the caller results were WITHHELD, not that none exist. A bare [] here
+      // has been read as absence for memories scoring 0.268-0.295 — well above the
+      // 0.05 minScore that governs individual relevance. The caller cannot infer
+      // that from an empty array, so it has to be reported.
+      query.onAbstain?.({
+        reason: 'confidence',
+        candidates: finalRanked.length,
+        topScore: finalRanked[0]?.score ?? 0,
+        confidence,
+        threshold: requireConfidence,
+      });
       return [];
     }
 
