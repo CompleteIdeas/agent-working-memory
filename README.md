@@ -1,10 +1,23 @@
 # AgentWorkingMemory (AWM)
 
-**Persistent working memory for AI agents.**
+**Memory for AI agents that survives the end of a conversation.**
 
-AWM helps agents retain important project knowledge across conversations and sessions. Instead of storing everything and retrieving by similarity alone, it filters for salience, builds associative links between related memories, and periodically consolidates useful knowledge while letting noise fade.
+Most "memory for AI" is a vector database: store everything, retrieve by similarity, hope
+the right thing comes back. AWM takes the opposite bet — that a memory is only useful if
+it is **selective**. It decides what is worth keeping *before* storing it, strengthens what
+gets used, lets the rest fade, and returns **nothing** when nothing is relevant rather than
+handing back the best of a bad set.
 
-Use it through Claude Code via MCP or as a local HTTP service for custom agents. Everything runs locally: SQLite + ONNX models + Node.js. No cloud, no API keys.
+> Most memory systems optimise for *finding something*.
+> AWM optimises for *whether there is anything worth returning*.
+
+That one idea explains the rest of the design: a salience filter that refuses most of what
+it sees, abstention as a first-class result, and a benchmark built on a real 11,000-memory
+store rather than synthetic Q&A.
+
+Everything runs on your machine — SQLite and three small ONNX models. No cloud, no API
+keys, nothing leaves the box. Use it from Claude Code over MCP, or as a local HTTP service
+for your own agents.
 
 ### Without AWM
 - Agent forgets earlier architecture decision
@@ -74,7 +87,21 @@ First conversation will be ~30 seconds slower while ML models download (~200MB t
 > are defined plainly, one paragraph each, in
 > [`docs/onboarding-vocabulary.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/onboarding-vocabulary.md) — a 5-minute read if any of the table below is unfamiliar.
 
-Most "memory for AI" projects are vector databases with a retrieval wrapper. AWM goes further:
+Three things set it apart. Everything in the table below follows from them.
+
+**1 — It refuses to remember most of what it sees.** A salience filter runs at write time:
+low-value writes are discarded, borderline ones go to staging, only what clears the bar
+becomes active. Retention is the product, not a side effect of storage.
+
+**2 — It will tell you it doesn't know.** When the score distribution says a recall is
+noisy or best-of-a-bad-bunch, AWM returns nothing and *says so* — naming how many
+candidates it withheld and why. Correct silence is scored as a win in its own benchmark,
+because a confident wrong answer is more expensive than an admitted gap.
+
+**3 — It is local, and stays local.** SQLite plus three small ONNX models. No API keys, no
+network calls, multi-process safe so several agent sessions can share one store.
+
+Concretely, against a typical vector store:
 
 | | Typical RAG / Vector Store | AWM |
 |---|---|---|

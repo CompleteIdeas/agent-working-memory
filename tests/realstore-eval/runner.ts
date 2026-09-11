@@ -47,7 +47,12 @@ const WORK = join(tmpdir(), `awm-realstore-${process.pid}.db`);
 /** Cost the agent pays when AWM does NOT surface the fact: it reads the code. */
 const FALLBACK_TOKENS = 2106;
 /** Real recalls return ~6.7 results on average in this store; 10 was arbitrary. */
-const RECALL_LIMIT = Number(process.env.REALSTORE_K ?? 7);
+// Default MUST track the shipped product default (mcp.ts memory_recall `limit`),
+// currently 3 since 0.13.8. It was 7 — chosen when the product default was 5 and the
+// store averaged ~6.7 results — which meant the benchmark measured a configuration
+// nobody ships: k=7 reports NET -1381/recall where the shipped k=3 reports +115.
+// If the product default moves again, move this with it.
+const RECALL_LIMIT = Number(process.env.REALSTORE_K ?? 3);
 const GRANULARITY = (process.env.REALSTORE_GRANULARITY ?? 'full') as 'full' | 'compact' | 'auto';
 const est = (s: string) => Math.max(Math.ceil(s.split(/\s+/).filter(Boolean).length * 1.3), Math.ceil(s.length / 4));
 

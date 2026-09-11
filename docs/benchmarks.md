@@ -34,6 +34,37 @@ Each eval creates a fresh SQLite database, seeds it with test data, and runs str
 | **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 24/30 = 80.0% memory probes, k=3; baseline arm not retained | NULL |
 | **Gauntlet at k=10** (2026-08-26) | 74.3% baseline vs 76.7% +flags, Fisher p=1.000; 6/10 probes flip between identical runs | NULL — fix probe determinism, not k |
 
+## 10-day regression check — 2026-09-11 (v0.14.1)
+
+Re-run against the **same frozen Aug-24 snapshot** and the same fixtures, so any movement
+is attributable to code rather than data.
+
+| metric | published 2026-08-24 | 2026-09-11 (v0.14.1) |
+|---|---|---|
+| category fixture success@1 | 63.8% | **63.8%** |
+| adversarial correctly silent | 90.0% | **90.0%** |
+| unit suite | 726 passing | **726 passing** |
+| identifier s@1 @ shipped k=3 | 70.0% | **70.0%** |
+| identifier sufficiency | 99.3% | **99.3%** (290/292) |
+| identifier NET tokens | +115/recall | **+116/recall** |
+
+**No regression.** At the shipped configuration the run reproduces to within one token per
+recall. The category fixture's s@5 and MRR each moved 0.2pp (≈ one query in 450), which on a
+frozen snapshot with a seeded sample is cross-encoder floating-point nondeterminism, not a
+change in behaviour.
+
+### Instrument defect found and fixed
+
+The first pass reported **NET −1383 tok/recall** on the identifier fixture, which reads as a
+serious regression. It was not: `tests/realstore-eval/runner.ts` defaulted to `REALSTORE_K=7`
+while the **product default has been `limit: 3` since 0.13.8**. The Aug-26 sweep measured
+−1381/recall at k=7 — the same number — and **+115** at k=3.
+
+So for two weeks the benchmark had been measuring a configuration nobody ships. The runner
+default now tracks the product default, with a comment pointing at `mcp.ts` so the two move
+together. This is the fourth instrument defect in this project with the same shape: a
+measurement quietly describing something other than the shipped thing.
+
 ## Retrieval quality — the 0.13.x wins (2026-08-24)
 
 **Read the provenance column before quoting a number** — the three results below were
