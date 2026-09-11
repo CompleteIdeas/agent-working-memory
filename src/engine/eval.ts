@@ -75,6 +75,8 @@ export class EvalEngine {
       activationCount: activationStats.count,
       avgPrecisionAtK: precision,
       avgLatencyMs: activationStats.avgLatencyMs,
+      p50LatencyMs: activationStats.p50LatencyMs,
+      p90LatencyMs: activationStats.p90LatencyMs,
       p95LatencyMs: activationStats.p95LatencyMs,
 
       totalEdges: allAssociations.length,
@@ -104,4 +106,36 @@ export class EvalEngine {
         Math.max(activeEngrams.length + retractedEngrams.length, 1),
     };
   }
+
+  /**
+   * 0.14.3: outcome-shaped usage numbers for memory_stats. Each of these can
+   * move in BOTH directions, unlike edge utility. Cheap: one pass over the
+   * agent's engrams plus two count queries.
+   */
+  async computeUsage(agentId: string): Promise<UsageMetrics> {
+    const active = await this.store.getEngramsByAgent(agentId, 'active');
+    const since30 = new Date(Date.now() - 30 * 24 * 3600_000);
+    const writes30d = active.filter(e => e.createdAt >= since30).length;
+    const neverRecalled = active.filter(e => e.accessCount === 0).length;
+    const act30 = await this.store.getActivationStats(agentId, 30 * 24);
+    const fb = await this.store.getLinkedFeedbackStats(agentId, 7 * 24);
+    return {
+      writes30d,
+      recalls30d: act30.count,
+      recallsPerWrite30d: writes30d > 0 ? act30.count / writes30d : 0,
+      neverRecalledShare: active.length > 0 ? neverRecalled / active.length : 0,
+      feedbackLinked7d: fb.total,
+      usefulShare7d: fb.total > 0 ? fb.useful / fb.total : 0,
+    };
+  }
+}
+
+export interface UsageMetrics {
+  writes30d: number;
+  recalls30d: number;
+  recallsPerWrite30d: number;
+  neverRecalledShare: number;
+  /** feedback rows in the window that carry an activation_event_id (0.14.3+) */
+  feedbackLinked7d: number;
+  usefulShare7d: number;
 }

@@ -54,7 +54,9 @@ export interface EvalMetrics {
   // Retrieval quality
   activationCount: number;
   avgPrecisionAtK: number;    // Of returned results, % judged useful
-  avgLatencyMs: number;
+  avgLatencyMs: number;       // kept for callers; misleading on the live store (mixes cold loads) — prefer p50/p90
+  p50LatencyMs: number;       // 0.14.3
+  p90LatencyMs: number;       // 0.14.3
   p95LatencyMs: number;
 
   // Connection quality

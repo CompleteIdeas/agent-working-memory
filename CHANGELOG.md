@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.14.3 (2026-09-11) — feedback joins to the recall that produced it; memory_stats reports outcomes
+
+A telemetry review against the live store found that AWM instrumented what it *did* and
+not what it *changed*. The one outcome signal — `retrieval_feedback` — had
+`activation_event_id = NULL` in **872 of 872 rows**: the engine generated the event id
+and dropped it, and the MCP `memory_feedback` path hardcoded `null` (the HTTP route already
+accepted an id). Feedback could never be traced to the recall it judged, which made
+12,736 activation events a log rather than a training set.
+
+- **`memory_recall` ends with `[recall_id: <uuid>]`** — the activation event this recall
+  logged. Every `ActivationResult` also carries `activationEventId` (same value across the
+  set, like `confidence`), and the engine exposes `lastActivationEventId`.
+- **`memory_feedback` accepts `recall_id`**; omitted, it defaults to the engine's most
+  recent activation — the common "recall, use, feedback" turn needs no extra plumbing.
+  Verified end to end on an isolated store: both the explicit and the default path produce
+  rows that JOIN to `activation_events`.
+- **`memory_stats` reports outcome numbers instead of activity counters.** "Edge utility"
+  (share of Hebbian edges ever activated) was monotone — it could only rise — and read as
+  health when it was not. Replaced with `Write:recall (30d)`, `Never recalled` share, and
+  `Recall→use (7d)` (useful share of *linked* feedback; unlinked legacy rows are excluded
+  on purpose). Each can move in both directions.
+- **Latency as p50 / p90, never a mean.** `activation_events.latency_ms` mixes warm recalls
+  with cold model loads and stalls — live store: mean 20 s, median 1.6 s, max 38 min. New
+  `getActivationStats` fields `p50LatencyMs` / `p90LatencyMs` on all three backends;
+  `avgLatencyMs` is kept for callers but no longer printed.
+- New store method `getLinkedFeedbackStats(agentId, windowHours)` (sqlite, pglite,
+  postgres) and `EvalEngine.computeUsage()`. New `tests/feedback-join.test.ts` (3).
+
+Not in the package, but done alongside in the user's hooks: the Stop hook
+`awm-learn-intents.cjs` was retired. It re-scanned the whole transcript on every Stop
+and wrote 177,110 rows in seven days with exactly one `used=true` — a structurally
+useless heuristic (does the engram UUID recur in later text). Its replacement is the
+identifier-transfer test measured in the 2026-09-10/11 evaluation, to be run once per
+session at Stop and to write rows that carry `recall_id`.
+
 ## 0.14.2 (2026-09-11) — one sidecar per process: the hook port walks upward instead of giving up
 
 Every Claude Code session spawns its own MCP process, and every one of them asked for

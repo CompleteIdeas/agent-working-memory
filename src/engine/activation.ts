@@ -1222,8 +1222,9 @@ export class ActivationEngine {
 
       // Log activation event for eval
       const latencyMs = performance.now() - startTime;
+      const eventId = randomUUID();
       await this.store.logActivationEvent({
-        id: randomUUID(),
+        id: eventId,
         agentId: query.agentId,
         timestamp: new Date(),
         context: query.context,
@@ -1232,10 +1233,21 @@ export class ActivationEngine {
         latencyMs,
         engramIds: activatedIds,
       });
+      // 0.14.3: expose the event id so callers can hand it back on
+      // memory_feedback. Before this, the id was generated here and dropped —
+      // every one of the 872 retrieval_feedback rows in the live store has
+      // activation_event_id = NULL, so feedback could never be joined to the
+      // recall it judged. Stamped on each result (same value across the set,
+      // like `confidence`) so the MCP layer can render it once in the footer.
+      for (const r of results) r.activationEventId = eventId;
+      this.lastActivationEventId = eventId;
     }
 
     return results;
   }
+
+  /** Id of the most recent non-internal activation this engine logged (0.14.3). */
+  lastActivationEventId: string | null = null;
 
   /**
    * Multi-graph traversal (MAGMA-inspired).

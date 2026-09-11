@@ -530,10 +530,15 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       };
     }
 
+    // 0.14.3: surface the activation event id once, so memory_feedback can join
+    // to this recall. Rendered after the token footer; cheap (one short line).
+    const evId = results[0]?.activationEventId;
+    const evFooter = evId ? `\n[recall_id: ${evId}]` : '';
+
     return {
       content: [{
         type: 'text' as const,
-        text: packed.lines.join('\n') + peerSuffix + formatTokenFooter(packed, params.max_tokens),
+        text: packed.lines.join('\n') + peerSuffix + formatTokenFooter(packed, params.max_tokens) + evFooter,
       }],
     };
   }
@@ -548,9 +553,19 @@ Always call this after using a recalled memory so the system learns what's valua
     engram_id: z.string().describe('ID of the memory (from memory_recall results)'),
     useful: z.boolean().describe('Was this memory actually helpful?'),
     context: z.string().optional().describe('Brief note on why it was/wasn\'t useful'),
+    recall_id: z.string().optional().describe(
+      'The [recall_id: …] printed at the end of the memory_recall output that returned this memory. '
+      + 'Pass it so the feedback is joined to that recall; omitted, it defaults to the most recent recall in this session.',
+    ),
   },
   async (params) => {
-    await store.logRetrievalFeedback(null, params.engram_id, params.useful, params.context ?? '');
+    // 0.14.3: join feedback to the recall that produced it. Explicit recall_id
+    // wins; otherwise fall back to the engine's most recent logged activation —
+    // the common case is "recall, use, feedback" in one turn. Before this the
+    // MCP path hardcoded null (the HTTP route already accepted the id), which
+    // is why every retrieval_feedback row in the live store was orphaned.
+    const eventId = params.recall_id ?? activationEngine.lastActivationEventId ?? null;
+    await store.logRetrievalFeedback(eventId, params.engram_id, params.useful, params.context ?? '');
 
     const engram = await store.getEngram(params.engram_id);
     if (engram) {
@@ -667,6 +682,11 @@ Also shows the activity log path so the user can tail it to see what's happening
   async () => {
     const metrics = await evalEngine.computeMetrics(AGENT_ID);
     const checkpoint = await store.getCheckpoint(AGENT_ID);
+    // 0.14.3: outcome numbers, not activity counters. "Edge utility" (share of
+    // edges ever activated) was monotone — it could only rise — and read as
+    // health when it was not. Latency was a mean over a column that mixes cold
+    // loads and stalls (live store: mean 20 s, median 1.6 s); medians only now.
+    const usage = await evalEngine.computeUsage(AGENT_ID);
     const lines = [
       `Agent: ${AGENT_ID}`,
       `Active memories: ${metrics.activeEngramCount}`,
@@ -674,9 +694,12 @@ Also shows the activity log path so the user can tail it to see what's happening
       `Retracted: ${metrics.retractedCount}`,
       `Avg confidence: ${metrics.avgConfidence.toFixed(3)}`,
       `Total edges: ${metrics.totalEdges}`,
-      `Edge utility: ${(metrics.edgeUtilityRate * 100).toFixed(1)}%`,
+      ``,
+      `Write:recall (30d): 1 : ${usage.recallsPerWrite30d.toFixed(2)}  (${usage.writes30d} writes, ${usage.recalls30d} recalls)`,
+      `Never recalled: ${(usage.neverRecalledShare * 100).toFixed(0)}% of active memories`,
+      `Recall→use (7d): ${usage.feedbackLinked7d > 0 ? (usage.usefulShare7d * 100).toFixed(0) + '% useful of ' + usage.feedbackLinked7d + ' judged' : 'no linked feedback yet'}`,
       `Activations (24h): ${metrics.activationCount}`,
-      `Avg latency: ${metrics.avgLatencyMs.toFixed(1)}ms`,
+      `Recall latency (24h): p50 ${metrics.p50LatencyMs.toFixed(0)}ms  p90 ${metrics.p90LatencyMs.toFixed(0)}ms`,
       ``,
       `Session writes: ${checkpoint?.auto.writeCountSinceConsolidation ?? 0}`,
       `Session recalls: ${checkpoint?.auto.recallCountSinceConsolidation ?? 0}`,

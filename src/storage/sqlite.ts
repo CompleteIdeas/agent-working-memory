@@ -1348,7 +1348,7 @@ export class EngramStore {
   }
 
   getActivationStats(agentId: string, windowHours: number = 24): {
-    count: number; avgLatencyMs: number; p95LatencyMs: number;
+    count: number; avgLatencyMs: number; p50LatencyMs: number; p90LatencyMs: number; p95LatencyMs: number;
   } {
     const since = new Date(Date.now() - windowHours * 3600_000).toISOString();
     const rows = this.db.prepare(`
@@ -1357,15 +1357,37 @@ export class EngramStore {
       ORDER BY latency_ms ASC
     `).all(agentId, since) as { latency_ms: number }[];
 
-    if (rows.length === 0) return { count: 0, avgLatencyMs: 0, p95LatencyMs: 0 };
+    if (rows.length === 0) return { count: 0, avgLatencyMs: 0, p50LatencyMs: 0, p90LatencyMs: 0, p95LatencyMs: 0 };
 
+    // 0.14.3: p50/p90 added. The column mixes warm recalls with cold model loads
+    // and stalls (live store: mean 20 s, median 1.6 s, max 38 min), so the mean
+    // is not a usable number; percentiles are. Rows are already sorted ASC.
+    const pct = (q: number) => rows[Math.min(Math.floor(rows.length * q), rows.length - 1)].latency_ms;
     const total = rows.reduce((s, r) => s + r.latency_ms, 0);
-    const p95Index = Math.min(Math.floor(rows.length * 0.95), rows.length - 1);
     return {
       count: rows.length,
       avgLatencyMs: total / rows.length,
-      p95LatencyMs: rows[p95Index].latency_ms,
+      p50LatencyMs: pct(0.5),
+      p90LatencyMs: pct(0.9),
+      p95LatencyMs: pct(0.95),
     };
+  }
+
+  /**
+   * 0.14.3: feedback rows in the window that are JOINED to an activation event.
+   * Unlinked rows (activation_event_id IS NULL — all 872 rows written before
+   * 0.14.3) are excluded on purpose: this is the recall→use signal, and a row
+   * that cannot be traced to a recall does not measure it.
+   */
+  getLinkedFeedbackStats(agentId: string, windowHours: number = 24 * 7): { total: number; useful: number } {
+    const since = new Date(Date.now() - windowHours * 3600_000).toISOString();
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS total, COUNT(CASE WHEN rf.useful = 1 THEN 1 END) AS useful
+      FROM retrieval_feedback rf
+      JOIN activation_events ae ON ae.id = rf.activation_event_id
+      WHERE ae.agent_id = ? AND rf.timestamp > ?
+    `).get(agentId, since) as { total: number; useful: number };
+    return { total: row.total, useful: row.useful };
   }
 
   getConsolidatedCount(agentId: string): number {

@@ -220,6 +220,13 @@ export interface ActivationResult {
    */
   confidence?: number;
   /**
+   * Id of the activation_events row this recall logged (0.14.3). Same value on
+   * every result in the same recall. Hand it back on memory_feedback so the
+   * feedback joins to the recall that produced it — before this, the id was
+   * generated and dropped, and every retrieval_feedback row was orphaned.
+   */
+  activationEventId?: string;
+  /**
    * Confidence-adaptive content preview (Paper 3: cognitive teaming).
    * Set when the query opts in via `granularity: 'compact' | 'auto'`.
    * Trades depth for breadth — short when the agent should scan a diverse

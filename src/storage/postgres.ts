@@ -1119,7 +1119,7 @@ export class PostgresEngramStore {
     };
   }
 
-  async getActivationStats(agentId: string, windowHours: number = 24): Promise<{ count: number; avgLatencyMs: number; p95LatencyMs: number }> {
+  async getActivationStats(agentId: string, windowHours: number = 24): Promise<{ count: number; avgLatencyMs: number; p50LatencyMs: number; p90LatencyMs: number; p95LatencyMs: number }> {
     await this.readyPromise;
     // Flush any buffered activation events so stats reflect the latest writes.
     await this.flushActivationEvents();
@@ -1130,15 +1130,33 @@ export class PostgresEngramStore {
        ORDER BY latency_ms ASC`,
       [agentId, since],
     );
-    if (result.rows.length === 0) return { count: 0, avgLatencyMs: 0, p95LatencyMs: 0 };
+    if (result.rows.length === 0) return { count: 0, avgLatencyMs: 0, p50LatencyMs: 0, p90LatencyMs: 0, p95LatencyMs: 0 };
     const latencies = result.rows.map((r) => Number(r.latency_ms));
     const total = latencies.reduce((s, l) => s + l, 0);
-    const p95Idx = Math.min(Math.floor(latencies.length * 0.95), latencies.length - 1);
+    // 0.14.3: p50/p90 — see sqlite.ts for why the mean is not usable here.
+    const pct = (q: number) => latencies[Math.min(Math.floor(latencies.length * q), latencies.length - 1)];
     return {
       count: latencies.length,
       avgLatencyMs: total / latencies.length,
-      p95LatencyMs: latencies[p95Idx],
+      p50LatencyMs: pct(0.5),
+      p90LatencyMs: pct(0.9),
+      p95LatencyMs: pct(0.95),
     };
+  }
+
+  /** 0.14.3: feedback rows joined to an activation event — see sqlite.ts. */
+  async getLinkedFeedbackStats(agentId: string, windowHours: number = 24 * 7): Promise<{ total: number; useful: number }> {
+    await this.readyPromise;
+    const since = new Date(Date.now() - windowHours * 3600_000).toISOString();
+    const result = await this.q<any>(
+      `SELECT COUNT(*) AS total, COUNT(CASE WHEN rf.useful = TRUE THEN 1 END) AS useful
+       FROM retrieval_feedback rf
+       JOIN activation_events ae ON ae.id = rf.activation_event_id
+       WHERE ae.agent_id = $1 AND rf.timestamp > $2`,
+      [agentId, since],
+    );
+    const row = result.rows[0] ?? { total: 0, useful: 0 };
+    return { total: Number(row.total), useful: Number(row.useful) };
   }
 
   async getConsolidatedCount(agentId: string): Promise<number> {
