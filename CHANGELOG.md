@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.14.2 (2026-09-11) — one sidecar per process: the hook port walks upward instead of giving up
+
+Every Claude Code session spawns its own MCP process, and every one of them asked for
+exactly port 8401 for its hook sidecar. On `EADDRINUSE` the sidecar logged "hooks
+disabled" and stopped — so with N concurrent sessions only the first had working hooks,
+and `memory_whoami` still reported `hookSidecar=8401` in all of them as if it were bound.
+
+Observed 2026-09-11 on a machine with five live sessions: **four had no sidecar at all.**
+The one that held 8401 belonged to the *personal* pool, so work-session checkpoints
+(PreCompact / SessionEnd) were being posted into the personal agent's process, and a
+UserPromptSubmit prime hook pointed at 8401 would have injected personal-store recalls
+into work sessions. This is the desktop (multi-session, shared SQLite) shape only; the
+docker deployments — one AWM per app, own port — were never affected.
+
+- **Sidecar binds the first free port in `[AWM_HOOK_PORT, +AWM_HOOK_PORT_RANGE)`**
+  (default 8401, range 10). A busy preferred port is no longer fatal; the whole range
+  busy still fails soft with hooks disabled and never takes the MCP server down.
+  `startSidecar` now returns `{ close, boundPort }`.
+- **`GET /health` reports `port`, `pid`, `version`** alongside `agentId`, so a hook
+  that probes the range can pick the sidecar for *its* agent and prefer the newest build.
+- **`memory_whoami` reports the port actually bound** — or `not bound (… hooks disabled)`
+  — instead of echoing the environment variable. `buildWhoami` takes an optional
+  `boundHookPort`; HTTP-surface callers are unchanged.
+- New `tests/sidecar-port-range.test.ts` (5 tests): preferred-free, walk-on-busy, two
+  same-agent sidecars on two ports, range-exhausted fails soft, `portRange: 1` preserves
+  the old behaviour. Full suite passes.
+
+Verified live with three real `dist/mcp.js` processes (work, work, personal) all
+preferring 8401: bound 8401 / 8402 / 8403, `/health` correct on each, a range-probing
+checkpoint hook from a work cwd landed in the work log and not the personal one, and a
+prime hook injected 5 work memories in ~2.2 s with the personal sidecar live alongside.
+
+Hook-side companion (not part of the package; lives in the user's `~/.claude/hooks`):
+a shared `awm-find-sidecar.cjs` probes the range in parallel (~10 ms) and matches on
+`/health.agentId` derived from cwd. `awm-prime.cjs` and `awm-checkpoint.cjs` now use it,
+and a resolved sidecar *replaces* the fixed fallback list rather than preceding it —
+falling through to 8401 after a miss is exactly how the cross-pool leak happened.
+Two calibration fixes rode along in `awm-prime.cjs`: `requireConfidence` 0.25 → 0.10
+(0.25 abstained on both specific test prompts — a ticket number, a named decision —
+while passing a vague one; see 0.14.1 for why) and the hard timeout 2 s → 4 s (warm
+`/memory/activate` with rerank measures 1.4–1.8 s, so 2 s lost the race half the time).
+
 ## 0.14.1 (2026-09-01) — an empty recall no longer claims the memories are absent
 
 `activate()` returned a bare `[]` when the confidence gate fired, and the MCP layer

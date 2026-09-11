@@ -27,7 +27,20 @@ export interface SidecarDeps {
   store: EngramStore;
   agentId: string;
   secret: string | null;
+  /** Preferred port. If busy, the sidecar walks upward (see `portRange`). */
   port: number;
+  /**
+   * 0.14.2: how many consecutive ports to try starting at `port` (default 10).
+   * Every Claude Code session spawns its own MCP process, and each one used to
+   * ask for exactly 8401; on EADDRINUSE the sidecar logged "hooks disabled" and
+   * gave up, so with N concurrent sessions only the first had working hooks —
+   * and `memory_whoami` still reported the configured port as if it were bound.
+   * Observed 2026-09-11: 4 of 5 live sessions had no sidecar at all.
+   * Hook clients probe the same range and match on `/health.agentId`.
+   */
+  portRange?: number;
+  /** Reported by /health so hook clients can prefer the newest build. */
+  version?: string;
   onConsolidate?: (agentId: string, reason: string) => void;
   /**
    * 0.12.2: warm recall for hooks. The sidecar runs in the same process as
@@ -157,8 +170,16 @@ function json(res: ServerResponse, status: number, body: Record<string, unknown>
 
 const AUTO_CHECKPOINT_INTERVAL_MS = 15 * 60_000; // 15 minutes
 
-export function startSidecar(deps: SidecarDeps): { close: () => void } {
+export interface SidecarHandle {
+  close: () => void;
+  /** The port actually bound, or null while binding / if every port in range was busy. */
+  boundPort: () => number | null;
+}
+
+export function startSidecar(deps: SidecarDeps): SidecarHandle {
   const { store, agentId, secret, port, onConsolidate } = deps;
+  const portRange = Math.max(1, deps.portRange ?? 10);
+  let bound: number | null = null;
 
   const server = createServer(async (req, res) => {
     // CORS preflight
@@ -170,7 +191,12 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
 
     // Health check — no auth required
     if (req.url === '/health' && req.method === 'GET') {
-      json(res, 200, { status: 'ok', sidecar: true, agentId });
+      // port/pid/version let a hook that probes 8401..841x pick the right
+      // process: same agentId as its session, newest version on a tie.
+      json(res, 200, {
+        status: 'ok', sidecar: true, agentId,
+        port: bound, pid: process.pid, version: deps.version ?? null,
+      });
       return;
     }
 
@@ -340,17 +366,34 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
     json(res, 404, { error: 'Not found' });
   });
 
-  server.listen(port, '127.0.0.1', () => {
-    console.error(`AWM hook sidecar listening on 127.0.0.1:${port}`);
+  // Bind to the first free port in [port, port + portRange). A listen error
+  // fires 'error' before 'listening', so we re-listen on the next candidate
+  // from the error handler; any other error, or exhausting the range, leaves
+  // the sidecar unbound (hooks disabled) but never takes the MCP server down.
+  let attempt = 0;
+  const tryListen = () => {
+    const candidate = port + attempt;
+    server.listen(candidate, '127.0.0.1');
+  };
+  server.on('listening', () => {
+    const addr = server.address();
+    bound = addr && typeof addr === 'object' ? addr.port : port + attempt;
+    const note = bound === port ? '' : ` (preferred ${port} was busy)`;
+    console.error(`AWM hook sidecar listening on 127.0.0.1:${bound}${note}`);
   });
-
   server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE' && attempt + 1 < portRange) {
+      attempt++;
+      tryListen();
+      return;
+    }
     if (err.code === 'EADDRINUSE') {
-      console.error(`AWM hook sidecar: port ${port} in use, hooks disabled`);
+      console.error(`AWM hook sidecar: ports ${port}-${port + portRange - 1} all in use, hooks disabled`);
     } else {
       console.error('AWM hook sidecar error:', err.message);
     }
   });
+  tryListen();
 
   // --- Silent auto-checkpoint every 15 minutes ---
   const autoCheckpointTimer = setInterval(async () => {
@@ -383,5 +426,6 @@ export function startSidecar(deps: SidecarDeps): { close: () => void } {
       clearInterval(autoCheckpointTimer);
       server.close();
     },
+    boundPort: () => bound,
   };
 }

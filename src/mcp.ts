@@ -124,6 +124,15 @@ function deriveAgentFromDir(): string {
 }
 const AGENT_ID = process.env.AWM_AGENT_ID ?? process.env.WORKER_NAME ?? deriveAgentFromDir();
 const HOOK_PORT = parseInt(process.env.AWM_HOOK_PORT ?? '8401', 10);
+// 0.14.2: ports to try upward from HOOK_PORT when it is busy (see sidecar.ts).
+const HOOK_PORT_RANGE = Math.max(1, parseInt(process.env.AWM_HOOK_PORT_RANGE ?? '10', 10) || 10);
+// Set once the sidecar starts; whoami reads the bound port from it.
+let sidecarHandle: { boundPort: () => number | null } | null = null;
+function sidecarPortLabel(): string {
+  const p = sidecarHandle?.boundPort() ?? null;
+  if (p === null) return `not bound (preferred ${HOOK_PORT}; hooks disabled)`;
+  return p === HOOK_PORT ? `127.0.0.1:${p}` : `127.0.0.1:${p} (preferred ${HOOK_PORT} was busy)`;
+}
 const HOOK_SECRET = process.env.AWM_HOOK_SECRET ?? null;
 
 initLogger(DB_PATH);
@@ -645,7 +654,7 @@ server.tool(
   `Identify THIS AWM instance — agent id, mode (standalone/hive), backend, store path, code provenance, ports, and the sibling agent spaces present in the same store. Call when unsure which AWM instance or memory space you are talking to.`,
   {},
   async () => {
-    const info = await buildWhoami(store, AGENT_ID, 'mcp');
+    const info = await buildWhoami(store, AGENT_ID, 'mcp', sidecarHandle ? sidecarHandle.boundPort() : undefined);
     return { content: [{ type: 'text', text: formatWhoami(info) }] };
   },
 );
@@ -675,7 +684,10 @@ Also shows the activity log path so the user can tail it to see what's happening
       `Checkpoint: ${checkpoint?.executionState ? checkpoint.executionState.currentTask : 'none'}`,
       ``,
       `Activity log: ${getLogPath() ?? 'not configured'}`,
-      `Hook sidecar: 127.0.0.1:${HOOK_PORT}`,
+      // Report the port actually BOUND, not the one configured. Before 0.14.2
+      // this line said 8401 in every session, including the ones whose sidecar
+      // had lost the port and silently disabled hooks.
+      `Hook sidecar: ${sidecarPortLabel()}`,
     ];
 
     return {
@@ -1336,6 +1348,8 @@ async function main() {
     agentId: AGENT_ID,
     secret: HOOK_SECRET,
     port: HOOK_PORT,
+    portRange: HOOK_PORT_RANGE,
+    version: VERSION,
     // 0.12.2: warm recall for hooks — the sidecar shares this process's
     // activation engine and loaded models, so a UserPromptSubmit hook can get
     // warm-latency recall without any standing server. Trimmed result shape
@@ -1419,7 +1433,8 @@ async function main() {
 
   // Log to stderr (stdout is reserved for MCP protocol)
   console.error(`AgentWorkingMemory MCP server started (agent: ${AGENT_ID}, db: ${DB_PATH})`);
-  console.error(`Hook sidecar on 127.0.0.1:${HOOK_PORT}${HOOK_SECRET ? ' (auth enabled)' : ' (no auth — set AWM_HOOK_SECRET)'}`);
+  sidecarHandle = sidecar;
+  console.error(`Hook sidecar preferred 127.0.0.1:${HOOK_PORT} (range ${HOOK_PORT_RANGE})${HOOK_SECRET ? ' (auth enabled)' : ' (no auth — set AWM_HOOK_SECRET)'}`);
 
   // Clean shutdown
   const cleanup = async () => {

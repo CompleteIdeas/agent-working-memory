@@ -59,6 +59,14 @@ export async function buildWhoami(
   store: WhoamiStore,
   agentId: string,
   surface: 'mcp' | 'http',
+  /**
+   * 0.14.2: the port the hook sidecar actually BOUND, from the running handle.
+   * Before this, whoami echoed AWM_HOOK_PORT from the environment — so a session
+   * whose sidecar had lost the port fight and disabled hooks still reported
+   * "hookSidecar=8401". Pass `null` for "tried and failed"; omit (undefined)
+   * for surfaces that have no sidecar, which falls back to the env value.
+   */
+  boundHookPort?: number | null,
 ): Promise<WhoamiInfo> {
   const coordination = process.env.AWM_COORDINATION === 'true' || process.env.AWM_COORDINATION === '1';
   let siblings: string[] = [];
@@ -80,7 +88,9 @@ export async function buildWhoami(
     pid: process.pid,
     ports: {
       http: Number.isFinite(httpPort) && httpPort > 0 ? httpPort : null,
-      hookSidecar: Number.isFinite(hookPort) && hookPort > 0 ? hookPort : null,
+      hookSidecar: boundHookPort !== undefined
+        ? boundHookPort
+        : (Number.isFinite(hookPort) && hookPort > 0 ? hookPort : null),
     },
     recall: { fingerprint: recallConfigFingerprint(), flags: activeRecallConfig() },
     siblingAgents: siblings,
