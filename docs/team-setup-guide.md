@@ -114,66 +114,50 @@ node dist/cli.js setup --global
 
 ---
 
-## Setting up the hooks (important)
+## Setting up the hooks
 
-AWM includes hooks that auto-save your state. After running `awm setup --global`, check that your hooks are installed:
+`awm setup --global` does this for you. Since 0.14.6 it installs **script files** rather than
+inline `curl` commands, so there is nothing to hand-edit and no secret to paste:
 
-Open `~/.claude/settings.json` and verify it contains a `hooks` section. If it doesn't, add it manually:
+| File | What it does |
+|---|---|
+| `~/.claude/hooks/awm-find-sidecar.cjs` | Works out which server this project talks to — reads the MCP config for the directory, probes the port range, picks the sidecar whose `/health` reports that agent |
+| `~/.claude/hooks/awm-checkpoint.cjs` | Auto-saves on Stop, PreCompact and SessionEnd |
+| `~/.claude/hooks/awm-prime.cjs` | Puts relevant memory into context when you send a prompt |
+| `~/.claude/hooks/awm-hooks.json` | A record of what setup installed |
 
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo \"MEMORY REMINDER: Before you finish this response, consider: Did you learn anything worth saving? Call memory_write for important discoveries, decisions, or outcomes. If you completed a task, call memory_task_end with a summary.\"",
-            "timeout": 5,
-            "async": true
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -sf -X POST http://127.0.0.1:8401/hooks/checkpoint -H \"Content-Type: application/json\" -H \"Authorization: Bearer YOUR_SECRET_HERE\" -d \"{\\\"hook_event_name\\\":\\\"PreCompact\\\"}\" --max-time 5",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -sf -X POST http://127.0.0.1:8401/hooks/checkpoint -H \"Content-Type: application/json\" -H \"Authorization: Bearer YOUR_SECRET_HERE\" -d \"{\\\"hook_event_name\\\":\\\"SessionEnd\\\"}\" --max-time 5",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
-  }
-}
+**Check it worked:**
+
+```bash
+awm doctor claude-code
 ```
 
-Replace `YOUR_SECRET_HERE` with the secret from `awm setup` output, or find it at:
-- npm install: check inside the AWM package `data/.awm-hook-secret`
-- Git clone: `C:\tools\awm\data\.awm-hook-secret`
+That probes the whole port range and reports each live sidecar as `port=agent@version pid`,
+warns if none of them serves the agent this directory is configured for, and flags hooks left
+over from before 0.14.6. It is more reliable than reading `settings.json` yourself.
+
+**Things that used to be manual and are not any more:**
+
+- *You do not paste a secret.* The bearer token lives in the MCP config and the hooks read it
+  at run time. Rotating it no longer leaves the hooks silently failing. It is deliberately
+  never written into `settings.json`.
+- *You do not assign ports.* Running two projects at once — say `work` and `personal` — needs
+  no configuration: the second server finds 8401 taken and walks to 8402, and each project's
+  hooks find the sidecar for their own agent rather than whichever server started first.
+- *Re-running setup is safe.* It upgrades rather than resets: your own hooks on those events
+  survive, and any env value you have already set wins over the default.
+
+If you are upgrading from a version before 0.14.6, re-run `awm setup --global` once. `awm doctor`
+will tell you if the old inline-`curl` hooks are still in place.
 
 **What the hooks do:**
-- **Stop** — reminds Claude to save important learnings after each response (runs in background, no delay)
+- **Stop** — reminds Claude to save important learnings after each response (background, no delay)
 - **PreCompact** — auto-saves state before Claude's context window gets compressed
-- **SessionEnd** — auto-saves state when you close the session
+- **SessionEnd** — auto-saves state when you close the session, and triggers consolidation
+- **UserPromptSubmit** — primes relevant memory into context before Claude sees your prompt
 
 ---
+
 
 ## How do I know it's working?
 
@@ -303,7 +287,8 @@ In each folder, ask Claude: *"Call memory_stats"* — it will show the agent ID 
 | `~/.claude/settings.json` | Hooks config (auto-checkpoint, reminders) |
 | `data/memory.db` | SQLite database (all memories) |
 | `data/awm.log` | Activity log (writes, recalls, checkpoints) |
-| `data/.awm-hook-secret` | Auth token for hook sidecar |
+| `~/.claude/hooks/awm-*.cjs` | The shipped hook scripts `awm setup` installs |
+| `~/.claude/hooks/awm-hooks.json` | Record of what setup installed, used by the hooks to find the server |
 
 To start fresh, delete `data/memory.db` and Claude starts with a blank slate.
 
@@ -326,7 +311,7 @@ To start fresh, delete `data/memory.db` and Claude starts with a blank slate.
 
 **Hook errors:**
 - Verify curl is available: `curl --version` (comes with Windows 11)
-- Check the secret matches: compare `~/.claude/settings.json` hooks with `data/.awm-hook-secret`
+- Run `awm doctor claude-code` — it checks the live sidecars, the installed hook versions, and whether one serves this directory's agent. The secret is read from the MCP config at run time, so there is nothing to compare by hand
 - Test the sidecar: `curl http://127.0.0.1:8401/health`
 
 **Want to see what Claude remembers:**

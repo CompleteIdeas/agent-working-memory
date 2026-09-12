@@ -60,6 +60,12 @@ const VERSION = pkg.version;
       `Update the "What's new — v${VERSION}" heading and its bullets`);
   }
   const status = readme.match(/Active development,\s*v?(\d+\.\d+\.\d+)/i)?.[1];
+  // Both markers are optional, so deleting them would silently disable the version check
+  // rather than fail it. Say so instead.
+  if (!whatsNew && !status) {
+    warn('readme', 'README carries no version marker, so nothing here verifies it matches package.json',
+      `Keep an "Active development, vX.Y.Z" line in Status, or a "## What's new — vX.Y.Z" heading`);
+  }
   if (status && status !== VERSION) {
     err('readme', `README Status line says v${status}, package.json is ${VERSION}`,
       `Update "Active development, v${VERSION}" in the Status section`);

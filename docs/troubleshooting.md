@@ -3,9 +3,12 @@
 ## Server won't start
 
 ### "EADDRINUSE: address already in use"
-Another process is using port 8400. Either stop it or use a different port:
+Another process is using port 8400. Either stop it or use a different port — but **not
+8401**: that is the hook sidecar's default, and the sidecar walks upward from it through
+`AWM_HOOK_PORT_RANGE` (default 8401–8410), so putting the API there creates a fresh clash.
+Pick something outside that window:
 ```bash
-AWM_PORT=8401 npx tsx src/index.ts
+AWM_PORT=8500 npx tsx src/index.ts
 ```
 
 ### "Cannot find module" errors

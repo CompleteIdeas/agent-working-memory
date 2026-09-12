@@ -321,7 +321,7 @@ For production, you want at minimum:
 | Storage growth | `GET /agent/:id/stats` → engram counts by stage; alarm on `staging` running unbounded |
 | Build provenance | startup log line `AWM build <ref> @ <timestamp>` (set via `--build-arg`) |
 | Activity stream | tail `data/awm.log` (writes, recalls, hook events) |
-| Daily counts | `GET /stats` on the hook sidecar (port `AWM_HOOK_PORT`, default 8401) |
+| Daily counts | `GET /stats` on the hook sidecar. It binds the first free port in `AWM_HOOK_PORT`..+`AWM_HOOK_PORT_RANGE` (default 8401–8410), so with several agents running check `/health` for the port each one actually took, or run `awm doctor` |
 
 If you've got a Prometheus stack, scrape the coordination telemetry
 counters at `GET /telemetry/channels` (these are enabled when

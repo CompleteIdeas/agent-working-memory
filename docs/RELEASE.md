@@ -184,7 +184,31 @@ deleted user hooks, a repointed database. Two notes from doing this:
   Unit tests use fake sidecars; only the real one proves the checkpoint persisted and that
   `SessionEnd` triggered consolidation.
 
-### 2. Write the CHANGELOG entry first, then the README
+### 2. Sweep the docs for what your change made untrue
+
+`check:release` compares numbers across files. It cannot tell you that a sentence is now
+false. Before tagging, grep the whole doc set for the behaviour you changed — not just the
+files the table names — because the expensive failures are **stale instructions**, not
+missing ones. A doc that omits a feature costs a reader nothing; a doc that tells them to do
+work the release automated costs them an afternoon.
+
+```bash
+# Whatever you changed, find every place that still describes the old behaviour.
+grep -rn "<old flag, port, file name, default>" README.md docs/ --include=*.md --include=*.html
+```
+
+Found by exactly this sweep before the 0.14.6 push, after `check:release` came back clean:
+
+- `docs/reference.md` told readers to "give each a different `AWM_HOOK_PORT`" — manual work
+  that port walking removed in 0.14.2.
+- `docs/team-setup-guide.md` still taught teams to hand-write inline-`curl` hooks with a
+  pasted secret: the exact configuration 0.14.6 exists to replace.
+- `docs/troubleshooting.md` suggested `AWM_PORT=8401` to escape a port clash — which lands
+  the API on the sidecar's own default and creates a new one.
+
+None of those were caught by a version string or a count. Budget twenty minutes for this.
+
+### 3. Write the CHANGELOG entry first, then the README
 
 Write the CHANGELOG entry **before** touching anything else. It forces you to say what
 changed, and the list of things you had to describe is the list of docs that need editing.
@@ -197,7 +221,7 @@ only the instrument did.
 Then the README, which has three places carrying a version and one carrying a test count.
 All four are checked.
 
-### 3. Version and publish
+### 4. Version and publish
 
 ```bash
 # package.json version, then:
@@ -212,7 +236,7 @@ npm publish                # runs build + check:release again
 site only updates on a git push. If you publish without pushing, the package is new and
 every doc link still describes the old release.
 
-### 4. After the tag
+### 5. After the tag
 
 - **Consumers that vendor this package.** `AgentSynapse/packages/awm` is a separate
   checkout, not a live dependency. `check:release` reports its version; bump it

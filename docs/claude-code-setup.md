@@ -324,7 +324,7 @@ Zero memory tools are registered — Claude can't see or call any of them, not e
 | No memory tools in Claude | Restart Claude Code after `awm setup --global` |
 | First conversation slow (~30s) | Normal — ML model download (one-time) |
 | Claude not saving memories | Check Stop hook in `~/.claude/settings.json` |
-| Hook errors in log | Verify `curl` is available; check secret matches `data/.awm-hook-secret` |
+| Hook errors in log | Run `awm doctor claude-code` — it probes the port range and reports which sidecars are live and whether one serves this directory's agent. The hooks read the secret from the MCP config at run time, so there is no separate secret file to compare |
 | `awm` command not found | Re-run `npm install -g agent-working-memory` |
 | Memory seems stale | Say "Call memory_restore" or close/reopen session to trigger consolidation |
 | Wrong memories surfacing | Use `memory_retract` to invalidate; give `memory_feedback(useful: false)` |
