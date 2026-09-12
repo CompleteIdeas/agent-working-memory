@@ -120,6 +120,8 @@ Concretely, against a typical vector store:
 
 The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/cognitive-model.md) for details.
 
+> **Deciding whether to adopt it?** [`docs/for-decision-makers.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md) is the fifteen-minute version for a technical manager — the problem, what it measurably does, what it does not, and what saying yes commits you to. No cognitive-science vocabulary.
+
 > **New to AWM?** [`docs/pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html) is a visual, plain-language walkthrough (no background required) — what happens when AWM learns and recalls a fact, why it's built this way, and how it differs from a plain vector store. Open it in a browser.
 
 > **Build an agent on it:** the [AWM-Native Agent Harness pattern](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
@@ -185,6 +187,19 @@ AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
 **s@1 56.4 → 63.8%**, **s@5 66.2 → 68.4%**, **MRR 60.6 → 66.0%** — with adversarial
 abstention held at **90.0%** in every arm. Selectivity was not traded away to buy accuracy.
 
+> **Those absolute levels were understated, and the corrected figures are higher.**
+> (2026-09-11, v0.14.4–0.14.5.) Two defects in the *measuring instrument* — not the
+> engine — were found and fixed: the benchmark's decay clock ran on the wall clock, so the
+> "frozen" snapshot aged a day per day; and the runner queried every gold as the `work`
+> agent while a quarter to a third of golds belonged to `personal`, so they were cut by
+> agent isolation before scoring. With both fixed, the same fixtures read
+> **identifier s@1 92.7%** (278/300; s@5 96.7%, MRR 94.6%) and **category s@1 92.0%**
+> (414/450; s@5 96.7%, MRR 94.2%), adversarial abstention still **90.0%**. Two independently
+> built fixtures agreeing within a point is the strongest evidence yet that the number is
+> real. The *deltas* above (the +7.4pp tags win) stand — both arms shared the artifact.
+> Nothing in the engine changed between 63.8 and 92.0. Full account:
+> [`docs/benchmarks.md`](docs/benchmarks.md) → "10-day regression check" corrections.
+
 > **On the +9.7pp figure.** It comes from LoCoMo, which this page retires two sections
 > below. Reported as-measured rather than quietly dropped, because the provenance is part
 > of the story: LoCoMo's short passages are exactly why it could not see the 400-char
@@ -213,7 +228,7 @@ Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/R
 | What | Result | Detail |
 |---|---|---|
 | **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **Unit + subsystem** | `test:run` **715/715** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| **Unit + subsystem** | `test:run` **737/737** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. Both arms complete at k=10: baseline **74.0%** vs **81.0%** with the flags (**+7.0pp**, Fisher p=0.31 — not significant, but directionally matching the +7.4pp fixture result). **All 10 probes flip between identical runs**, and `multihop` has never passed at any k | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
 | **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
@@ -560,7 +575,41 @@ they lost — is documented in [`docs/reference.md`](https://github.com/Complete
 
 All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
 
-## What's New in v0.14.0 (latest)
+## What's New in v0.14.5 (latest)
+
+Five point releases on 2026-09-01 and 2026-09-11. Nothing in the retrieval engine changed
+in the last four; what changed is *how it is measured, how it is invoked, and what it
+reports about itself*.
+
+- **The benchmark instrument was wrong twice, and the real numbers are higher (0.14.4,
+  0.14.5).** ACT-R decay computed memory age from the wall clock, so the "frozen" eval
+  snapshot aged a day per day and the same code scored 70.0% one evening and 67.0% the
+  next afternoon. Separately, the eval runner queried every gold as the `work` agent while
+  a quarter to a third belonged to `personal` — cut by agent isolation before scoring, and
+  counted as misses. With both fixed: **identifier s@1 92.7%, category s@1 92.0%**,
+  adversarial abstention unchanged at 90.0%. Two independently built fixtures now agree
+  within a point. Details and the correction notes are in [Benchmarks](#benchmarks); the
+  eval runner pins its clock (`ActivationQuery.now`) and queries as each gold's own agent.
+- **Feedback now joins to the recall that produced it (0.14.3).** `memory_recall` ends
+  with `[recall_id: …]`; `memory_feedback` accepts it (and defaults to the most recent
+  recall). Before this, every feedback row in the live store was orphaned — 872 of 872 —
+  so the learning loop had no usable signal. `memory_stats` now reports outcome numbers
+  that can move in both directions (write:recall ratio, never-recalled share, recall→use
+  rate, p50/p90 latency) in place of the monotone "edge utility".
+- **One hook sidecar per session (0.14.2).** Each Claude Code session's AWM process now
+  binds the first free port from 8401 upward instead of giving up when 8401 is taken.
+  Previously, with several sessions open, only the first had working hooks, and
+  `memory_whoami` reported a port it had not bound. It now reports the port actually held.
+- **An empty recall no longer claims absence (0.14.1).** When the confidence gate withholds
+  matches, the reply says `RECALL ABSTAINED` with the count and threshold, instead of "No
+  relevant memories found."
+
+**Measured on real use this week** (details in the CHANGELOG): on four support tickets,
+the same agent with memory found twice the specific facts the real answer needed and used
+half the database queries; on a six-month application project, recorded decisions were
+recalled a median of 30 days after being written, some after 167 days.
+
+### Earlier: v0.14.0
 
 Retrieval-quality releases, all additive. Corpus provenance differs per result and is
 named in [Benchmarks](#benchmarks) — only the tags result and the combined figure come

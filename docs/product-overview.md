@@ -1,16 +1,30 @@
 # AgentWorkingMemory — Product Overview
 
-> **New to AWM?** The vocabulary below — *engram, salience, activation,
-> Hebbian, staging* — is defined plainly in
-> [`onboarding-vocabulary.md`](onboarding-vocabulary.md). Read that first
-> if any of these terms are unfamiliar; the rest of this page will land
-> better.
+> **Deciding whether to adopt AWM, rather than build on it?** Read
+> [`for-decision-makers.md`](for-decision-makers.md) instead — it covers the
+> problem, the measured results, the limits, and the commitment, with no
+> specialist vocabulary. This page is for people who will operate or extend
+> the system.
+
+> **New to the vocabulary?** *Engram, salience, activation, Hebbian, staging*
+> are each defined in one plain paragraph in
+> [`onboarding-vocabulary.md`](onboarding-vocabulary.md). Five minutes.
 
 ## What It Is
 
-AgentWorkingMemory (AWM) is a cognitive memory layer for AI agents. It gives any LLM-based agent the ability to **remember**, **forget**, **learn from experience**, and **self-correct** across conversations. Instead of treating every interaction as a blank slate, AWM maintains a persistent, scored, and associatively-linked memory graph that surfaces the right information at the right time.
+AgentWorkingMemory (AWM) is a memory layer for AI agents. It lets an agent **remember**
+across conversations, **forget** what stops mattering, **learn** from whether a memory
+turned out to be useful, and **correct itself** when a stored fact is later shown to be
+wrong. Instead of starting each session blank, the agent starts with a scored, linked set
+of memories and asks for the few that are relevant to the task in front of it.
 
-The system is built on established cognitive science — ACT-R base-level activation for temporal decay, Hebbian learning for association strengthening ("neurons that fire together wire together"), and hippocampal-inspired staging for uncertain memories. Three local ML models (embeddings, cross-encoder reranker, query expander) run entirely on-device with no external API calls.
+Under the hood, the design borrows from cognitive science rather than from search
+engineering: memories weaken with disuse the way human recall does (ACT-R decay),
+memories that are used together become linked (Hebbian association), and uncertain
+memories sit in a holding area until they are confirmed or discarded (staging). Three small
+ML models — an embedder, a cross-encoder reranker, and a query expander — run locally with
+no external calls. The rest of this page is the plain-language tour of those pieces;
+[`cognitive-model.md`](cognitive-model.md) has the theory and citations.
 
 ## Who It's For
 
