@@ -76,6 +76,10 @@
     cognitive memory layer. For engineers and researchers: the write path, the multi-stage recall
     funnel, the cognitive scoring model, and the attribution analysis behind the current defaults.</p>
     <p class="meta">embedder: bge-small-en-v1.5 (384d) · reranker: ms-marco-MiniLM-L-6-v2 · local, in-process · precision-first</p>
+    <p class="meta" style="margin-top:10px;color:#cbd5e1">Not an engineer? Start with
+      <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md" style="color:#a5b4fc">the decision-maker brief</a>
+      or <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md" style="color:#a5b4fc">the plain-language walkthrough</a>
+      — this page assumes you want the internals.</p>
   </div>
 </header>
 
@@ -280,10 +284,24 @@ topN        = limit * <span class="k">8</span>                 <span class="c">/
 rerankPool  = max(limit * <span class="k">4</span>, <span class="k">40</span>)        <span class="c">// was max(*2,15)  (AWM_RERANK_POOL)</span>
 abstainGate = post-rerank top-<span class="k">5</span>          <span class="c">// was whole pool  (AWM_ABSTAIN_GATE_K)</span></pre>
 
+<div class="note warn"><span class="lbl">Benchmark provenance — read before quoting the KPIs below</span>
+The attribution study in this section was run on <strong>LoCoMo</strong>, and its conclusion — a weak
+composite was gatekeeping a strong reranker; widen the pool — is sound and shaped the defaults that still
+ship. But <strong>LoCoMo was retired as AWM's benchmark in 0.13.x</strong>: its passages are ~115 chars
+against a real store's ~2,000, it is seeded in one shot so decay and Hebbian signals contribute nothing,
+and it rewards indiscriminate retention, so the salience filter caps its score regardless of ranking
+quality. The absolute figures below (≈25% recall, ≈29% success@1) describe that benchmark, not this
+system. <strong>On a frozen copy of a real 30,000-memory store, with the clock pinned and each query
+scoped to its gold's own agent (v0.14.5), AWM returns the right memory first 92.7% of the time on
+identifier queries and 92.0% on topic queries, with adversarial abstention at 90.0%.</strong> Those
+figures, the fixtures, and the two instrument corrections that produced them are in
+<a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/benchmarks.md">docs/benchmarks.md</a>.
+The KPIs are kept as the historical record of the tuning decision.</div>
+
 <div class="kpi">
-  <div class="item"><div class="v">22.7 &#8594; <span class="up">25.7%</span></div><div class="l">LoCoMo overall recall</div></div>
-  <div class="item"><div class="v">13.4 &#8594; <span class="up">17.3</span></div><div class="l">multi-hop</div></div>
-  <div class="item"><div class="v">18.6 &#8594; <span class="up">23.5</span></div><div class="l">single-hop</div></div>
+  <div class="item"><div class="v">22.7 &#8594; <span class="up">25.7%</span></div><div class="l">LoCoMo overall recall <small>(retired)</small></div></div>
+  <div class="item"><div class="v">13.4 &#8594; <span class="up">17.3</span></div><div class="l">multi-hop <small>(LoCoMo)</small></div></div>
+  <div class="item"><div class="v">18.6 &#8594; <span class="up">23.5</span></div><div class="l">single-hop <small>(LoCoMo)</small></div></div>
   <div class="item"><div class="v">73.4 &#8594; <span class="up">74.9</span></div><div class="l">adversarial (precision)</div></div>
   <div class="item"><div class="v">35 &#8594; 77<small>ms</small></div><div class="l">recall latency (local)</div></div>
 </div>
@@ -336,8 +354,9 @@ division and it scales.</p>
 
 <footer>
   <p>AWM — Agent Working Memory · local, precision-first cognitive memory on ACT-R. Recall, write, and
-  consolidation pipelines as implemented; figures are schematic. Benchmark figures: LoCoMo (Snap Research),
-  retrieval-only, expansion-off. Source: <span class="tag">src/engine/activation.ts</span>
+  consolidation pipelines as implemented; figures are schematic. §5 benchmark figures: LoCoMo (Snap
+  Research), retrieval-only, expansion-off — <strong>retired 0.13.x; current figures in docs/benchmarks.md</strong>.
+  Mechanism and config values re-verified against source 2026-09-11 (v0.14.5). Source: <span class="tag">src/engine/activation.ts</span>
   <span class="tag">src/core/write-pipeline.ts</span> <span class="tag">src/engine/consolidation.ts</span>.</p>
 </footer>
 
