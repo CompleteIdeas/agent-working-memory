@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.14.5 (2026-09-11) — the eval queried as the wrong agent; the real identifier baseline is 92.7%
+
+With the clock pinned (0.14.4) the identifier fixture read 68.0% s@1, and the per-query trace
+showed 88 of 96 non-top-1s never appeared in the top-3 at all. A k=50 stage probe found they
+never appeared in the top-50 either, and `AWM_DISABLE_POOL_FILTER=1` did not surface them. A
+single-query A/B that printed the gold's owner found the cause in one column: **every one was
+`agent=personal`**. `tests/realstore-eval/runner.ts` had hardcoded `agentId: 'work'` on every
+`activate()` call while the fixture has carried a per-item `agent` field since it was built
+(983 work / 333 personal of 1,316). Personal golds were removed by agent isolation before any
+scoring ran — **0 of 78 retrievable by construction** — and the benchmark was scoring a product
+feature as a ranking failure.
+
+- **Runners query as the gold's own agent** (`it.agent ?? 'work'`): `runner.ts`,
+  `temporal-runner.ts`, `miss-stage-probe.ts`, `one-miss-filter-ab.ts`. Adversarial probes
+  still query as `work` (absent-fact queries, agent-agnostic). `Item.agent?: string` added.
+- **`fixture-category.json` and `fixture-temporal.json` annotated** with each gold's
+  `agent_id` from the snapshot (category 318 work / 132 personal; temporal 67 / 34). Probe
+  sets are byte-for-byte unchanged; backups kept as `*.bak-20260911`.
+- **Corrected identifier baseline, pinned clock + agent-aware, seeded 300, k=3:**
+  **s@1 92.7% (278/300), s@5 96.7%, MRR 94.6%**, adversarial silent 90.0%, p50 528 ms,
+  **NET +519 tok/recall** (was +71 — 74 recalls that had been paying the ~2,106-token
+  code-reading fallback now return the answer). By agent: work 204/222 = 91.9%, personal
+  74/78 = 94.9%.
+- **The 10 remaining work-scoped misses are real ranking misses**, not fixture ambiguity —
+  only 1 of 10 winners is a near-duplicate or contains the identifier (jaccard 0.07–0.29).
+  5 are absent from the top-50 (pool stage), 2 are in-pool at ranks 4 and 6 with the
+  identifier absent from the rerank passage. That is the actual remaining work.
+- Category and temporal fixtures re-measured agent-aware; see `docs/benchmarks.md`.
+
+Every published cross-fixture number before 0.14.5 understated retrieval by the share of
+personal golds in its fixture (identifier 25%, category 29%, temporal 34%). Nothing in the
+engine changed in this release; the instrument did.
+
 ## 0.14.4 (2026-09-11) — the benchmark was ageing: decay clock is now pinnable, and the eval pins it
 
 The identifier-fixture benchmark read **70.0% success@1** one evening and **67.0%** the next

@@ -42,10 +42,12 @@ is attributable to code rather than data.
 | metric | published 2026-08-24 | 2026-09-11 (v0.14.1) |
 |---|---|---|
 | category fixture success@1 | 63.8% | **63.8%** |
+| **category fixture success@1, clock pinned AND agent-aware (v0.14.5)** | — | **92.0%** (414/450; s@5 96.7%, MRR 94.2%, adversarial 90.0%) |
 | adversarial correctly silent | 90.0% | **90.0%** |
 | unit suite | 726 passing | **726 passing** |
 | identifier s@1 @ shipped k=3 | 70.0% | **70.0%** |
 | **identifier s@1, clock PINNED to snapshot (v0.14.4, the reproducible reference)** | — | **68.0%** (204/300; s@5 70.7%, MRR 69.3%, +71 tok/recall) |
+| **identifier s@1, clock pinned AND agent-aware (v0.14.5 — THE reference)** | — | **92.7%** (278/300; s@5 96.7%, MRR 94.6%, adversarial 90.0%, **+519 tok/recall**) |
 | identifier sufficiency | 99.3% | **99.3%** (290/292) |
 | identifier NET tokens | +115/recall | **+116/recall** |
 
@@ -63,6 +65,21 @@ recall. The category fixture's s@5 and MRR each moved 0.2pp (≈ one query in 45
 > `query.now` (and `asOf`) to the snapshot's own newest timestamp and prints
 > `clock pinned to …`, so runs reproduce across days. The pinned-clock baseline supersedes
 > both 70.0 and 67.0 as the identifier-fixture reference — see the 0.14.4 entry below.
+>
+> **Second correction (2026-09-11, v0.14.5).** With the clock pinned, the per-query trace
+> showed 88 of 96 non-top-1s never reached the top-3. A k=50 stage probe found they never
+> reached the top-50 either, and `AWM_DISABLE_POOL_FILTER=1` did not surface them. The
+> reason: **the runner hardcoded `agentId: 'work'`** while the fixture has carried a per-item
+> `agent` field all along (983 work / 333 personal). Every personal-scoped gold was cut by
+> agent isolation before scoring — 0 of 78 retrievable by construction — and the benchmark
+> scored a product feature (a work session must not see personal memories) as a ranking
+> defect. Queried as the gold's own agent: work 204/222 = 91.9%, personal 74/78 = 94.9%,
+> **overall 278/300 = 92.7%**. The same artifact is in the category fixture (132 of 450 golds
+> personal) and the temporal fixture (34 of 101); both are now annotated with each gold's
+> agent (probe sets unchanged) and every runner honors it. This is the third instrument
+> defect of identical shape in this project — k=7-vs-3, wall-clock decay, agent scoping:
+> **a measurement quietly describing something other than the shipped thing.** When a
+> metric splits cleanly on a field the runner ignores, the runner is wrong, not the system.
 
 ### Instrument defect found and fixed
 

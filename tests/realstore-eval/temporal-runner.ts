@@ -54,7 +54,7 @@ async function main() {
     let s1 = 0, s5 = 0, rr = 0;
     for (const it of items) {
       const res: any[] = await act.activate({
-        agentId: 'work', context: it.phrasings[ph], limit: K, internal: true,
+        agentId: (it as any).agent ?? 'work', context: it.phrasings[ph], limit: K, internal: true,
         // Anchor relative phrasing to the fixture, not the wall clock, or
         // "last Friday" would mean something different on every run.
         asOf: new Date(it.asOf + 'T12:00:00Z').getTime(),

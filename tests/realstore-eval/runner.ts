@@ -71,6 +71,8 @@ const est = (s: string) => Math.max(Math.ceil(s.split(/\s+/).filter(Boolean).len
 
 interface Item {
   query: string; goldId: string | null; identifier: string | null;
+  /** agent_id of the gold engram — the runner must query AS this agent (0.14.5). */
+  agent?: string;
   offset?: number; contentLen?: number; memoryClass?: string;
   beyondTruncation?: boolean; adversarial?: boolean;
 }
@@ -147,8 +149,15 @@ async function main() {
   let qi = 0;
   for (const it of items) {
     const _t0 = process.hrtime.bigint();
+    // 0.14.5: query as the gold's OWN agent. The fixture has carried an `agent` field
+    // all along (983 work / 333 personal) but the runner hardcoded 'work', so every
+    // personal-scoped gold was cut by agent isolation before any scoring ran and
+    // counted as a retrieval miss. On the pinned 300-sample: 78 of the 88 "misses"
+    // were personal golds — 0/78 retrievable by construction — and s@1 on the 222
+    // work-scoped queries was 91.9%, not 68.0%. Agent scoping is a product feature;
+    // a benchmark must not score it as a ranking defect.
     const res: any[] = await activation.activate({
-      agentId: 'work', context: it.query, limit: RECALL_LIMIT,
+      agentId: it.agent ?? 'work', context: it.query, limit: RECALL_LIMIT,
       granularity: GRANULARITY, internal: true,
       now: snapshotNow, asOf: snapshotNow,
     } as any);
