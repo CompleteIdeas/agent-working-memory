@@ -105,6 +105,9 @@ run_linux() {
     # Relative require works because the script cd's to $ROOT; node WRITES via $HOST.
     VERSION=$(node -e "console.log(require('./package.json').version)")
     SHA=$(git -C "$HOST" rev-parse --short HEAD 2>/dev/null || echo unknown)
+    # The run tests the WORKING TREE, not the commit. Record whether they differed, so a
+    # stamp taken over uncommitted changes is not mistaken for one taken at that commit.
+    [ -n "$(git -C "$HOST" status --porcelain 2>/dev/null)" ] && SHA="$SHA-dirty"
     mkdir -p "$ROOT/.release-checks"
     node -e '
       const [out, version, commit, ...rest] = process.argv.slice(1);

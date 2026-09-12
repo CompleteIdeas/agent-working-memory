@@ -238,7 +238,8 @@ const VERSION = pkg.version;
       const age = Math.floor((Date.now() - Date.parse(st.when)) / 86400000);
       note('linux-suite', `v${VERSION} passed on Linux: ${st.files} files / ${st.tests} tests, ${st.os} ${st.arch}, ${st.commit}, ${age === 0 ? 'today' : age + 'd ago'}`);
       const head = git('rev-parse --short HEAD');
-      if (head && st.commit !== head) note('linux-suite', `that run was at ${st.commit}, HEAD is now ${head} — re-run if the change touches src/`);
+      if (st.commit.endsWith('-dirty')) note('linux-suite', `that run was over uncommitted changes (${st.commit}) — re-run against the committed tree before tagging`);
+      else if (head && st.commit !== head) note('linux-suite', `that run was at ${st.commit}, HEAD is now ${head} — re-run if the change touches src/`);
     } catch { note('linux-suite', `.release-checks/linux-${VERSION}.json is unreadable — re-run: npm run test:linux`); }
   } else {
     note('linux-suite', `No Linux run recorded for v${VERSION} — run: npm run test:linux`);
