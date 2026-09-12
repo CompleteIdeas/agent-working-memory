@@ -39,7 +39,18 @@ Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboa
 |------|---------|
 | `~/.mcp.json` | Tells Claude Code to load the AWM MCP server |
 | `~/.claude/CLAUDE.md` | Memory workflow instructions (when to write, recall, checkpoint) |
-| `~/.claude/settings.json` | Auto-checkpoint hooks (Stop, PreCompact, SessionEnd) — see [reference.md → Hook Configuration](reference.md#hook-configuration) for the exact JSON shape if you need to add them manually |
+| `~/.claude/settings.json` | Wires the hooks below on Stop, PreCompact, SessionEnd, UserPromptSubmit and PostToolUse. Since 0.14.6 these reference **shipped script files**, not inline `curl` — see [reference.md → Hook Configuration](reference.md#hook-configuration) |
+| `~/.claude/hooks/awm-find-sidecar.cjs` | Resolves which sidecar to talk to: reads the MCP config governing the session's cwd, probes the port range, and picks the one whose `/health` reports that agent |
+| `~/.claude/hooks/awm-checkpoint.cjs` | Checkpoint on Stop / PreCompact / SessionEnd; forwards the whole hook payload |
+| `~/.claude/hooks/awm-prime.cjs` | `UserPromptSubmit` — primes relevant memory into context. `--no-prime` skips it; an empty `~/.claude/hooks/awm-prime.disabled` turns it off without uninstalling |
+| `~/.claude/hooks/awm-hooks.json` | Records what setup installed, so the hooks can find the server even with no project config |
+
+The bearer secret lives in the MCP config and is read at run time, so regenerating it does
+not leave the hooks silently 401-ing. It is deliberately **not** written into
+`settings.json`. Every hook fails open: no output, exit 0.
+
+Re-running `awm setup` upgrades rather than resets — your own hooks on those events survive,
+and any env value you have already set wins over the default.
 
 ### Verify
 
@@ -63,6 +74,7 @@ These happen without any action from you:
 | **Every response** | Stop hook reminds Claude to save important learnings |
 | **Context compaction** | PreCompact hook auto-checkpoints state before context window shrinks |
 | **Session end** | SessionEnd hook auto-checkpoints + triggers consolidation (sleep cycle) |
+| **Every prompt you send** | UserPromptSubmit hook primes relevant memory into context before Claude sees the prompt (0.14.6). Prompts under 15 characters make no network call |
 | **Every 15 min** | Silent auto-checkpoint while session is active |
 
 ### Agent-directed behaviors (Claude decides)
@@ -333,10 +345,13 @@ Claude Code ←stdio→ AWM MCP (19 tools)
                    SQLite + FTS5
                    (single file: memory.db)
 
-Hook Sidecar ←HTTP:8401→ Claude Code hooks
-                          ├── Stop (memory reminder)
-                          ├── PreCompact (auto-checkpoint)
-                          ├── SessionEnd (checkpoint + consolidate)
+Hook Sidecar ←HTTP:8401+→ Claude Code hooks
+   (binds the first free port    ├── Stop (memory reminder)
+    in AWM_HOOK_PORT ..          ├── PreCompact (auto-checkpoint)
+    +AWM_HOOK_PORT_RANGE,        ├── SessionEnd (checkpoint + consolidate)
+    default 8401..8410,          ├── UserPromptSubmit (prime — 0.14.6)
+    so a second project
+    walks to 8402)
                           └── POST /memory/activate (0.12.2 — warm recall for e.g. a
                               UserPromptSubmit hook; ~0.8s, no standing server needed,
                               runs in the sidecar's own process/model lifecycle)

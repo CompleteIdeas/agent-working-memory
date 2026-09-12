@@ -458,16 +458,32 @@ audit what was installed.
 **The hook sidecar:**
 
 The sidecar is a separate HTTP server bundled with AWM, run automatically
-when the MCP server starts. It listens on `AWM_HOOK_PORT` (default
-`8401`) on `127.0.0.1` only. Authentication is via the `Authorization:
-Bearer ${AWM_HOOK_SECRET}` header — set this env var to anything random
-and the same value will be substituted into the hooks above by
-`awm setup --global`.
+when the MCP server starts, on `127.0.0.1` only. Since 0.14.2 it binds the
+**first free port** in `[AWM_HOOK_PORT, AWM_HOOK_PORT + AWM_HOOK_PORT_RANGE)`
+— default `8401` with a range of `10`, so `8401..8410`. Authentication is via the `Authorization:
+Bearer ${AWM_HOOK_SECRET}` header — set this env var to anything random and
+`awm setup --global` stores it in the MCP config. Since 0.14.6 the hook scripts
+**read it from there at run time** rather than having it baked into
+`settings.json`, so rotating the secret does not leave them silently 401-ing.
 
-**Port collisions:** If you run multiple AWM agents simultaneously (e.g.,
-"work" and "personal" pools per the [Quickstart](quickstart.md#separate-memory-pools-optional)),
-give each a different `AWM_HOOK_PORT` and update the URLs above
-accordingly.
+**Port collisions are handled for you (0.14.2).** Running several AWM agents at
+once (e.g. "work" and "personal" pools per the
+[Quickstart](quickstart.md#separate-memory-pools-optional)) needs no manual port
+assignment: the second server finds 8401 taken and walks to 8402. `/health`
+reports the port it actually bound and the agent it serves, and the shipped hook
+scripts probe the range and pick the sidecar matching the session's own agent —
+so a hook never talks to whichever server happened to grab 8401 first.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `AWM_HOOK_PORT` | `8401` | First port the sidecar tries |
+| `AWM_HOOK_PORT_RANGE` | `10` | How many ports to walk upward before giving up. `awm setup --hook-port-range N` writes it |
+| `AWM_HOOK_SECRET` | generated | Bearer token. Stored in the MCP config and read by the hooks at run time, never written into `settings.json` |
+| `AWM_SETUP_HOME` | `$HOME` | Overrides the home directory for `awm setup` / `awm doctor`, so an upgrade can be rehearsed against a scratch tree |
+
+The shipped hook scripts carry a version stamp (`AWM_HOOKS_VERSION`, currently
+`0.14.6`); `awm doctor` compares it against what is installed and tells you when a
+re-run of `awm setup` would change something.
 
 **Verifying the hooks installed correctly:**
 
@@ -475,7 +491,12 @@ accordingly.
 # Show the installed hook config
 cat ~/.claude/settings.json | python -m json.tool
 
-# Confirm the sidecar is listening
+# Confirm the sidecar is listening — prefer `awm doctor`, which probes the whole
+# range, reports `port=agent@version pid` for each live sidecar, and warns when
+# none of them serves the agent this directory is configured for.
+awm doctor claude-code
+
+# Or by hand, remembering the port may have walked past 8401:
 curl -fsS -H "Authorization: Bearer $AWM_HOOK_SECRET" \
   http://127.0.0.1:8401/stats
 # {"writes": N, "recalls": N, "hooks": N, "total": N}

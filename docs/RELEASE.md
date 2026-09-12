@@ -30,6 +30,23 @@ Do not read the whole list. Find the rows that match what you actually changed.
 | **Hook behaviour, ports, or the sidecar** | `src/adapters/hook-scripts.ts` **and** `AWM_HOOKS_VERSION`, `tests/adapters/hook-scripts.test.ts`, `docs/reference.md` hook section, `docs/claude-code-setup.md` |
 | **Anything that changes what a FRESH install should look like** | `src/adapters/` — see the box below. This is the one that cost a whole release |
 | **A claim in the README** | Check it is still true. The README is the most-read and least-verified file in the repo |
+| **A new npm script** | The script block in `README.md`, the Releasing section in `CONTRIBUTING.md`, and the Verify list below. A script nobody can find is a script nobody runs |
+| **A new doc, or a generated one** | `docs/README.md` — it is the index, and an unindexed page is invisible. Say plainly whether the page is hand-written or generated |
+| **Any `.sh` or `.cjs` read by a container** | Nothing — `.gitattributes` pins them to LF. Do not remove those rules: `core.autocrlf=true` is normal on a Windows checkout, and a CRLF shell script fails inside Linux as `set: -: invalid option`, which reads as a broken test |
+
+> ### The row that gets violated most
+>
+> **A default, threshold or env var → `docs/reference.md`.** Audited before the 0.14.6 push,
+> that row had been missed for four releases: `AWM_HOOK_PORT_RANGE` (added 0.14.2) and
+> `AWM_SETUP_HOME` (added 0.14.6) were undocumented, and worse, the page still instructed
+> readers to *"give each a different `AWM_HOOK_PORT`"* — manual work that port walking had
+> made unnecessary three releases earlier. Stale instructions cost more than missing ones,
+> because someone follows them.
+>
+> The same audit found `docs/claude-code-setup.md` last touched 2026-08-22, describing
+> inline-`curl` hooks and a `data/.awm-hook-secret` file that 0.14.6 replaced. It is named
+> in the hooks row above and was missed anyway. **Grep the docs for the thing you changed
+> before you tag; the table only helps if someone reads it.**
 
 > ### The 0.14.6 lesson, stated once
 >
@@ -54,6 +71,8 @@ npx tsc --noEmit -p .      # typecheck
 npx vitest run             # full suite — put the real number in the README
 npm run test:mcp           # MCP smoke test against a live server
 npm run check:release      # the mechanical half of this document
+npm run test:linux         # build + full suite on Linux (see below)
+npm run test:docker        # clean-room install of the packed tarball (see below)
 ```
 
 If anything touched retrieval, also regenerate the measured numbers rather than editing
@@ -65,8 +84,22 @@ npm run bench -- --all     # plus the local challenge suites
 ```
 
 It refuses to start below 8 GB of commit headroom, because these suites load ONNX models
-natively and five earlier runs were OOM-killed on this machine, one of them mid-write. It
-writes `docs/benchmarks-current.md` and archives raw stdout under `bench-runs/`. Anything
+natively and five earlier runs were OOM-killed on this machine, one of them mid-write
+(`BENCH_MIN_HEADROOM_GB` overrides it). It
+writes `docs/benchmarks-current.md` and archives raw stdout under `bench-runs/`.
+
+**`--all` needs a live server.** The four local suites (self, edge, stress, sleep) drive
+`http://localhost:8400` and do not start one; without it they exit 1 in about ten seconds and
+were reported as FAILED — a missing precondition dressed up as a broken product. They are now
+probed for and skipped with the reason. To actually run them, start a server against a
+**scratch database** first, never your real store, because these suites seed and mutate data:
+
+```bash
+AWM_DB_PATH=/tmp/bench-scratch.db npm start
+```
+
+Commit before you measure: a dirty tree stamps the generated page
+*"not a releasable measurement"*. Anything
 it cannot regenerate — the gauntlet, the production cost audit, retired LoCoMo — is listed
 in its own output as historical rather than quietly carried forward.
 
