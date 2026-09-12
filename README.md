@@ -122,6 +122,8 @@ The design is based on cognitive science — ACT-R activation decay, Hebbian lea
 
 > **Deciding whether to adopt it?** [`docs/for-decision-makers.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md) is the fifteen-minute version for a technical manager — the problem, what it measurably does, what it does not, and what saying yes commits you to. No cognitive-science vocabulary.
 
+> **Want to understand the mechanism?** [`docs/walkthrough.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md) follows one memory from write to recall to correction, explaining each piece by what it does before naming it. Thirty minutes; every number sourced.
+
 > **New to AWM?** [`docs/pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html) is a visual, plain-language walkthrough (no background required) — what happens when AWM learns and recalls a fact, why it's built this way, and how it differs from a plain vector store. Open it in a browser.
 
 > **Build an agent on it:** the [AWM-Native Agent Harness pattern](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.

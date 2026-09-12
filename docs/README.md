@@ -8,6 +8,7 @@ covers everything else.
 | Doc | What it covers |
 |---|---|
 | **[for-decision-makers.md](for-decision-makers.md)** | **Start here if you are deciding whether to adopt it** — the problem, what it measurably does, what it does not, what saying yes commits you to. No jargon. |
+| **[walkthrough.md](walkthrough.md)** | **Start here if you want the mechanism explained** — one memory followed from write to recall to correction, each piece introduced by what it does. |
 | [quickstart.md](quickstart.md) | Install, first write, first recall |
 | [product-overview.md](product-overview.md) | What the system is, in one page — for someone who will build on or operate it |
 | [user-guide.md](user-guide.md) | Day-to-day use: when to write, when to recall |

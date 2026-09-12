@@ -111,7 +111,8 @@ and to say "I don't know" when it should.
 
 ---
 
-*Deeper reading, in order of technical depth:* [`product-overview.md`](product-overview.md)
+*Deeper reading, in order of technical depth:* [`walkthrough.md`](walkthrough.md)
+(the mechanism, one memory followed end to end) → [`product-overview.md`](product-overview.md)
 (what the system is, one page) → [`user-guide.md`](user-guide.md) (day-to-day use) →
 [`architecture.md`](architecture.md) (how the pieces fit) →
 [`cognitive-model.md`](cognitive-model.md) (the theory and its citations).

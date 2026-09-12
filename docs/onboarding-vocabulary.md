@@ -85,7 +85,7 @@ The **probationary buffer** for borderline-salience engrams (score
 considered during consolidation. If a staging engram **resonates** with
 existing knowledge (gets a graph link, or its concept matches another
 memory's tags), it gets promoted to active. If it sits unused, it gets
-swept after 24 hours.
+swept after 30 days.
 
 > *Practical anchor:* Staging is how AWM avoids both extremes — it doesn't
 > reject low-confidence memories outright, but it also doesn't pollute
@@ -132,7 +132,7 @@ so the corrected version takes over the graph role.
 | **Slim cache** | An in-memory index of every engram's `(id, concept, embedding)` for fast recall. Populated at server startup. Disable with `AWM_DISABLE_SLIM_CACHE=1` if you suspect cache drift. |
 | **Workspace** | A scoping mechanism that lets multiple agents share a memory pool while still defaulting to their own subset. Set `AWM_WORKSPACE` to opt in. |
 | **Reranker** | The cross-encoder model (ms-marco-MiniLM) that runs at the end of recall to refine the top-K ordering. Disable per-call with `useReranker: false` for fast/low-quality. |
-| **Abstention** | Opt-in: pass `requireConfidence: 0.25` on recall to make AWM return `[]` (instead of best-of-bad-bunch) when the score distribution looks weak. |
+| **Abstention** | On by default at a light threshold (`require_confidence: 0.05`) — AWM returns `RECALL ABSTAINED` with the withheld count instead of a best-of-bad-bunch result when the score distribution looks weak. Raise it (0.10–0.25) only for push-style use where nobody asked; a specific query with one clear winner around 0.3 will be *silenced* by 0.25. |
 
 ---
 
@@ -149,8 +149,10 @@ when you give it a context ("memory_recall"). Everything else — staging,
 consolidation, retraction, eviction — is housekeeping that AWM runs to
 keep recall sharp over time.
 
-For deeper grounding (ACT-R, Hebbian learning, complementary learning
-systems, synaptic homeostasis), see [`cognitive-model.md`](cognitive-model.md).
+For the mechanism explained in sequence — one memory written, scored, recalled,
+faded and corrected — see [`walkthrough.md`](walkthrough.md). For the theory
+and citations (ACT-R, Hebbian learning, complementary learning systems,
+synaptic homeostasis), see [`cognitive-model.md`](cognitive-model.md).
 
 For "I read this and now what?" — the natural next read is
 [`quickstart.md`](quickstart.md) (install + first write/recall) or
