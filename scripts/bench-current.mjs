@@ -169,7 +169,14 @@ const NOT_REGENERABLE = [
 // Raw stdout is archived verbatim, so a parse miss loses a table cell, never the evidence.
 // ─────────────────────────────────────────────────────────────────────────────
 function parseMetrics(out) {
-  const num = (re) => { const m = out.match(re); return m ? Number(m[1]) : null; };
+  // Strip thousands separators before Number(), and treat NaN as absent: `??` only
+  // catches null/undefined, so a NaN here silently reached the published page.
+  const num = (re) => {
+    const m = out.match(re);
+    if (!m) return null;
+    const v = Number(String(m[1]).replace(/,/g, ''));
+    return Number.isFinite(v) ? v : null;
+  };
   return {
     arm: out.match(/arm=(\S+)/)?.[1] ?? null,
     clockPinned: /clock pinned to (\S+)/.exec(out)?.[1] ?? null,
@@ -182,8 +189,11 @@ function parseMetrics(out) {
     p50ms: num(/p50\s+(\d+)ms/),
     p90ms: num(/p90\s+(\d+)ms/),
     sufficiency: num(/SUFFICIENCY\s+([\d.]+)%/),
-    netTokens: num(/NET ([+-]?[\d,]+) tok/)
-      ?? (out.match(/NET ([+-]?[\d,]+) tok/) ? Number(out.match(/NET ([+-]?[\d,]+) tok/)[1].replace(/,/g, '')) : null),
+    netTokens: num(/NET ([+-]?[\d,]+) tok/),
+    netTokensPerRecall: num(/\(([+-]?[\d,]+)\/recall\)/),
+    // The temporal runner prints a per-phrasing comparison, not one score.
+    temporalBaseline: num(/^\s*none\s+([\d.]+)%/m),
+    temporalOracle: num(/ORACLE \(week-filtered\)\s+([\d.]+)%/),
   };
 }
 
@@ -199,7 +209,7 @@ function run(suite, artifactsDir) {
   writeFileSync(join(artifactsDir, `${suite.id}.log`), out);
   const ok = r.status === 0;
   console.log(ok ? `ok (${secs}s)` : `FAILED exit ${r.status} (${secs}s) — see artifacts/${suite.id}.log`);
-  return { ...suite, ok, secs, metrics: ok ? parseMetrics(out) : null };
+  return { ...suite, ok, status: r.status, secs, metrics: ok ? parseMetrics(out) : null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -245,15 +255,31 @@ function render(meta, results) {
   L.push('');
   L.push('| Suite | probes | s@1 | s@5 | MRR | abstention | p50 | p90 |');
   L.push('|---|---|---|---|---|---|---|---|');
-  for (const r of results.filter(r => RETRIEVAL_SUITES.some(s => s.id === r.id))) {
+  for (const r of results.filter(r => RETRIEVAL_SUITES.some(s => s.id === r.id) && r.id !== 'temporal')) {
     if (!r.ok) { L.push(`| ${r.title} | — | _run failed_ | | | | | |`); continue; }
     const m = r.metrics;
     L.push(`| ${r.title} | ${m.answerable ?? '—'} | **${pct(m.s1)}** | ${pct(m.s5)} | ${pct(m.mrr)} | ${pct(m.adversarialSilent)} | ${ms(m.p50ms)} | ${ms(m.p90ms)} |`);
   }
   L.push('');
   for (const r of results.filter(r => r.ok && r.metrics?.sufficiency !== null && r.metrics?.sufficiency !== undefined)) {
-    L.push(`- **${r.title}** — of the golds retrieved, ${pct(r.metrics.sufficiency)} actually contain the answer${r.metrics.netTokens !== null ? `; net token economics ${r.metrics.netTokens >= 0 ? '+' : ''}${r.metrics.netTokens.toLocaleString()} per recall` : ''}.`);
+      L.push(`- **${r.title}** — of the golds retrieved, ${pct(r.metrics.sufficiency)} actually contain the answer${r.metrics.netTokensPerRecall !== null && r.metrics.netTokensPerRecall !== undefined ? `; net token economics ${r.metrics.netTokensPerRecall >= 0 ? '+' : ''}${r.metrics.netTokensPerRecall} per recall` : ''}.`);
   }
+  const temporal = results.find(r => r.id === 'temporal');
+  if (temporal?.ok && temporal.metrics?.temporalBaseline !== null && temporal.metrics?.temporalBaseline !== undefined) {
+    L.push('');
+    L.push('## Temporal cues');
+    L.push('');
+    L.push('This suite is a comparison, not a score: it asks whether phrasing a query with a time');
+    L.push('cue ("last week", "in March") helps, and what a working date filter would be worth.');
+    L.push('');
+    L.push(`- No temporal cue: **${pct(temporal.metrics.temporalBaseline)}** s@1 — the baseline.`);
+    if (temporal.metrics.temporalOracle !== null && temporal.metrics.temporalOracle !== undefined) {
+      const gap = (temporal.metrics.temporalOracle - temporal.metrics.temporalBaseline).toFixed(1);
+      L.push(`- Oracle week-filter: **${pct(temporal.metrics.temporalOracle)}** — the ceiling a working filter approaches, ${gap}pp above baseline.`);
+    }
+    L.push(`- Per-phrasing detail in \`${meta.artifactsRel}/temporal.log\`. Every cue phrasing currently scores *below* the no-cue baseline, so the cue is not yet being used as a filter.`);
+  }
+
   const localRan = results.filter(r => LOCAL_SUITES.some(s => s.id === r.id));
   if (localRan.length) {
     L.push('');
@@ -263,7 +289,7 @@ function render(meta, results) {
     L.push('|---|---|');
     for (const r of localRan) {
       if (r.skipped) { L.push(`| ${r.title} | _skipped_ — ${r.reason} |`); continue; }
-      L.push(`| ${r.title} | ${r.ok ? `passed (${r.secs}s)` : `**failed** (exit ${r.ok})`} — see \`${meta.artifactsRel}/${r.id}.log\` |`);
+      L.push(`| ${r.title} | ${r.ok ? `passed (${r.secs}s)` : `**failed** (exit ${r.status})`} — see \`${meta.artifactsRel}/${r.id}.log\` |`);
     }
   }
   L.push('');
