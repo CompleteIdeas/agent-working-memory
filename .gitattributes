@@ -1,0 +1,9 @@
+# Shell scripts must keep LF in the working tree, on every platform.
+#
+# core.autocrlf=true is normal on a Windows checkout, but these scripts are read by
+# bash INSIDE a Linux container (tests/docker/*.sh) or by Git Bash driving one. A CRLF
+# checkout makes container bash fail with `set: -: invalid option` and
+# `syntax error near unexpected token $'do\r'` — which reads as a broken test, not as a
+# line-ending problem. Cost a debugging round on 2026-09-12.
+*.sh text eol=lf
+*.cjs text eol=lf
