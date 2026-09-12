@@ -1,731 +1,244 @@
 # AgentWorkingMemory (AWM)
 
-**Memory for AI agents that survives the end of a conversation.**
+**Give your AI coding agent a memory that survives the conversation — and knows when to stay quiet.**
 
-Most "memory for AI" is a vector database: store everything, retrieve by similarity, hope
-the right thing comes back. AWM takes the opposite bet — that a memory is only useful if
-it is **selective**. It decides what is worth keeping *before* storing it, strengthens what
-gets used, lets the rest fade, and returns **nothing** when nothing is relevant rather than
-handing back the best of a bad set.
+Every session with an AI assistant starts blank. It has forgotten what your team decided last
+week, which approach was tried and rejected, and which table actually holds the thing it needs.
+So it re-derives all of it — reading files, running searches, asking you — and on a large project
+it will confidently rebuild something that was already decided against.
 
-> Most memory systems optimise for *finding something*.
-> AWM optimises for *whether there is anything worth returning*.
+AWM fixes that with one local process and one SQLite file. The agent writes short notes as it
+learns; AWM decides which are worth keeping, hands back the two or three that matter when asked,
+and says **nothing** when nothing fits.
 
-That one idea explains the rest of the design: a salience filter that refuses most of what
-it sees, abstention as a first-class result, and a benchmark built on a real 11,000-memory
-store rather than synthetic Q&A.
+```bash
+npm install -g agent-working-memory && awm setup --global
+```
 
-Everything runs on your machine — SQLite and three small ONNX models. No cloud, no API
-keys, nothing leaves the box. Use it from Claude Code over MCP, or as a local HTTP service
-for your own agents.
+Restart Claude Code. 19 tools appear. No cloud, no API keys, nothing leaves your machine.
 
-### Without AWM
-- Agent forgets earlier architecture decision
-- Suggests Redux after project standardized on Zustand
-- Repeats discussion already settled three days ago
-- Every new conversation starts from scratch
-
-### With AWM
-- Recalls prior state-management decision and rationale
-- Surfaces related implementation patterns from past sessions
-- Continues work without re-asking for context
-- Gets more consistent the longer you use it
+<p align="center">
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md"><b>Deciding whether to adopt it? →</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md"><b>Want the mechanism walked through? →</b></a> &nbsp;·&nbsp;
+  <a href="https://completeideas.github.io/agent-working-memory/"><b>Docs site →</b></a>
+</p>
 
 ---
 
-## Quick Start
+## What it does, measured
 
-**Node.js 22 LTS+** required — check with `node --version`. (Node 20 reached EOL 2026-04-30; AWM 0.8.6+ requires 22.)
+Every number below is reproducible from this repository against a frozen copy of a **real
+30,000-memory store** — not synthetic test data. Method and corrections: [`docs/benchmarks.md`](docs/benchmarks.md).
+
+| | |
+|---|---|
+| **Returns the right memory first** | **92.7%** of identifier queries · **92.0%** of topic queries · ~97% in the top five |
+| **Stays silent when it should** | **90%** correct abstention on questions about facts never stored |
+| **Halves the digging** | Same agent, same tools, four real support tickets: with memory, **2× the specific facts** the real answer needed and **half the database queries** (49 vs 100). On one ticket the memoryless arm ran 25 queries, exhausted its budget and answered nothing; the memory arm answered in 4. |
+| **Holds decisions for months** | On a six-month application project, recorded decisions were recalled a median of **30 days** after being written — some after **167 days**. 41% of the technical identifiers the agent used had entered the conversation *only* through a recall. |
+| **Costs a fraction to answer** | Scoped recall answers in **~630 tokens flat** regardless of store size. Carrying the memory store instead: ~1.3M tokens. Reading the codebase: doesn't fit in any window. |
+| **Lets a cheap model punch up** | A small model plus AWM out-performed a frontier model on a 15-task domain workload at **~1/40th the cost** — **14/15 vs 7/15**, $0.007 vs $0.277 per task. |
+
+Two independently built fixtures agree within a point. Warm recall takes about half a second.
+
+<details>
+<summary><b>How these numbers were corrected upward in September 2026</b> — read before comparing to older figures</summary>
+
+Earlier published figures (s@1 63.8% category, 70.0% identifier) were **understated by the
+measuring instrument, not the engine**. Two defects, both found and fixed in 0.14.4–0.14.5: the
+benchmark's decay clock ran on the wall clock, so the "frozen" snapshot aged a day per day; and the
+runner queried every gold as the `work` agent while a quarter to a third belonged to `personal`,
+so agent isolation cut them before scoring. Nothing in retrieval changed between 63.8 and 92.0.
+The within-day *deltas* published earlier (e.g. the +7.4pp tags win) stand. Full account in
+[`docs/benchmarks.md`](docs/benchmarks.md) → correction notes.
+</details>
+
+---
+
+## Why it works when a vector store doesn't
+
+Most "memory for AI" stores everything and retrieves by similarity. AWM makes the opposite bet:
+**a memory is only useful if it is selective.**
+
+**It refuses most of what it sees.** Every write is scored for importance before storage —
+is it new, is it a decision or a root cause, does it name its subject? About a third of what
+the agent offers is kept at full confidence. The rest never competes, so recall stays sharp as
+the store grows.
+
+**It forgets gracefully.** Memories that keep getting used stay strong; ones nobody touches
+fade from ranking without being deleted. The model is borrowed from cognitive science (ACT-R),
+and it means no one curates the store.
+
+**It tells you when it doesn't know.** When the top candidates are only marginally better than
+the tenth, AWM returns nothing and says how many it withheld. A confident wrong memory is more
+expensive than an admitted gap — the benchmark scores the silence as a win.
+
+**It knows what changed.** When a fact is corrected, the old memory is marked superseded and
+carries a visible warning if it ever surfaces. A notes file has two paragraphs that read with
+equal confidence; AWM knows which one won. One project has 108 such supersessions — an agent
+resuming it gets one current state, not five.
+
+**It stays local and per-person.** One SQLite file, three small ONNX models (~200 MB, once).
+Work and personal memories are separate pools; several sessions share a pool safely.
+
+<details>
+<summary>Against a typical RAG / vector store, feature by feature</summary>
+
+| | Typical vector store | AWM |
+|---|---|---|
+| Storage | Everything | Salience-filtered: active / staging / low-confidence fallback |
+| Retrieval | Cosine similarity | Keyword + vector candidates → liveness scoring → cross-encoder rerank → abstention gate |
+| Forgetting | Manual cleanup | ACT-R decay; reinforced knowledge persists |
+| Correction | Delete and re-insert | Supersede with a visible pointer; retract with confidence propagation to neighbours |
+| Duplicates | Stored again | Reinforce the existing memory instead |
+| Wrong answers | Best of a bad set | Returns nothing, says why |
+| Named things | Vocabulary-dependent | Entity index on tickets, people, tables, files |
+| Feedback | None | Useful / not-useful adjusts confidence and rank |
+| Multi-agent | Per-instance | Shared store, per-agent scoping, opt-in shared workspace |
+</details>
+
+---
+
+## Who uses it
+
+- **Long-running coding agents** that need cross-session project knowledge
+- **Support and operations agents** that must remember what was already decided on a ticket
+- **Multi-agent pipelines** where specialised agents share one memory
+- **Local-first teams** for whom cloud memory is not acceptable
+- **Any MCP host** — Claude Code, [Hermes Agent](docs/integrations/hermes.md), or your own agent over a local HTTP API
+
+**Not** a chatbot, a hosted service, a generic vector database, or a replacement for your
+code and tickets as the source of truth. Recall first; verify against the source when it
+matters; supersede when reality differs.
+
+---
+
+## Get started
 
 ```bash
 npm install -g agent-working-memory
-awm setup --global
+awm setup --global          # MCP config, CLAUDE.md guidance, hooks
 ```
 
-Restart Claude Code. That's it — 19 tools appear automatically (17 memory + 2 onboarding).
+Requires **Node.js 22+**. Restart Claude Code; the first conversation is ~30 s slower while the
+models download. Upgrading is the same two commands — the database is preserved and every
+release to date has been backward compatible.
 
-### Upgrading
+Starting on an existing project? Warm-start the store from its own docs so recall is useful
+on day one:
 
 ```bash
-npm install -g agent-working-memory@latest
-awm setup --global          # Updates MCP config, CLAUDE.md instructions, and hooks
+awm onboard ./docs --repo . --project <name>    # review the pack, then
+awm import <pack> --db <path> --dedupe
 ```
 
-Restart Claude Code after upgrading. Your existing memory database is preserved — all upgrades are backward compatible. New features (metadata tags, workspace recall, synthesis) are opt-in.
-
-> **From v0.6.x → v0.7.x:** The `memory_write` tool now accepts optional metadata parameters (`project`, `topic`, `session_id`, etc.) that improve recall quality. Re-running `awm setup --global` updates your CLAUDE.md with instructions for the agent to use them.
-
-First conversation will be ~30 seconds slower while ML models download (~200MB total, cached locally). After that, everything runs on your machine.
-
-> For isolated memory per folder, see [Separate Memory Pools](#separate-memory-pools). For team onboarding, see [docs/quickstart.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/quickstart.md).
-
-> **Starting on an existing project?** Warm-start the store from its own docs so recall is
-> useful immediately: `awm onboard ./docs --repo . --project <name>` → review the pack →
-> `awm import <pack> --db <path> --dedupe`. See [What's New in v0.11.0](#whats-new-in-v0110).
-
----
-
-## Who this is for
-
-- **Long-running coding agents** that need cross-session project knowledge
-- **Multi-agent workflows** where specialized agents share a common memory
-- **Local-first setups** where cloud memory is not acceptable
-- **Teams using Claude Code** who want persistent context without manual notes
-
-## What this is not
-
-- Not a chatbot UI
-- Not a hosted SaaS
-- Not a generic vector database
-- Not a replacement for your source of truth (code, docs, tickets)
-
----
-
-## Why it's different
-
-> **New to the vocabulary?** Terms like *engram, salience, activation, Hebbian, staging*
-> are defined plainly, one paragraph each, in
-> [`docs/onboarding-vocabulary.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/onboarding-vocabulary.md) — a 5-minute read if any of the table below is unfamiliar.
-
-Three things set it apart. Everything in the table below follows from them.
-
-**1 — It refuses to remember most of what it sees.** A salience filter runs at write time:
-low-value writes are discarded, borderline ones go to staging, only what clears the bar
-becomes active. Retention is the product, not a side effect of storage.
-
-**2 — It will tell you it doesn't know.** When the score distribution says a recall is
-noisy or best-of-a-bad-bunch, AWM returns nothing and *says so* — naming how many
-candidates it withheld and why. Correct silence is scored as a win in its own benchmark,
-because a confident wrong answer is more expensive than an admitted gap.
-
-**3 — It is local, and stays local.** SQLite plus three small ONNX models. No API keys, no
-network calls, multi-process safe so several agent sessions can share one store.
-
-Concretely, against a typical vector store:
-
-| | Typical RAG / Vector Store | AWM |
-|---|---|---|
-| **Storage** | Everything | Salience-filtered with low-confidence fallback (novel events go active, borderline enter staging, low-salience stored at reduced confidence) |
-| **Retrieval** | Cosine similarity | 10-phase pipeline: dual BM25 (keyword + expanded) + vectors + reranking + graph walk + decay + coref expansion |
-| **Named things** | Vocabulary-dependent — misses if the query doesn't lexically match | Entity inverted index: exact lookup on named entities ("ticket 19252", a person's name), immune to phrasing mismatch |
-| **Connections** | None | Hebbian edges that strengthen when memories co-activate |
-| **Over time** | Grows forever, gets noisier | Consolidation: diameter-enforced clustering, cross-topic bridges, synaptic-tagged decay |
-| **Forgetting** | Manual cleanup | Cognitive forgetting: unused memories fade, reinforced knowledge persists (access-count modulated) |
-| **Feedback** | None | Useful/not-useful signals tune confidence and retrieval rank |
-| **Correction** | Delete and re-insert | Retraction: wrong memories invalidated, corrections linked, penalties propagate (depth 2, decaying) |
-| **Graph** | None or single graph | Multi-graph: semantic, temporal, causal, entity — independent traversal with fused scoring |
-| **Learning** | Unconditional co-activation | Validation-gated: edges strengthen only on positive feedback (Kairos-inspired) |
-| **Noise rejection** | None | Multi-channel agreement gate: requires 2+ retrieval channels to agree before returning results |
-| **Duplicates** | Stored repeatedly | Reinforce-on-duplicate: near-exact matches boost existing memory instead of creating copies |
-
-The design is based on cognitive science — ACT-R activation decay, Hebbian learning, complementary learning systems, synaptic homeostasis, and synaptic tagging — rather than ad-hoc heuristics. See [How It Works](#how-it-works) and [docs/cognitive-model.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/cognitive-model.md) for details.
-
-> **Deciding whether to adopt it?** [`docs/for-decision-makers.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md) is the fifteen-minute version for a technical manager — the problem, what it measurably does, what it does not, and what saying yes commits you to. No cognitive-science vocabulary.
-
-> **Want to understand the mechanism?** [`docs/walkthrough.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md) follows one memory from write to recall to correction, explaining each piece by what it does before naming it. Thirty minutes; every number sourced.
-
-> **Engineer who wants the pipeline internals?** [`docs/pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html) is the visual technical tour — the write path, the recall funnel stage by stage, the scoring model, and the attribution study behind the current defaults. Its §5 benchmark figures are from the retired LoCoMo suite and are flagged as such on the page; current figures are in [Benchmarks](#benchmarks). Open it in a browser.
-
-> **Build an agent on it:** the [AWM-Native Agent Harness pattern](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/patterns/awm-native-harness.md) shows how to use AWM as an always-on cognitive *substrate* (not a tool the model calls) so the agent learns automatically by working — letting a cheap model perform at a high level and get cheaper + better over time. Measured: gpt-5.4-mini + AWM beat a frontier model on a domain workload at ~1/40th the cost.
-
-> **For builders & researchers:** [`docs/awm-for-agents.html`](https://completeideas.github.io/agent-working-memory/awm-for-agents.html) is the agent playbook — why AWM exists (the context-window wall), the PRIME→ACT→VERIFY→LEARN harness, the full agent feature surface (workspace, session IDs, bearer-token hooks, supersede/feedback), how multi-hop is solved in the harness, and the honest gauntlet findings (where AWM wins, ties, and what isn't measured yet). Open it in a browser.
-
----
-
-## Why it matters at scale
-
-The reason AWM exists: **past roughly half a million tokens, you can no longer keep a large project's context alive by carrying it.** The codebase, the docs, the decision history, and the meeting/work transcripts outgrow every model's window — and summarizing to fit silently drops the fact you needed next.
-
-These figures come from real-world use on a large software platform project, where a single work agent has accumulated **20,000+ memories** over a multi-million-token codebase and documentation set:
-
-| To answer one question, carry… | tokens | AWM scoped recall |
-|---|---|---|
-| the accumulated memory (~20K memories) | ~1.3M | **~630, flat** |
-| the project's notes & transcript docs | ~2M | **~630, flat** |
-| the whole system (code + docs) | ~29M — fits in no window, any tier | **~630, flat** |
-
-A scoped recall answers from the relevant *slice*, independent of how large the store grows. Measured consequences on real questions against the real project:
-
-- **~2,000× fewer tokens per query** than carrying the memory store — and **~5× fewer** than opening the single best-matching documentation file (a floor; agents usually open several and still miss cross-file facts).
-- **At scale, "carry everything" isn't an option.** At ~20K memories no context window holds it, so retrieval is not an optimization — it is the only door. A static notes file or long-context approach is forced to truncate, which silently drops facts.
-
-Two structural advantages a file or a flat vector store cannot match:
-
-- **Staleness is tracked.** When a fact changes, `memory_supersede` retires the old value and recall stops returning it — the system *knows* what changed. A notes file or repo goes stale silently; you would re-scan everything to find out. (This work agent has superseded and retracted dozens of facts as the project moved.)
-- **Dead weight costs nothing.** ~90% of accumulated memories are never recalled for a given task — a notes file pays for all of them in every prompt; recall pays for ≈zero.
-
-### Honest about the trade-offs
-
-- AWM does **not** win on small, one-shot tasks — write/recall overhead exceeds the savings until knowledge is reused or the corpus grows past what fits in context.
-- Recall is not free: a few seconds of latency per query buys the token reduction.
-- Recall accuracy is bounded by what was written — write quality matters (lead with the fact; tag with identifiers like file, table, ticket).
-- It does not replace your source of truth. The intended pattern is: **recall first, read/grep the code for ground truth on a miss, and supersede when reality differs.**
-
----
-
-## Benchmarks
-
-Two kinds of tests, both reproducible (see [Testing & Evaluation](#testing--evaluation)).
-First, **recall quality** — does the pipeline return the right memory? Second,
-**behavior under stress** — does it stay honest, filter noise, and hold up as the
-store grows and ages?
-
-### 1 · The 0.13.x retrieval wins
-
-Three changes shipped in 0.13.4–0.13.6. Each row names **the corpus it was measured
-on** — they are not the same, and the difference matters. Enable all three together:
-
-```bash
-AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
-```
-
-| Change | Flag | Measured result | Measured on |
-|---|---|---|---|
-| **Second-stage rerank** — let the cross-encoder's own score decide final order, instead of a blend that capped its vote at 70% | `AWM_RERANK2=1` | **+9.7pp success@1** (37.8 → 47.6), p<0.001, paired McNemar. Costs no extra inference — the scores already existed and were being partly discarded. | 616 LoCoMo probes — ⚠ the benchmark retired below |
-| **Query-aware rerank window** — spend the same 400-char budget on the window densest in query terms instead of the prefix | `AWM_RERANK_WINDOW=query` | **25.0% → 87.5%** long-memory success@1 (3.5×), at **+0.07%** CPU and **zero** added tokens. | Generated long-memory corpus, calibrated to real-store statistics, answer planted at a controlled offset |
-| **Tags into the rerank passage** — put words that exist only as tags in front of the component that decides | `AWM_RERANK_TAGS=1` | **+7.4pp success@1** (56.4 → 63.8) on category queries. | 450 probes on a **frozen real-store snapshot** |
-
-**Combined, on the real store** (450 category probes, frozen 11,294-engram snapshot):
-**s@1 56.4 → 63.8%**, **s@5 66.2 → 68.4%**, **MRR 60.6 → 66.0%** — with adversarial
-abstention held at **90.0%** in every arm. Selectivity was not traded away to buy accuracy.
-
-> **Those absolute levels were understated, and the corrected figures are higher.**
-> (2026-09-11, v0.14.4–0.14.5.) Two defects in the *measuring instrument* — not the
-> engine — were found and fixed: the benchmark's decay clock ran on the wall clock, so the
-> "frozen" snapshot aged a day per day; and the runner queried every gold as the `work`
-> agent while a quarter to a third of golds belonged to `personal`, so they were cut by
-> agent isolation before scoring. With both fixed, the same fixtures read
-> **identifier s@1 92.7%** (278/300; s@5 96.7%, MRR 94.6%) and **category s@1 92.0%**
-> (414/450; s@5 96.7%, MRR 94.2%), adversarial abstention still **90.0%**. Two independently
-> built fixtures agreeing within a point is the strongest evidence yet that the number is
-> real. The *deltas* above (the +7.4pp tags win) stand — both arms shared the artifact.
-> Nothing in the engine changed between 63.8 and 92.0. Full account:
-> [`docs/benchmarks.md`](docs/benchmarks.md) → "10-day regression check" corrections.
-
-> **On the +9.7pp figure.** It comes from LoCoMo, which this page retires two sections
-> below. Reported as-measured rather than quietly dropped, because the provenance is part
-> of the story: LoCoMo's short passages are exactly why it could not see the 400-char
-> truncation, and that blind spot is what made the standalone `AWM_RERANK2`
-> recommendation wrong. The combined real-store number above is the one to trust.
-
-> **End-to-end, this did not move the acceptance test.** See the gauntlet row below.
-
-> **⚠ Enable them together.** `AWM_RERANK2` *alone* regresses long-memory s@5 from
-> 91.7% to 25.0%. BM25 over full content had been quietly compensating for the
-> reranker's 400-char blindness; making a blind reranker authoritative removes that
-> cover. Ship both, or neither.
-
-The finding underneath all three: **a memory is unreachable when a word it needs was
-never written into its body.** On this store, 66.2% of topical tag terms never appear
-in the text at all. Three other approaches to the same defect were tested and
-rejected — re-embedding with tags (+0.3pp), mined dialect aliases (−0.2pp), and a
-larger 768d embedder (+0.7pp alone, −1.1pp combined). You cannot recover a word that
-was never written; you can only put the word that *is* recorded in front of the ranker.
-That is also why 0.13.6 rewrote the **writing guidance**, not just the ranker.
-
-Full evidence, protocol, and the rejected arms: [`docs/archive/`](docs/archive/README.md).
-
-### 2 · Everything else, in one table
-
-| What | Result | Detail |
-|---|---|---|
-| **Eval harness** (retrieval / associative / redundancy / temporal) | Recall@5 **0.980** · success@10 **1.000** · dedup F1 **0.966** · Spearman **0.932** — all four above threshold | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **Unit + subsystem** | `test:run` **737/737** · `test:self` **93.9%** · `test:edge` **~32/34** · `test:mcp` **5/5** | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **Adversarial / noise rejection** | `test:pilot` **14/15** (5/5 distractors rejected) · `test:ab` **AWM 10/11 vs keyword 8/11** | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **End-to-end ablation** (the gauntlet) | **74%±5pp memory-dependent vs 0% no-memory control** (0.11.x baseline); only the memory substrate varies. Both arms complete at k=10: baseline **74.0%** vs **81.0%** with the flags (**+7.0pp**, Fisher p=0.31 — not significant, but directionally matching the +7.4pp fixture result). **All 10 probes flip between identical runs**, and `multihop` has never passed at any k | [`gauntlet-baseline`](docs/archive/gauntlet-baseline-2026-07-30.md) |
-| **Consolidation under stress** | Recall **holds 90–100%** across 100 cycles; edges grow to ~2,300 then self-prune to ~1,500 | [`docs/benchmarks.md`](docs/benchmarks.md) |
-| **Token economics** | **9.8× lower** aggregate cost than the Read/Grep/Glob rediscovery it replaces | [`docs/benchmarks.md`](docs/benchmarks.md) |
-
-**The retrieval gains above have not yet shown up end-to-end, and the reason is now
-understood.** Both arms now run complete at k=10: baseline **74.0%** against **81.0%**
-with the flags — **+7.0pp**, Fisher exact **p = 0.31**. Not significant, but the direction
-and magnitude match the fixture-level +7.4pp, so this is consistent with the gains
-converting rather than evidence that they do. Resolving it is hard because **all 10 probes
-flip between identical runs**, with `composite` passing 5/10 under an unchanged configuration, and `multihop` moving 2/10 to 6/10 with the flags — half of those passes at 2 steps or fewer, i.e. better ranking rather than the agent chaining. Raising k narrows the interval
-around an unstable mean; it does not make the suite able to resolve a few-point
-difference. The next step is probe determinism, not more repetitions. See
-[`docs/benchmarks.md`](docs/benchmarks.md).
-
-Two other numbers are easy to misread, so they are stated plainly:
-
-- **`test:sleep` = 78.6% is a consolidation-*quality* score**, not recall falling to
-  78.6%. It asks "after the maintenance pass, is recall at least as good and the
-  structure better?" Recall is held flat across three cycles while the graph reorganizes.
-- **Token savings depend entirely on the baseline you pick.** vs carrying the full
-  history (what a memoryless agent must actually do): **+67% at 97.5% accuracy**. vs an
-  oracle that pre-scoped context to the exactly-relevant task: **≈ −13%** — a
-  deliberately brutal bar that hands the baseline the very scoping retrieval exists to
-  do. 0.13.x added a third and stricter measure, **sufficiency**: does the delivered
-  text actually *contain* the answer, or merely point at it?
-
-> **LoCoMo was retired in 0.13.x.** It was useful for learning how to benchmark this
-> product but does not represent it: median 115-char passages against a real store's
-> 1,965; seeded in one shot, so decay, Hebbian weights and salience contribute nothing;
-> no supersession, no cross-session use; it *rewards* indiscriminate retention, so the
-> salience filter — the product — caps its score regardless of ranking quality; and it
-> is structurally blind to the 400-char truncation that turned out to affect 79% of real
-> ground-truth identifiers. `tests/realstore-eval/` replaces it.
-
----
-
-## Features
-
-### Memory Tools (17 + 2 onboarding = 19)
-
-| Tool | Purpose |
-|------|---------|
-| `memory_write` | Store a memory (salience filter + reinforce-on-duplicate) |
-| `memory_recall` | Retrieve relevant memories by context (dual BM25 + coref expansion) |
-| `memory_feedback` | Report whether a recalled memory was useful |
-| `memory_retract` | Invalidate a wrong memory with optional correction |
-| `memory_supersede` | Replace outdated memory with current version |
-| `memory_stats` | View memory health metrics and activity |
-| `memory_whoami` | Identify the instance — agent id, workspace, backend, store path, sibling agent spaces |
-| `memory_checkpoint` | Save execution state (survives context compaction) |
-| `memory_restore` | Recover state + relevant context at session start |
-| `memory_task_add` | Create a prioritized task |
-| `memory_task_update` | Change task status/priority |
-| `memory_task_list` | List tasks by status |
-| `memory_task_next` | Get the highest-priority actionable task |
-| `memory_task_begin` | Start a task — auto-checkpoints and recalls context |
-| `memory_task_end` | End a task — writes summary and checkpoints |
-| `compress_output` | Encode a structured tool output as TOON — ~50-65% fewer tokens, lossless, output-only |
-| `retrieve_original` | Get the verbatim source back for a `compress_output` ref |
-
-### Onboarding Tools (2)
-
-For warm-starting a cold store from a project's own docs/repo — see [What's New in v0.11.0](#whats-new-in-v0110).
-
-| Tool | Purpose |
-|------|---------|
-| `onboard_scan` | Extract candidate memories from a project's docs/repo for review |
-| `onboard_questions` | Anchored interview questions to refine what a cold store should know |
-
-### Separate Memory Pools
-
-By default, all projects share one memory pool. For isolated pools per folder, place a `.mcp.json` in each parent folder with a different `AWM_AGENT_ID`:
-
-```
-C:\Users\you\work\.mcp.json          -> AWM_AGENT_ID: "work"
-C:\Users\you\personal\.mcp.json      -> AWM_AGENT_ID: "personal"
-```
-
-Claude Code uses the closest `.mcp.json` ancestor. Same database, isolation by agent ID.
-
-### Incognito Mode
-
-```bash
-AWM_INCOGNITO=1 claude
-```
-
-Registers zero tools — Claude doesn't see memory at all. All other tools and MCP servers work normally.
-
-### Auto-Checkpoint Hooks
-
-Installed by `awm setup --global`:
-
-- **Stop** — reminds Claude to write/recall after each response
-- **PreCompact** — auto-checkpoints before context compression
-- **SessionEnd** — auto-checkpoints and consolidates on close
-- **15-min timer** — silent auto-checkpoint while session is active
-
-### Auto-Backup
-
-The HTTP server automatically copies the database to a `backups/` directory on startup with a timestamp. Cheap insurance against data loss.
-
-### Activity Log
-
-```bash
-tail -f "$(npm root -g)/agent-working-memory/data/awm.log"
-```
-
-Real-time: writes, recalls, reinforcements, checkpoints, consolidation, hook events.
-
-### Activity Stats
-
-```bash
-curl http://127.0.0.1:8401/stats
-```
-
-Returns daily counts: `{"writes": 8, "recalls": 9, "hooks": 3, "total": 25}`
-
----
-
-## Memory Invocation Strategy
-
-AWM combines deterministic hooks for guaranteed memory operations at lifecycle transitions with agent-directed usage during active work.
-
-### Deterministic triggers (always happen)
-
-| Event | Action |
-|-------|--------|
-| Session start | `memory_restore` — recover state + recall context |
-| Pre-compaction | Auto-checkpoint via hook sidecar |
-| Session end | Auto-checkpoint + full consolidation |
-| Every 15 min | Silent auto-checkpoint (if active) |
-| Task start | `memory_task_begin` — checkpoint + recall |
-| Task end | `memory_task_end` — summary + checkpoint |
-
-### Agent-directed triggers (when these situations occur)
-
-**Write memory when:**
-- A project decision is made or changed
-- A root cause is discovered
-- A reusable implementation pattern is established
-- A preference, constraint, or requirement is clarified
-- A prior assumption is found to be wrong
-
-**Recall memory when:**
-- Starting work on a new task or subsystem
-- Re-entering code you haven't touched recently
-- After context compaction
-- After a failed attempt (check if there's prior knowledge)
-- Before refactoring or making architectural changes
-
-**Retract when:**
-- A stored memory turns out to be wrong or outdated
-
-**Feedback when:**
-- A recalled memory was used (useful) or irrelevant (not useful)
-
----
-
-## HTTP API
-
-For custom agents, scripts, or non-Claude-Code workflows:
-
-```bash
-awm serve                    # From npm install
-npx tsx src/index.ts         # From source
-```
-
-```bash
-# Write
-curl -X POST http://localhost:8400/memory/write -H "Content-Type: application/json" -d '{
-  "agentId": "my-agent",
-  "concept": "Express error handling",
-  "content": "Use centralized error middleware as the last app.use()",
-  "eventType": "causal", "surprise": 0.5, "causalDepth": 0.7
-}'
-
-# Recall
-curl -X POST http://localhost:8400/memory/activate -H "Content-Type: application/json" -d '{
-  "agentId": "my-agent",
-  "context": "How should I handle errors in my Express API?"
-}'
-```
-
-**Substrate primitives (0.8+)** — for long-running structured projects (novels,
-codebases, investigations) where an agent tracks typed state across hundreds of writes
-without polluting cognitive retrieval: `/memory/latest-by-tag` (latest per tag key),
-`/memory/top-by` (native filter + sort), `/memory/supersede` (atomic write-and-supersede
-by concept match), `/memory/sequence/:agentId/next` (race-free chronology). The
-`memory_class: "structural"` class keeps high-volume system-written records out of
-cognitive `/activate` while preserving them at canonical salience.
-
-Every endpoint, with request/response schemas and worked examples:
-[`docs/reference.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md).
-
----
-
-## How It Works
-
-### The Memory Lifecycle
-
-1. **Write** — Salience scoring evaluates novelty, surprise, causal depth, and effort. High-salience memories go active; borderline ones enter staging; low-salience stored at reduced confidence for recall fallback. Near-duplicates reinforce existing memories instead of creating copies.
-
-2. **Connect** — Vector embedding (BGE-small-en-v1.5, 384d). Temporal edges link to recent memories. Hebbian edges form between co-retrieved memories. Coref expansion resolves pronouns to entity names.
-
-3. **Retrieve** — 10-phase pipeline: coref expansion + query expansion + dual BM25 (keyword-stripped + expanded) + semantic vectors + Rocchio pseudo-relevance feedback + ACT-R temporal decay (synaptic-tagged) + Hebbian boost + entity-bridge boost + graph walk + cross-encoder reranking + multi-channel agreement gate.
-
-4. **Consolidate** — 7-phase sleep cycle: diameter-enforced clustering (prevents chaining), edge strengthening (access-weighted), cross-topic bridge formation (direct closest-pair), confidence-modulated decay (synaptic tagging extends half-life), synaptic homeostasis, cognitive forgetting, staging sweep. Embedding backfill ensures all memories are clusterable.
-
-5. **Feedback** — Useful/not-useful signals adjust confidence, affecting retrieval rank and forgetting resistance.
-
-### Cognitive Foundations
-
-- **ACT-R activation decay** (Anderson 1993) — memories decay with time, strengthen with use. Synaptic tagging: heavily-accessed memories decay slower (log-scaled).
-- **Hebbian learning** — co-retrieved memories form stronger associative edges
-- **Complementary Learning Systems** — fast capture (salience + staging) + slow consolidation (sleep cycle)
-- **Synaptic homeostasis** — edge weight normalization prevents hub domination
-- **Forgetting as feature** — noise removal improves signal-to-noise for connected memories
-- **Diameter-enforced clustering** — prevents semantic chaining (e.g., physics->biophysics->cooking = 1 cluster)
-- **Multi-channel agreement** — OOD detection requires multiple retrieval channels to agree
-
----
-
-## Architecture
-
-```
-src/
-  core/             # Cognitive primitives
-    embeddings.ts     - Local vector embeddings (BGE-small-en-v1.5, 384d)
-    reranker.ts       - Cross-encoder passage scoring (ms-marco-MiniLM)
-    query-expander.ts - Synonym expansion (flan-t5-small)
-    salience.ts       - Write-time importance scoring (novelty + salience + reinforce-on-duplicate)
-    decay.ts          - ACT-R temporal activation decay
-    hebbian.ts        - Association strengthening/weakening
-    logger.ts         - Append-only activity log (data/awm.log)
-  engine/           # Processing pipelines
-    activation.ts     - 10-phase retrieval pipeline (dual BM25, coref, agreement gate)
-    consolidation.ts  - 7-phase sleep cycle (diameter clustering, direct bridging, synaptic tagging)
-    connections.ts    - Discover links between memories
-    staging.ts        - Weak signal buffer (promote or discard)
-    retraction.ts     - Negative memory / corrections
-    eviction.ts       - Capacity enforcement
-  hooks/
-    sidecar.ts        - Hook HTTP server (auto-checkpoint, stats, timer)
-  storage/
-    sqlite.ts         - SQLite + FTS5 persistence layer
-  api/
-    routes.ts         - HTTP endpoints (memory + task + system)
-  mcp.ts            - MCP server (19 tools: 17 memory + 2 onboarding, incognito support)
-  cli.ts            - CLI (setup, serve, hook config)
-  index.ts          - HTTP server entry point (auto-backup on startup)
-```
-
-For detailed architecture including pipeline phases, database schema, and system diagrams, see [docs/architecture.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/architecture.md).
-
----
-
-## Testing & Evaluation
-
-```bash
-npx vitest run                      # Unit: salience, decay, hebbian, supersession
-npm run eval                        # 4 benchmark suites
-npm run eval -- --suite=retrieval   # One suite
-npm run eval -- --bm25-only         # Ablation: isolate a channel's contribution
-```
-
-### Real-store benchmark (0.13.x — replaces LoCoMo)
-
-Measures the pipeline against a **frozen snapshot of a real store**, so passage lengths,
-decay, supersession and Hebbian weights are all real rather than synthetic. Ground truth
-is a unique-identifier hold-out verified through FTS, so it needs no hand labeling. And
-correct **abstention scores positively** — selectivity is the product, so a benchmark
-that punishes silence is measuring the wrong system.
-
-```bash
-node tests/realstore-eval/snapshot.mjs          # freeze a copy of the live store
-npx tsx tests/realstore-eval/runner.ts          # identifier fixture (regression guard)
-REALSTORE_FIXTURE=fixture-category.json \
-  npx tsx tests/realstore-eval/runner.ts        # category fixture (retrievability)
-bash tests/realstore-eval/campaign/full-comparison.sh   # baseline vs recommended, all suites
-```
-
-Each run works on a **copy** — activation mutates access counts, and a benchmark must
-not drift the thing it measures. The runner prints the active flag fingerprint, so every
-result records which configuration produced it.
-
-Per-suite methodology, scoring, and the remaining `test:*` scripts:
-[`docs/benchmarks.md`](docs/benchmarks.md).
-
----
-
-## Environment Variables
-
-**Recommended recall configuration (0.13.x)** — default-OFF, but measured wins. Enable
-all three together (see [Benchmarks](#benchmarks)):
-
-```bash
-AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
-```
-
-| Variable | Effect |
+| Next | |
 |---|---|
-| `AWM_RERANK2=1` | Second-stage reorder of the returned window by cross-encoder score alone, after the abstention gate. **+9.7pp s@1.** Must be paired with `AWM_RERANK_WINDOW=query` |
-| `AWM_RERANK_WINDOW=query` | Spend the rerank char budget on the window densest in query terms instead of the first N chars. **25% → 87.5%** long-memory s@1 |
-| `AWM_RERANK_TAGS=1` | Append structured tags to the rerank passage, so category words that exist only as tags reach the deciding stage. **+7.4pp s@1** |
-
-Verify what a running process actually has — `memory_whoami` prints a `Recall config:`
-line and `GET /health` reports the same fingerprint. A submodule bump can report a new
-version while the flags never reached the process; on version alone that looks like success.
-
-**Core settings:**
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `AWM_DB_PATH` | `memory.db` (SQLite) / `./memory-pglite` (PGlite) | Storage path — file for SQLite, directory for PGlite |
-| `AWM_STORE_BACKEND` | `sqlite` | `sqlite` (WAL, multi-process safe) · `pglite` (single-process) · `postgres` (networked, **experimental**) |
-| `AWM_AGENT_ID` | `claude-code` | Agent id — the memory namespace. Pin it explicitly; an unpinned session lands in a per-directory UUID space nothing else can recall |
-| `AWM_WORKSPACE` | *(unset)* | Default workspace for cross-agent recall in hive setups |
-| `AWM_PORT` / `AWM_HOOK_PORT` | `8400` / `8401` | HTTP server and hook sidecar ports |
-| `AWM_API_KEY` / `AWM_HOOK_SECRET` | *(none)* | Bearer tokens. Binding beyond loopback without an API key fails closed |
-| `AWM_INCOGNITO` | *(unset)* | `1` disables all tools |
-| `AWM_EMBED_MODEL` / `AWM_EMBED_DIMS` | `Xenova/bge-small-en-v1.5` / `384` | ⚠ `cosineSimilarity` returns **0** on dimension mismatch — migrate the whole corpus or not at all |
-
-Every variable — including the salience, decay, fade, confidence, granularity and
-diagnostic knobs, each with its measured effect and the **rejected** experiments and why
-they lost — is documented in [`docs/reference.md`](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md).
+| Install, first write, first recall | [`docs/quickstart.md`](docs/quickstart.md) |
+| Separate pools per project, incognito mode, hooks | [`docs/claude-code-setup.md`](docs/claude-code-setup.md) |
+| Teams and multi-agent | [`docs/team-setup-guide.md`](docs/team-setup-guide.md) |
+| Custom agents over HTTP | [`docs/reference.md`](docs/reference.md) |
 
 ---
 
-## Tech Stack
+## Recommended configuration
 
-| Component | Technology |
-|-----------|-----------|
-| Language | TypeScript (ES2022, strict) |
-| Database | SQLite via better-sqlite3 + FTS5 |
-| HTTP | Fastify 5 |
-| MCP | @modelcontextprotocol/sdk |
-| ML Runtime | @huggingface/transformers (local ONNX) |
-| Embeddings | BGE-small-en-v1.5 (BAAI, retrieval-optimized, 384d) |
-| Reranker | ms-marco-MiniLM-L-6-v2 (cross-encoder) |
-| Query Expansion | flan-t5-small (synonym generation) |
-| Tests | Vitest 4 |
-| Validation | Zod 4 |
+Three retrieval improvements ship default-off and should be enabled **together**:
 
-All three ML models run locally via ONNX. No external API calls for retrieval. The entire system is a single SQLite file + a Node.js process.
+```bash
+AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
+```
 
-## What's New in v0.14.5 (latest)
-
-Five point releases on 2026-09-01 and 2026-09-11. Nothing in the retrieval engine changed
-in the last four; what changed is *how it is measured, how it is invoked, and what it
-reports about itself*.
-
-- **The benchmark instrument was wrong twice, and the real numbers are higher (0.14.4,
-  0.14.5).** ACT-R decay computed memory age from the wall clock, so the "frozen" eval
-  snapshot aged a day per day and the same code scored 70.0% one evening and 67.0% the
-  next afternoon. Separately, the eval runner queried every gold as the `work` agent while
-  a quarter to a third belonged to `personal` — cut by agent isolation before scoring, and
-  counted as misses. With both fixed: **identifier s@1 92.7%, category s@1 92.0%**,
-  adversarial abstention unchanged at 90.0%. Two independently built fixtures now agree
-  within a point. Details and the correction notes are in [Benchmarks](#benchmarks); the
-  eval runner pins its clock (`ActivationQuery.now`) and queries as each gold's own agent.
-- **Feedback now joins to the recall that produced it (0.14.3).** `memory_recall` ends
-  with `[recall_id: …]`; `memory_feedback` accepts it (and defaults to the most recent
-  recall). Before this, every feedback row in the live store was orphaned — 872 of 872 —
-  so the learning loop had no usable signal. `memory_stats` now reports outcome numbers
-  that can move in both directions (write:recall ratio, never-recalled share, recall→use
-  rate, p50/p90 latency) in place of the monotone "edge utility".
-- **One hook sidecar per session (0.14.2).** Each Claude Code session's AWM process now
-  binds the first free port from 8401 upward instead of giving up when 8401 is taken.
-  Previously, with several sessions open, only the first had working hooks, and
-  `memory_whoami` reported a port it had not bound. It now reports the port actually held.
-- **An empty recall no longer claims absence (0.14.1).** When the confidence gate withholds
-  matches, the reply says `RECALL ABSTAINED` with the count and threshold, instead of "No
-  relevant memories found."
-
-**Measured on real use this week** (details in the CHANGELOG): on four support tickets,
-the same agent with memory found twice the specific facts the real answer needed and used
-half the database queries; on a six-month application project, recorded decisions were
-recalled a median of 30 days after being written, some after 167 days.
-
-### Earlier: v0.14.0
-
-Retrieval-quality releases, all additive. Corpus provenance differs per result and is
-named in [Benchmarks](#benchmarks) — only the tags result and the combined figure come
-from a real-store snapshot.
-
-- **Second-stage rerank (`AWM_RERANK2`)** — final order was a blend that capped the
-  cross-encoder at 70% of the vote. It disagrees with that blend about rank 1 on 38.6%
-  of queries, and where the disagreement is decidable **the cross-encoder is right 77%
-  of the time**. Re-sorting by its score: **+9.7pp s@1**, no added inference. Placed
-  after the abstention gate so it cannot affect selectivity — predicted 0 broken / 0
-  fixed on adversarial, and measured exactly that.
-- **Query-aware rerank window (`AWM_RERANK_WINDOW=query`)** — truncating passages to
-  the first 400 chars is necessary (cross-encoders pad to the longest passage in a
-  batch), but a *prefix* is the wrong 400. Real canonical memories are median 1,965
-  chars, 98.7% exceed 400, and **99.9%** of long ones carry their identifiers only
-  past char 400. Same budget, densest window: **25% → 87.5%**.
-- **`memory_whoami` reports the effective recall config** — version alone does not
-  answer "what am I actually running". This caught a real deployment failure the day
-  it shipped: a project-level `.mcp.json` was overriding the config being edited, so
-  the new version reported success while the flags never reached the process.
-- **Tags into the rerank passage (`AWM_RERANK_TAGS`)** — **+7.4pp s@1**, with no
-  re-embed, no new model and no write-path change; existing corpora benefit immediately
-  because the tags are already stored.
-- **Writing guidance corrected at the source** — the shipped advice was *causing* the
-  problem it warned about. "Pick the most specific topic" pushed authors away from
-  category words, reliably producing memories that are maximally specific and
-  categorically anonymous. Two new rules: **name the CATEGORY as well as the
-  specifics**, and **tags are not a substitute for body text** (only BM25 indexes tags —
-  the embedding and the rerank passage are both built from `concept + content`, so a
-  tag-only word is invisible to two of three channels, including the one that now
-  decides ordering).
-
-### Previously, in v0.12.x
-
-`memory_whoami` instance identity · entity inverted index (`AWM_ENTITY_INDEX_FETCH=1`,
-opt-in) · local-first security defaults (loopback bind, fail-closed without an API key)
-· write-path slow-write telemetry · memory-spine provenance (`origin_class`,
-`valid_from`/`valid_to`) · cognition recipes at `memory_task_end` · engram ids in
-recall results · eager warm at MCP startup + sidecar warm recall.
-
-Full version-by-version history — every release back to v0.6.0, including the
-0.7.6→0.7.14 latency work (11s→300ms) and the 0.8.5 recall-quality hardening pass —
-lives in [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md).
-
-## Integrations
-
-AWM is a standard MCP server, so it plugs into any MCP-capable agent host with
-**no adapter code** — the same server Claude Code uses. Point two hosts at the
-same `AWM_DB_PATH` (with a shared `AWM_AGENT_ID`/`AWM_WORKSPACE`) and they share
-one cognitive memory.
-
-### Hermes Agent (Nous Research)
-
-1. Make AWM available where Hermes runs (e.g. a derived Docker image — the
-   Hermes image already bundles Node):
-
-   ```dockerfile
-   FROM hermes-agent:local
-   USER root
-   RUN npm install -g agent-working-memory@latest
-   ENV HF_HOME=/opt/data/.cache/huggingface
-   ```
-
-2. Register it in `~/.hermes/config.yaml`:
-
-   ```yaml
-   mcp_servers:
-     awm:
-       command: node
-       args: ["/usr/local/lib/node_modules/agent-working-memory/dist/mcp.js"]
-       env:
-         AWM_AGENT_ID: hermes
-         AWM_DB_PATH: /opt/data/awm/hermes.db    # on a persistent volume
-         HF_HOME: /opt/data/.cache/huggingface
-       timeout: 600                              # first call downloads the embedder
-   ```
-
-3. AWM's tools appear to the agent as `mcp_awm_memory_write`,
-   `mcp_awm_memory_recall`, etc. Works with any Hermes model provider
-   (verified on Anthropic and Azure `gpt-5-4-mini`).
-
-Full recipe — model-provider examples, the Azure GPT-5.x `/openai/v1` note, and
-gotchas (incl. the Windows CRLF/s6 clone fix) — is in
-[docs/integrations/hermes.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/integrations/hermes.md).
-
-## Project Status
-
-AWM is in active development (v0.14.0). The core memory pipeline, consolidation
-system, multi-agent coordination, and MCP integration are stable and used
-daily in production coding workflows.
-
-- Core retrieval and consolidation: **stable**
-- MCP tools and Claude Code integration: **stable** (19 tools: 17 memory + 2 onboarding)
-- Other MCP hosts (e.g. [Hermes Agent](https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/integrations/hermes.md)): **supported** — AWM drops in as an MCP memory server with no adapter code
-- Multi-agent coordination: **stable** (v0.8.1 hardening)
-- Task management: **stable**
-- Hook sidecar and auto-checkpoint: **stable** — plus `POST /memory/activate` warm recall for hooks (v0.12.2)
-- HTTP API: **stable** (for custom agents)
-- Eval harness: **stable** (v0.6.0, extended through 0.8.x); gauntlet acceptance test added (v0.12.0)
-- Recall confidence + opt-in abstention (PR-1, PR-2): **stable** (v0.8.5)
-- Coherence-weighted retraction + counter-narrative inheritance: **stable** (v0.8.5)
-- Content fade stage + adaptive output granularity: **stable** (v0.8.5)
-- PGlite backend (alternative to SQLite, with pgvector + ivfflat): **stable** (v0.8.x)
-- Networked Postgres backend (`pg` + pgvector, multi-connection): **experimental** (v0.10.0)
-- Backend-agnostic `import`/`export` (embeddings included, cross-backend port): **stable** (v0.10.0)
-- Instance identity (`memory_whoami`), local-first security defaults, write-path telemetry, memory-spine provenance (`origin_class`/`valid_from`/`valid_to`), cognition recipes: **stable** (v0.12.0)
-- Entity inverted index + guarded index-backed retrieval: **stable, opt-in** (`AWM_ENTITY_INDEX_FETCH=1`, default off pending broader eval) (v0.12.0)
-- Second-stage rerank, query-aware rerank window, tags-into-rerank: **stable, opt-in** (`AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1` — enable together) (v0.13.4-0.13.6)
-- Real-store benchmark (`tests/realstore-eval/`), replacing LoCoMo: **stable** (v0.13.x)
-
-See [CHANGELOG.md](https://github.com/CompleteIdeas/agent-working-memory/blob/master/CHANGELOG.md) for version history.
+Second-stage rerank by the cross-encoder's own score; a 400-character rerank window placed on
+the densest query-term region rather than the prefix (**25% → 87.5%** on long memories); and
+tags fed into the rerank passage (**+7.4pp**). `memory_whoami` prints the active fingerprint so
+you can confirm a running process actually has them. Every other variable, with its measured
+effect and the experiments that were rejected: [`docs/reference.md`](docs/reference.md).
 
 ---
 
-## License
+## How it works, in one paragraph
 
-Apache 2.0 — see [LICENSE](https://github.com/CompleteIdeas/agent-working-memory/blob/master/LICENSE) and [NOTICE](https://github.com/CompleteIdeas/agent-working-memory/blob/master/NOTICE).
+A write is scored for salience — novelty against the existing store, event type, whether it
+names identifiers — and lands active, staged, or low-confidence. A recall casts a wide net with
+keyword and vector search, scores each candidate for relevance and liveness, lets linked
+memories vote, hands the shortlist to a cross-encoder that actually reads the text, then checks
+whether the score distribution justifies answering at all. A maintenance pass on session end
+clusters, decays unused links, and archives what has gone cold. Corrections supersede rather
+than overwrite.
+
+The whole thing, one memory followed end to end with every threshold sourced:
+[`docs/walkthrough.md`](docs/walkthrough.md). The pipeline internals for engineers, with the
+attribution study behind the defaults: [`pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html).
+The theory and its citations: [`docs/cognitive-model.md`](docs/cognitive-model.md).
+
+---
+
+## Honest limits
+
+- No help on small one-off tasks — the overhead pays back when knowledge is reused or the
+  project outgrows the context window.
+- Recall is bounded by what was written. A memory that never names its subject can't be found
+  by it. The writing guidance exists for this reason.
+- The association graph, as of this release, rarely changes a final answer; the reranker does.
+- It is 0.x, and it says so: the benchmark was corrected three times this month when the
+  instrument turned out to be wrong. The corrections are documented in place, not revised away.
+
+Everything else, with evidence and workarounds: [`docs/known-limitations.md`](docs/known-limitations.md).
+
+---
+
+## What's new — v0.14.5
+
+Nothing in the retrieval engine changed in the last four point releases; what changed is how it
+is measured, invoked, and reports on itself.
+
+- **Benchmark instrument corrected twice; real numbers are higher.** Identifier s@1 92.7%,
+  category 92.0%, abstention unchanged at 90%. The runner now pins its clock and queries as each
+  gold's own agent.
+- **Feedback joins to its recall.** `memory_recall` ends with `[recall_id: …]`;
+  `memory_feedback` accepts it. Before this every feedback row in the live store was orphaned.
+  `memory_stats` now reports outcome numbers instead of activity counters.
+- **One hook sidecar per session.** Each session's process binds the first free port from 8401
+  upward; `memory_whoami` reports the port it actually holds.
+- **An empty recall no longer claims absence.** `RECALL ABSTAINED` with the withheld count,
+  instead of "No relevant memories found."
+
+Full history back to v0.6.0: [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## Reference
+
+The README points outward; it does not duplicate. Everything below is the authoritative source.
+
+| | |
+|---|---|
+| **All 19 MCP tools**, every HTTP endpoint with schemas, every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
+| Architecture, pipelines, schema, backends (SQLite · PGlite · Postgres) | [`docs/architecture.md`](docs/architecture.md) · [`docs/pglite-feature-parity.md`](docs/pglite-feature-parity.md) |
+| Every eval suite — what it measures, how to run it, and how each number was corrected | [`docs/benchmarks.md`](docs/benchmarks.md) |
+| Building an agent on AWM as a substrate (PRIME → ACT → VERIFY → LEARN) | [`docs/patterns/awm-native-harness.md`](docs/patterns/awm-native-harness.md) · [agent playbook](https://completeideas.github.io/agent-working-memory/awm-for-agents.html) |
+| Running it as a service; backup, restore, migration | [`docs/deployment.md`](docs/deployment.md) |
+| Behaviour as the store grows | [`docs/using-awm-at-scale.md`](docs/using-awm-at-scale.md) |
+| The vocabulary — engram, salience, activation, Hebbian, staging | [`docs/onboarding-vocabulary.md`](docs/onboarding-vocabulary.md) |
+| When something is wrong | [`docs/troubleshooting.md`](docs/troubleshooting.md) |
+| Full index | [`docs/README.md`](docs/README.md) |
+
+**Stack:** TypeScript · SQLite + FTS5 (or PGlite / Postgres) · Fastify · `@modelcontextprotocol/sdk` ·
+local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-marco-MiniLM cross-encoder,
+flan-t5-small expansion. Node 22+.
+
+```bash
+npx vitest run          # 737 tests
+npm run eval            # benchmark suites
+```
+
+---
+
+## Status
+
+Active development, v0.14.5. Core retrieval, consolidation, MCP integration, hooks, task
+management, and the HTTP API are stable and in daily production use. PGlite backend stable;
+networked Postgres experimental. Real-store benchmark replaces LoCoMo as of 0.13.x.
+
+**License:** Apache 2.0 — [LICENSE](LICENSE) · [NOTICE](NOTICE)
