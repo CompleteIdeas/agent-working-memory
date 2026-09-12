@@ -1,0 +1,1523 @@
+{
+  "note": "Temporal ground truth. Gold is unique-by-subject within its ISO week; asOf anchors relative phrasing so results stay reproducible over time.",
+  "corpus": 964,
+  "weeks": 18,
+  "answerable": 101,
+  "items": [
+    {
+      "goldId": "c592e212-3798-461c-b218-ae4a40895083",
+      "subject": "acct-platform-fee configurable platform platform_settings",
+      "createdAt": "2026-05-01T16:33:58.614Z",
+      "week": "2026-W18",
+      "memoryClass": "working",
+      "asOf": "2026-05-04",
+      "phrasings": {
+        "none": "acct-platform-fee configurable platform platform_settings",
+        "relativeDay": "acct-platform-fee configurable platform platform_settings from last Friday",
+        "relativeWeek": "acct-platform-fee configurable platform platform_settings from last week",
+        "absoluteDate": "acct-platform-fee configurable platform platform_settings on 2026-05-01",
+        "absoluteMonth": "acct-platform-fee configurable platform platform_settings in May 2026"
+      }
+    },
+    {
+      "goldId": "8bf6d14f-f284-4b0f-a810-fcd16185b02a",
+      "subject": "per-starter schedule",
+      "createdAt": "2026-05-01T18:29:49.215Z",
+      "week": "2026-W18",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-04",
+      "phrasings": {
+        "none": "per-starter schedule",
+        "relativeDay": "per-starter schedule from last Friday",
+        "relativeWeek": "per-starter schedule from last week",
+        "absoluteDate": "per-starter schedule on 2026-05-01",
+        "absoluteMonth": "per-starter schedule in May 2026"
+      }
+    },
+    {
+      "goldId": "fbaa3bf9-909b-49c2-b798-e8719ffb1135",
+      "subject": "board return additions",
+      "createdAt": "2026-05-01T19:34:47.702Z",
+      "week": "2026-W18",
+      "memoryClass": "working",
+      "asOf": "2026-05-04",
+      "phrasings": {
+        "none": "board return additions",
+        "relativeDay": "board return additions from last Friday",
+        "relativeWeek": "board return additions from last week",
+        "absoluteDate": "board return additions on 2026-05-01",
+        "absoluteMonth": "board return additions in May 2026"
+      }
+    },
+    {
+      "goldId": "ffc286ce-a71d-465c-96f5-85cd373a40af",
+      "subject": "count methodology registrations",
+      "createdAt": "2026-05-01T19:34:48.588Z",
+      "week": "2026-W18",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-04",
+      "phrasings": {
+        "none": "count methodology registrations",
+        "relativeDay": "count methodology registrations from last Friday",
+        "relativeWeek": "count methodology registrations from last week",
+        "absoluteDate": "count methodology registrations on 2026-05-01",
+        "absoluteMonth": "count methodology registrations in May 2026"
+      }
+    },
+    {
+      "goldId": "d33188de-3ffa-44b2-98e7-5c7e357cd68a",
+      "subject": "freshdesk replies stakeholders",
+      "createdAt": "2026-05-01T21:50:37.109Z",
+      "week": "2026-W18",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-04",
+      "phrasings": {
+        "none": "freshdesk replies stakeholders",
+        "relativeDay": "freshdesk replies stakeholders from last Friday",
+        "relativeWeek": "freshdesk replies stakeholders from last week",
+        "absoluteDate": "freshdesk replies stakeholders on 2026-05-01",
+        "absoluteMonth": "freshdesk replies stakeholders in May 2026"
+      }
+    },
+    {
+      "goldId": "53d39e88-8015-4358-9513-a712a505bdae",
+      "subject": "correction tbllogosemail send pattern",
+      "createdAt": "2026-05-02T00:10:42.237Z",
+      "week": "2026-W18",
+      "memoryClass": "working",
+      "asOf": "2026-05-04",
+      "phrasings": {
+        "none": "correction tbllogosemail send pattern",
+        "relativeDay": "correction tbllogosemail send pattern from last Saturday",
+        "relativeWeek": "correction tbllogosemail send pattern from last week",
+        "absoluteDate": "correction tbllogosemail send pattern on 2026-05-02",
+        "absoluteMonth": "correction tbllogosemail send pattern in May 2026"
+      }
+    },
+    {
+      "goldId": "b601a498-8b8b-4a75-890f-bcdefe779a1a",
+      "subject": "roster report ai-4",
+      "createdAt": "2026-05-04T21:01:17.087Z",
+      "week": "2026-W19",
+      "memoryClass": "working",
+      "asOf": "2026-05-11",
+      "phrasings": {
+        "none": "roster report ai-4",
+        "relativeDay": "roster report ai-4 from last Monday",
+        "relativeWeek": "roster report ai-4 from last week",
+        "absoluteDate": "roster report ai-4 on 2026-05-04",
+        "absoluteMonth": "roster report ai-4 in May 2026"
+      }
+    },
+    {
+      "goldId": "2d2dfb97-7002-4ef9-8fe2-3335da328556",
+      "subject": "post_entry_price means disabled never",
+      "createdAt": "2026-05-04T21:01:56.868Z",
+      "week": "2026-W19",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-11",
+      "phrasings": {
+        "none": "post_entry_price means disabled never",
+        "relativeDay": "post_entry_price means disabled never from last Monday",
+        "relativeWeek": "post_entry_price means disabled never from last week",
+        "absoluteDate": "post_entry_price means disabled never on 2026-05-04",
+        "absoluteMonth": "post_entry_price means disabled never in May 2026"
+      }
+    },
+    {
+      "goldId": "6783e2b8-af96-4759-8167-993ea3c1cf31",
+      "subject": "bulk pricing already-active",
+      "createdAt": "2026-05-04T22:15:05.356Z",
+      "week": "2026-W19",
+      "memoryClass": "working",
+      "asOf": "2026-05-11",
+      "phrasings": {
+        "none": "bulk pricing already-active",
+        "relativeDay": "bulk pricing already-active from last Monday",
+        "relativeWeek": "bulk pricing already-active from last week",
+        "absoluteDate": "bulk pricing already-active on 2026-05-04",
+        "absoluteMonth": "bulk pricing already-active in May 2026"
+      }
+    },
+    {
+      "goldId": "8177710b-9f3f-4d77-b2c1-8de418d450fe",
+      "subject": "tickets reviewed resolved",
+      "createdAt": "2026-05-05T01:57:25.797Z",
+      "week": "2026-W19",
+      "memoryClass": "working",
+      "asOf": "2026-05-11",
+      "phrasings": {
+        "none": "tickets reviewed resolved",
+        "relativeDay": "tickets reviewed resolved from last Tuesday",
+        "relativeWeek": "tickets reviewed resolved from last week",
+        "absoluteDate": "tickets reviewed resolved on 2026-05-05",
+        "absoluteMonth": "tickets reviewed resolved in May 2026"
+      }
+    },
+    {
+      "goldId": "491c67dd-9e30-4d1f-8799-bf26f8f43479",
+      "subject": "tuning cleanup curve",
+      "createdAt": "2026-05-05T04:43:54.803Z",
+      "week": "2026-W19",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-11",
+      "phrasings": {
+        "none": "tuning cleanup curve",
+        "relativeDay": "tuning cleanup curve from last Tuesday",
+        "relativeWeek": "tuning cleanup curve from last week",
+        "absoluteDate": "tuning cleanup curve on 2026-05-05",
+        "absoluteMonth": "tuning cleanup curve in May 2026"
+      }
+    },
+    {
+      "goldId": "1bba57d0-72e3-4da6-99a9-957f95a316ff",
+      "subject": "drop partner_ org_types",
+      "createdAt": "2026-05-05T05:14:47.347Z",
+      "week": "2026-W19",
+      "memoryClass": "working",
+      "asOf": "2026-05-11",
+      "phrasings": {
+        "none": "drop partner_ org_types",
+        "relativeDay": "drop partner_ org_types from last Tuesday",
+        "relativeWeek": "drop partner_ org_types from last week",
+        "absoluteDate": "drop partner_ org_types on 2026-05-05",
+        "absoluteMonth": "drop partner_ org_types in May 2026"
+      }
+    },
+    {
+      "goldId": "cfc8774a-24e3-4cc6-88d7-da4ad696eeb9",
+      "subject": "release doc-only retriever revert",
+      "createdAt": "2026-05-11T15:43:47.320Z",
+      "week": "2026-W20",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-18",
+      "phrasings": {
+        "none": "release doc-only retriever revert",
+        "relativeDay": "release doc-only retriever revert from last Monday",
+        "relativeWeek": "release doc-only retriever revert from last week",
+        "absoluteDate": "release doc-only retriever revert on 2026-05-11",
+        "absoluteMonth": "release doc-only retriever revert in May 2026"
+      }
+    },
+    {
+      "goldId": "828d0d1c-bf60-4f0d-9589-09b4b9f60f8f",
+      "subject": "prefix-tag enrichment",
+      "createdAt": "2026-05-11T15:44:10.957Z",
+      "week": "2026-W20",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-18",
+      "phrasings": {
+        "none": "prefix-tag enrichment",
+        "relativeDay": "prefix-tag enrichment from last Monday",
+        "relativeWeek": "prefix-tag enrichment from last week",
+        "absoluteDate": "prefix-tag enrichment on 2026-05-11",
+        "absoluteMonth": "prefix-tag enrichment in May 2026"
+      }
+    },
+    {
+      "goldId": "358267a0-215d-45c0-ae39-7c8d3bc7dde9",
+      "subject": "embeddedawm awmclient",
+      "createdAt": "2026-05-11T15:44:21.301Z",
+      "week": "2026-W20",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-18",
+      "phrasings": {
+        "none": "embeddedawm awmclient",
+        "relativeDay": "embeddedawm awmclient from last Monday",
+        "relativeWeek": "embeddedawm awmclient from last week",
+        "absoluteDate": "embeddedawm awmclient on 2026-05-11",
+        "absoluteMonth": "embeddedawm awmclient in May 2026"
+      }
+    },
+    {
+      "goldId": "7857c5b8-3698-4659-8b46-b49e9cc09638",
+      "subject": "codex benchmark prep",
+      "createdAt": "2026-05-11T15:45:24.332Z",
+      "week": "2026-W20",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-18",
+      "phrasings": {
+        "none": "codex benchmark prep",
+        "relativeDay": "codex benchmark prep from last Monday",
+        "relativeWeek": "codex benchmark prep from last week",
+        "absoluteDate": "codex benchmark prep on 2026-05-11",
+        "absoluteMonth": "codex benchmark prep in May 2026"
+      }
+    },
+    {
+      "goldId": "e71d4f60-5b2a-4d22-9b43-4aa4a9ac77f2",
+      "subject": "strengthened file-memory",
+      "createdAt": "2026-05-11T15:47:54.521Z",
+      "week": "2026-W20",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-18",
+      "phrasings": {
+        "none": "strengthened file-memory",
+        "relativeDay": "strengthened file-memory from last Monday",
+        "relativeWeek": "strengthened file-memory from last week",
+        "absoluteDate": "strengthened file-memory on 2026-05-11",
+        "absoluteMonth": "strengthened file-memory in May 2026"
+      }
+    },
+    {
+      "goldId": "b5b54bcd-7cb9-47b0-b5d0-b744ea21a1c7",
+      "subject": "note format",
+      "createdAt": "2026-05-11T17:38:51.152Z",
+      "week": "2026-W20",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-18",
+      "phrasings": {
+        "none": "note format",
+        "relativeDay": "note format from last Monday",
+        "relativeWeek": "note format from last week",
+        "absoluteDate": "note format on 2026-05-11",
+        "absoluteMonth": "note format in May 2026"
+      }
+    },
+    {
+      "goldId": "2e7287c3-6096-4353-aa2e-e59474a7e25e",
+      "subject": "editorial modes wired retract",
+      "createdAt": "2026-05-18T14:21:01.273Z",
+      "week": "2026-W21",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-25",
+      "phrasings": {
+        "none": "editorial modes wired retract",
+        "relativeDay": "editorial modes wired retract from last Monday",
+        "relativeWeek": "editorial modes wired retract from last week",
+        "absoluteDate": "editorial modes wired retract on 2026-05-18",
+        "absoluteMonth": "editorial modes wired retract in May 2026"
+      }
+    },
+    {
+      "goldId": "0559fadf-92f0-4823-baa1-6fd23e4ec3e6",
+      "subject": "removed canvas source truth",
+      "createdAt": "2026-05-18T15:50:32.234Z",
+      "week": "2026-W21",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-25",
+      "phrasings": {
+        "none": "removed canvas source truth",
+        "relativeDay": "removed canvas source truth from last Monday",
+        "relativeWeek": "removed canvas source truth from last week",
+        "absoluteDate": "removed canvas source truth on 2026-05-18",
+        "absoluteMonth": "removed canvas source truth in May 2026"
+      }
+    },
+    {
+      "goldId": "749d849a-cb1f-4ae9-987a-d9a4e7357fa9",
+      "subject": "overview chapter-major consolidated",
+      "createdAt": "2026-05-18T16:29:56.372Z",
+      "week": "2026-W21",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-25",
+      "phrasings": {
+        "none": "overview chapter-major consolidated",
+        "relativeDay": "overview chapter-major consolidated from last Monday",
+        "relativeWeek": "overview chapter-major consolidated from last week",
+        "absoluteDate": "overview chapter-major consolidated on 2026-05-18",
+        "absoluteMonth": "overview chapter-major consolidated in May 2026"
+      }
+    },
+    {
+      "goldId": "c9afd619-b205-4441-a79a-00a202af2ad3",
+      "subject": "worker-b clean",
+      "createdAt": "2026-05-18T17:14:45.361Z",
+      "week": "2026-W21",
+      "memoryClass": "working",
+      "asOf": "2026-05-25",
+      "phrasings": {
+        "none": "worker-b clean",
+        "relativeDay": "worker-b clean from last Monday",
+        "relativeWeek": "worker-b clean from last week",
+        "absoluteDate": "worker-b clean on 2026-05-18",
+        "absoluteMonth": "worker-b clean in May 2026"
+      }
+    },
+    {
+      "goldId": "0d5d5486-73de-4e61-8cd4-c497de4102e1",
+      "subject": "entry-import gate",
+      "createdAt": "2026-05-18T17:21:46.861Z",
+      "week": "2026-W21",
+      "memoryClass": "canonical",
+      "asOf": "2026-05-25",
+      "phrasings": {
+        "none": "entry-import gate",
+        "relativeDay": "entry-import gate from last Monday",
+        "relativeWeek": "entry-import gate from last week",
+        "absoluteDate": "entry-import gate on 2026-05-18",
+        "absoluteMonth": "entry-import gate in May 2026"
+      }
+    },
+    {
+      "goldId": "3d6b7ee0-1571-4a75-8acf-e0ee7c8ac4bd",
+      "subject": "apifetch type staff",
+      "createdAt": "2026-05-18T17:22:41.699Z",
+      "week": "2026-W21",
+      "memoryClass": "working",
+      "asOf": "2026-05-25",
+      "phrasings": {
+        "none": "apifetch type staff",
+        "relativeDay": "apifetch type staff from last Monday",
+        "relativeWeek": "apifetch type staff from last week",
+        "absoluteDate": "apifetch type staff on 2026-05-18",
+        "absoluteMonth": "apifetch type staff in May 2026"
+      }
+    },
+    {
+      "goldId": "5dd394aa-a8e0-4d79-9e71-1eb5f391856f",
+      "subject": "reframe p0-p4 plan",
+      "createdAt": "2026-05-25T15:02:50.928Z",
+      "week": "2026-W22",
+      "memoryClass": "working",
+      "asOf": "2026-06-01",
+      "phrasings": {
+        "none": "reframe p0-p4 plan",
+        "relativeDay": "reframe p0-p4 plan from last Monday",
+        "relativeWeek": "reframe p0-p4 plan from last week",
+        "absoluteDate": "reframe p0-p4 plan on 2026-05-25",
+        "absoluteMonth": "reframe p0-p4 plan in May 2026"
+      }
+    },
+    {
+      "goldId": "3762c1ce-313f-46d2-b184-99cae0f63510",
+      "subject": "production strategic",
+      "createdAt": "2026-05-25T15:12:12.879Z",
+      "week": "2026-W22",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-01",
+      "phrasings": {
+        "none": "production strategic",
+        "relativeDay": "production strategic from last Monday",
+        "relativeWeek": "production strategic from last week",
+        "absoluteDate": "production strategic on 2026-05-25",
+        "absoluteMonth": "production strategic in May 2026"
+      }
+    },
+    {
+      "goldId": "9735de97-9ac7-43e1-a9e3-6fad084d2178",
+      "subject": "embedded default per-user files",
+      "createdAt": "2026-05-25T15:16:28.871Z",
+      "week": "2026-W22",
+      "memoryClass": "working",
+      "asOf": "2026-06-01",
+      "phrasings": {
+        "none": "embedded default per-user files",
+        "relativeDay": "embedded default per-user files from last Monday",
+        "relativeWeek": "embedded default per-user files from last week",
+        "absoluteDate": "embedded default per-user files on 2026-05-25",
+        "absoluteMonth": "embedded default per-user files in May 2026"
+      }
+    },
+    {
+      "goldId": "eb26fa4a-117d-4f73-a0af-24c160f2c429",
+      "subject": "worker-thread pool",
+      "createdAt": "2026-05-25T16:31:42.073Z",
+      "week": "2026-W22",
+      "memoryClass": "working",
+      "asOf": "2026-06-01",
+      "phrasings": {
+        "none": "worker-thread pool",
+        "relativeDay": "worker-thread pool from last Monday",
+        "relativeWeek": "worker-thread pool from last week",
+        "absoluteDate": "worker-thread pool on 2026-05-25",
+        "absoluteMonth": "worker-thread pool in May 2026"
+      }
+    },
+    {
+      "goldId": "82931bb4-0f3a-41f0-9422-e10fef54238f",
+      "subject": "backend-agnostic iengramstore",
+      "createdAt": "2026-05-25T18:09:11.825Z",
+      "week": "2026-W22",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-01",
+      "phrasings": {
+        "none": "backend-agnostic iengramstore",
+        "relativeDay": "backend-agnostic iengramstore from last Monday",
+        "relativeWeek": "backend-agnostic iengramstore from last week",
+        "absoluteDate": "backend-agnostic iengramstore on 2026-05-25",
+        "absoluteMonth": "backend-agnostic iengramstore in May 2026"
+      }
+    },
+    {
+      "goldId": "efbd687c-2edc-4ac0-a789-d2e95d48b3d4",
+      "subject": "feature inventory wishlist already",
+      "createdAt": "2026-05-25T18:59:10.300Z",
+      "week": "2026-W22",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-01",
+      "phrasings": {
+        "none": "feature inventory wishlist already",
+        "relativeDay": "feature inventory wishlist already from last Monday",
+        "relativeWeek": "feature inventory wishlist already from last week",
+        "absoluteDate": "feature inventory wishlist already on 2026-05-25",
+        "absoluteMonth": "feature inventory wishlist already in May 2026"
+      }
+    },
+    {
+      "goldId": "1f4daf27-d60c-46bb-901f-aed6240d9b2c",
+      "subject": "camp repointed family-interest group",
+      "createdAt": "2026-06-01T01:54:57.733Z",
+      "week": "2026-W23",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-08",
+      "phrasings": {
+        "none": "camp repointed family-interest group",
+        "relativeDay": "camp repointed family-interest group from last Monday",
+        "relativeWeek": "camp repointed family-interest group from last week",
+        "absoluteDate": "camp repointed family-interest group on 2026-06-01",
+        "absoluteMonth": "camp repointed family-interest group in June 2026"
+      }
+    },
+    {
+      "goldId": "1d788874-cde7-47c8-9e15-e65c01879e17",
+      "subject": "rich-capture auth race",
+      "createdAt": "2026-06-01T16:18:47.719Z",
+      "week": "2026-W23",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-08",
+      "phrasings": {
+        "none": "rich-capture auth race",
+        "relativeDay": "rich-capture auth race from last Monday",
+        "relativeWeek": "rich-capture auth race from last week",
+        "absoluteDate": "rich-capture auth race on 2026-06-01",
+        "absoluteMonth": "rich-capture auth race in June 2026"
+      }
+    },
+    {
+      "goldId": "2b1dee34-b41b-47b2-9348-f6d958fa503a",
+      "subject": "jsdom ooms near heap",
+      "createdAt": "2026-06-01T16:36:48.122Z",
+      "week": "2026-W23",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-08",
+      "phrasings": {
+        "none": "jsdom ooms near heap",
+        "relativeDay": "jsdom ooms near heap from last Monday",
+        "relativeWeek": "jsdom ooms near heap from last week",
+        "absoluteDate": "jsdom ooms near heap on 2026-06-01",
+        "absoluteMonth": "jsdom ooms near heap in June 2026"
+      }
+    },
+    {
+      "goldId": "d6a7f4b1-6e72-4b51-82a8-6965e5d81f1c",
+      "subject": "christina confirms camping hookups",
+      "createdAt": "2026-06-01T16:56:51.157Z",
+      "week": "2026-W23",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-08",
+      "phrasings": {
+        "none": "christina confirms camping hookups",
+        "relativeDay": "christina confirms camping hookups from last Monday",
+        "relativeWeek": "christina confirms camping hookups from last week",
+        "absoluteDate": "christina confirms camping hookups on 2026-06-01",
+        "absoluteMonth": "christina confirms camping hookups in June 2026"
+      }
+    },
+    {
+      "goldId": "493b4076-fdac-4dcf-bff2-f55c21a48bbb",
+      "subject": "infinite render loop object",
+      "createdAt": "2026-06-01T16:57:18.661Z",
+      "week": "2026-W23",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-08",
+      "phrasings": {
+        "none": "infinite render loop object",
+        "relativeDay": "infinite render loop object from last Monday",
+        "relativeWeek": "infinite render loop object from last week",
+        "absoluteDate": "infinite render loop object on 2026-06-01",
+        "absoluteMonth": "infinite render loop object in June 2026"
+      }
+    },
+    {
+      "goldId": "ffdf1e85-dd7f-4007-a69c-8dea00268fcf",
+      "subject": "registered activities need riders",
+      "createdAt": "2026-06-01T17:08:36.864Z",
+      "week": "2026-W23",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-08",
+      "phrasings": {
+        "none": "registered activities need riders",
+        "relativeDay": "registered activities need riders from last Monday",
+        "relativeWeek": "registered activities need riders from last week",
+        "absoluteDate": "registered activities need riders on 2026-06-01",
+        "absoluteMonth": "registered activities need riders in June 2026"
+      }
+    },
+    {
+      "goldId": "e3344c4f-574a-4738-a0b3-a0e9606f546b",
+      "subject": "xentry establishment bypass sp_xe_qualification_messages",
+      "createdAt": "2026-06-08T00:15:23.658Z",
+      "week": "2026-W24",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-15",
+      "phrasings": {
+        "none": "xentry establishment bypass sp_xe_qualification_messages",
+        "relativeDay": "xentry establishment bypass sp_xe_qualification_messages from last Monday",
+        "relativeWeek": "xentry establishment bypass sp_xe_qualification_messages from last week",
+        "absoluteDate": "xentry establishment bypass sp_xe_qualification_messages on 2026-06-08",
+        "absoluteMonth": "xentry establishment bypass sp_xe_qualification_messages in June 2026"
+      }
+    },
+    {
+      "goldId": "281d9de7-4334-4991-95e6-ac40ae89a16a",
+      "subject": "ux-a-h-03 leak",
+      "createdAt": "2026-06-08T04:36:30.030Z",
+      "week": "2026-W24",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-15",
+      "phrasings": {
+        "none": "ux-a-h-03 leak",
+        "relativeDay": "ux-a-h-03 leak from last Monday",
+        "relativeWeek": "ux-a-h-03 leak from last week",
+        "absoluteDate": "ux-a-h-03 leak on 2026-06-08",
+        "absoluteMonth": "ux-a-h-03 leak in June 2026"
+      }
+    },
+    {
+      "goldId": "2bb6f358-2761-4273-888c-d44c54e7a6a3",
+      "subject": "entry_id nullable keyed natural",
+      "createdAt": "2026-06-08T18:08:48.372Z",
+      "week": "2026-W24",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-15",
+      "phrasings": {
+        "none": "entry_id nullable keyed natural",
+        "relativeDay": "entry_id nullable keyed natural from last Monday",
+        "relativeWeek": "entry_id nullable keyed natural from last week",
+        "absoluteDate": "entry_id nullable keyed natural on 2026-06-08",
+        "absoluteMonth": "entry_id nullable keyed natural in June 2026"
+      }
+    },
+    {
+      "goldId": "badcdbf5-717c-4a79-b50b-77d363a8447f",
+      "subject": "signs duration figures reconciled",
+      "createdAt": "2026-06-09T00:05:46.641Z",
+      "week": "2026-W24",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-15",
+      "phrasings": {
+        "none": "signs duration figures reconciled",
+        "relativeDay": "signs duration figures reconciled from last Tuesday",
+        "relativeWeek": "signs duration figures reconciled from last week",
+        "absoluteDate": "signs duration figures reconciled on 2026-06-09",
+        "absoluteMonth": "signs duration figures reconciled in June 2026"
+      }
+    },
+    {
+      "goldId": "166f9592-f0e7-49a6-b9ba-63ec94b6a812",
+      "subject": "batch-drafting re-stage repetition auditor",
+      "createdAt": "2026-06-09T11:12:52.279Z",
+      "week": "2026-W24",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-15",
+      "phrasings": {
+        "none": "batch-drafting re-stage repetition auditor",
+        "relativeDay": "batch-drafting re-stage repetition auditor from last Tuesday",
+        "relativeWeek": "batch-drafting re-stage repetition auditor from last week",
+        "absoluteDate": "batch-drafting re-stage repetition auditor on 2026-06-09",
+        "absoluteMonth": "batch-drafting re-stage repetition auditor in June 2026"
+      }
+    },
+    {
+      "goldId": "72d618d2-0fd3-4b77-a399-9b858e0571c6",
+      "subject": "orrery count coin math",
+      "createdAt": "2026-06-09T12:31:14.056Z",
+      "week": "2026-W24",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-15",
+      "phrasings": {
+        "none": "orrery count coin math",
+        "relativeDay": "orrery count coin math from last Tuesday",
+        "relativeWeek": "orrery count coin math from last week",
+        "absoluteDate": "orrery count coin math on 2026-06-09",
+        "absoluteMonth": "orrery count coin math in June 2026"
+      }
+    },
+    {
+      "goldId": "f11798ef-7e46-4270-bf11-eb3836af12cf",
+      "subject": "postroom edit one-shot preserves",
+      "createdAt": "2026-06-15T00:41:59.275Z",
+      "week": "2026-W25",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-22",
+      "phrasings": {
+        "none": "postroom edit one-shot preserves",
+        "relativeDay": "postroom edit one-shot preserves from last Monday",
+        "relativeWeek": "postroom edit one-shot preserves from last week",
+        "absoluteDate": "postroom edit one-shot preserves on 2026-06-15",
+        "absoluteMonth": "postroom edit one-shot preserves in June 2026"
+      }
+    },
+    {
+      "goldId": "831b97b7-555f-468d-ad03-48754ed8940e",
+      "subject": "multi-provider models provider model",
+      "createdAt": "2026-06-15T01:39:20.247Z",
+      "week": "2026-W25",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-22",
+      "phrasings": {
+        "none": "multi-provider models provider model",
+        "relativeDay": "multi-provider models provider model from last Monday",
+        "relativeWeek": "multi-provider models provider model from last week",
+        "absoluteDate": "multi-provider models provider model on 2026-06-15",
+        "absoluteMonth": "multi-provider models provider model in June 2026"
+      }
+    },
+    {
+      "goldId": "e4f72bb6-fb84-4c63-ae2e-9795e5f58dda",
+      "subject": "connections view fetch",
+      "createdAt": "2026-06-15T01:54:05.068Z",
+      "week": "2026-W25",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-22",
+      "phrasings": {
+        "none": "connections view fetch",
+        "relativeDay": "connections view fetch from last Monday",
+        "relativeWeek": "connections view fetch from last week",
+        "absoluteDate": "connections view fetch on 2026-06-15",
+        "absoluteMonth": "connections view fetch in June 2026"
+      }
+    },
+    {
+      "goldId": "69417e54-4447-4e16-b6ac-f073998adac2",
+      "subject": "skills auto-derived procedural separate",
+      "createdAt": "2026-06-15T02:06:49.482Z",
+      "week": "2026-W25",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-22",
+      "phrasings": {
+        "none": "skills auto-derived procedural separate",
+        "relativeDay": "skills auto-derived procedural separate from last Monday",
+        "relativeWeek": "skills auto-derived procedural separate from last week",
+        "absoluteDate": "skills auto-derived procedural separate on 2026-06-15",
+        "absoluteMonth": "skills auto-derived procedural separate in June 2026"
+      }
+    },
+    {
+      "goldId": "6baba28c-33a9-4411-9e31-0896277b1d8c",
+      "subject": "installer blocked handoff delivered",
+      "createdAt": "2026-06-15T02:11:40.669Z",
+      "week": "2026-W25",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-22",
+      "phrasings": {
+        "none": "installer blocked handoff delivered",
+        "relativeDay": "installer blocked handoff delivered from last Monday",
+        "relativeWeek": "installer blocked handoff delivered from last week",
+        "absoluteDate": "installer blocked handoff delivered on 2026-06-15",
+        "absoluteMonth": "installer blocked handoff delivered in June 2026"
+      }
+    },
+    {
+      "goldId": "d2eddd05-a334-40f6-b500-072a01738838",
+      "subject": "rivers summer reopen xentry",
+      "createdAt": "2026-06-16T14:03:29.969Z",
+      "week": "2026-W25",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-22",
+      "phrasings": {
+        "none": "rivers summer reopen xentry",
+        "relativeDay": "rivers summer reopen xentry from last Tuesday",
+        "relativeWeek": "rivers summer reopen xentry from last week",
+        "absoluteDate": "rivers summer reopen xentry on 2026-06-16",
+        "absoluteMonth": "rivers summer reopen xentry in June 2026"
+      }
+    },
+    {
+      "goldId": "1bb56d88-dea9-40fa-b31a-1dfa94a6bced",
+      "subject": "tiered upgrade-only model like",
+      "createdAt": "2026-06-28T22:49:53.280Z",
+      "week": "2026-W26",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-29",
+      "phrasings": {
+        "none": "tiered upgrade-only model like",
+        "relativeDay": "tiered upgrade-only model like from last Sunday",
+        "relativeWeek": "tiered upgrade-only model like from last week",
+        "absoluteDate": "tiered upgrade-only model like on 2026-06-28",
+        "absoluteMonth": "tiered upgrade-only model like in June 2026"
+      }
+    },
+    {
+      "goldId": "c7830e28-f14a-4dba-8103-f70050feb1a1",
+      "subject": "rules longer usea program",
+      "createdAt": "2026-06-28T22:50:01.287Z",
+      "week": "2026-W26",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-29",
+      "phrasings": {
+        "none": "rules longer usea program",
+        "relativeDay": "rules longer usea program from last Sunday",
+        "relativeWeek": "rules longer usea program from last week",
+        "absoluteDate": "rules longer usea program on 2026-06-28",
+        "absoluteMonth": "rules longer usea program in June 2026"
+      }
+    },
+    {
+      "goldId": "b968c242-db94-4613-9e3a-28790db91a0f",
+      "subject": "cart fixes area numeral",
+      "createdAt": "2026-06-28T23:06:35.687Z",
+      "week": "2026-W26",
+      "memoryClass": "canonical",
+      "asOf": "2026-06-29",
+      "phrasings": {
+        "none": "cart fixes area numeral",
+        "relativeDay": "cart fixes area numeral from last Sunday",
+        "relativeWeek": "cart fixes area numeral from last week",
+        "absoluteDate": "cart fixes area numeral on 2026-06-28",
+        "absoluteMonth": "cart fixes area numeral in June 2026"
+      }
+    },
+    {
+      "goldId": "c868614d-aca7-4098-81b2-8ab1c3fb3743",
+      "subject": "restructured adults parents-educators moved",
+      "createdAt": "2026-06-29T00:46:06.617Z",
+      "week": "2026-W27",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-06",
+      "phrasings": {
+        "none": "restructured adults parents-educators moved",
+        "relativeDay": "restructured adults parents-educators moved from last Monday",
+        "relativeWeek": "restructured adults parents-educators moved from last week",
+        "absoluteDate": "restructured adults parents-educators moved on 2026-06-29",
+        "absoluteMonth": "restructured adults parents-educators moved in June 2026"
+      }
+    },
+    {
+      "goldId": "46914ed2-0a50-413c-825f-27ac67b603c5",
+      "subject": "codex misconception myth-bust exhibits",
+      "createdAt": "2026-06-29T01:29:58.001Z",
+      "week": "2026-W27",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-06",
+      "phrasings": {
+        "none": "codex misconception myth-bust exhibits",
+        "relativeDay": "codex misconception myth-bust exhibits from last Monday",
+        "relativeWeek": "codex misconception myth-bust exhibits from last week",
+        "absoluteDate": "codex misconception myth-bust exhibits on 2026-06-29",
+        "absoluteMonth": "codex misconception myth-bust exhibits in June 2026"
+      }
+    },
+    {
+      "goldId": "06288da9-9fb2-4963-900a-46dce9ced09e",
+      "subject": "list cleared",
+      "createdAt": "2026-06-29T03:03:51.009Z",
+      "week": "2026-W27",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-06",
+      "phrasings": {
+        "none": "list cleared",
+        "relativeDay": "list cleared from last Monday",
+        "relativeWeek": "list cleared from last week",
+        "absoluteDate": "list cleared on 2026-06-29",
+        "absoluteMonth": "list cleared in June 2026"
+      }
+    },
+    {
+      "goldId": "2b43095f-8c3a-4d38-8351-5dcedb82bac8",
+      "subject": "voice personify computer software",
+      "createdAt": "2026-06-29T03:08:38.081Z",
+      "week": "2026-W27",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-06",
+      "phrasings": {
+        "none": "voice personify computer software",
+        "relativeDay": "voice personify computer software from last Monday",
+        "relativeWeek": "voice personify computer software from last week",
+        "absoluteDate": "voice personify computer software on 2026-06-29",
+        "absoluteMonth": "voice personify computer software in June 2026"
+      }
+    },
+    {
+      "goldId": "29078078-fd64-48ce-b2fd-a79b84ebbe3d",
+      "subject": "walk ux-walkthrough starter ux-001",
+      "createdAt": "2026-06-29T03:20:24.944Z",
+      "week": "2026-W27",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-06",
+      "phrasings": {
+        "none": "walk ux-walkthrough starter ux-001",
+        "relativeDay": "walk ux-walkthrough starter ux-001 from last Monday",
+        "relativeWeek": "walk ux-walkthrough starter ux-001 from last week",
+        "absoluteDate": "walk ux-walkthrough starter ux-001 on 2026-06-29",
+        "absoluteMonth": "walk ux-walkthrough starter ux-001 in June 2026"
+      }
+    },
+    {
+      "goldId": "958e6d89-df08-4e2e-9860-a7eccf5596dc",
+      "subject": "watch moving succeed trained-out",
+      "createdAt": "2026-06-29T03:41:48.801Z",
+      "week": "2026-W27",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-06",
+      "phrasings": {
+        "none": "watch moving succeed trained-out",
+        "relativeDay": "watch moving succeed trained-out from last Monday",
+        "relativeWeek": "watch moving succeed trained-out from last week",
+        "absoluteDate": "watch moving succeed trained-out on 2026-06-29",
+        "absoluteMonth": "watch moving succeed trained-out in June 2026"
+      }
+    },
+    {
+      "goldId": "77d1f855-cf1e-47b5-881f-9cf69e819cb5",
+      "subject": "advanced-owner orphaned horses merge",
+      "createdAt": "2026-07-08T18:34:03.409Z",
+      "week": "2026-W28",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-13",
+      "phrasings": {
+        "none": "advanced-owner orphaned horses merge",
+        "relativeDay": "advanced-owner orphaned horses merge from last Wednesday",
+        "relativeWeek": "advanced-owner orphaned horses merge from last week",
+        "absoluteDate": "advanced-owner orphaned horses merge on 2026-07-08",
+        "absoluteMonth": "advanced-owner orphaned horses merge in July 2026"
+      }
+    },
+    {
+      "goldId": "ce0f315b-3953-41e0-9459-e3caaaa14388",
+      "subject": "showconnect duplicate score rows",
+      "createdAt": "2026-07-11T20:32:19.351Z",
+      "week": "2026-W28",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-13",
+      "phrasings": {
+        "none": "showconnect duplicate score rows",
+        "relativeDay": "showconnect duplicate score rows from last Saturday",
+        "relativeWeek": "showconnect duplicate score rows from last week",
+        "absoluteDate": "showconnect duplicate score rows on 2026-07-11",
+        "absoluteMonth": "showconnect duplicate score rows in July 2026"
+      }
+    },
+    {
+      "goldId": "8e133d44-1593-4abf-ad84-2dbf948597fa",
+      "subject": "daily-check-in calendars wired delegated",
+      "createdAt": "2026-07-13T16:18:30.852Z",
+      "week": "2026-W29",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-20",
+      "phrasings": {
+        "none": "daily-check-in calendars wired delegated",
+        "relativeDay": "daily-check-in calendars wired delegated from last Monday",
+        "relativeWeek": "daily-check-in calendars wired delegated from last week",
+        "absoluteDate": "daily-check-in calendars wired delegated on 2026-07-13",
+        "absoluteMonth": "daily-check-in calendars wired delegated in July 2026"
+      }
+    },
+    {
+      "goldId": "ec21973f-87af-42ed-b337-2c5c6b3194d7",
+      "subject": "ocala non-uniform pricing omnibus",
+      "createdAt": "2026-07-13T18:05:55.607Z",
+      "week": "2026-W29",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-20",
+      "phrasings": {
+        "none": "ocala non-uniform pricing omnibus",
+        "relativeDay": "ocala non-uniform pricing omnibus from last Monday",
+        "relativeWeek": "ocala non-uniform pricing omnibus from last week",
+        "absoluteDate": "ocala non-uniform pricing omnibus on 2026-07-13",
+        "absoluteMonth": "ocala non-uniform pricing omnibus in July 2026"
+      }
+    },
+    {
+      "goldId": "d3d2b9d4-2335-4c20-be1c-76cd5175e1de",
+      "subject": "submitted already-complete readiness-query lesson",
+      "createdAt": "2026-07-13T18:50:19.873Z",
+      "week": "2026-W29",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-20",
+      "phrasings": {
+        "none": "submitted already-complete readiness-query lesson",
+        "relativeDay": "submitted already-complete readiness-query lesson from last Monday",
+        "relativeWeek": "submitted already-complete readiness-query lesson from last week",
+        "absoluteDate": "submitted already-complete readiness-query lesson on 2026-07-13",
+        "absoluteMonth": "submitted already-complete readiness-query lesson in July 2026"
+      }
+    },
+    {
+      "goldId": "fb60406d-b358-4ab0-bc61-508ee3cba3d7",
+      "subject": "separate-check fees fee_collection_mode text",
+      "createdAt": "2026-07-13T21:24:42.532Z",
+      "week": "2026-W29",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-20",
+      "phrasings": {
+        "none": "separate-check fees fee_collection_mode text",
+        "relativeDay": "separate-check fees fee_collection_mode text from last Monday",
+        "relativeWeek": "separate-check fees fee_collection_mode text from last week",
+        "absoluteDate": "separate-check fees fee_collection_mode text on 2026-07-13",
+        "absoluteMonth": "separate-check fees fee_collection_mode text in July 2026"
+      }
+    },
+    {
+      "goldId": "7bcfcd6e-3775-4bf3-9a1e-12461459d24b",
+      "subject": "house personify models",
+      "createdAt": "2026-07-14T12:17:53.415Z",
+      "week": "2026-W29",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-20",
+      "phrasings": {
+        "none": "house personify models",
+        "relativeDay": "house personify models from last Tuesday",
+        "relativeWeek": "house personify models from last week",
+        "absoluteDate": "house personify models on 2026-07-14",
+        "absoluteMonth": "house personify models in July 2026"
+      }
+    },
+    {
+      "goldId": "a1b0de39-f33f-4361-8063-c208d7b28fd2",
+      "subject": "cite failures present fact",
+      "createdAt": "2026-07-14T12:36:30.459Z",
+      "week": "2026-W29",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-20",
+      "phrasings": {
+        "none": "cite failures present fact",
+        "relativeDay": "cite failures present fact from last Tuesday",
+        "relativeWeek": "cite failures present fact from last week",
+        "absoluteDate": "cite failures present fact on 2026-07-14",
+        "absoluteMonth": "cite failures present fact in July 2026"
+      }
+    },
+    {
+      "goldId": "7f65aabb-f434-4174-a901-278874de17d3",
+      "subject": "competitor theclubhub.org",
+      "createdAt": "2026-07-20T01:05:56.505Z",
+      "week": "2026-W30",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-27",
+      "phrasings": {
+        "none": "competitor theclubhub.org",
+        "relativeDay": "competitor theclubhub.org from last Monday",
+        "relativeWeek": "competitor theclubhub.org from last week",
+        "absoluteDate": "competitor theclubhub.org on 2026-07-20",
+        "absoluteMonth": "competitor theclubhub.org in July 2026"
+      }
+    },
+    {
+      "goldId": "21d2bd1c-25d9-4be0-a1d8-61a9988e01b4",
+      "subject": "sport-deep core borrow best",
+      "createdAt": "2026-07-20T01:07:50.123Z",
+      "week": "2026-W30",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-27",
+      "phrasings": {
+        "none": "sport-deep core borrow best",
+        "relativeDay": "sport-deep core borrow best from last Monday",
+        "relativeWeek": "sport-deep core borrow best from last week",
+        "absoluteDate": "sport-deep core borrow best on 2026-07-20",
+        "absoluteMonth": "sport-deep core borrow best in July 2026"
+      }
+    },
+    {
+      "goldId": "b30568ae-8dec-40bd-aa1b-326027e8ba3d",
+      "subject": "horizontal-scroll strip",
+      "createdAt": "2026-07-20T03:55:57.472Z",
+      "week": "2026-W30",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-27",
+      "phrasings": {
+        "none": "horizontal-scroll strip",
+        "relativeDay": "horizontal-scroll strip from last Monday",
+        "relativeWeek": "horizontal-scroll strip from last week",
+        "absoluteDate": "horizontal-scroll strip on 2026-07-20",
+        "absoluteMonth": "horizontal-scroll strip in July 2026"
+      }
+    },
+    {
+      "goldId": "96830543-2397-4ee8-8e1a-83b00365ce60",
+      "subject": "roadmap expansion volunteer governing-body",
+      "createdAt": "2026-07-20T05:42:42.319Z",
+      "week": "2026-W30",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-27",
+      "phrasings": {
+        "none": "roadmap expansion volunteer governing-body",
+        "relativeDay": "roadmap expansion volunteer governing-body from last Monday",
+        "relativeWeek": "roadmap expansion volunteer governing-body from last week",
+        "absoluteDate": "roadmap expansion volunteer governing-body on 2026-07-20",
+        "absoluteMonth": "roadmap expansion volunteer governing-body in July 2026"
+      }
+    },
+    {
+      "goldId": "239667f5-24f2-4616-91cb-d39e5a207506",
+      "subject": "board-kpi revenue payment_transactions",
+      "createdAt": "2026-07-20T07:20:25.341Z",
+      "week": "2026-W30",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-27",
+      "phrasings": {
+        "none": "board-kpi revenue payment_transactions",
+        "relativeDay": "board-kpi revenue payment_transactions from last Monday",
+        "relativeWeek": "board-kpi revenue payment_transactions from last week",
+        "absoluteDate": "board-kpi revenue payment_transactions on 2026-07-20",
+        "absoluteMonth": "board-kpi revenue payment_transactions in July 2026"
+      }
+    },
+    {
+      "goldId": "47efd958-42ee-453b-a282-4a9ef49ff83a",
+      "subject": "connect tailscale node",
+      "createdAt": "2026-07-20T15:01:35.086Z",
+      "week": "2026-W30",
+      "memoryClass": "canonical",
+      "asOf": "2026-07-27",
+      "phrasings": {
+        "none": "connect tailscale node",
+        "relativeDay": "connect tailscale node from last Monday",
+        "relativeWeek": "connect tailscale node from last week",
+        "absoluteDate": "connect tailscale node on 2026-07-20",
+        "absoluteMonth": "connect tailscale node in July 2026"
+      }
+    },
+    {
+      "goldId": "279d1e62-2363-4330-ad43-a2782c000273",
+      "subject": "pre-open fixes",
+      "createdAt": "2026-07-28T03:26:29.872Z",
+      "week": "2026-W31",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-03",
+      "phrasings": {
+        "none": "pre-open fixes",
+        "relativeDay": "pre-open fixes from last Tuesday",
+        "relativeWeek": "pre-open fixes from last week",
+        "absoluteDate": "pre-open fixes on 2026-07-28",
+        "absoluteMonth": "pre-open fixes in July 2026"
+      }
+    },
+    {
+      "goldId": "c049d056-4f44-4e31-99df-960b9276bc24",
+      "subject": "correction tool used load",
+      "createdAt": "2026-07-28T13:18:24.224Z",
+      "week": "2026-W31",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-03",
+      "phrasings": {
+        "none": "correction tool used load",
+        "relativeDay": "correction tool used load from last Tuesday",
+        "relativeWeek": "correction tool used load from last week",
+        "absoluteDate": "correction tool used load on 2026-07-28",
+        "absoluteMonth": "correction tool used load in July 2026"
+      }
+    },
+    {
+      "goldId": "bcc17935-fdbc-40a2-a998-56bd0441edb0",
+      "subject": "re-imports routine pulls paid",
+      "createdAt": "2026-07-28T14:09:22.325Z",
+      "week": "2026-W31",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-03",
+      "phrasings": {
+        "none": "re-imports routine pulls paid",
+        "relativeDay": "re-imports routine pulls paid from last Tuesday",
+        "relativeWeek": "re-imports routine pulls paid from last week",
+        "absoluteDate": "re-imports routine pulls paid on 2026-07-28",
+        "absoluteMonth": "re-imports routine pulls paid in July 2026"
+      }
+    },
+    {
+      "goldId": "82cf2fd8-e81f-4343-80bb-b1ac0bf82ab1",
+      "subject": "upload-abort tbloscmpimportdivisionmatch unrecorded script",
+      "createdAt": "2026-07-30T00:58:50.242Z",
+      "week": "2026-W31",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-03",
+      "phrasings": {
+        "none": "upload-abort tbloscmpimportdivisionmatch unrecorded script",
+        "relativeDay": "upload-abort tbloscmpimportdivisionmatch unrecorded script from last Thursday",
+        "relativeWeek": "upload-abort tbloscmpimportdivisionmatch unrecorded script from last week",
+        "absoluteDate": "upload-abort tbloscmpimportdivisionmatch unrecorded script on 2026-07-30",
+        "absoluteMonth": "upload-abort tbloscmpimportdivisionmatch unrecorded script in July 2026"
+      }
+    },
+    {
+      "goldId": "56b0a87e-d7fc-4699-9fbc-1b3cd4ed1e37",
+      "subject": "blank forced password wipe",
+      "createdAt": "2026-07-31T03:33:45.148Z",
+      "week": "2026-W31",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-03",
+      "phrasings": {
+        "none": "blank forced password wipe",
+        "relativeDay": "blank forced password wipe from last Friday",
+        "relativeWeek": "blank forced password wipe from last week",
+        "absoluteDate": "blank forced password wipe on 2026-07-31",
+        "absoluteMonth": "blank forced password wipe in July 2026"
+      }
+    },
+    {
+      "goldId": "db886644-9e4e-4667-ae53-2c0e6dc263ef",
+      "subject": "backfilled members.user_id committee accounts",
+      "createdAt": "2026-07-31T04:01:00.546Z",
+      "week": "2026-W31",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-03",
+      "phrasings": {
+        "none": "backfilled members.user_id committee accounts",
+        "relativeDay": "backfilled members.user_id committee accounts from last Friday",
+        "relativeWeek": "backfilled members.user_id committee accounts from last week",
+        "absoluteDate": "backfilled members.user_id committee accounts on 2026-07-31",
+        "absoluteMonth": "backfilled members.user_id committee accounts in July 2026"
+      }
+    },
+    {
+      "goldId": "0e625023-78c0-4c5a-a866-036ab11079a3",
+      "subject": "handled attestation branching",
+      "createdAt": "2026-08-03T01:01:01.296Z",
+      "week": "2026-W32",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-10",
+      "phrasings": {
+        "none": "handled attestation branching",
+        "relativeDay": "handled attestation branching from last Monday",
+        "relativeWeek": "handled attestation branching from last week",
+        "absoluteDate": "handled attestation branching on 2026-08-03",
+        "absoluteMonth": "handled attestation branching in August 2026"
+      }
+    },
+    {
+      "goldId": "2908dc3d-e85b-406b-b4d3-aa104eae48db",
+      "subject": "published committee qual division-script",
+      "createdAt": "2026-08-03T13:24:05.863Z",
+      "week": "2026-W32",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-10",
+      "phrasings": {
+        "none": "published committee qual division-script",
+        "relativeDay": "published committee qual division-script from last Monday",
+        "relativeWeek": "published committee qual division-script from last week",
+        "absoluteDate": "published committee qual division-script on 2026-08-03",
+        "absoluteMonth": "published committee qual division-script in August 2026"
+      }
+    },
+    {
+      "goldId": "0dc02aab-4ca6-4259-b1f0-853ec54b7926",
+      "subject": "round poc-vs-xentry cross-validation cindy",
+      "createdAt": "2026-08-03T18:36:00.334Z",
+      "week": "2026-W32",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-10",
+      "phrasings": {
+        "none": "round poc-vs-xentry cross-validation cindy",
+        "relativeDay": "round poc-vs-xentry cross-validation cindy from last Monday",
+        "relativeWeek": "round poc-vs-xentry cross-validation cindy from last week",
+        "absoluteDate": "round poc-vs-xentry cross-validation cindy on 2026-08-03",
+        "absoluteMonth": "round poc-vs-xentry cross-validation cindy in August 2026"
+      }
+    },
+    {
+      "goldId": "b5ef429e-0928-4e4d-bcd1-cabe3885d359",
+      "subject": "gaffney merge preflight thin",
+      "createdAt": "2026-08-03T19:43:38.629Z",
+      "week": "2026-W32",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-10",
+      "phrasings": {
+        "none": "gaffney merge preflight thin",
+        "relativeDay": "gaffney merge preflight thin from last Monday",
+        "relativeWeek": "gaffney merge preflight thin from last week",
+        "absoluteDate": "gaffney merge preflight thin on 2026-08-03",
+        "absoluteMonth": "gaffney merge preflight thin in August 2026"
+      }
+    },
+    {
+      "goldId": "a647e916-5ad0-4d44-8ba4-552b34187468",
+      "subject": "dispositioned cart",
+      "createdAt": "2026-08-03T20:31:08.703Z",
+      "week": "2026-W32",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-10",
+      "phrasings": {
+        "none": "dispositioned cart",
+        "relativeDay": "dispositioned cart from last Monday",
+        "relativeWeek": "dispositioned cart from last week",
+        "absoluteDate": "dispositioned cart on 2026-08-03",
+        "absoluteMonth": "dispositioned cart in August 2026"
+      }
+    },
+    {
+      "goldId": "ab6edbd4-34e2-4cb1-8f91-aa7b4c929979",
+      "subject": "re-run coverage-gap pairs bak_aec37_20260803",
+      "createdAt": "2026-08-03T20:41:15.804Z",
+      "week": "2026-W32",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-10",
+      "phrasings": {
+        "none": "re-run coverage-gap pairs bak_aec37_20260803",
+        "relativeDay": "re-run coverage-gap pairs bak_aec37_20260803 from last Monday",
+        "relativeWeek": "re-run coverage-gap pairs bak_aec37_20260803 from last week",
+        "absoluteDate": "re-run coverage-gap pairs bak_aec37_20260803 on 2026-08-03",
+        "absoluteMonth": "re-run coverage-gap pairs bak_aec37_20260803 in August 2026"
+      }
+    },
+    {
+      "goldId": "6fcee4d8-bd20-407f-bb2d-67d9fffab7d0",
+      "subject": "verify.sh deploys grep exit",
+      "createdAt": "2026-08-10T15:30:02.624Z",
+      "week": "2026-W33",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-17",
+      "phrasings": {
+        "none": "verify.sh deploys grep exit",
+        "relativeDay": "verify.sh deploys grep exit from last Monday",
+        "relativeWeek": "verify.sh deploys grep exit from last week",
+        "absoluteDate": "verify.sh deploys grep exit on 2026-08-10",
+        "absoluteMonth": "verify.sh deploys grep exit in August 2026"
+      }
+    },
+    {
+      "goldId": "2a7171d9-56e4-4683-b579-1b7d362eb96b",
+      "subject": "priorities meeting decisions action",
+      "createdAt": "2026-08-10T15:59:21.281Z",
+      "week": "2026-W33",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-17",
+      "phrasings": {
+        "none": "priorities meeting decisions action",
+        "relativeDay": "priorities meeting decisions action from last Monday",
+        "relativeWeek": "priorities meeting decisions action from last week",
+        "absoluteDate": "priorities meeting decisions action on 2026-08-10",
+        "absoluteMonth": "priorities meeting decisions action in August 2026"
+      }
+    },
+    {
+      "goldId": "fd3576b8-e03f-4849-b534-2df233cfbf01",
+      "subject": "squads training middle between",
+      "createdAt": "2026-08-10T17:44:17.995Z",
+      "week": "2026-W33",
+      "memoryClass": "working",
+      "asOf": "2026-08-17",
+      "phrasings": {
+        "none": "squads training middle between",
+        "relativeDay": "squads training middle between from last Monday",
+        "relativeWeek": "squads training middle between from last week",
+        "absoluteDate": "squads training middle between on 2026-08-10",
+        "absoluteMonth": "squads training middle between in August 2026"
+      }
+    },
+    {
+      "goldId": "583c0231-399a-4f33-aaf6-cbbf1a6d305a",
+      "subject": "complaints exclusions self-heal",
+      "createdAt": "2026-08-10T19:01:03.509Z",
+      "week": "2026-W33",
+      "memoryClass": "working",
+      "asOf": "2026-08-17",
+      "phrasings": {
+        "none": "complaints exclusions self-heal",
+        "relativeDay": "complaints exclusions self-heal from last Monday",
+        "relativeWeek": "complaints exclusions self-heal from last week",
+        "absoluteDate": "complaints exclusions self-heal on 2026-08-10",
+        "absoluteMonth": "complaints exclusions self-heal in August 2026"
+      }
+    },
+    {
+      "goldId": "5a51ae13-f0c8-4e9d-88e0-4082897f83b0",
+      "subject": "daily check-in closes tonight",
+      "createdAt": "2026-08-11T13:26:09.063Z",
+      "week": "2026-W33",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-17",
+      "phrasings": {
+        "none": "daily check-in closes tonight",
+        "relativeDay": "daily check-in closes tonight from last Tuesday",
+        "relativeWeek": "daily check-in closes tonight from last week",
+        "absoluteDate": "daily check-in closes tonight on 2026-08-11",
+        "absoluteMonth": "daily check-in closes tonight in August 2026"
+      }
+    },
+    {
+      "goldId": "e218f059-9289-44f7-8a3c-482146e86041",
+      "subject": "pre-check experience misses overqualification",
+      "createdAt": "2026-08-11T17:21:09.401Z",
+      "week": "2026-W33",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-17",
+      "phrasings": {
+        "none": "pre-check experience misses overqualification",
+        "relativeDay": "pre-check experience misses overqualification from last Tuesday",
+        "relativeWeek": "pre-check experience misses overqualification from last week",
+        "absoluteDate": "pre-check experience misses overqualification on 2026-08-11",
+        "absoluteMonth": "pre-check experience misses overqualification in August 2026"
+      }
+    },
+    {
+      "goldId": "82ff0fb2-4566-4c41-a328-508894bd28f1",
+      "subject": "contract-audit unchecked runtime",
+      "createdAt": "2026-08-17T14:04:41.177Z",
+      "week": "2026-W34",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-24",
+      "phrasings": {
+        "none": "contract-audit unchecked runtime",
+        "relativeDay": "contract-audit unchecked runtime from last Monday",
+        "relativeWeek": "contract-audit unchecked runtime from last week",
+        "absoluteDate": "contract-audit unchecked runtime on 2026-08-17",
+        "absoluteMonth": "contract-audit unchecked runtime in August 2026"
+      }
+    },
+    {
+      "goldId": "471a8dfe-800e-43de-af8f-87173a4353c4",
+      "subject": "declarations bulk-inserted tbluserareadeclaration jennifer-approved",
+      "createdAt": "2026-08-17T16:22:31.878Z",
+      "week": "2026-W34",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-24",
+      "phrasings": {
+        "none": "declarations bulk-inserted tbluserareadeclaration jennifer-approved",
+        "relativeDay": "declarations bulk-inserted tbluserareadeclaration jennifer-approved from last Monday",
+        "relativeWeek": "declarations bulk-inserted tbluserareadeclaration jennifer-approved from last week",
+        "absoluteDate": "declarations bulk-inserted tbluserareadeclaration jennifer-approved on 2026-08-17",
+        "absoluteMonth": "declarations bulk-inserted tbluserareadeclaration jennifer-approved in August 2026"
+      }
+    },
+    {
+      "goldId": "fa703e4f-cd38-4920-90aa-9cdb35149995",
+      "subject": "email_allowlist email_redirect_to valve clearing",
+      "createdAt": "2026-08-17T16:45:51.126Z",
+      "week": "2026-W34",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-24",
+      "phrasings": {
+        "none": "email_allowlist email_redirect_to valve clearing",
+        "relativeDay": "email_allowlist email_redirect_to valve clearing from last Monday",
+        "relativeWeek": "email_allowlist email_redirect_to valve clearing from last week",
+        "absoluteDate": "email_allowlist email_redirect_to valve clearing on 2026-08-17",
+        "absoluteMonth": "email_allowlist email_redirect_to valve clearing in August 2026"
+      }
+    },
+    {
+      "goldId": "4286ebcb-7318-4d22-84fe-7f988bfd1f96",
+      "subject": "third-party tblmembernonuseaorgdetails tblnonuseaorgmaster t.i.p.s.",
+      "createdAt": "2026-08-17T22:39:16.911Z",
+      "week": "2026-W34",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-24",
+      "phrasings": {
+        "none": "third-party tblmembernonuseaorgdetails tblnonuseaorgmaster t.i.p.s.",
+        "relativeDay": "third-party tblmembernonuseaorgdetails tblnonuseaorgmaster t.i.p.s. from last Monday",
+        "relativeWeek": "third-party tblmembernonuseaorgdetails tblnonuseaorgmaster t.i.p.s. from last week",
+        "absoluteDate": "third-party tblmembernonuseaorgdetails tblnonuseaorgmaster t.i.p.s. on 2026-08-17",
+        "absoluteMonth": "third-party tblmembernonuseaorgdetails tblnonuseaorgmaster t.i.p.s. in August 2026"
+      }
+    },
+    {
+      "goldId": "2f1497de-31de-4334-ae6e-097df9af9501",
+      "subject": "suzi zook penelope emergency_contact",
+      "createdAt": "2026-08-17T23:30:09.293Z",
+      "week": "2026-W34",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-24",
+      "phrasings": {
+        "none": "suzi zook penelope emergency_contact",
+        "relativeDay": "suzi zook penelope emergency_contact from last Monday",
+        "relativeWeek": "suzi zook penelope emergency_contact from last week",
+        "absoluteDate": "suzi zook penelope emergency_contact on 2026-08-17",
+        "absoluteMonth": "suzi zook penelope emergency_contact in August 2026"
+      }
+    },
+    {
+      "goldId": "fdb1f91e-926b-4aed-98e1-a1f9839e9dfa",
+      "subject": "activated opening",
+      "createdAt": "2026-08-17T23:32:56.914Z",
+      "week": "2026-W34",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-24",
+      "phrasings": {
+        "none": "activated opening",
+        "relativeDay": "activated opening from last Monday",
+        "relativeWeek": "activated opening from last week",
+        "absoluteDate": "activated opening on 2026-08-17",
+        "absoluteMonth": "activated opening in August 2026"
+      }
+    },
+    {
+      "goldId": "b2a9e7c5-d259-4b55-9c50-8431ac36ef92",
+      "subject": "confirm post-show report retirement",
+      "createdAt": "2026-08-24T00:04:31.150Z",
+      "week": "2026-W35",
+      "memoryClass": "working",
+      "asOf": "2026-08-31",
+      "phrasings": {
+        "none": "confirm post-show report retirement",
+        "relativeDay": "confirm post-show report retirement from last Monday",
+        "relativeWeek": "confirm post-show report retirement from last week",
+        "absoluteDate": "confirm post-show report retirement on 2026-08-24",
+        "absoluteMonth": "confirm post-show report retirement in August 2026"
+      }
+    },
+    {
+      "goldId": "4a245af4-e7a9-424a-8917-b8bd9263515e",
+      "subject": "morning sync claim reconciled",
+      "createdAt": "2026-08-24T00:11:13.500Z",
+      "week": "2026-W35",
+      "memoryClass": "working",
+      "asOf": "2026-08-31",
+      "phrasings": {
+        "none": "morning sync claim reconciled",
+        "relativeDay": "morning sync claim reconciled from last Monday",
+        "relativeWeek": "morning sync claim reconciled from last week",
+        "absoluteDate": "morning sync claim reconciled on 2026-08-24",
+        "absoluteMonth": "morning sync claim reconciled in August 2026"
+      }
+    },
+    {
+      "goldId": "389ba8bf-90db-437d-83b6-66157e0f6bd4",
+      "subject": "spreading activation awm_spread re-tested",
+      "createdAt": "2026-08-24T00:23:05.576Z",
+      "week": "2026-W35",
+      "memoryClass": "canonical",
+      "asOf": "2026-08-31",
+      "phrasings": {
+        "none": "spreading activation awm_spread re-tested",
+        "relativeDay": "spreading activation awm_spread re-tested from last Monday",
+        "relativeWeek": "spreading activation awm_spread re-tested from last week",
+        "absoluteDate": "spreading activation awm_spread re-tested on 2026-08-24",
+        "absoluteMonth": "spreading activation awm_spread re-tested in August 2026"
+      }
+    },
+    {
+      "goldId": "092e4204-4205-41e9-9ac3-939bea9438a8",
+      "subject": "temporal worst category",
+      "createdAt": "2026-08-24T00:23:28.206Z",
+      "week": "2026-W35",
+      "memoryClass": "working",
+      "asOf": "2026-08-31",
+      "phrasings": {
+        "none": "temporal worst category",
+        "relativeDay": "temporal worst category from last Monday",
+        "relativeWeek": "temporal worst category from last week",
+        "absoluteDate": "temporal worst category on 2026-08-24",
+        "absoluteMonth": "temporal worst category in August 2026"
+      }
+    },
+    {
+      "goldId": "4563a097-e375-4924-8663-0593685763b8",
+      "subject": "meeting mapped code unmerged",
+      "createdAt": "2026-08-24T00:25:04.017Z",
+      "week": "2026-W35",
+      "memoryClass": "working",
+      "asOf": "2026-08-31",
+      "phrasings": {
+        "none": "meeting mapped code unmerged",
+        "relativeDay": "meeting mapped code unmerged from last Monday",
+        "relativeWeek": "meeting mapped code unmerged from last week",
+        "absoluteDate": "meeting mapped code unmerged on 2026-08-24",
+        "absoluteMonth": "meeting mapped code unmerged in August 2026"
+      }
+    },
+    {
+      "goldId": "211a4ec2-e3ec-48b2-bbcb-9b7905460cf1",
+      "subject": "rachel henson hansen email",
+      "createdAt": "2026-08-24T00:32:14.819Z",
+      "week": "2026-W35",
+      "memoryClass": "working",
+      "asOf": "2026-08-31",
+      "phrasings": {
+        "none": "rachel henson hansen email",
+        "relativeDay": "rachel henson hansen email from last Monday",
+        "relativeWeek": "rachel henson hansen email from last week",
+        "absoluteDate": "rachel henson hansen email on 2026-08-24",
+        "absoluteMonth": "rachel henson hansen email in August 2026"
+      }
+    }
+  ]
+}

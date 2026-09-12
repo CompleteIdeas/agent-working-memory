@@ -1,0 +1,4057 @@
+{
+  "note": "Category-query ground truth: query uses a topical tag word ABSENT from the gold body, plus rare subject words that ARE present. This is the population the identifier fixture cannot express.",
+  "corpus": 1722,
+  "answerable": 450,
+  "items": [
+    {
+      "goldId": "01dcefca-bb05-4c46-87d8-a685bd7ae7e7",
+      "category": "equihub",
+      "subject": "task-c1 fork multipart",
+      "query": "equihub task-c1 fork multipart",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "02d63d05-fb21-498c-990d-e8bdd46ec560",
+      "category": "assignment",
+      "subject": "glen agree viii",
+      "query": "assignment glen agree viii",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "02e48b87-7642-4a5c-ba2e-e518ec55838c",
+      "category": "subscriptions",
+      "subject": "mismatched suspension",
+      "query": "subscriptions mismatched suspension",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "0334dcaa-0c1c-43ad-b6d0-7667d71009ce",
+      "category": "overnight",
+      "subject": "state_reason admin-staff-surfaces",
+      "query": "overnight state_reason admin-staff-surfaces",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "043bcf17-c505-4455-a11a-c81db564209f",
+      "category": "compliance",
+      "subject": "gdpr compounds already-known",
+      "query": "compliance gdpr compounds already-known",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "043ceb0b-f734-456e-883f-4feed8187e7c",
+      "category": "architecture",
+      "subject": "pull-based beats",
+      "query": "architecture pull-based beats",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "058eb6be-27e6-4266-b3a8-956ae61300f7",
+      "category": "maintenance",
+      "subject": "amend prefer-life-status runbook",
+      "query": "maintenance amend prefer-life-status runbook",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "05aec1ab-3103-43c4-b214-6285b022f1c0",
+      "category": "readiness",
+      "subject": "board-workspace board-of-governors",
+      "query": "readiness board-workspace board-of-governors",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "0677e86f-14f8-4c25-97ea-76b39d145143",
+      "category": "preflight",
+      "subject": "pf-02a rk-201 program-scoped",
+      "query": "preflight pf-02a rk-201 program-scoped",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "067edf6a-47cd-4271-b7df-deaf198f5e8d",
+      "category": "gate",
+      "subject": "per-item outbound replies",
+      "query": "gate per-item outbound replies",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "0782f5f7-88e0-48f2-817c-9d3c7a836ebc",
+      "category": "style",
+      "subject": "preparedness fear tone",
+      "query": "style preparedness fear tone",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "08a69240-9840-4599-b08e-b5d02b6dd61a",
+      "category": "showconnect",
+      "subject": "doors tack",
+      "query": "showconnect doors tack",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "0a420847-1d52-451c-b9d1-0b1e37c9b580",
+      "category": "equihub",
+      "subject": "auth-02 parental",
+      "query": "equihub auth-02 parental",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "0a7b97b4-a8f0-44fc-b51b-831f6953a263",
+      "category": "rosterkeep",
+      "subject": "planning-doc four-ai-agents divergence",
+      "query": "rosterkeep planning-doc four-ai-agents divergence",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "0b43cb8d-e6a1-430e-aabe-ce5aa208abd4",
+      "category": "usea",
+      "subject": "legit marco polo",
+      "query": "usea legit marco polo",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "0b45f6e3-e573-4f10-8732-f43111f6c522",
+      "category": "react",
+      "subject": "churn useref one-shot",
+      "query": "react churn useref one-shot",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "0dc02aab-4ca6-4259-b1f0-853ec54b7926",
+      "category": "agent",
+      "subject": "poc-vs-xentry cross-validation",
+      "query": "agent poc-vs-xentry cross-validation",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "0dfdd62e-ba27-4ea0-977c-717ae34ab01c",
+      "category": "waivers",
+      "subject": "scrubbed signature-app hmac",
+      "query": "waivers scrubbed signature-app hmac",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "0e3b7c6b-dd50-4efc-8663-a1e1446d00a4",
+      "category": "staffing",
+      "subject": "event-support event-weekend weekend",
+      "query": "staffing event-support event-weekend weekend",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "0e625023-78c0-4c5a-a866-036ab11079a3",
+      "category": "entries",
+      "subject": "branching attestation handled",
+      "query": "entries branching attestation handled",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "0eee1153-3bae-47b3-91c0-0e79ea44ae65",
+      "category": "championships",
+      "subject": "data.useventing.com pocv2 staffreports",
+      "query": "championships data.useventing.com pocv2 staffreports",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "0f39b14b-3fdc-4234-b973-0abef4167201",
+      "category": "audit",
+      "subject": "area-dashboard display_name",
+      "query": "audit area-dashboard display_name",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "101ecf70-1987-46fb-9ec4-13fb9614b9a9",
+      "category": "equihub",
+      "subject": "notify-enrolled-on-edit d5888394",
+      "query": "equihub notify-enrolled-on-edit d5888394",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "106e53e5-270e-4b69-98af-45911034e058",
+      "category": "synology",
+      "subject": "j4125 jellyfin transcoding",
+      "query": "synology j4125 jellyfin transcoding",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "1255ed7d-19f7-463f-a277-d5649dddb51f",
+      "category": "complete",
+      "subject": "import_jobs loader entities",
+      "query": "complete import_jobs loader entities",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "13176490-a1b3-4e04-994d-a8ca208eb967",
+      "category": "notifications",
+      "subject": "usertesting app-setting switched",
+      "query": "notifications usertesting app-setting switched",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "1339c0d9-d139-4f00-b669-7545c5f48f14",
+      "category": "novelforge",
+      "subject": "twist payoff ladder",
+      "query": "novelforge twist payoff ladder",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "14f66f6c-2010-4feb-aacc-3dad134c6f50",
+      "category": "usea",
+      "subject": "path-based domain-based usef_submit.py",
+      "query": "usea path-based domain-based usef_submit.py",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "159bd12d-dbdd-4dd8-bc6e-616082187b1b",
+      "category": "accounting",
+      "subject": "centrally practices credits",
+      "query": "accounting centrally practices credits",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "160154f4-e21c-4440-8e59-2deaab23752c",
+      "category": "design",
+      "subject": "config-over-code pool-filter honest",
+      "query": "design config-over-code pool-filter honest",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "166f9592-f0e7-49a6-b9ba-63ec94b6a812",
+      "category": "restage",
+      "subject": "re-stage repetition auditor",
+      "query": "restage re-stage repetition auditor",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "17064569-0a24-4a0f-8dff-fb6158767246",
+      "category": "day2",
+      "subject": "day-2 outcomes",
+      "query": "day2 day-2 outcomes",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "179bfebc-5638-4d5d-8606-fa191db912db",
+      "category": "composition",
+      "subject": "ai-011 compose",
+      "query": "composition ai-011 compose",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "1839604c-41da-4b95-a84d-7b3ede7518c1",
+      "category": "surface",
+      "subject": "event-registration subsystem orphaned",
+      "query": "surface event-registration subsystem orphaned",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "18f0824d-0571-48e0-bc95-113380ff465e",
+      "category": "overnight",
+      "subject": "continues ready_to_fix",
+      "query": "overnight continues ready_to_fix",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1a57ed39-eb6c-4fe0-b98e-0c06ab34e40f",
+      "category": "refactor",
+      "subject": "mwamemory backend-agnostic",
+      "query": "refactor mwamemory backend-agnostic",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "1af63718-4e93-4c3d-80e4-fd293dc88c48",
+      "category": "feedback",
+      "subject": "glitch auto-trigger",
+      "query": "feedback glitch auto-trigger",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 8
+    },
+    {
+      "goldId": "1b1e6358-8317-4612-8c41-625b347c3491",
+      "category": "design",
+      "subject": "strict-token loopback opt-in",
+      "query": "design strict-token loopback opt-in",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "1ba3839a-22b9-42e1-ad8c-59a6576e5e94",
+      "category": "data",
+      "subject": "ours reverts",
+      "query": "data ours reverts",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "1bb56d88-dea9-40fa-b31a-1dfa94a6bced",
+      "category": "build",
+      "subject": "upgrade-only tiered",
+      "query": "build upgrade-only tiered",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1bba57d0-72e3-4da6-99a9-957f95a316ff",
+      "category": "equihub",
+      "subject": "partner_ org_types",
+      "query": "equihub partner_ org_types",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "1bfb185f-5863-4ba7-b1ae-6e3f195191b5",
+      "category": "novelforge",
+      "subject": "recalibrated romp believed-loss",
+      "query": "novelforge recalibrated romp believed-loss",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1c21c574-915b-4a4b-8f2d-bd58acbe5976",
+      "category": "usea",
+      "subject": "not-qualified unpopulated batch-run",
+      "query": "usea not-qualified unpopulated batch-run",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1c864033-963a-4127-99da-9316a3dd2940",
+      "category": "rowing",
+      "subject": "refactored finance.tsx ui.tsx",
+      "query": "rowing refactored finance.tsx ui.tsx",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "1d1fc90b-e4ea-47c8-97a6-2f2f398e0378",
+      "category": "equihub",
+      "subject": "competing-tier carve-out",
+      "query": "equihub competing-tier carve-out",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1db091ee-5ee8-4d23-a227-866ec9ad7095",
+      "category": "parsing",
+      "subject": "delimited responses",
+      "query": "parsing delimited responses",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1eec0e05-291c-4829-b8c1-dbddcc18060a",
+      "category": "audit",
+      "subject": "autopopulatefromresults entries.division",
+      "query": "audit autopopulatefromresults entries.division",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "1f7c57da-6f31-468b-aa4d-ad419cb68c70",
+      "category": "friction",
+      "subject": "separator convention constant",
+      "query": "friction separator convention constant",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "1ff57ff4-b720-4ddb-babd-62006354e03b",
+      "category": "equihub",
+      "subject": "s-nov-06 ux-h07",
+      "query": "equihub s-nov-06 ux-h07",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "20960ef3-00df-46c6-bd98-92e494b2577e",
+      "category": "scope",
+      "subject": "v1.0 reuse-from-ip",
+      "query": "scope v1.0 reuse-from-ip",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "20f93e18-591e-439a-8853-7ac8565b9924",
+      "category": "integration",
+      "subject": "sp_usef_member_id_batch_query re-queries tbl_usef_usea_verified_ids",
+      "query": "integration sp_usef_member_id_batch_query re-queries tbl_usef_usea_verified_ids",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "2196276f-30ca-4d8c-9142-25e11c4bc255",
+      "category": "preflight",
+      "subject": "pf-09 rk-504 export.iif",
+      "query": "preflight pf-09 rk-504 export.iif",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "21d2bd1c-25d9-4be0-a1d8-61a9988e01b4",
+      "category": "strategy",
+      "subject": "sport-deep borrow digest",
+      "query": "strategy sport-deep borrow digest",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "2211c223-dfe0-41e4-ab3d-9716d4d2c28d",
+      "category": "completeideas",
+      "subject": "hardware mwa_00293_bot milestone",
+      "query": "completeideas hardware mwa_00293_bot milestone",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 10
+    },
+    {
+      "goldId": "221dfc7b-5769-4d70-af14-f67a22fae2fc",
+      "category": "authz",
+      "subject": "clearanceruleseditor pf-18",
+      "query": "authz clearanceruleseditor pf-18",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "2278ed05-2ae3-489b-8da8-5957f6aad29a",
+      "category": "fallen",
+      "subject": "campbell underly woods",
+      "query": "fallen campbell underly woods",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "22932ab7-4078-459d-8ce1-2dcca5dfce96",
+      "category": "workflow",
+      "subject": "forks ladder heavy",
+      "query": "workflow forks ladder heavy",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "23d6f0c8-5292-4468-b49e-00263b2259ed",
+      "category": "harness",
+      "subject": "decomposed flan-t5 eager",
+      "query": "harness decomposed flan-t5 eager",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "242d7ba2-4bf3-495b-9244-3619ecf2f75d",
+      "category": "launch",
+      "subject": "agree escalate staff-review",
+      "query": "launch agree escalate staff-review",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "24a260e1-89d7-4499-95ce-e4863713f1dc",
+      "category": "database",
+      "subject": "optimization-plan-2026-08-18.md optimization",
+      "query": "database optimization-plan-2026-08-18.md optimization",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "24bd682e-01eb-41d7-b0ce-301ffc77d316",
+      "category": "equihub",
+      "subject": "denormalization s-fam-04 rider_name",
+      "query": "equihub denormalization s-fam-04 rider_name",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "250bb610-c85b-4169-8cbd-8ca63a4f4bd2",
+      "category": "product",
+      "subject": "requirementcheck unrendered",
+      "query": "product requirementcheck unrendered",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "255aff44-df84-41b6-8668-b98a9b876f6e",
+      "category": "financials",
+      "subject": "task-force data-pull july",
+      "query": "financials task-force data-pull july",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "25bd230f-19b0-4fce-a00d-00a8aa16697b",
+      "category": "equihub",
+      "subject": "blast radius",
+      "query": "equihub blast radius",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "262b43a7-d505-44f3-8189-2c7b289081b5",
+      "category": "showconnect",
+      "subject": "resync uncorrected stands",
+      "query": "showconnect resync uncorrected stands",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "28162b72-9287-4f5a-b7f0-af86d770ee99",
+      "category": "authorization",
+      "subject": "mount-level delegation-scope req.path",
+      "query": "authorization mount-level delegation-scope req.path",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "2908dc3d-e85b-406b-b4d3-aa104eae48db",
+      "category": "usea",
+      "subject": "division-script dup-safe go-ahead",
+      "query": "usea division-script dup-safe go-ahead",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2996e443-0f58-4de1-88eb-c2aefed83c0c",
+      "category": "deployment",
+      "subject": "retrofitted f1-f6",
+      "query": "deployment retrofitted f1-f6",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2a6bc09e-4c66-4fcc-8641-30e88c11140c",
+      "category": "championships",
+      "subject": "juniors champ qualifying",
+      "query": "championships juniors champ qualifying",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "2a836a1c-8f64-4cc1-9201-145777b8ee66",
+      "category": "cases",
+      "subject": "insight receipts",
+      "query": "cases insight receipts",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2ab1866e-cc5a-4381-b9a0-4995609a2c6d",
+      "category": "azure",
+      "subject": "scaling percent ceiling",
+      "query": "azure scaling percent ceiling",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "2ab4a15b-b904-4220-8be2-99ebbdcf4082",
+      "category": "shell",
+      "subject": "auto-revert canary armed",
+      "query": "shell auto-revert canary armed",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2b11ea9d-8e0c-46e1-a419-4719361ec69f",
+      "category": "qualifications",
+      "subject": "external_id tmp_result_id percent",
+      "query": "qualifications external_id tmp_result_id percent",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "2b43095f-8c3a-4d38-8351-5dcedb82bac8",
+      "category": "completeideas",
+      "subject": "computer predictions personify",
+      "query": "completeideas computer predictions personify",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "2ba976f8-11c1-48cd-9e57-cae0b4e38fe3",
+      "category": "friction",
+      "subject": "unread get_ hide",
+      "query": "friction unread get_ hide",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "2bc5f165-78c1-45fe-9acc-0cc85966be53",
+      "category": "audit",
+      "subject": "escaping mistake",
+      "query": "audit escaping mistake",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "2bda4c12-2538-49a2-9a5e-a5178fc2fd09",
+      "category": "novelforge",
+      "subject": "light derek recurs",
+      "query": "novelforge light derek recurs",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2be6d2ad-244c-4ff2-adf1-80074bf47752",
+      "category": "equihub",
+      "subject": "collapse recovery",
+      "query": "equihub collapse recovery",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "2c59861b-c4fa-4a3a-aecb-5ebb7e6fea12",
+      "category": "championships",
+      "subject": "dually uhlman linkage",
+      "query": "championships dually uhlman linkage",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2d1fbad1-5f08-47f4-be4b-5f2c1623f476",
+      "category": "friction",
+      "subject": "measures throwaway",
+      "query": "friction measures throwaway",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2d2dfb97-7002-4ef9-8fe2-3335da328556",
+      "category": "usea",
+      "subject": "accidental due_date_price post_entry_price",
+      "query": "usea accidental due_date_price post_entry_price",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "2d3777ff-fdb8-4689-80dd-edb7014e8694",
+      "category": "showconnect",
+      "subject": "whole-event bands ribbon",
+      "query": "showconnect whole-event bands ribbon",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "2d4722ac-841d-4c3e-9bd1-4695a0384c17",
+      "category": "completeideas",
+      "subject": "awm.recall overhead earns",
+      "query": "completeideas awm.recall overhead earns",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "2d7d9187-ffa3-4e3b-8156-36acc55b5d66",
+      "category": "equihub",
+      "subject": "member-switcher loaderror stacked-pr",
+      "query": "equihub member-switcher loaderror stacked-pr",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "2e0d0b2d-0396-478c-b60b-25b0abf01df2",
+      "category": "website",
+      "subject": "unicode self-hosted escapes",
+      "query": "website unicode self-hosted escapes",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "2f1497de-31de-4334-ae6e-097df9af9501",
+      "category": "audit",
+      "subject": "suzi zook penelope",
+      "query": "audit suzi zook penelope",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "2f15f37f-b314-49cf-bd12-46fec24bfa90",
+      "category": "savepoint",
+      "subject": "small-medium-sweep post-commit",
+      "query": "savepoint small-medium-sweep post-commit",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "30fa148d-f649-4101-9145-76d5293e9981",
+      "category": "multi",
+      "subject": "ridetimes venues come",
+      "query": "multi ridetimes venues come",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "31b675a1-5603-43d0-b08b-8b79043c7669",
+      "category": "data",
+      "subject": "emitting wrong-person investigate",
+      "query": "data emitting wrong-person investigate",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "32abe67d-0380-4b6f-9e0a-cbbb6d6669da",
+      "category": "20plus",
+      "subject": "athlete-scoped grants denies",
+      "query": "20plus athlete-scoped grants denies",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "330b9bab-10e6-46ab-97ca-0b73e22ab459",
+      "category": "signaturehub",
+      "subject": "signature-hub hosted",
+      "query": "signaturehub signature-hub hosted",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "336b88a2-d527-45d1-b54f-9fe87913e008",
+      "category": "structure",
+      "subject": "book-outline injected primitive",
+      "query": "structure book-outline injected primitive",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "33764669-6623-4a62-80a7-e0e3c86b9ea1",
+      "category": "usea",
+      "subject": "dataflow results-driven entry-driven",
+      "query": "usea dataflow results-driven entry-driven",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "34872edb-3a28-4b23-8bbb-ac089639c462",
+      "category": "mapping",
+      "subject": "field-backfill identity-key unkeyed",
+      "query": "mapping field-backfill identity-key unkeyed",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "357d5ef2-797d-46be-b162-630a9301b9a5",
+      "category": "payments",
+      "subject": "full-price-diff mailed-payment fix-20",
+      "query": "payments full-price-diff mailed-payment fix-20",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "358267a0-215d-45c0-ae39-7c8d3bc7dde9",
+      "category": "architecture",
+      "subject": "awmclient embeddedawm",
+      "query": "architecture awmclient embeddedawm",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "360608a5-113a-4d28-bdbc-3b8272852aa0",
+      "category": "revised",
+      "subject": "confidence-scoring twin-veto unsafe",
+      "query": "revised confidence-scoring twin-veto unsafe",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "365fd598-51f0-4b5a-9226-06c410421bfe",
+      "category": "triggers",
+      "subject": "task-c2 filing d999b527",
+      "query": "triggers task-c2 filing d999b527",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "366ded29-71fe-4166-9d50-a8eb2921f5c9",
+      "category": "equihub",
+      "subject": "ux-h31 ux-h30",
+      "query": "equihub ux-h31 ux-h30",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "368c7fe5-5f17-47c5-8f0b-9f7a012aa725",
+      "category": "preflight",
+      "subject": "pf-15 rk-305 rk-603",
+      "query": "preflight pf-15 rk-305 rk-603",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "36f9d2b0-abe2-42d4-9c64-9d13e40315d5",
+      "category": "navigation",
+      "subject": "scoped_tabs vanishes control",
+      "query": "navigation scoped_tabs vanishes control",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "372f2a82-a3f6-40c9-9825-10e85571551c",
+      "category": "usea",
+      "subject": "signed-pdf self-rendered recommend",
+      "query": "usea signed-pdf self-rendered recommend",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "39fa3ded-e7d2-449e-ac4c-bfbf027facdc",
+      "category": "equihub",
+      "subject": "fix-it contrast increment",
+      "query": "equihub fix-it contrast increment",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "39ff4a84-874b-4aee-a075-3b83aa83d36a",
+      "category": "showconnect",
+      "subject": "setobstacle obstacle_id flush",
+      "query": "showconnect setobstacle obstacle_id flush",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "3a240a87-4f49-4c14-afe0-36f5e0b2b92b",
+      "category": "strategy",
+      "subject": "email-connect broker newsletter-reuse",
+      "query": "strategy email-connect broker newsletter-reuse",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "3a81388a-6268-442e-b33d-75f869f7b0e1",
+      "category": "equihub",
+      "subject": "tier-blind fr-028 gettrackenrollees",
+      "query": "equihub tier-blind fr-028 gettrackenrollees",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "3b21bbde-58a2-4164-b87a-ff258099bc7b",
+      "category": "novelforge",
+      "subject": "back-third connor machinery",
+      "query": "novelforge back-third connor machinery",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "3b433228-56c3-4a6c-b7e5-90832701685b",
+      "category": "readiness",
+      "subject": "technically reveals",
+      "query": "readiness technically reveals",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "3c5e74d4-f590-4664-8079-58945fd21a87",
+      "category": "triage",
+      "subject": "jennifer-feedback horse-reg",
+      "query": "triage jennifer-feedback horse-reg",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "3c909f57-0831-4106-96be-c68f9ecae529",
+      "category": "azure",
+      "subject": "pitr geo-redundant zone-redundant",
+      "query": "azure pitr geo-redundant zone-redundant",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "3ceb4e98-46f5-47af-8086-b09c75601468",
+      "category": "subdomain",
+      "subject": "testbed app-mode memo",
+      "query": "subdomain testbed app-mode memo",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "3d7b2cd5-5e4d-40b3-9f73-4a194cb4504c",
+      "category": "equihub",
+      "subject": "debate fin-06",
+      "query": "equihub debate fin-06",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "3df5c213-8071-40bc-a3d9-a44a88071a42",
+      "category": "bakeoff",
+      "subject": "heat-novel ceiling deepseek",
+      "query": "bakeoff heat-novel ceiling deepseek",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "3ec68c90-d7f2-4786-9f77-33119ffea3b2",
+      "category": "equihub",
+      "subject": "position notify recipients",
+      "query": "equihub position notify recipients",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "3ed7ba10-060e-42e9-b27e-53a29e36a897",
+      "category": "export",
+      "subject": "date-slot compids",
+      "query": "export date-slot compids",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "3f356bbc-4baa-4068-a68a-9123e5690fe2",
+      "category": "controls",
+      "subject": "name-key analysis-layer gravity-aware",
+      "query": "controls name-key analysis-layer gravity-aware",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "3f4b7b28-b816-44d0-9ed6-1562e6c56680",
+      "category": "usea",
+      "subject": "xc-fault precedence",
+      "query": "usea xc-fault precedence",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "3fc434b4-ad22-4100-a4de-d3151cdfbf67",
+      "category": "xentry",
+      "subject": "permanent move-up",
+      "query": "xentry permanent move-up",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "40b3c817-c1bc-47c8-a5b4-835cff5e5293",
+      "category": "database",
+      "subject": "realistic fixture",
+      "query": "database realistic fixture",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "416d70b2-8de7-47fe-8499-02f5ecd18bca",
+      "category": "infra",
+      "subject": "awm-deploy converted vendored",
+      "query": "infra awm-deploy converted vendored",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "418d9d10-9fa9-4a18-b574-d8d25be98671",
+      "category": "cross",
+      "subject": "obstacle_id saves orphaned",
+      "query": "cross obstacle_id saves orphaned",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "4273c18e-977e-4728-8ec9-b7b95cae1a5e",
+      "category": "times",
+      "subject": "all-pass web-stage sc-full-test",
+      "query": "times all-pass web-stage sc-full-test",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "43445833-cff0-4e7f-b322-0b7df37fc1b9",
+      "category": "preflight",
+      "subject": "rk-206a pf-03 validity",
+      "query": "preflight rk-206a pf-03 validity",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "4355dca2-f863-408e-b1ad-74ff92f17918",
+      "category": "testing",
+      "subject": "perspective close-out",
+      "query": "testing perspective close-out",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "438566f3-88ce-4f48-87ce-23d9281cd3b1",
+      "category": "aiagentbuild",
+      "subject": "ticket-investigation shannon collins",
+      "query": "aiagentbuild ticket-investigation shannon collins",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "439ac640-b9ca-47c6-82a6-fbf116e68ae9",
+      "category": "equihub",
+      "subject": "paused pressure",
+      "query": "equihub paused pressure",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "45691426-7b7e-451e-aed8-d55fa2c1c13d",
+      "category": "accessibility",
+      "subject": "tabled cascade",
+      "query": "accessibility tabled cascade",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "45f468b9-ccf4-4526-a757-5768a5589b6f",
+      "category": "equihub",
+      "subject": "segment recipient severe",
+      "query": "equihub segment recipient severe",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "46ae6490-32c6-4786-a9b8-3980f2adf7a3",
+      "category": "rosterkeep",
+      "subject": "feature-gap feature-gaps-2026-08-21.md",
+      "query": "rosterkeep feature-gap feature-gaps-2026-08-21.md",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "471a8dfe-800e-43de-af8f-87173a4353c4",
+      "category": "usea",
+      "subject": "bulk-inserted jennifer-approved expired-program",
+      "query": "usea bulk-inserted jennifer-approved expired-program",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "474403f6-3f8b-43ba-bc18-30cdbd3fb5d7",
+      "category": "showconnect",
+      "subject": "caching adaptive showday",
+      "query": "showconnect caching adaptive showday",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "485b7a98-521f-43bf-aeaf-910f1455d92a",
+      "category": "retirement",
+      "subject": "dropping area_programs",
+      "query": "retirement dropping area_programs",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "487f7aa5-5099-486f-9b04-1d7933a49839",
+      "category": "transactional",
+      "subject": "cf0edf paging externalref",
+      "query": "transactional cf0edf paging externalref",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "48c8daba-3e3a-47e1-9235-893787306cf0",
+      "category": "equihub",
+      "subject": "sp_os_xe_export_data_date_range speedup heavy",
+      "query": "equihub sp_os_xe_export_data_date_range speedup heavy",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "4908f6a3-a544-4db6-be08-76262ff84ca0",
+      "category": "usea",
+      "subject": "entries-opening overload initiations",
+      "query": "usea entries-opening overload initiations",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "49a43967-3e04-40c9-a181-a7eaeecbc473",
+      "category": "rowing",
+      "subject": "re-verified hardened",
+      "query": "rowing re-verified hardened",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "49ddf054-0fb8-4155-b803-eafec4da3627",
+      "category": "stablewith",
+      "subject": "truncated eei-channel wrong-recipient",
+      "query": "stablewith truncated eei-channel wrong-recipient",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 7
+    },
+    {
+      "goldId": "4ad497db-01d2-4769-a331-14b7227f3955",
+      "category": "mobile",
+      "subject": "hanging so-row.cols cell",
+      "query": "mobile hanging so-row.cols cell",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "4b6401e6-9c71-49fb-9dfd-88b719f07357",
+      "category": "evidence",
+      "subject": "multi-writer hosted-vs-local local-first",
+      "query": "evidence multi-writer hosted-vs-local local-first",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "4b86e679-42c3-49a7-b94d-b864d685d02a",
+      "category": "novelforge",
+      "subject": "nudge pressure length",
+      "query": "novelforge nudge pressure length",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "4c0fd82a-8689-4bdd-bf92-cc24e13cc992",
+      "category": "equihub",
+      "subject": "cabinet_file_id task-c3 horse_health_records",
+      "query": "equihub cabinet_file_id task-c3 horse_health_records",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "4c4dd8fe-017f-458c-9680-be523bd24888",
+      "category": "preflight",
+      "subject": "pf-06 email_suppression rk-403",
+      "query": "preflight pf-06 email_suppression rk-403",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "4e5f8fee-4472-445a-a42b-fabaa216222e",
+      "category": "harness",
+      "subject": "submodule-pin-bump topology clarified",
+      "query": "harness submodule-pin-bump topology clarified",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "4f14ec8c-50c9-4a04-9021-c6909034d1d4",
+      "category": "equihub",
+      "subject": "finalize superseded",
+      "query": "equihub finalize superseded",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "4f58f33a-93f1-45b5-a38a-4dbb8e8d516b",
+      "category": "deployment",
+      "subject": "fence transposition holes",
+      "query": "deployment fence transposition holes",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "4f9856de-9e50-4411-a073-f3d78fd0d63e",
+      "category": "parsing",
+      "subject": "date-only existing-scope strings",
+      "query": "parsing date-only existing-scope strings",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "4fe2a611-f963-4a97-920a-a07778c5aaff",
+      "category": "desync",
+      "subject": "frontier moves unclassified",
+      "query": "desync frontier moves unclassified",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "5028fca2-fcd6-4c44-8863-388243f1a3fe",
+      "category": "qualifications",
+      "subject": "re-establishment move-up",
+      "query": "qualifications re-establishment move-up",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "50fd6245-3f6b-4663-bd25-2c8864152b81",
+      "category": "usea",
+      "subject": "re-stamp hardcode",
+      "query": "usea re-stamp hardcode",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "5213f16f-34cd-41d1-abe6-ce8c7921e048",
+      "category": "xentry",
+      "subject": "valid-starter dressage_penalties signal",
+      "query": "xentry valid-starter dressage_penalties signal",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "53664d94-cc6b-4629-aed9-011a16e97057",
+      "category": "contacts",
+      "subject": "office-info mockup",
+      "query": "contacts office-info mockup",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "53d39e88-8015-4358-9513-a712a505bdae",
+      "category": "usea",
+      "subject": "tbllogosemail ad-hoc",
+      "query": "usea tbllogosemail ad-hoc",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "542c13f4-b97e-4faa-93e1-6ecbf981fa94",
+      "category": "personalization",
+      "subject": "per-person connectors",
+      "query": "personalization per-person connectors",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "542ec7ce-c1b8-43d7-afa3-10adc5364070",
+      "category": "audit",
+      "subject": "adult-check auth-access-control add-child",
+      "query": "audit adult-check auth-access-control add-child",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "5432e57f-0726-4b57-9145-6d683b7617cc",
+      "category": "overnight",
+      "subject": "vocabularies contract-enum-drift",
+      "query": "overnight vocabularies contract-enum-drift",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "555f83cb-4e5a-4f93-bac1-0b7c0278d632",
+      "category": "equihub",
+      "subject": "zero-open milestone",
+      "query": "equihub zero-open milestone",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "5590165f-cacb-4df0-a5ec-82ebf66fd760",
+      "category": "equihub",
+      "subject": "view_comp_eligible_riders current-year-only awards",
+      "query": "equihub view_comp_eligible_riders current-year-only awards",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "5640bc8e-48d3-4748-a6b4-e1845520d05a",
+      "category": "ambiguity",
+      "subject": "foot-gun rk-206 date_record",
+      "query": "ambiguity foot-gun rk-206 date_record",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "56b0a87e-d7fc-4699-9fbc-1b3cd4ed1e37",
+      "category": "onboarding",
+      "subject": "wipe forced",
+      "query": "onboarding wipe forced",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "57237e66-a26a-4492-a764-1d59ef241328",
+      "category": "security",
+      "subject": "b614b2b replay protection",
+      "query": "security b614b2b replay protection",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "57255d32-a893-4934-b434-362712b4eb9d",
+      "category": "mutation",
+      "subject": "fixed_unverified hygiene",
+      "query": "mutation fixed_unverified hygiene",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "57801481-e63d-414f-bb71-fb42aa00b67e",
+      "category": "showconnect",
+      "subject": "sj-without-times intelligence boards",
+      "query": "showconnect sj-without-times intelligence boards",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "5790301a-3a0f-46c3-aaa3-093d1d073568",
+      "category": "accessibility",
+      "subject": "positions.tsx a11y",
+      "query": "accessibility positions.tsx a11y",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5797280e-138d-4869-982c-5d0950dac7ed",
+      "category": "scheduling",
+      "subject": "show-jumping re-assignment tomorrow",
+      "query": "scheduling show-jumping re-assignment tomorrow",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "583c0231-399a-4f33-aaf6-cbbf1a6d305a",
+      "category": "usea",
+      "subject": "exclusions self-heal complaints",
+      "query": "usea exclusions self-heal complaints",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "58569759-64a1-40fa-8eca-0050bdabd447",
+      "category": "usea",
+      "subject": "division-aware post-fix-16 folders",
+      "query": "usea division-aware post-fix-16 folders",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "58a8bee2-2b73-45ea-adcf-162210e4626f",
+      "category": "matchers",
+      "subject": "uppercase matcher titles",
+      "query": "matchers uppercase matcher titles",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5966436c-c92c-420b-a825-2de7341a8955",
+      "category": "friction",
+      "subject": "process.exit races",
+      "query": "friction process.exit races",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5a51ae13-f0c8-4e9d-88e0-4082897f83b0",
+      "category": "usea",
+      "subject": "horse-gate close-day tonight",
+      "query": "usea horse-gate close-day tonight",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 7
+    },
+    {
+      "goldId": "5a8606a8-0d71-4cb6-b4a0-05a51b20b626",
+      "category": "novelforge",
+      "subject": "name-drift dale fitch",
+      "query": "novelforge name-drift dale fitch",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5aab395e-e11b-4fd9-9175-3ebc84cbc10a",
+      "category": "activation",
+      "subject": "f34124ae activateregistrations transaction_id",
+      "query": "activation f34124ae activateregistrations transaction_id",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5c80db23-eeda-4425-8f38-58367d8edd95",
+      "category": "equihub",
+      "subject": "wording labels",
+      "query": "equihub wording labels",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5d1aa5c9-77dc-4b0b-b27f-124268c69126",
+      "category": "novelforge",
+      "subject": "voice-surgery content-extension extension-forbidden",
+      "query": "novelforge voice-surgery content-extension extension-forbidden",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "5d3b6299-e983-4f86-a9b0-6e06a39fa453",
+      "category": "equihub",
+      "subject": "ux-c04 close-out",
+      "query": "equihub ux-c04 close-out",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5d3d959e-4ca9-4394-aa91-75a0873560e9",
+      "category": "showconnect",
+      "subject": "grains ribbon tiles",
+      "query": "showconnect grains ribbon tiles",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5db887c9-1ce0-47d6-924f-f0ab2c5d5c8f",
+      "category": "coordination",
+      "subject": "flood replay",
+      "query": "coordination flood replay",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "5e6d5136-90cd-4602-b6f8-817f3268a24c",
+      "category": "equihub",
+      "subject": "ux-m41 int-01",
+      "query": "equihub ux-m41 int-01",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "5e6d8d16-e8be-45b0-9a96-a537a248c6e0",
+      "category": "usea",
+      "subject": "per-upload precomputed recompute",
+      "query": "usea per-upload precomputed recompute",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5e9761dc-4ce5-49aa-87c6-acd9771414d1",
+      "category": "scheduling",
+      "subject": "schedule-generation recalculates phase.planned_slots",
+      "query": "scheduling schedule-generation recalculates phase.planned_slots",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "5ec3c365-aee1-47ae-b1d2-dac7d848e880",
+      "category": "identity",
+      "subject": "corrupted mid-event",
+      "query": "identity corrupted mid-event",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "5f19dad9-a1b3-47dd-8d64-39bc52acf7b8",
+      "category": "hive",
+      "subject": "multi-byte content-length",
+      "query": "hive multi-byte content-length",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "5f841fcb-b1ed-45fc-9709-15397980ea46",
+      "category": "novelforge",
+      "subject": "central climax danny",
+      "query": "novelforge central climax danny",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "6028ae21-abed-47b3-baf2-bf514741cff5",
+      "category": "showconnect",
+      "subject": "wide-screen rail tiles",
+      "query": "showconnect wide-screen rail tiles",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "625f6acd-c495-411a-92bc-73a36f46f401",
+      "category": "support",
+      "subject": "r_eventhorseinspection scratches hotfix",
+      "query": "support r_eventhorseinspection scratches hotfix",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "62c541a7-f53f-4f4b-b941-3296c0138cec",
+      "category": "ordering",
+      "subject": "premature-save use-wizard-persistence.ts persistence",
+      "query": "ordering premature-save use-wizard-persistence.ts persistence",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "63299ed4-5cdc-42d4-9085-b8b73b691690",
+      "category": "generation",
+      "subject": "redesigned elevated learnai4kids.org",
+      "query": "generation redesigned elevated learnai4kids.org",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "6338353b-9ea5-4a16-9b98-270240ad6538",
+      "category": "usea",
+      "subject": "scalarized sp_os_xe_qualifications_summary",
+      "query": "usea scalarized sp_os_xe_qualifications_summary",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "639e5e0f-cbe3-4310-ad4c-bd1a3290c588",
+      "category": "favorites",
+      "subject": "carry-over absorbed cascade",
+      "query": "favorites carry-over absorbed cascade",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "6404e404-9b44-4ee7-83ee-4218a15d6144",
+      "category": "academic",
+      "subject": "homework policy-first prep-not-write",
+      "query": "academic homework policy-first prep-not-write",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "64c9d2ed-2ab3-4d75-97e8-64f025b7a1a0",
+      "category": "billing",
+      "subject": "responsible payer party",
+      "query": "billing responsible payer party",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "64d21cf3-275e-4c23-9856-d6110a7f881c",
+      "category": "quirks",
+      "subject": "verified-already-fixed inet",
+      "query": "quirks verified-already-fixed inet",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "6501bbf6-7818-4eff-b44b-41cec3755747",
+      "category": "equihub",
+      "subject": "horse_qualification cross-level legibility",
+      "query": "equihub horse_qualification cross-level legibility",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "65bbf272-0bf1-4af6-a0dd-cfb33559393d",
+      "category": "audit",
+      "subject": "poll-retry-on-error payments-cart-checkout continues",
+      "query": "audit poll-retry-on-error payments-cart-checkout continues",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "65c9e563-1e20-44de-ae44-f73116933a5d",
+      "category": "usea",
+      "subject": "shanley thursday kelsey",
+      "query": "usea shanley thursday kelsey",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "65ce97a3-35c8-4536-8b7d-8e12468ef8ba",
+      "category": "busting",
+      "subject": "chained markers",
+      "query": "busting chained markers",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "65cec1e0-27c2-45ef-813e-03f37c6ecb11",
+      "category": "idor",
+      "subject": "vulns introduced",
+      "query": "idor vulns introduced",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "65f37afa-40f4-4405-af31-72c68d9095f0",
+      "category": "testing",
+      "subject": "describe callback",
+      "query": "testing describe callback",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "66228382-6b35-4497-804b-93d7a9c13019",
+      "category": "memory",
+      "subject": "dissolved registry-membership breeds",
+      "query": "memory dissolved registry-membership breeds",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "6638d772-90d2-490d-a622-22813bc2f621",
+      "category": "attractors",
+      "subject": "gentle male regret",
+      "query": "attractors gentle male regret",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "66775d63-2816-4160-b984-a1406413cdcb",
+      "category": "equihub",
+      "subject": "broadened force-transfer",
+      "query": "equihub broadened force-transfer",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "677a69c8-34e0-4e94-89f5-6937c683b551",
+      "category": "usea",
+      "subject": "subdivisions dump confirms",
+      "query": "usea subdivisions dump confirms",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "67c6d58a-ca9e-448f-9155-04c3a108e156",
+      "category": "enum",
+      "subject": "already-hardened crm-sponsors structural_pass",
+      "query": "enum already-hardened crm-sponsors structural_pass",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "6876a464-b7d2-4bb7-99f3-2f9b82c96299",
+      "category": "usea",
+      "subject": "knott move-up interpretation",
+      "query": "usea knott move-up interpretation",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "68b1d21f-511c-417e-bacd-a77279ebf2bf",
+      "category": "education",
+      "subject": "report-issue testers",
+      "query": "education report-issue testers",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "68ed14f1-d1f7-4ef6-8b67-007cbd62d865",
+      "category": "usea",
+      "subject": "handover sp_merge_member_accounts memberdedupresults",
+      "query": "usea handover sp_merge_member_accounts memberdedupresults",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "68ed6baa-873e-4a34-a02d-805c53e6ee9e",
+      "category": "conflict",
+      "subject": "launch-hive port-kill",
+      "query": "conflict launch-hive port-kill",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "69c9e077-6b04-4926-a0dd-eef9897aab4c",
+      "category": "equihub",
+      "subject": "mechanica qualification-engine",
+      "query": "equihub mechanica qualification-engine",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "6a0128d0-4986-48e1-9517-9158f34dfa0b",
+      "category": "rbac",
+      "subject": "comp-org-gate revieworganizerapplication",
+      "query": "rbac comp-org-gate revieworganizerapplication",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "6a78bf3d-d9c8-449c-990b-378ca85fee04",
+      "category": "capabilities",
+      "subject": "confuse semantics tracker",
+      "query": "capabilities confuse semantics tracker",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "6baba28c-33a9-4411-9e31-0896277b1d8c",
+      "category": "packaging",
+      "subject": "toolchain installer rust",
+      "query": "packaging toolchain installer rust",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "6bf44d60-279b-49a6-bd6c-5a1a452467ec",
+      "category": "form",
+      "subject": "weren interest campbethanybeach",
+      "query": "form weren interest campbethanybeach",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "6c4d9aa6-6639-410e-b823-5132705823e1",
+      "category": "1200",
+      "subject": "phase.planned_slots beginner cross-country",
+      "query": "1200 phase.planned_slots beginner cross-country",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "6e3fee37-96d8-4814-872a-a9245fcf172b",
+      "category": "usea",
+      "subject": "congratulations emailed quantified",
+      "query": "usea congratulations emailed quantified",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "6edbefbc-d642-4db9-b230-959d661037d3",
+      "category": "legacy",
+      "subject": "ee-import stafford",
+      "query": "legacy ee-import stafford",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "6f331fb1-0d2f-4f90-86d7-ac517f928ce5",
+      "category": "showconnect",
+      "subject": "scorers sheet",
+      "query": "showconnect scorers sheet",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "6f569716-9097-453c-ac7c-ea65e3f337af",
+      "category": "scoping",
+      "subject": "ai-017 past-season trip-notice",
+      "query": "scoping ai-017 past-season trip-notice",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "6f74a429-e763-42db-9ccb-356c1bda1bf4",
+      "category": "setup",
+      "subject": "qual-check rulebook alias",
+      "query": "setup qual-check rulebook alias",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "6faee2d9-4526-4ca1-9852-cb6c2e118982",
+      "category": "sprint",
+      "subject": "platform-sync entry-status",
+      "query": "sprint platform-sync entry-status",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "703849a6-973a-4078-b34c-9e0282e6d2d9",
+      "category": "reupload",
+      "subject": "glitch re-upload trials",
+      "query": "reupload glitch re-upload trials",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "71579163-a9c8-4759-99cc-b9c4671ce375",
+      "category": "verification",
+      "subject": "entry-draft unreachable",
+      "query": "verification entry-draft unreachable",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "72d618d2-0fd3-4b77-a399-9b858e0571c6",
+      "category": "novelforge",
+      "subject": "coin quill revision",
+      "query": "novelforge coin quill revision",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "730da58a-bf9d-486d-b823-f731f0c89d37",
+      "category": "handoff",
+      "subject": "releases id-in-recall telemetry",
+      "query": "handoff releases id-in-recall telemetry",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7335b4fd-4dff-4c4b-b332-a4f827e6df07",
+      "category": "scheduling",
+      "subject": "scrambles slotscheduledao.findscheduleslots double-booking",
+      "query": "scheduling scrambles slotscheduledao.findscheduleslots double-booking",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "73ec65be-d5f0-428f-9f0e-499aa82499df",
+      "category": "data",
+      "subject": "person.merge sign-ups destroyed",
+      "query": "data person.merge sign-ups destroyed",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "746e2597-3153-41cf-b595-ed5f432ac440",
+      "category": "agent",
+      "subject": "hazard next_run_date",
+      "query": "agent hazard next_run_date",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "74b33266-599a-4de9-b066-d73f166f1be7",
+      "category": "qualification",
+      "subject": "dever georgia deactivated",
+      "query": "qualification dever georgia deactivated",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "74c6e4d2-f053-45c7-804a-dfd9bb757976",
+      "category": "equihub",
+      "subject": "fix-22 ux-h22 multi-horse",
+      "query": "equihub fix-22 ux-h22 multi-horse",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7579470c-4039-4a64-802e-1029034743b7",
+      "category": "equihub",
+      "subject": "achievement awards ribbon",
+      "query": "equihub achievement awards ribbon",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "75c8365c-ef11-4f00-957e-ced6239bc826",
+      "category": "qualifications",
+      "subject": "mer-based combination",
+      "query": "qualifications mer-based combination",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "76c13842-8199-4821-b2d6-121bce6c3d77",
+      "category": "showconnect",
+      "subject": "cross-sign godaddy",
+      "query": "showconnect cross-sign godaddy",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "772a402a-e5c9-45d3-8c13-c32202464bee",
+      "category": "equihub",
+      "subject": "f2fcb09 fbda",
+      "query": "equihub f2fcb09 fbda",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "77d1f855-cf1e-47b5-881f-9cf69e819cb5",
+      "category": "campaign",
+      "subject": "advanced-owner orphaned",
+      "query": "campaign advanced-owner orphaned",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7960c384-2ab3-4a3e-98b1-46cb5ccbe4bf",
+      "category": "cleanup",
+      "subject": "task-c4 file-cabinet",
+      "query": "cleanup task-c4 file-cabinet",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "79dd70d1-3498-4daa-bd12-c8cc15b2dc22",
+      "category": "triage",
+      "subject": "conflation evaluate",
+      "query": "triage conflation evaluate",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "7acba563-bbc3-4bf5-a25a-019c6ce300f1",
+      "category": "audit",
+      "subject": "person.first_name ends. owner-name",
+      "query": "audit person.first_name ends. owner-name",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7bcfcd6e-3775-4bf3-9a1e-12461459d24b",
+      "category": "personification",
+      "subject": "personify house",
+      "query": "personification personify house",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "7ceb9565-68cc-44c3-af0c-6c484f0ac50e",
+      "category": "rowing",
+      "subject": "regex-shape rk-206 anchorcutoff",
+      "query": "rowing regex-shape rk-206 anchorcutoff",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "7da0ec82-8cb9-4e96-9bca-6793b0b51833",
+      "category": "mutation",
+      "subject": "year_foaled obviously-wrong foaling",
+      "query": "mutation year_foaled obviously-wrong foaling",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "7dbfb783-2cbd-4dca-afc4-5c320eea3148",
+      "category": "pipeline",
+      "subject": "anchored average length",
+      "query": "pipeline anchored average length",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7e3bba74-5493-4f5b-8aa0-b0af76c200a4",
+      "category": "friction",
+      "subject": "dirname-relative relocated inherits",
+      "query": "friction dirname-relative relocated inherits",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7ec7e60b-3470-4eb6-a680-781c348a395a",
+      "category": "equihub",
+      "subject": "championships ocala",
+      "query": "equihub championships ocala",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7faefbea-3844-434d-86de-750f5916d191",
+      "category": "offseason",
+      "subject": "off-season disciples homepage",
+      "query": "offseason off-season disciples homepage",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "7fd085be-6a63-497d-a596-36479f9229ff",
+      "category": "migration",
+      "subject": "whatsapp sent.dm templates-only",
+      "query": "migration whatsapp sent.dm templates-only",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "8034e3af-7659-491e-ba20-83007f8adefe",
+      "category": "authorization",
+      "subject": "reporting-analytics organizer-reports anti-pattern",
+      "query": "authorization reporting-analytics organizer-reports anti-pattern",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "806ef656-aba6-4c49-8dcd-a6328d286d76",
+      "category": "equihub",
+      "subject": "evidence_file_ref my-progress",
+      "query": "equihub evidence_file_ref my-progress",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "808cf151-1db0-4dc4-aa7c-2da09eb99911",
+      "category": "accessibility",
+      "subject": "muted-foreground contrast",
+      "query": "accessibility muted-foreground contrast",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "8130d761-be9d-4735-851f-8bf8f4903631",
+      "category": "equihub",
+      "subject": "chair conflict-of-interest governors",
+      "query": "equihub chair conflict-of-interest governors",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "828d0d1c-bf60-4f0d-9589-09b4b9f60f8f",
+      "category": "tagging",
+      "subject": "prefix-tag enrichment",
+      "query": "tagging prefix-tag enrichment",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "82931bb4-0f3a-41f0-9422-e10fef54238f",
+      "category": "adaptation",
+      "subject": "iengramstore backend-agnostic",
+      "query": "adaptation iengramstore backend-agnostic",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "82e3122c-f916-4246-9180-1587b5cc3bf2",
+      "category": "identity",
+      "subject": "rename-only entry.owner_id. tblxeregistrationdetails.owner_usea_id",
+      "query": "identity rename-only entry.owner_id. tblxeregistrationdetails.owner_usea_id",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "8372e8ba-b843-4a14-80c9-a3731e7ad0c5",
+      "category": "decomposition",
+      "subject": "sparse-cue multihop headline",
+      "query": "decomposition sparse-cue multihop headline",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "838177d1-4024-431b-975e-2ce90600941e",
+      "category": "venues",
+      "subject": "outreach loudoun contacts",
+      "query": "venues outreach loudoun contacts",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "83d45d28-19f3-479b-a417-fdc63e3ddbd0",
+      "category": "equihub",
+      "subject": "daily-horse-jobs awaiting_decision",
+      "query": "equihub daily-horse-jobs awaiting_decision",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "83f4589e-6aa6-41ff-afb3-52e47f1674c7",
+      "category": "escaping",
+      "subject": "escapelike inconsistency",
+      "query": "escaping escapelike inconsistency",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "844a3184-f20e-45b8-962d-d6d5b8deb75b",
+      "category": "exceptions",
+      "subject": "makenzie stewart tblaecqualificationoverride",
+      "query": "exceptions makenzie stewart tblaecqualificationoverride",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "84b3d651-3353-4e89-b4d9-6d08d310d77a",
+      "category": "equihub",
+      "subject": "date-coverage hc-merge validity",
+      "query": "equihub date-coverage hc-merge validity",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "84d68a39-6050-4ba2-bd03-adf7c522132e",
+      "category": "versioning",
+      "subject": "snapshots undo",
+      "query": "versioning snapshots undo",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "85ce3949-f5f1-4253-b268-19329e7d8ad7",
+      "category": "hardening",
+      "subject": "logins parent-first minors",
+      "query": "hardening logins parent-first minors",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "85d1de01-b486-43af-8725-c1dc9d0ee6ff",
+      "category": "scheduling",
+      "subject": "unverifiable formerly-assigned assign-by-pinny",
+      "query": "scheduling unverifiable formerly-assigned assign-by-pinny",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "863d273e-543f-420c-ab02-cc95797841d2",
+      "category": "audit",
+      "subject": "malformed-id blank-rider-id sportsfield",
+      "query": "audit malformed-id blank-rider-id sportsfield",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "863e40d4-6966-4a6e-acc6-21a5383fd017",
+      "category": "equihub",
+      "subject": "workspace-consolidation deep-dive unification",
+      "query": "equihub workspace-consolidation deep-dive unification",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "86a61322-9ee4-46d6-ba70-c7e70b00e5d8",
+      "category": "usea",
+      "subject": "tblxecogginsdetails coggins_file_location suffix",
+      "query": "usea tblxecogginsdetails coggins_file_location suffix",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "87a388d6-11ff-4477-8d1e-0d83d3a56b4f",
+      "category": "harness",
+      "subject": "model-load mechanisms no-server",
+      "query": "harness model-load mechanisms no-server",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "87e0e5f6-06d3-4ac5-8f5f-c047f77b7d25",
+      "category": "data",
+      "subject": "esign.useventing.com esignature_details esignature",
+      "query": "data esign.useventing.com esignature_details esignature",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "87f5070e-66d8-48b2-aa94-2a62e2187a4b",
+      "category": "mockups",
+      "subject": "embed-first reshapes composite",
+      "query": "mockups embed-first reshapes composite",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "88f88dc1-6249-47fe-9b9f-82571292929a",
+      "category": "thesis",
+      "subject": "total-recall positioning",
+      "query": "thesis total-recall positioning",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 9
+    },
+    {
+      "goldId": "8b02dc57-1dd0-433c-9142-5e3ef6d72e24",
+      "category": "notifications",
+      "subject": "horse_connection_acknowledged handler-less already-delivered",
+      "query": "notifications horse_connection_acknowledged handler-less already-delivered",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "8b5c050f-54dc-4f93-9e51-6665bec7da79",
+      "category": "usea",
+      "subject": "characterize precisely describe",
+      "query": "usea characterize precisely describe",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "8c20ec01-6069-4277-8b46-2ca6b347cd66",
+      "category": "usea",
+      "subject": "mailmerge staging-table",
+      "query": "usea mailmerge staging-table",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "8cfacb17-6a38-4721-817f-1d20e79f8148",
+      "category": "release",
+      "subject": "tauri unblocked desktop",
+      "query": "release tauri unblocked desktop",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "8d72a8f2-8969-4c62-bc7c-0ce96fdf0430",
+      "category": "harness",
+      "subject": "eager repoint prime",
+      "query": "harness eager repoint prime",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "8e1e798b-d8b7-4adc-bef4-02a6dda6ea1a",
+      "category": "equihub",
+      "subject": "aec-19073 exception",
+      "query": "equihub aec-19073 exception",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "8ea87233-53c0-4fa5-94d6-d9ce8b3faa33",
+      "category": "usea",
+      "subject": "galatea fix-21 kimber",
+      "query": "usea galatea fix-21 kimber",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "8eb8f836-ed86-4a3c-818f-daec117dd1d6",
+      "category": "waivers",
+      "subject": "signed-doc eligible esignature",
+      "query": "waivers signed-doc eligible esignature",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "8f527217-ab5b-4b60-992f-ef789cf1f2b9",
+      "category": "usea",
+      "subject": "triplication scratch-pad millbrook",
+      "query": "usea triplication scratch-pad millbrook",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "8fe26d52-5e4d-4184-a987-c98ba55d1967",
+      "category": "rowing",
+      "subject": "autonomy sign-off",
+      "query": "rowing autonomy sign-off",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "9019ead6-01e5-4239-9abb-67b29ad853a4",
+      "category": "reports",
+      "subject": "member-edit reopened member_addresses",
+      "query": "reports member-edit reopened member_addresses",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "9076be48-6cc1-4527-a5c2-1807e72333de",
+      "category": "information",
+      "subject": "vocabulary settled visibility",
+      "query": "information vocabulary settled visibility",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "90a0199c-4b8d-403e-84e6-c6c246631066",
+      "category": "finalization",
+      "subject": "division-switch bleed tie-break",
+      "query": "finalization division-switch bleed tie-break",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "929f9384-76a8-4cc2-b038-d33f77a42abe",
+      "category": "model",
+      "subject": "rk-607 event-setup pf-19",
+      "query": "model rk-607 event-setup pf-19",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "93012164-0026-4630-b4d2-d37734b72e3d",
+      "category": "mutation",
+      "subject": "full-history reloaded re-check",
+      "query": "mutation full-history reloaded re-check",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "9380371f-3835-4637-9f60-825c4e1f121a",
+      "category": "equihub",
+      "subject": "ux-c02 discriminated union",
+      "query": "equihub ux-c02 discriminated union",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "938b40a1-3f91-47db-aab6-c0625ab7e19c",
+      "category": "correction",
+      "subject": "mameesh caroline repoint",
+      "query": "correction mameesh caroline repoint",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "93a01658-385a-4cad-812c-68db3eae446a",
+      "category": "harness",
+      "subject": "v0.12.1 wo-1 finalization",
+      "query": "harness v0.12.1 wo-1 finalization",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "93a25cc4-7651-411c-a026-63c96c5ff0e0",
+      "category": "widgets",
+      "subject": "day-blind currency next-up",
+      "query": "widgets day-blind currency next-up",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "956dbd81-389c-41fa-bef1-487d0ce6412a",
+      "category": "legacy",
+      "subject": "rider_mem_message desync status_id",
+      "query": "legacy rider_mem_message desync status_id",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "958e6d89-df08-4e2e-9860-a7eccf5596dc",
+      "category": "completeideas",
+      "subject": "trained-out succeed",
+      "query": "completeideas trained-out succeed",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 7
+    },
+    {
+      "goldId": "961dbfa4-658c-4439-84c5-21abe8c33a63",
+      "category": "testing",
+      "subject": "deleteuserentry division-fee half-fix",
+      "query": "testing deleteuserentry division-fee half-fix",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "96287eaf-90ff-46ca-a284-a01924d9b23d",
+      "category": "tbluserareadeclaration",
+      "subject": "rider_id tbloscmpimportdata.rdr_id_usea entrant",
+      "query": "tbluserareadeclaration rider_id tbloscmpimportdata.rdr_id_usea entrant",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "96830543-2397-4ee8-8e1a-83b00365ce60",
+      "category": "staff",
+      "subject": "governing-body expansion",
+      "query": "staff governing-body expansion",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "96982413-c6c4-4f25-b3b1-08c2baf5a098",
+      "category": "architecture",
+      "subject": "editorial-review book-ready",
+      "query": "architecture editorial-review book-ready",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "96d74c20-456d-444e-9ffc-0ac0fa8a3a2c",
+      "category": "rosterkeep",
+      "subject": "rk-205 co-signature rk-206b",
+      "query": "rosterkeep rk-205 co-signature rk-206b",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "973aaee6-8268-4a45-bffd-553d0cb97a6a",
+      "category": "integration",
+      "subject": "mailer.ts discards swallowed",
+      "query": "integration mailer.ts discards swallowed",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "9892b663-b556-4c43-92e5-f320d0c76b46",
+      "category": "campbethanybeach",
+      "subject": "week-of-5 post-rest targeted",
+      "query": "campbethanybeach week-of-5 post-rest targeted",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "98f4c480-5c44-4ff2-884b-551bd29cda7d",
+      "category": "accounting",
+      "subject": "refunded collection",
+      "query": "accounting refunded collection",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "9a1cdb90-3b35-4963-a880-1bba223d0e34",
+      "category": "resvg",
+      "subject": "assets member-card tofu",
+      "query": "resvg assets member-card tofu",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "9b2c4728-9e47-4f37-8915-0c2bb46547e7",
+      "category": "usea",
+      "subject": "fix-17 horse_qualification_live inlined",
+      "query": "usea fix-17 horse_qualification_live inlined",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "9b7346ab-7061-417d-b287-f24229ac1156",
+      "category": "state",
+      "subject": "reverse-eval layer-2 chapter-ops",
+      "query": "state reverse-eval layer-2 chapter-ops",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "9c792e63-7ae3-4c24-895e-c352646c740e",
+      "category": "usea",
+      "subject": "mid-flight unpaid shavings",
+      "query": "usea mid-flight unpaid shavings",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "9c7e5eca-f4a4-48ae-aace-647aed32ada4",
+      "category": "preflight",
+      "subject": "pf-05b rk-306 medical_profile",
+      "query": "preflight pf-05b rk-306 medical_profile",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "9ce7a00d-ac7a-47d4-9392-a99feef79ef5",
+      "category": "prefill",
+      "subject": "w1.2 rule_set-under-superadmin cross-tenant",
+      "query": "prefill w1.2 rule_set-under-superadmin cross-tenant",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "9d0062ed-1838-44c3-a217-d10c5c1169c0",
+      "category": "race",
+      "subject": "replica volume",
+      "query": "race replica volume",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "9e6c5f8c-3d97-4367-bfd5-2fce3c11cded",
+      "category": "docflow",
+      "subject": "event-type templating",
+      "query": "docflow event-type templating",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "9ed464e0-fb75-481a-9de4-695e8b1422b7",
+      "category": "naming",
+      "subject": "october liability",
+      "query": "naming october liability",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "9eee988f-8945-4199-88ad-7d04c004eabc",
+      "category": "completeideas",
+      "subject": "chat-feature content-filter per-chat",
+      "query": "completeideas chat-feature content-filter per-chat",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "9fbf7a77-72b2-42a6-8404-03c574cceb9a",
+      "category": "usea",
+      "subject": "singular plural traps",
+      "query": "usea singular plural traps",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "9ff1fa6b-3a05-4263-aedc-5f6068354c28",
+      "category": "navigation",
+      "subject": "scopebar spine",
+      "query": "navigation scopebar spine",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "a1cf4013-25c0-401a-aa27-3e6e9ab5f2a0",
+      "category": "equihub",
+      "subject": "downloadauthedblob token-refresh api.ts",
+      "query": "equihub downloadauthedblob token-refresh api.ts",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "a619d6b9-a39f-437f-86d1-3bed5f258021",
+      "category": "information",
+      "subject": "layered breadcrumb minimal",
+      "query": "information layered breadcrumb minimal",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "a6d8c805-8c5f-4f0c-aacb-16eeccbf4ea5",
+      "category": "pipeline",
+      "subject": "migratedev npmrc",
+      "query": "pipeline migratedev npmrc",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "a7ad9cab-078d-4043-a56e-fd1ffd6d2bfc",
+      "category": "messaging",
+      "subject": "coming-soon wall",
+      "query": "messaging coming-soon wall",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "a9ffc2e3-8481-42c2-b07f-490bc371197b",
+      "category": "usea",
+      "subject": "daily-check-in config.local.json notion",
+      "query": "usea daily-check-in config.local.json notion",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "aa8a2c88-6179-4ea9-977a-bb44aa9f293d",
+      "category": "config",
+      "subject": "check-only reopened coconino",
+      "query": "config check-only reopened coconino",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "aa9fdb16-7f05-457c-99a6-50188519120d",
+      "category": "certification",
+      "subject": "adminpasswordreset staff-gated executemerge",
+      "query": "certification adminpasswordreset staff-gated executemerge",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "ab6edbd4-34e2-4cb1-8f91-aa7b4c929979",
+      "category": "xentry",
+      "subject": "coverage-gap bak_aec37_20260803",
+      "query": "xentry coverage-gap bak_aec37_20260803",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "abca9249-9c7d-4575-b79a-a720ae599383",
+      "category": "migration",
+      "subject": "decommission osportal",
+      "query": "migration decommission osportal",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "ac40e575-fd73-4017-a924-249322246aa3",
+      "category": "leaderboard",
+      "subject": "phishing aspen",
+      "query": "leaderboard phishing aspen",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "ac96ff8b-6187-41ef-a620-d4d7e62c31c0",
+      "category": "staging",
+      "subject": "mail-read-only m365",
+      "query": "staging mail-read-only m365",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "ad56b53e-fdd3-41e2-ae17-e1e69e21b41e",
+      "category": "preflight",
+      "subject": "dual-sig athlete-clearance validafter",
+      "query": "preflight dual-sig athlete-clearance validafter",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "ae26f5e5-d7bf-49ff-8d07-24f68b0b0ccd",
+      "category": "times",
+      "subject": "ghost schedule_slot",
+      "query": "times ghost schedule_slot",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "af1e2722-a0a8-4105-be24-f1d8d66eab98",
+      "category": "mapping",
+      "subject": "overwhelmingly schooling-show perfectly",
+      "query": "mapping overwhelmingly schooling-show perfectly",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "aff015d2-9ffb-4e3a-b286-b2846d61f4a2",
+      "category": "usea",
+      "subject": "entrants xentry-gated ee-imported",
+      "query": "usea entrants xentry-gated ee-imported",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b03dbba5-b8cf-456e-92dc-3ede940824b8",
+      "category": "native",
+      "subject": "weighted improve",
+      "query": "native weighted improve",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "b151c015-f457-4341-aa49-654341d4282d",
+      "category": "navigation",
+      "subject": "sc-theme.js injects headers",
+      "query": "navigation sc-theme.js injects headers",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b18533ba-5b48-4049-b7ea-2a71a16810b5",
+      "category": "showconnect",
+      "subject": "day-of thin-json fk-strip",
+      "query": "showconnect day-of thin-json fk-strip",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b259101e-f936-4b5e-9637-234b9a42af48",
+      "category": "rosterkeep",
+      "subject": "pf-08 rk-604 cosmetic-toggles",
+      "query": "rosterkeep pf-08 rk-604 cosmetic-toggles",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b30568ae-8dec-40bd-aa1b-326027e8ba3d",
+      "category": "responsive",
+      "subject": "horizontal-scroll strip",
+      "query": "responsive horizontal-scroll strip",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b3236fe2-f786-439b-b519-6ac188e6c1cf",
+      "category": "harness",
+      "subject": "log-only wo-4 learn-lite",
+      "query": "harness log-only wo-4 learn-lite",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "b336c830-a119-45cd-8872-040f9b12c6bd",
+      "category": "scheduling",
+      "subject": "pre-scores one-sj-time-per-division re-spaces",
+      "query": "scheduling pre-scores one-sj-time-per-division re-spaces",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b41dca39-01b9-4262-b3bc-03430d40d67e",
+      "category": "technique",
+      "subject": "locating no-ref",
+      "query": "technique locating no-ref",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b423bf00-8be6-4f71-9604-04096cbbfe1a",
+      "category": "cloud",
+      "subject": "openrouter dogfood",
+      "query": "cloud openrouter dogfood",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b561cb34-24a1-479f-9113-7dce5ed2b161",
+      "category": "usea",
+      "subject": "staging-table mail nested",
+      "query": "usea staging-table mail nested",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b56e564e-06cd-4039-ab45-99e397159e22",
+      "category": "positions",
+      "subject": "tier-split rk-307",
+      "query": "positions tier-split rk-307",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 11
+    },
+    {
+      "goldId": "b5ef429e-0928-4e4d-bcd1-cabe3885d359",
+      "category": "agent",
+      "subject": "gaffney double-2026-membership preflight",
+      "query": "agent gaffney double-2026-membership preflight",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b724bdfc-dae1-43a9-8718-641f3663298a",
+      "category": "worklist",
+      "subject": "program-dues invoicing ux-c06",
+      "query": "worklist program-dues invoicing ux-c06",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "b8322e95-2d80-4019-9b48-3ad6dda9389e",
+      "category": "equihub",
+      "subject": "ux-c05 close-out",
+      "query": "equihub ux-c05 close-out",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b8f83682-d314-439d-8d47-2994beafb56b",
+      "category": "caching",
+      "subject": "perf office-info fragility",
+      "query": "caching perf office-info fragility",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b91a01c1-b87f-4827-8b83-b872ebd14aa1",
+      "category": "preflight",
+      "subject": "pf-14 rk-712 school-email",
+      "query": "preflight pf-14 rk-712 school-email",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b9295ed4-b123-4466-a3c1-2a162f08fcfb",
+      "category": "process",
+      "subject": "piping verify.sh tail",
+      "query": "process piping verify.sh tail",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "b93c8e83-afcd-4e7e-b3d9-d5b855b04c4b",
+      "category": "assets",
+      "subject": "wavespeed flux recipe",
+      "query": "assets wavespeed flux recipe",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "b968c242-db94-4613-9e3a-28790db91a0f",
+      "category": "scenario",
+      "subject": "numeral exclusivity",
+      "query": "scenario numeral exclusivity",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "b9758115-6d8a-4c27-94f5-2611064362b8",
+      "category": "touch",
+      "subject": "remembered choice officer",
+      "query": "touch remembered choice officer",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "b9b6d514-f460-4266-93f1-e04daeaa8a90",
+      "category": "precheck",
+      "subject": "all-areas false-trigger",
+      "query": "precheck all-areas false-trigger",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "badcdbf5-717c-4a79-b50b-77d363a8447f",
+      "category": "novelforge",
+      "subject": "figures divorce marriage",
+      "query": "novelforge figures divorce marriage",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "bb7a0207-fcc9-4f0c-8e67-891572c53fb6",
+      "category": "membership",
+      "subject": "area-to-state mapareastatezip",
+      "query": "membership area-to-state mapareastatezip",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "bc26f4b5-9a3b-4767-9986-6e6e5169ffad",
+      "category": "null",
+      "subject": "slot-swap battery invariance",
+      "query": "null slot-swap battery invariance",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "bc487ea6-c5cb-41e6-94b7-f9b0bc34b159",
+      "category": "novelforge",
+      "subject": "booksindex corrupt-json quarantine",
+      "query": "novelforge booksindex corrupt-json quarantine",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "bcc17935-fdbc-40a2-a998-56bd0441edb0",
+      "category": "usea",
+      "subject": "re-imports dunned pospichal",
+      "query": "usea re-imports dunned pospichal",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "bd432392-d420-4751-b286-bd56abd2bb74",
+      "category": "audit",
+      "subject": "impressive super treatment",
+      "query": "audit impressive super treatment",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "be086d54-238a-4e2c-ab70-250392d079d5",
+      "category": "flow",
+      "subject": "step-jump uncovered",
+      "query": "flow step-jump uncovered",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "be9e7024-5604-49bb-b286-edadbb8ee0d4",
+      "category": "story",
+      "subject": "personified antagonist conspiracy",
+      "query": "story personified antagonist conspiracy",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "bec6f8f6-f319-4340-8c8e-e3ae22a27427",
+      "category": "programmes",
+      "subject": "recruiting conditioning programme",
+      "query": "programmes recruiting conditioning programme",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "bee02dda-7f9f-4863-bfff-3b9eab4178fc",
+      "category": "regression",
+      "subject": "double-booked ride-time",
+      "query": "regression double-booked ride-time",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "bfb09951-29de-4f5e-b2f3-3f9585dbb2dd",
+      "category": "equihub",
+      "subject": "ws-consolidation activate",
+      "query": "equihub ws-consolidation activate",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "c026b152-0848-4222-9bee-84b4cbc77ee3",
+      "category": "payments",
+      "subject": "paid-state phantom-paid inferred",
+      "query": "payments paid-state phantom-paid inferred",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "c0524107-a565-4e88-8edb-467890bdc4f9",
+      "category": "launch",
+      "subject": "admin-only entity-page",
+      "query": "launch admin-only entity-page",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "c0729b88-317a-4f4a-864d-d037225fd8dc",
+      "category": "equihub",
+      "subject": "effective-date feedback- boilerplate",
+      "query": "equihub effective-date feedback- boilerplate",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "c0bfd26d-48e8-4c07-8928-d2b7809ec30c",
+      "category": "equihub",
+      "subject": "fin-03 auth-04",
+      "query": "equihub fin-03 auth-04",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "c510a416-2f24-44cb-a22d-5cc4f8b65249",
+      "category": "usea",
+      "subject": "diverge fix-20",
+      "query": "usea diverge fix-20",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "c5904911-89f1-48d7-b736-4bfe5dcda30f",
+      "category": "performance",
+      "subject": "fallback-to-inline media",
+      "query": "performance fallback-to-inline media",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "c60e99ed-ccd1-463a-ae25-8581e889eceb",
+      "category": "deployment",
+      "subject": "open-decisions walkthrough",
+      "query": "deployment open-decisions walkthrough",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "c74994ab-5ebd-4829-be78-cb3041cdc3df",
+      "category": "campbethanybeach",
+      "subject": "self-selected thereafter asked-for",
+      "query": "campbethanybeach self-selected thereafter asked-for",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "c75152ac-4afc-4df6-8f42-151ccade446e",
+      "category": "retest",
+      "subject": "hurt culprit chokepoint",
+      "query": "retest hurt culprit chokepoint",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "c868614d-aca7-4098-81b2-8ab1c3fb3743",
+      "category": "outcome",
+      "subject": "parents-educators restructured door",
+      "query": "outcome parents-educators restructured door",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "cb48b4e0-5a39-4883-82d8-25063abb2177",
+      "category": "usea",
+      "subject": "plan-cache fix-16 stood",
+      "query": "usea plan-cache fix-16 stood",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "cc5b3b49-d002-46a0-a0d3-0d2aa340e360",
+      "category": "equihub",
+      "subject": "changed_by horse_audit_log",
+      "query": "equihub changed_by horse_audit_log",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "cc82f321-18a2-4bac-a000-0750c07c00b0",
+      "category": "testing",
+      "subject": "board-tester dispositioned slate",
+      "query": "testing board-tester dispositioned slate",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "cd5bc034-85e4-4fef-9ff8-6d59b2d62118",
+      "category": "platform",
+      "subject": "resumable weak competent",
+      "query": "platform resumable weak competent",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "cde4b491-2284-4f3a-a332-6a6f7df1b84c",
+      "category": "equihub",
+      "subject": "cci1 precedent contradicts",
+      "query": "equihub cci1 precedent contradicts",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "cea1a604-eac0-45da-8a38-a2a3e795efd6",
+      "category": "showconnect",
+      "subject": "parentheses two-line addendum",
+      "query": "showconnect parentheses two-line addendum",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "cec2fa2f-31ce-4f91-81a4-c71b62ba7998",
+      "category": "usea",
+      "subject": "fix-04 overdue re-auth",
+      "query": "usea fix-04 overdue re-auth",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "cf271814-168c-4756-9478-9f0ee52e09a4",
+      "category": "security",
+      "subject": "literature benchmarks",
+      "query": "security literature benchmarks",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "cfb4c3e8-8df2-4a1d-8984-b097266a14a8",
+      "category": "database",
+      "subject": "duplicate-index live-table",
+      "query": "database duplicate-index live-table",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "cfc8774a-24e3-4cc6-88d7-da4ad696eeb9",
+      "category": "changelog",
+      "subject": "doc-only retriever revert",
+      "query": "changelog doc-only retriever revert",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "d184094e-fb4b-4340-a729-8bc75a8144da",
+      "category": "equihub",
+      "subject": "vocabularies strengthened contract-enum-drift",
+      "query": "equihub vocabularies strengthened contract-enum-drift",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "d18f6aef-ee0f-4254-8798-cb91e1284cba",
+      "category": "feedback",
+      "subject": "staff-locked probes reopen",
+      "query": "feedback staff-locked probes reopen",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "d2388ad2-247b-41ea-af49-965c015dc663",
+      "category": "audit",
+      "subject": "swallows stripe_subscription_id nulls",
+      "query": "audit swallows stripe_subscription_id nulls",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "d2d22a74-6995-4e56-b55f-76c1d8eebb97",
+      "category": "esignature",
+      "subject": "repeatable recipe",
+      "query": "esignature repeatable recipe",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 11
+    },
+    {
+      "goldId": "d2eddd05-a334-40f6-b500-072a01738838",
+      "category": "usea",
+      "subject": "post_entry_close_date honors oe_end_date",
+      "query": "usea post_entry_close_date honors oe_end_date",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d33188de-3ffa-44b2-98e7-5c7e357cd68a",
+      "category": "conventions",
+      "subject": "stakeholders replies",
+      "query": "conventions stakeholders replies",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d3d2b9d4-2335-4c20-be1c-76cd5175e1de",
+      "category": "agent",
+      "subject": "readiness-query already-complete",
+      "query": "agent readiness-query already-complete",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d51b1931-ae48-477f-8283-0aa9a66fd2bb",
+      "category": "craft",
+      "subject": "inspector bobby writer",
+      "query": "craft inspector bobby writer",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "d5cbe967-358d-4d29-9308-ed7fe2c7c9d5",
+      "category": "agent",
+      "subject": "mer-val current-era",
+      "query": "agent mer-val current-era",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d5f76696-ad8f-4aae-b92f-ce902d41963a",
+      "category": "usea",
+      "subject": "duplicate-score create-on-load onetoone",
+      "query": "usea duplicate-score create-on-load onetoone",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "d64427de-8207-4e9c-a6cb-a5f670dbe5c4",
+      "category": "equihub",
+      "subject": "program-linked sponsorships guided",
+      "query": "equihub program-linked sponsorships guided",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d6835650-7604-49de-b4b6-56f6040e3906",
+      "category": "step5",
+      "subject": "knull person-identity eliza",
+      "query": "step5 knull person-identity eliza",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d69e71d3-c23b-408f-96a5-e2abda3cb69e",
+      "category": "equihub",
+      "subject": "af-p3 af-20",
+      "query": "equihub af-p3 af-20",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "d6a7f4b1-6e72-4b51-82a8-6965e5d81f1c",
+      "category": "usea",
+      "subject": "hookups camping confirms",
+      "query": "usea hookups camping confirms",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "d6c02dfe-3c95-4431-8e2a-1e19354ab64e",
+      "category": "novelforge",
+      "subject": "anti-meaning gravity",
+      "query": "novelforge anti-meaning gravity",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d6e9791b-88c7-45a0-a544-09d41e40690a",
+      "category": "credits",
+      "subject": "applyeventcectoattendees education-certifications",
+      "query": "credits applyeventcectoattendees education-certifications",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "d70f385a-0009-48fd-865d-97ee08bbbb91",
+      "category": "attractors",
+      "subject": "brash unsympathetic antihero",
+      "query": "attractors brash unsympathetic antihero",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "d77cad3d-82c8-4f8c-bbba-068cd81c43aa",
+      "category": "rosterkeep",
+      "subject": "s0-s6 pilot-sprint-plan-2026-08-22.md",
+      "query": "rosterkeep s0-s6 pilot-sprint-plan-2026-08-22.md",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "d79d4d89-a270-4bc9-8d2c-1b9e4a33e9aa",
+      "category": "equihub",
+      "subject": "fc-1..5 deploy-gated staged",
+      "query": "equihub fc-1..5 deploy-gated staged",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "de53d6a4-ec4a-487a-8486-2ad969393db9",
+      "category": "config",
+      "subject": "crashes pglite",
+      "query": "config crashes pglite",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "debafea5-2b9d-4d26-8771-0d9c24030eac",
+      "category": "equihub",
+      "subject": "wallets stripe.ts exposes",
+      "query": "equihub wallets stripe.ts exposes",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "dec34203-3061-47b7-9373-801a26d3c1c5",
+      "category": "integration",
+      "subject": "gpt-5-4-mini azure-foundry base_url",
+      "query": "integration gpt-5-4-mini azure-foundry base_url",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "df17dc9c-b267-4890-8c85-5b30d4d2f6d0",
+      "category": "readiness",
+      "subject": "yield beta",
+      "query": "readiness yield beta",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "dfcb96de-2843-4e02-ae2b-afec4d540fe3",
+      "category": "equihub",
+      "subject": "role-granting user_roles",
+      "query": "equihub role-granting user_roles",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "e0b9718b-8b07-4797-bfec-22bdbdc8ac54",
+      "category": "rbac",
+      "subject": "barn_manager oq-020",
+      "query": "rbac barn_manager oq-020",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "e10fdd13-d59e-4b86-9681-e4f72f9844f6",
+      "category": "residual",
+      "subject": "view_core_amateur_history am_name am_status",
+      "query": "residual view_core_amateur_history am_name am_status",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "e153d308-c784-413a-8cba-13bf9c08426c",
+      "category": "hardening",
+      "subject": "cleanupstale user_feedback auto-detect",
+      "query": "hardening cleanupstale user_feedback auto-detect",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "e218f059-9289-44f7-8a3c-482146e86041",
+      "category": "usea",
+      "subject": "overqualification misses qualify_result_rank",
+      "query": "usea overqualification misses qualify_result_rank",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "e2e775a0-8839-41fc-8421-33569c981d17",
+      "category": "novelforge",
+      "subject": "systemic-selection allowance ch37",
+      "query": "novelforge systemic-selection allowance ch37",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "e43b1afc-75cd-44b5-94d6-d7d925c79451",
+      "category": "management",
+      "subject": "focus-steal hand-rolled dialog",
+      "query": "management focus-steal hand-rolled dialog",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 10
+    },
+    {
+      "goldId": "e5a62e0b-6700-4d1c-b4fa-54913db126b8",
+      "category": "legacy",
+      "subject": "unfamiliar replying",
+      "query": "legacy unfamiliar replying",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "e6a3eabd-72e2-416a-831f-72d42a658ca5",
+      "category": "equihub",
+      "subject": "license-level anchored",
+      "query": "equihub license-level anchored",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "e713b3c6-e792-42ef-977a-3a3f9aadb9a5",
+      "category": "security",
+      "subject": "server-through roster-keep-com unblocked",
+      "query": "security server-through roster-keep-com unblocked",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "e7f20d35-1330-449f-87f2-07884e3bd638",
+      "category": "feedback",
+      "subject": "height_hands coerce",
+      "query": "feedback height_hands coerce",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "e8da519e-5992-4b80-a9eb-62c11e3d62bf",
+      "category": "rosterkeep",
+      "subject": "pronouns preferences tone",
+      "query": "rosterkeep pronouns preferences tone",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "e98122aa-0b36-4cac-b57f-5fed2abb6722",
+      "category": "directory",
+      "subject": "hf_home awm_cache_dir",
+      "query": "directory hf_home awm_cache_dir",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "e9a244c7-0d6a-4b5b-bc9d-d1da518715de",
+      "category": "preflight",
+      "subject": "pf-05a self-register medical_alerts",
+      "query": "preflight pf-05a self-register medical_alerts",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 7
+    },
+    {
+      "goldId": "eaf9555e-50be-418c-b186-8ef48b401480",
+      "category": "usea",
+      "subject": "lonesky-class minors guardian",
+      "query": "usea lonesky-class minors guardian",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "eb6ac5e5-355f-4e53-9cb0-09f6215a79c3",
+      "category": "ticks",
+      "subject": "f8e6133 name-change",
+      "query": "ticks f8e6133 name-change",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "eb73a435-c1d1-4c0a-9c17-c072e8dbab73",
+      "category": "esignature",
+      "subject": "signature_request_expiry_days esign-equihub-prod unset",
+      "query": "esignature signature_request_expiry_days esign-equihub-prod unset",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "ec21973f-87af-42ed-b337-2c5c6b3194d7",
+      "category": "usea",
+      "subject": "non-uniform ocala",
+      "query": "usea non-uniform ocala",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 8
+    },
+    {
+      "goldId": "eceba653-9f7e-4d4a-8903-ca859c618ed0",
+      "category": "endpoints",
+      "subject": "collects unrendered contacts",
+      "query": "endpoints collects unrendered contacts",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "ef3ef414-1156-4f49-ae0e-fc5156c24229",
+      "category": "generation",
+      "subject": "seedream fictional grounding",
+      "query": "generation seedream fictional grounding",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "efad5460-f787-4ed2-ac7e-b6acfc27a52d",
+      "category": "integrity",
+      "subject": "stale-server negative prove",
+      "query": "integrity stale-server negative prove",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "f029141e-b6de-486b-8827-ae498812a995",
+      "category": "equihub",
+      "subject": "pipeline-fix-2 mocks",
+      "query": "equihub pipeline-fix-2 mocks",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "f03de833-376b-4add-b10a-cd22f4ef388d",
+      "category": "winter",
+      "subject": "exempt-state task_assignment",
+      "query": "winter exempt-state task_assignment",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 6
+    },
+    {
+      "goldId": "f0a11936-a345-425d-a875-0e7d49045d4e",
+      "category": "zfold",
+      "subject": "file-tab skin fold",
+      "query": "zfold file-tab skin fold",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "f0abb2fc-5cf6-42d7-8187-8238a9d8b727",
+      "category": "equihub",
+      "subject": "feedback_audit_all_entry_surfaces whenever",
+      "query": "equihub feedback_audit_all_entry_surfaces whenever",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "f1d654a5-cb4c-4b03-8378-5bec86fbe303",
+      "category": "record",
+      "subject": "dual-system area_programs",
+      "query": "record dual-system area_programs",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "f300a809-6718-4268-ba73-a1ad1af18034",
+      "category": "branding",
+      "subject": "band.us vibe imagery",
+      "query": "branding band.us vibe imagery",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "f39495ea-25e5-469f-82ad-bd38ad3a8fd6",
+      "category": "blackbaud",
+      "subject": "c8608f2 campbethanybeach",
+      "query": "blackbaud c8608f2 campbethanybeach",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "f48d7669-6de8-47a9-a674-8520aaba2a14",
+      "category": "identity",
+      "subject": "unkeyed needing rehearsal",
+      "query": "identity unkeyed needing rehearsal",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "f50b57f7-00a0-40e2-9cd3-884519f81aee",
+      "category": "equihub",
+      "subject": "acct-fee-config rider_pays intentional",
+      "query": "equihub acct-fee-config rider_pays intentional",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "f59ee081-cd71-4059-b7a3-b7adf25fe318",
+      "category": "deploy",
+      "subject": "wellness deck loudoun",
+      "query": "deploy wellness deck loudoun",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "f5ac7a9e-180f-484d-978f-59d2bdc52010",
+      "category": "summary",
+      "subject": "phasing testing-available",
+      "query": "summary phasing testing-available",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "f6c6d5d6-2958-494e-9943-1816c6d72b7d",
+      "category": "equihub",
+      "subject": "purposes event_comment other_info",
+      "query": "equihub purposes event_comment other_info",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "f90a2bc2-fdf6-4d77-8c73-a46292320498",
+      "category": "equihub",
+      "subject": "graph_refresh_token aadsts700082 calendar-invite",
+      "query": "equihub graph_refresh_token aadsts700082 calendar-invite",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "f9d6dac3-08da-4270-9ecc-719810653c44",
+      "category": "championships",
+      "subject": "aec-style champ",
+      "query": "championships aec-style champ",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "fa703e4f-cd38-4920-90aa-9cdb35149995",
+      "category": "checklist",
+      "subject": "email_allowlist email_redirect_to valve",
+      "query": "checklist email_allowlist email_redirect_to valve",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "faa34a1e-a783-4973-8a38-d94978094aba",
+      "category": "fidelity",
+      "subject": "drifts mockup",
+      "query": "fidelity drifts mockup",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fafb4f7e-78ae-4e1d-ac41-8b0b35c136b0",
+      "category": "equihub",
+      "subject": "feedback_denormalized_actor_fields_split_owner_vs_subject actor choose",
+      "query": "equihub feedback_denormalized_actor_fields_split_owner_vs_subject actor choose",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fb1da6e9-dc74-4229-a8bb-0d6614ad5220",
+      "category": "audit",
+      "subject": "horseidparam strips",
+      "query": "audit horseidparam strips",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "fb37432a-b1e3-48c0-ae5b-cd5bc65f1580",
+      "category": "winter",
+      "subject": "cancel-practice ac9fe80",
+      "query": "winter cancel-practice ac9fe80",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 4
+    },
+    {
+      "goldId": "fb60406d-b358-4ab0-bc61-508ee3cba3d7",
+      "category": "usea",
+      "subject": "separate-check fee_collection_mode",
+      "query": "usea separate-check fee_collection_mode",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fc2d8c2e-a763-47e8-a30f-d0c231cc1c01",
+      "category": "esignature",
+      "subject": "cohort sign-off",
+      "query": "esignature cohort sign-off",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fcb228b0-b5a5-4644-9859-492e830783e3",
+      "category": "usea",
+      "subject": "overrank pineapple lane",
+      "query": "usea overrank pineapple lane",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "fccacc1d-c445-4dc1-9f2a-a2ed26e9cc03",
+      "category": "scoring",
+      "subject": "tie-break coconino",
+      "query": "scoring tie-break coconino",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fcee85f1-c153-48b7-b5ee-e8f609bb4856",
+      "category": "upgrade",
+      "subject": "wo-2 measure cold-load",
+      "query": "upgrade wo-2 measure cold-load",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fcfc571c-4d72-4284-919c-0c0f7a320a82",
+      "category": "usea",
+      "subject": "purged xc-faulted xcfix",
+      "query": "usea purged xc-faulted xcfix",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "fd002e11-b007-4320-b950-d0e872922c96",
+      "category": "threading",
+      "subject": "agent_responded_at outlook replying",
+      "query": "threading agent_responded_at outlook replying",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fe5610e5-2185-43ff-9d50-0bbcf11d8080",
+      "category": "equihub",
+      "subject": "launch-scope defer",
+      "query": "equihub launch-scope defer",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 2
+    },
+    {
+      "goldId": "fea19675-6c4c-4a94-b0f7-959057686588",
+      "category": "harness",
+      "subject": "wo-2 measure cold-load",
+      "query": "harness wo-2 measure cold-load",
+      "memoryClass": "working",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    },
+    {
+      "goldId": "febcd1c2-1eb2-4473-82ea-37385fd66676",
+      "category": "cleanup",
+      "subject": "months-old critical-flagged risk-weight",
+      "query": "cleanup months-old critical-flagged risk-weight",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 1
+    },
+    {
+      "goldId": "fed68c66-1d03-48b5-910b-b37aed0780bf",
+      "category": "qualifications",
+      "subject": "questions-for-robert converge con-3",
+      "query": "qualifications questions-for-robert converge con-3",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 7
+    },
+    {
+      "goldId": "ff1ea853-5a9b-48b0-b6e2-49580c74e3f0",
+      "category": "fidelity",
+      "subject": "subpage send-the-link one-line",
+      "query": "fidelity subpage send-the-link one-line",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 3
+    },
+    {
+      "goldId": "ffdc4312-cd06-460e-bed0-e2752528d66d",
+      "category": "friction",
+      "subject": "re-verify pre-compaction durable",
+      "query": "friction re-verify pre-compaction durable",
+      "memoryClass": "canonical",
+      "bodyHasCategory": false,
+      "absentCount": 5
+    }
+  ]
+}
