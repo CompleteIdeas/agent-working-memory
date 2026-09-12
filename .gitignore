@@ -41,3 +41,7 @@ bench-runs/
 # Staging dir for the docker release test
 .release-stage/
 .release-checks/
+
+# Per-run eval traces (timestamped). The deliberately-kept evidence traces
+# (trace-*-aug24.jsonl) are tracked and must NOT match this pattern.
+tests/realstore-eval/trace-store-*.jsonl
