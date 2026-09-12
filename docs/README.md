@@ -43,6 +43,7 @@ covers everything else.
 | [using-awm-at-scale.md](using-awm-at-scale.md) | Behaviour as the store grows |
 | [telemetry-recommendations.md](telemetry-recommendations.md) | What to instrument |
 | [traceability.md](traceability.md) | Following a result back to its cause |
+| **[RELEASE.md](RELEASE.md)** | **Cutting a release** — what to update for each kind of change, and `npm run check:release`, which enforces the mechanical half |
 
 ## Design records
 

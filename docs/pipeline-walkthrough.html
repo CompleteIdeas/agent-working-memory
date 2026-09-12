@@ -3,363 +3,551 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AWM — Retrieval Pipeline (Technical Walkthrough)</title>
+<title>How AWM decides what to say — AgentWorkingMemory</title>
+<meta name="description" content="A mental model of AgentWorkingMemory's retrieval: cheap stages propose, expensive stages decide, and the system is allowed to say nothing.">
 <style>
   :root{
-    --bg:#fcfcfd; --surface:#ffffff; --panel:#f6f7f9; --ink:#0f172a; --muted:#5b6472;
-    --line:#e4e7ec; --line2:#d0d5dd;
-    --indigo:#4f46e5; --indigo-soft:#eef2ff; --teal:#0d9488; --teal-soft:#ecfdf9;
-    --amber:#b45309; --amber-soft:#fff7ed; --rose:#be123c; --rose-soft:#fff1f2;
-    --green:#15803d; --code-bg:#0f172a; --code-ink:#e2e8f0;
-    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --ink:#101419; --ink2:#39414d; --mut:#6a7381; --line:#e2e7ed; --line2:#eef1f5;
+    --bg:#fcfcfd; --panel:#fff; --code:#f4f6f9;
+    --q1:#3b52d9; --q1bg:#eef1fe;
+    --q2:#0b8a80; --q2bg:#e9f8f6;
+    --q3:#b4530c; --q3bg:#fdf2e7;
+    --clock:#5b6472; --clockbg:#f1f3f6;
+    --rose:#b42318;
+    --mono:ui-monospace,"SFMono-Regular","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
+  html{-webkit-text-size-adjust:100%}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
-    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:880px;margin:0 auto;padding:0 24px}
-  a{color:var(--indigo);text-decoration:none} a:hover{text-decoration:underline}
-  h1,h2,h3,h4{line-height:1.25;letter-spacing:-.011em;font-weight:650}
-  h1{font-size:2.1rem;margin:.1em 0 .15em}
-  h2{font-size:1.45rem;margin:2.6em 0 .6em;padding-top:.6em;border-top:1px solid var(--line)}
-  h2 .n{color:var(--indigo);font-variant-numeric:tabular-nums;margin-right:.5em;font-weight:700}
-  h3{font-size:1.08rem;margin:1.5em 0 .35em}
-  p{margin:.65em 0} code{font-family:var(--mono);font-size:.86em;background:var(--panel);
-    border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:#3730a3}
-  header{background:linear-gradient(180deg,#0f172a,#1e293b);color:#e2e8f0;padding:54px 0 40px}
-  header .badge{font-family:var(--mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;
-    color:#a5b4fc;border:1px solid #3730a3;border-radius:999px;padding:4px 12px;display:inline-block;margin-bottom:14px}
-  header h1{color:#f8fafc}
-  header .abstract{color:#cbd5e1;max-width:680px;margin:.6em 0 0;font-size:1.05rem}
-  header .meta{font-family:var(--mono);font-size:.78rem;color:#94a3b8;margin-top:18px}
-  .lede{font-size:1.12rem;color:#334155}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
-  .note{border-radius:10px;padding:13px 16px;margin:14px 0;font-size:.95rem;border:1px solid var(--line)}
-  .note .lbl{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
-    font-weight:700;display:block;margin-bottom:5px}
-  .note.mech{background:var(--indigo-soft);border-color:#c7d2fe} .note.mech .lbl{color:var(--indigo)}
-  .note.result{background:var(--teal-soft);border-color:#99f6e4} .note.result .lbl{color:var(--teal)}
-  .note.why{background:var(--amber-soft);border-color:#fed7aa} .note.why .lbl{color:var(--amber)}
-  .note.warn{background:var(--rose-soft);border-color:#fecdd3} .note.warn .lbl{color:var(--rose)}
-  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:.9rem}
-  th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
-  th{background:var(--panel);font-size:.74rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:650}
-  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono)}
-  .up{color:var(--green);font-weight:600} .down{color:var(--rose);font-weight:600}
-  pre{background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:14px 16px;overflow-x:auto;
-    font-family:var(--mono);font-size:.83rem;line-height:1.5;margin:14px 0}
-  pre .k{color:#c4b5fd} pre .c{color:#64748b} pre .s{color:#7dd3fc}
-  .toc{font-family:var(--sans);font-size:.92rem;columns:2;column-gap:28px}
-  @media(max-width:720px){.toc{columns:1}h1{font-size:1.7rem}}
-  .toc a{display:block;padding:4px 0;color:var(--ink);border-bottom:1px solid var(--line)}
-  .toc a:hover{color:var(--indigo)} .toc .n{color:var(--indigo);font-family:var(--mono);font-weight:700;margin-right:8px}
-  figure{margin:22px 0;text-align:center} figcaption{font-size:.83rem;color:var(--muted);margin-top:8px;text-align:left}
-  .svgwrap{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
-  svg{max-width:100%;height:auto;font-family:var(--sans)}
-  .kpi{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
-  .kpi .item{flex:1;min-width:130px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px}
-  .kpi .v{font-size:1.4rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-  .kpi .v small{font-size:.9rem;color:var(--muted);font-weight:500}
-  .kpi .l{font-size:.78rem;color:var(--muted);margin-top:2px}
-  footer{margin:56px 0 36px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:.85rem}
-  .tag{font-family:var(--mono);font-size:.72rem;background:var(--panel);border:1px solid var(--line);
-    border-radius:5px;padding:2px 7px;color:var(--muted)}
+    font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:800px;margin:0 auto;padding:0 24px}
+  a{color:var(--q1);text-decoration:none;border-bottom:1px solid rgba(59,82,217,.28)}
+  a:hover{border-bottom-color:var(--q1)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:13.2px;line-height:1.6;background:#11151c;color:#dbe2ea;
+    border-radius:10px;padding:16px 18px;overflow-x:auto;margin:20px 0}
+  pre .c{color:#7f8b9c} pre .k{color:#7dd3c4}
+
+  header{background:linear-gradient(176deg,#0e1218 0%,#171d27 100%);color:#f2f5f8}
+  header .wrap{padding:62px 24px 54px}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.15em;text-transform:uppercase;
+    color:#8fa0ff;font-weight:600;margin:0 0 20px}
+  h1{font-size:clamp(30px,5.2vw,44px);line-height:1.12;letter-spacing:-.025em;margin:0 0 22px;font-weight:700}
+  .thesis{font-size:clamp(17px,2.4vw,20px);line-height:1.5;color:#c6cfdb;max-width:56ch;margin:0}
+  .thesis b{color:#fff;font-weight:600}
+  .herometa{margin:28px 0 0;font-family:var(--mono);font-size:12px;color:#7c8798;line-height:1.9}
+  .herometa a{color:#a9b6ff;border-bottom-color:rgba(169,182,255,.3)}
+
+  main .wrap{padding:0 24px}
+  section{padding:52px 0;border-bottom:1px solid var(--line2)}
+  section:last-of-type{border-bottom:0}
+  h2{font-size:26px;line-height:1.2;letter-spacing:-.02em;margin:0 0 6px;font-weight:700}
+  h3{font-size:17.5px;letter-spacing:-.01em;margin:34px 0 8px;font-weight:650}
+  p{margin:0 0 16px;color:var(--ink2)}
+  p.lead{font-size:18px;color:var(--ink);margin-bottom:22px}
+  .qhead{display:flex;gap:16px;align-items:baseline;margin-bottom:20px}
+  .qnum{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.1em;
+    padding:4px 9px;border-radius:6px;white-space:nowrap;position:relative;top:-3px}
+  .q1 .qnum{background:var(--q1bg);color:var(--q1)}
+  .q2 .qnum{background:var(--q2bg);color:var(--q2)}
+  .q3 .qnum{background:var(--q3bg);color:var(--q3)}
+  .clock .qnum{background:var(--clockbg);color:var(--clock)}
+  .role{font-family:var(--mono);font-size:12.5px;color:var(--mut);margin:0 0 18px}
+
+  figure{margin:26px 0;padding:0}
+  .svgwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;overflow-x:auto}
+  svg{display:block;width:100%;height:auto;min-width:430px}
+  figcaption{font-size:13.6px;color:var(--mut);margin-top:10px;line-height:1.55}
+
+  .box{border:1px solid var(--line);border-left-width:3px;border-radius:10px;
+    background:var(--panel);padding:16px 18px;margin:22px 0;font-size:15.2px}
+  .box p{margin:0 0 10px;color:var(--ink2)} .box p:last-child{margin:0}
+  .box .lbl{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;font-weight:700;margin-bottom:7px}
+  .box.rule{border-left-color:var(--q1);background:var(--q1bg)} .box.rule .lbl{color:var(--q1)}
+  .box.trap{border-left-color:var(--rose)} .box.trap .lbl{color:var(--rose)}
+  .box.note{border-left-color:var(--mut)} .box.note .lbl{color:var(--mut)}
+
+  .tablewrap{overflow-x:auto;margin:22px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.6px;min-width:480px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line2);vertical-align:top}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);
+    font-weight:650;border-bottom:1px solid var(--line)}
+  td:first-child{font-weight:600;color:var(--ink)}
+  td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  tr.group td{background:var(--code);font-family:var(--mono);font-size:11.5px;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--mut);font-weight:700;white-space:nowrap}
+
+  .pred{border-top:1px solid var(--line2);padding:18px 0 4px}
+  .pred:first-of-type{border-top:0}
+  .pred h4{margin:0 0 6px;font-size:16.5px;font-weight:650;letter-spacing:-.01em}
+  .pred p{margin:0;font-size:15.3px}
+  .pred .because{display:block;margin-top:7px;font-size:14px;color:var(--mut)}
+  .pred .because b{font-family:var(--mono);font-size:12.4px;font-weight:600;color:var(--ink2)}
+
+  .nums{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:24px 0}
+  @media(max-width:620px){.nums{grid-template-columns:repeat(2,1fr)}}
+  .nums div{background:var(--panel);padding:16px 14px}
+  .nums .v{font-size:25px;font-weight:700;letter-spacing:-.025em;font-variant-numeric:tabular-nums}
+  .nums .l{font-size:12.6px;color:var(--mut);margin-top:3px;line-height:1.4}
+
+  footer{background:var(--code);border-top:1px solid var(--line);margin-top:10px}
+  footer .wrap{padding:28px 24px 56px;font-size:13.4px;color:var(--mut)}
+  footer p{color:var(--mut);margin:0 0 10px}
 </style>
 </head>
 <body>
+
 <header>
   <div class="wrap">
-    <span class="badge">AWM · Retrieval Pipeline · Technical Walkthrough</span>
-    <h1>How AWM Retrieves</h1>
-    <p class="abstract">A pipeline-level walkthrough of Agent Working Memory — the ACT-R-grounded
-    cognitive memory layer. For engineers and researchers: the write path, the multi-stage recall
-    funnel, the cognitive scoring model, and the attribution analysis behind the current defaults.</p>
-    <p class="meta">embedder: bge-small-en-v1.5 (384d) · reranker: ms-marco-MiniLM-L-6-v2 · local, in-process · precision-first</p>
-    <p class="meta" style="margin-top:10px;color:#cbd5e1">Not an engineer? Start with
-      <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md" style="color:#a5b4fc">the decision-maker brief</a>
-      or <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md" style="color:#a5b4fc">the plain-language walkthrough</a>
-      — this page assumes you want the internals.</p>
+    <p class="eyebrow">AgentWorkingMemory &middot; retrieval internals</p>
+    <h1>How AWM decides what to say</h1>
+    <p class="thesis">A vector store answers <i>what is similar?</i> A memory has to answer something
+    harder: <b>what should I say, and should I say anything at all?</b> That is three questions, each
+    answered by a different mechanism, over a store that changes with time.</p>
+    <p class="herometa">
+      bge-small-en-v1.5 (384d) &middot; ms-marco-MiniLM-L-6-v2 cross-encoder &middot; SQLite + FTS5 &middot; all local, in-process<br>
+      Prefer it without the internals?
+      <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md">One memory, followed end to end</a> &middot;
+      <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md">The decision-maker brief</a>
+    </p>
   </div>
 </header>
 
+<main>
 <div class="wrap">
 
-<p class="lede">AWM is a <strong>local, precision-first cognitive memory</strong> for agents. Unlike a
-vector store (retrieve-by-similarity), it models retention and retrieval on ACT-R: memories carry an
-activation that decays and strengthens with use, edges form between co-activated memories, and recall is
-a staged funnel that ends in calibrated <em>abstention</em> rather than a forced answer. This document
-traces the actual pipeline and the evidence behind its tuning.</p>
+<section>
+  <h2>The whole system in one rule</h2>
+  <p class="lead">Every stage in AWM is either a <b>proposer</b> or a <b>decider</b>, and nothing is
+  allowed to be both.</p>
 
-<div class="card toc">
-  <a href="#overview"><span class="n">1</span> Pipeline overview</a>
-  <a href="#actr"><span class="n">2</span> Cognitive core (ACT-R)</a>
-  <a href="#write"><span class="n">3</span> Write path</a>
-  <a href="#recall"><span class="n">4</span> Recall funnel</a>
-  <a href="#attribution"><span class="n">5</span> Attribution analysis &amp; tuning</a>
-  <a href="#consolidation"><span class="n">6</span> Consolidation</a>
-  <a href="#design"><span class="n">7</span> Design rationale</a>
-  <a href="#config"><span class="n">8</span> Configuration surface</a>
+  <p>Proposers are cheap, wide and generous: their only job is to avoid losing the answer. Deciders are
+  expensive, narrow and final: they are the only stages permitted to rank, cut or refuse. Hold that
+  distinction and the rest of the design follows from it &mdash; why the shortlist handed to the reranker
+  is more than ten times the size of the answer, why keyword search is never allowed to break a tie, why
+  an empty result is a decision rather than an absence.</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 760 282" role="img" aria-label="The three questions AWM answers and which stages answer each">
+        <defs>
+          <marker id="a" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L6.5,3 L0,6 Z" fill="#98a2b3"/>
+          </marker>
+        </defs>
+
+        <text x="10" y="30" font-size="11" font-family="monospace" font-weight="700" fill="#3b52d9" letter-spacing="1">Q1 PROPOSE</text>
+        <text x="10" y="134" font-size="11" font-family="monospace" font-weight="700" fill="#0b8a80" letter-spacing="1">Q2 DECIDE</text>
+        <text x="10" y="236" font-size="11" font-family="monospace" font-weight="700" fill="#b4530c" letter-spacing="1">Q3 SPEAK?</text>
+
+        <rect x="128" y="12" width="146" height="56" rx="9" fill="#eef1fe" stroke="#c3cdfb"/>
+        <text x="201" y="34" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">keyword + vector</text>
+        <text x="201" y="52" text-anchor="middle" font-size="11" font-family="monospace" fill="#5b6472">union, few hundred</text>
+
+        <line x1="274" y1="40" x2="302" y2="40" stroke="#98a2b3" stroke-width="1.5" marker-end="url(#a)"/>
+
+        <rect x="304" y="12" width="146" height="56" rx="9" fill="#eef1fe" stroke="#c3cdfb"/>
+        <text x="377" y="34" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">composite score</text>
+        <text x="377" y="52" text-anchor="middle" font-size="11" font-family="monospace" fill="#5b6472">relevance x liveness</text>
+
+        <line x1="450" y1="40" x2="478" y2="40" stroke="#98a2b3" stroke-width="1.5" marker-end="url(#a)"/>
+
+        <rect x="480" y="12" width="146" height="56" rx="9" fill="#eef1fe" stroke="#c3cdfb"/>
+        <text x="553" y="34" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">graph walk</text>
+        <text x="553" y="52" text-anchor="middle" font-size="11" font-family="monospace" fill="#5b6472">neighbours vote</text>
+
+        <text x="644" y="36" font-size="11" font-family="monospace" fill="#3b52d9">shortlist</text>
+        <text x="644" y="50" font-size="11" font-family="monospace" fill="#3b52d9">of ~40</text>
+
+        <path d="M626,40 L706,40 L706,96 L377,96 L377,112" fill="none" stroke="#98a2b3" stroke-width="1.5" marker-end="url(#a)"/>
+
+        <rect x="231" y="116" width="292" height="56" rx="9" fill="#e9f8f6" stroke="#a7e0d8"/>
+        <text x="377" y="138" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">cross-encoder reads query + memory together</text>
+        <text x="377" y="156" text-anchor="middle" font-size="11" font-family="monospace" fill="#0b8a80">the only stage that ranks for real</text>
+
+        <line x1="377" y1="172" x2="377" y2="198" stroke="#98a2b3" stroke-width="1.5" marker-end="url(#a)"/>
+
+        <rect x="128" y="200" width="224" height="56" rx="9" fill="#fdf2e7" stroke="#f3d2ab"/>
+        <text x="240" y="222" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">do the channels agree?</text>
+        <text x="240" y="240" text-anchor="middle" font-size="11" font-family="monospace" fill="#5b6472">is this query in-domain</text>
+
+        <rect x="366" y="200" width="234" height="56" rx="9" fill="#fdf2e7" stroke="#f3d2ab"/>
+        <text x="483" y="222" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">is the set shaped like an answer?</text>
+        <text x="483" y="240" text-anchor="middle" font-size="11" font-family="monospace" fill="#5b6472">sharpness &middot; cliff &middot; floor</text>
+
+        <text x="614" y="234" font-size="12" font-family="monospace" font-weight="650" fill="#b4530c">answer or &empty;</text>
+      </svg>
+    </div>
+    <figcaption>Three questions, answered in order. Q1 may only gather and narrow cheaply; it is never
+    the final word. Q2 is the single decisive ranking. Q3 has two independent ways to return nothing.</figcaption>
+  </figure>
+
+  <div class="box rule">
+    <span class="lbl">The rule, stated once</span>
+    <p>A cheap stage that is allowed to decide will quietly cost you the answer, because it is cheap
+    precisely by not reading anything carefully. Every default below exists to keep proposers generous
+    and deciders late.</p>
+  </div>
+
+  <p>Underneath all three questions sits a clock. Memories carry an activation that decays with time and
+  strengthens with use, so the store you query today is not the store you queried in March. That is the
+  fourth thing to hold, and it explains a class of behaviour nothing above accounts for.</p>
+</section>
+
+<section class="q1">
+  <div class="qhead"><span class="qnum">Q1</span><h2>What could possibly match?</h2></div>
+  <p class="role">Proposer &middot; cheap &middot; wide &middot; the only eligibility gate</p>
+
+  <p>Two channels run against the store and their results are unioned. <b>Keyword</b> (BM25 over FTS5)
+  catches exact strings &mdash; a ticket number, a table name, a file path, an error message.
+  <b>Vector</b> (cosine against 384-dimension embeddings) catches the same idea in different words.
+  Neither is sufficient alone, which is the entire reason both exist: identifiers embed badly, and
+  paraphrases share no tokens.</p>
+
+  <p>What survives is scored by the <b>composite</b> &mdash; a blend of text match, vector match, ACT-R
+  activation, Hebbian edge strength, graph centrality, stored confidence and past feedback. Relevance
+  gates the rest of that blend, so a popular, heavily-linked memory cannot muscle in on popularity alone.
+  Then a beam walk of depth two over the association graph lets shortlisted memories pull in their
+  neighbours, under a hard cap, so the graph can nudge an ordering but never invent one.</p>
+
+  <p>The output is a shortlist of about forty for a three-result query. That ratio is the point.</p>
+
+  <div class="box note">
+    <span class="lbl">Where that ratio came from</span>
+    <p>An instrumented study traced, query by query, the stage at which the correct memory was lost. It
+    was not the search &mdash; the answer cleared candidate generation almost always &mdash; and it was
+    not the reranker, which lifted the right memory by three ranks on average whenever it got to see it.
+    Half of all losses happened when the composite ranked a perfectly retrievable memory just below the
+    shortlist cutoff, so the reranker never saw it at all. A weak ranker was gatekeeping a strong one.</p>
+    <p>That study ran on a benchmark retired in 0.13.x, and its absolute scores no longer describe this
+    system. The structural lesson is what survived, and it is the rule above: widen the shortlist, demote
+    the cheap ranker to a filter, let the expensive one decide. Current measurements are
+    <a href="#numbers">further down</a>.</p>
+  </div>
+</section>
+
+<section class="q2">
+  <div class="qhead"><span class="qnum">Q2</span><h2>Which one actually answers it?</h2></div>
+  <p class="role">Decider &middot; expensive &middot; narrow &middot; the precision cut</p>
+
+  <p>Everything to this point compared the query and a memory <i>separately</i> &mdash; each reduced to a
+  vector or a bag of terms, then measured against the other. A cross-encoder does not do that. It reads
+  the query and the memory as a single input and scores the pair directly, which is why it can tell that
+  a memory containing your identifier is nonetheless about something else entirely.</p>
+
+  <p>It is also around two orders of magnitude more expensive per candidate, which is the whole reason
+  for the funnel in front of it. Most of warm recall latency is this stage, and that is why the result
+  limit is a cost dial as much as a breadth dial.</p>
+
+  <p>Three settings materially improve what the reranker gets to read. All three ship default-off so an
+  existing install never changes behaviour under its owner, and all three are switched on by
+  <code>awm setup</code> from 0.14.6 on a fresh install.</p>
+
+  <div class="tablewrap">
+  <table>
+    <tr><th>Setting</th><th>What changes</th><th class="num">Measured</th></tr>
+    <tr><td><code>AWM_RERANK_WINDOW=query</code></td>
+        <td>The 400-character passage is cut from the densest region of query terms rather than the start of the memory</td>
+        <td class="num">25% &rarr; 87.5%<br><span style="color:var(--mut);font-size:12.5px">on long memories</span></td></tr>
+    <tr><td><code>AWM_RERANK_TAGS=1</code></td>
+        <td>Structured tags join the passage, so <code>ticket=19252</code> is readable by the stage that decides</td>
+        <td class="num">+7.4pp</td></tr>
+    <tr><td><code>AWM_RERANK2=1</code></td>
+        <td>Second-stage ordering by the cross-encoder's own score rather than the blend</td>
+        <td class="num">enable together</td></tr>
+  </table>
+  </div>
+
+  <div class="box trap">
+    <span class="lbl">A consequence worth internalising</span>
+    <p>The embedding is built from concept and content only. A word that exists <i>solely</i> as a tag is
+    therefore invisible to the vector channel no matter what else you tune &mdash; keyword search indexes
+    it, and the reranker sees it only with <code>AWM_RERANK_TAGS=1</code>. Tag it <i>and</i> write it into
+    the body. This is the highest-leverage habit when writing memories, and no retrieval setting rescues
+    a memory that never names its own subject.</p>
+  </div>
+</section>
+
+<section class="q3">
+  <div class="qhead"><span class="qnum">Q3</span><h2>Should it say anything at all?</h2></div>
+  <p class="role">Decider &middot; two independent guards &middot; why this is safe to wire into reasoning</p>
+
+  <p>A confident wrong memory costs more than an admitted gap, because the agent will act on it. So the
+  last thing AWM decides is whether to answer, and it decides that twice, on two different questions.</p>
+
+  <h3>Guard one &mdash; do the channels agree this query is in-domain?</h3>
+  <p>Keyword, vector and reranker each vote on whether they found anything convincing, judged over the
+  post-rerank top five rather than the whole shortlist. Two of three must agree, or three of three when
+  the caller explicitly asked for abstention. Fall below that with no strong semantic match anywhere and
+  recall returns empty. Judging the returned five rather than the wide pool is what let the shortlist
+  grow without one deep distractor propping up a bad answer.</p>
+
+  <h3>Guard two &mdash; is this result set <i>shaped</i> like a good answer?</h3>
+  <p>This guard ignores content entirely and looks only at the distribution of final scores. Three
+  signals, combined as a weighted geometric mean, so any one of them near zero drags the whole result
+  down rather than being averaged away:</p>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 760 214" role="img" aria-label="Three score distributions: confident, noise, and best of a bad set">
+        <g font-family="monospace" font-size="10.5" fill="#6a7381">
+          <text x="16" y="18" font-size="12" font-weight="700" fill="#0b8a80" font-family="-apple-system,sans-serif">Confident</text>
+          <rect x="16" y="30" width="26" height="96" rx="3" fill="#0b8a80"/>
+          <rect x="48" y="104" width="26" height="22" rx="3" fill="#c9d3de"/>
+          <rect x="80" y="110" width="26" height="16" rx="3" fill="#c9d3de"/>
+          <rect x="112" y="114" width="26" height="12" rx="3" fill="#c9d3de"/>
+          <rect x="144" y="116" width="26" height="10" rx="3" fill="#c9d3de"/>
+          <line x1="10" y1="126" x2="180" y2="126" stroke="#d5dbe3"/>
+          <text x="16" y="146">sharpness high</text><text x="16" y="160">cliff high</text><text x="16" y="174">floor high</text>
+          <text x="16" y="196" font-size="11.5" fill="#0b8a80" font-weight="700">answer</text>
+
+          <text x="296" y="18" font-size="12" font-weight="700" fill="#b42318" font-family="-apple-system,sans-serif">Noise</text>
+          <rect x="296" y="64" width="26" height="62" rx="3" fill="#c9d3de"/>
+          <rect x="328" y="68" width="26" height="58" rx="3" fill="#c9d3de"/>
+          <rect x="360" y="66" width="26" height="60" rx="3" fill="#c9d3de"/>
+          <rect x="392" y="72" width="26" height="54" rx="3" fill="#c9d3de"/>
+          <rect x="424" y="70" width="26" height="56" rx="3" fill="#c9d3de"/>
+          <line x1="290" y1="126" x2="460" y2="126" stroke="#d5dbe3"/>
+          <text x="296" y="146" fill="#b42318">sharpness ~0</text><text x="296" y="160" fill="#b42318">cliff ~0</text><text x="296" y="174">floor mid</text>
+          <text x="296" y="196" font-size="11.5" fill="#b42318" font-weight="700">withhold</text>
+
+          <text x="576" y="18" font-size="12" font-weight="700" fill="#b42318" font-family="-apple-system,sans-serif">Best of a bad set</text>
+          <rect x="576" y="96" width="26" height="30" rx="3" fill="#e8a598"/>
+          <rect x="608" y="118" width="26" height="8" rx="3" fill="#c9d3de"/>
+          <rect x="640" y="120" width="26" height="6" rx="3" fill="#c9d3de"/>
+          <rect x="672" y="121" width="26" height="5" rx="3" fill="#c9d3de"/>
+          <rect x="704" y="122" width="26" height="4" rx="3" fill="#c9d3de"/>
+          <line x1="570" y1="126" x2="740" y2="126" stroke="#d5dbe3"/>
+          <text x="576" y="146">sharpness high</text><text x="576" y="160">cliff high</text><text x="576" y="174" fill="#b42318">floor LOW</text>
+          <text x="576" y="196" font-size="11.5" fill="#b42318" font-weight="700">withhold</text>
+        </g>
+        <line x1="240" y1="14" x2="240" y2="200" stroke="#e6eaef"/>
+        <line x1="520" y1="14" x2="520" y2="200" stroke="#e6eaef"/>
+      </svg>
+    </div>
+    <figcaption>Sharpness is top-1 against the mean of the top five. Cliff is the drop from first to
+    tenth. Floor is the top score in absolute terms. The third case is the interesting one: a clear
+    winner among candidates that are all mediocre.</figcaption>
+  </figure>
+
+<pre><span class="c">// src/engine/confidence.ts - weighted geometric mean, so a weak signal cannot be averaged away</span>
+confidence = sharpness<span class="k">^0.4</span> &middot; cliff<span class="k">^0.3</span> &middot; floor<span class="k">^0.3</span>
+
+<span class="c">// sharpness = top1 / mean(top5)    is there a standout?</span>
+<span class="c">// cliff     = (top1 - top10)/top1  does it drop off after the winner?</span>
+<span class="c">// floor     = top1                 is the winner good in absolute terms?</span></pre>
+
+  <div class="box trap">
+    <span class="lbl">The trap this creates, and why the default is 0.05</span>
+    <p>Because <code>floor</code> is an absolute score, a narrow question with exactly one correct answer
+    can score modestly and still be <i>right</i>. Measured on the live store: two precise identifier
+    queries produced confidence of 0.26 and 0.38 and were withheld at a 0.25 threshold, while a vague
+    prompt matching a broad cloud of loosely-related memories sailed through at 0.92.</p>
+    <p><b>Confidence measures the shape of an answer, not its correctness</b>, and that shape is easiest
+    to achieve on questions too general to be useful. Raising this threshold therefore silences your most
+    specific queries first &mdash; exactly the ones worth asking. The default is a light 0.05. Treat 0.10
+    as the ceiling, and use it only for pushed recall such as prompt priming, where nobody asked.</p>
+  </div>
+
+  <p>When guard two fires, the reply says <code>RECALL ABSTAINED</code> and reports how many results were
+  withheld. An empty result <i>without</i> that line is genuine absence. The distinction matters: the
+  first means reformulate with the exact identifier, the second means go and read the source.</p>
+</section>
+
+<section class="clock">
+  <div class="qhead"><span class="qnum">CLOCK</span><h2>The store changes while you are not looking</h2></div>
+  <p class="role">Borrowed from ACT-R &middot; why nobody has to curate this</p>
+
+  <p>Every memory carries a base-level activation computed from how often it has been retrieved and how
+  long ago. Retrieval touches a memory and resets its clock, so what keeps proving useful stays sharp and
+  the one-offs sink without ever being deleted.</p>
+
+<pre><span class="c">// src/core/decay.ts</span>
+B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
+<span class="c">// n = retrieval count, age = time since last touch, d = 0.3-0.6 adapted to the query</span></pre>
+
+  <figure>
+    <div class="svgwrap">
+      <svg viewBox="0 0 720 190" role="img" aria-label="Activation over time for frequently retrieved versus one-off memories">
+        <line x1="56" y1="152" x2="690" y2="152" stroke="#d5dbe3"/>
+        <line x1="56" y1="16" x2="56" y2="152" stroke="#d5dbe3"/>
+        <text x="373" y="178" text-anchor="middle" font-size="11.5" fill="#6a7381" font-family="monospace">time since last retrieval</text>
+        <text x="20" y="86" text-anchor="middle" font-size="11.5" fill="#6a7381" font-family="monospace" transform="rotate(-90 20 86)">activation</text>
+        <path d="M56,42 C220,54 420,76 690,104" fill="none" stroke="#0b8a80" stroke-width="2.5"/>
+        <text x="446" y="88" font-size="11.5" fill="#0b8a80" font-family="monospace">retrieved often - persists</text>
+        <path d="M56,54 C150,108 300,142 690,150" fill="none" stroke="#b42318" stroke-width="2.5" stroke-dasharray="5 3"/>
+        <text x="312" y="140" font-size="11.5" fill="#b42318" font-family="monospace">never retrieved - fades</text>
+      </svg>
+    </div>
+    <figcaption>Practice effects, not a time-to-live. The content of long-unretrieved memories fades while
+    their cue pathways &mdash; concept, tags, embedding &mdash; stay intact, so an old memory remains
+    findable by the thing it was about.</figcaption>
+  </figure>
+
+  <p>A consolidation pass runs in the background on session end: cluster, strengthen what co-activates,
+  bridge across clusters, decay and forget on an age and access gate, prune redundancy, cap per-node edge
+  weight. Measured to <i>improve</i> retrieval as the store grows, by removing keyword-similar noise that
+  would otherwise bury the memory you want.</p>
+
+  <div class="box trap">
+    <span class="lbl">What the clock does to measurement</span>
+    <p>A benchmark that replays a frozen snapshot against a live wall clock is measuring the wall clock.
+    AWM's own identifier benchmark read 70.0% one month and 67.0% the next from this alone, on an
+    unchanged commit. Recall now accepts a pinned evaluation time and the harness pins it to the
+    snapshot. If you build an evaluation against a decaying store, pin the clock before you trust a
+    delta.</p>
+  </div>
+</section>
+
+<section>
+  <h2>The write path is the same rule, mirrored</h2>
+  <p>Storage is not an insert. It is propose-then-decide running in the other direction, and it is the
+  reason recall stays sharp as the store grows: most of what an agent offers never competes at retrieval
+  time at all.</p>
+
+  <div class="tablewrap">
+  <table>
+    <tr><th>Stage</th><th>What it decides</th></tr>
+    <tr><td>Embed</td><td>384-dimension vector from concept and content, reused immediately as the novelty signal</td></tr>
+    <tr><td>Salience</td><td><code>0.45&middot;novelty + 0.15&middot;surprise + 0.15&middot;decision + 0.15&middot;causal + 0.1&middot;effort</code> plus an event-type bonus, into one of three dispositions: active at 0.4 and above, staging at 0.2, otherwise discarded</td></tr>
+    <tr><td>Reinforce</td><td>A close match to an existing memory strengthens it &mdash; confidence up, retrieval count up, content merged &mdash; rather than creating a near-duplicate that would split the vote at recall</td></tr>
+    <tr><td>Supersede</td><td>A correction marks the old memory superseded and down-ranks it hard, so recall returns the current answer while the transition stays queryable. Retraction is the separate, stronger action for something that was simply wrong.</td></tr>
+    <tr><td>Connections</td><td>Queued, drained during consolidation, forming the semantic and entity edges that Q1's graph walk later traverses</td></tr>
+  </table>
+  </div>
+
+  <p>Roughly a third of what is offered is kept at full confidence. The rest is staged or dropped. A notes
+  file has two paragraphs that read with equal authority; AWM knows which one won.</p>
+</section>
+
+<section>
+  <h2>What the model lets you predict</h2>
+  <p class="lead">The test of a mental model is whether it tells you what will happen before you measure
+  it. Six things this one predicts.</p>
+
+  <div class="pred">
+    <h4>Tighten abstention and your best questions go dark first</h4>
+    <p>Precise queries with one correct answer score modestly in absolute terms, and the absolute term
+    carries three tenths of the confidence weight.
+    <span class="because"><b>Q3 &middot; floor</b> &mdash; raise the threshold only for recall nobody asked for.</span></p>
+  </div>
+
+  <div class="pred">
+    <h4>A memory that never names its subject cannot be found by it</h4>
+    <p>No amount of retrieval tuning recovers a word that was never written down, and a word that lives
+    only in a tag is invisible to the embedding.
+    <span class="because"><b>Q1 &middot; channels</b> &mdash; write the category noun next to the identifier, in the body.</span></p>
+  </div>
+
+  <div class="pred">
+    <h4>The same question answers differently in June than in March</h4>
+    <p>Not a bug and not index drift &mdash; activation moved, and a memory nobody touched fell behind one
+    that keeps earning its place.
+    <span class="because"><b>Clock</b> &mdash; pin it before you evaluate anything.</span></p>
+  </div>
+
+  <div class="pred">
+    <h4>Growth does not degrade recall the way it degrades a vector store</h4>
+    <p>Selective retention, reinforcement instead of duplication, and consolidation all attack the same
+    failure: a store in which everything is a little bit relevant.
+    <span class="because"><b>Write path &middot; consolidation</b> &mdash; measured on a real 30,000-memory store.</span></p>
+  </div>
+
+  <div class="pred">
+    <h4>The association graph rarely changes the final answer</h4>
+    <p>It nudges an ordering under a hard cap; the reranker decides. Stated plainly because a model that
+    over-claims its own graph would mislead you about where to spend effort.
+    <span class="because"><b>Q1 proposes, Q2 decides</b> &mdash; measured across 300 real queries.</span></p>
+  </div>
+
+  <div class="pred">
+    <h4>Empty means two different things that need opposite responses</h4>
+    <p><code>RECALL ABSTAINED</code> with a withheld count means reformulate using the exact identifier. A
+    plain empty result means it was never stored, so go and read the source.
+    <span class="because"><b>Q3 &middot; both guards</b> &mdash; never retry by lowering the threshold.</span></p>
+  </div>
+</section>
+
+<section id="numbers">
+  <h2>Where it currently lands</h2>
+  <p>Measured against a frozen copy of a real 30,000-memory store rather than synthetic fixtures, with the
+  decay clock pinned to the snapshot and every query scoped to its own memory pool, at three results per
+  query.</p>
+
+  <div class="nums">
+    <div><div class="v">92.7%</div><div class="l">Right memory first, identifier queries (300)</div></div>
+    <div><div class="v">92.0%</div><div class="l">Right memory first, topic queries (450)</div></div>
+    <div><div class="v">90.0%</div><div class="l">Correctly silent on facts never stored</div></div>
+    <div><div class="v">528<span style="font-size:16px;color:var(--mut)">ms</span></div><div class="l">Median warm recall, local</div></div>
+  </div>
+
+  <p>Two fixtures built independently agree within a point. Both were corrected upward twice in September
+  2026, when the instrument rather than the engine turned out to be wrong &mdash; once for the unpinned
+  clock above, once for a runner that queried every memory as the wrong agent. Those corrections are
+  documented in place rather than revised away, in
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/benchmarks.md">benchmarks.md</a>.</p>
+</section>
+
+<section>
+  <h2>The knobs, grouped by what they affect</h2>
+  <p>Every default below is a measured value. The grouping is the useful part: it tells you which dial to
+  reach for when a behaviour surprises you.</p>
+
+  <div class="tablewrap">
+  <table>
+    <tr><th>Variable</th><th class="num">Default</th><th>Effect</th></tr>
+    <tr class="group"><td colspan="3">Q1 &mdash; how generous the proposal is</td></tr>
+    <tr><td><code>AWM_RERANK_POOL</code></td><td class="num">max(limit&middot;4, 40)</td><td>How many candidates reach the decider. Recall against latency; the dial the attribution study moved.</td></tr>
+    <tr><td><code>AWM_TOPN_MULT</code></td><td class="num">8</td><td>Candidate breadth carried into the graph walk and rerank</td></tr>
+    <tr><td><code>AWM_SIM_FLOOR_TARGETED</code></td><td class="num">0.50</td><td>Raw cosine floor for vector eligibility on targeted queries; 0.35 in exploratory mode</td></tr>
+    <tr class="group"><td colspan="3">Q2 &mdash; what the decider gets to read</td></tr>
+    <tr><td><code>AWM_RERANK_WINDOW</code></td><td class="num">query</td><td>Place the 400-character passage on the densest query-term region rather than the prefix</td></tr>
+    <tr><td><code>AWM_RERANK_TAGS</code></td><td class="num">1</td><td>Include structured tags in the rerank passage</td></tr>
+    <tr><td><code>AWM_RERANK2</code></td><td class="num">1</td><td>Second-stage ordering by the cross-encoder's own score</td></tr>
+    <tr class="group"><td colspan="3">Q3 &mdash; when to say nothing</td></tr>
+    <tr><td><code>require_confidence</code></td><td class="num">0.05</td><td>Per-call shape gate. Read the trap above before raising it.</td></tr>
+    <tr><td><code>AWM_ABSTAIN_GATE_K</code></td><td class="num">5</td><td>How many post-rerank results the channel-agreement guard judges. Decouples pool width from precision.</td></tr>
+    <tr class="group"><td colspan="3">Clock</td></tr>
+    <tr><td><code>now</code></td><td class="num">wall clock</td><td>Per-call pin for the decay clock. Required for any reproducible evaluation.</td></tr>
+  </table>
+  </div>
+
+  <p>The complete surface, including the experiments that were tried and <b>rejected</b>, is in
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/reference.md">reference.md</a>.
+  <code>memory_whoami</code> prints which of these a running process actually has, which is worth checking
+  before concluding that a setting did nothing.</p>
+</section>
+
+<section>
+  <h2>The division of labour</h2>
+  <p class="lead">AWM is the precise, fast, local memory layer. The judgement &mdash; what to chain, what
+  to verify, when to act &mdash; stays with the agent.</p>
+  <p>That boundary is deliberate, and it is why the abstention gate exists at all. A memory system that
+  always answers pushes its uncertainty into the agent's reasoning, where it becomes indistinguishable
+  from knowledge. One that is willing to return nothing hands back a signal the agent can act on: ask
+  differently, or go and look at the source. Build against that division and the thing scales.</p>
+</section>
+
 </div>
-
-<!-- ============================ 1 ============================ -->
-<h2 id="overview"><span class="n">1</span>Pipeline overview</h2>
-<p>Two pipelines and a background cycle. <strong>Write</strong> decides what to retain and how to link it;
-<strong>recall</strong> turns a query into a precise, calibrated result set; <strong>consolidation</strong>
-periodically reorganizes the graph offline.</p>
-
-<figure>
-<div class="svgwrap">
-<svg viewBox="0 0 840 250" role="img" aria-label="AWM recall pipeline">
-  <defs>
-    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
-      <path d="M0,0 L7,3 L0,6 Z" fill="#94a3b8"/>
-    </marker>
-  </defs>
-  <rect x="8" y="20" width="120" height="46" rx="8" fill="#fff" stroke="#d0d5dd"/>
-  <text x="68" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">query</text>
-  <text x="68" y="56" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">+ coref</text>
-  <line x1="128" y1="43" x2="158" y2="43" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="160" y="14" width="150" height="58" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
-  <text x="235" y="34" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">candidate generation</text>
-  <text x="235" y="50" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">BM25 ∪ vector</text>
-  <text x="235" y="64" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">few hundred</text>
-  <line x1="310" y1="43" x2="340" y2="43" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="342" y="14" width="150" height="58" rx="8" fill="#fff" stroke="#d0d5dd"/>
-  <text x="417" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">composite score</text>
-  <text x="417" y="46" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">ACT-R + text + graph</text>
-  <text x="417" y="60" text-anchor="middle" font-size="11" fill="#4f46e5" font-family="monospace">cheap WIDE pre-filter</text>
-  <line x1="492" y1="43" x2="522" y2="43" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="524" y="14" width="140" height="58" rx="8" fill="#fff" stroke="#d0d5dd"/>
-  <text x="594" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">graph walk</text>
-  <text x="594" y="46" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">4 edge types,</text>
-  <text x="594" y="60" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">beam depth-2</text>
-  <line x1="664" y1="43" x2="700" y2="43" stroke="#94a3b8" stroke-width="1.5"/>
-  <line x1="700" y1="43" x2="700" y2="150" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="600" y="150" width="200" height="60" rx="8" fill="#ecfdf9" stroke="#99f6e4"/>
-  <text x="700" y="172" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">cross-encoder rerank</text>
-  <text x="700" y="188" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">wide pool: max(limit·4,40)</text>
-  <text x="700" y="202" text-anchor="middle" font-size="11" fill="#0d9488" font-family="monospace">the precision cut</text>
-  <line x1="600" y1="180" x2="540" y2="180" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="392" y="150" width="146" height="60" rx="8" fill="#fff" stroke="#d0d5dd"/>
-  <text x="465" y="172" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">abstention gate</text>
-  <text x="465" y="188" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">OOD agreement on</text>
-  <text x="465" y="202" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">post-rerank top-K</text>
-  <line x1="392" y1="180" x2="332" y2="180" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="180" y="150" width="150" height="60" rx="8" fill="#fff" stroke="#d0d5dd"/>
-  <text x="255" y="176" text-anchor="middle" font-size="12" font-weight="600" fill="#0f172a">result · or ∅</text>
-  <text x="255" y="194" text-anchor="middle" font-size="11" fill="#5b6472" font-family="monospace">+ confidence</text>
-</svg>
-</div>
-<figcaption>Recall flow. Candidate generation is the only stage that decides eligibility; the composite is
-a <em>wide pre-filter</em>; the cross-encoder makes the precision cut on a wide pool; the gate abstains on
-weak agreement. §4–§5 explain why the pool is wide and the gate is top-K.</figcaption>
-</figure>
-
-<!-- ============================ 2 ============================ -->
-<h2 id="actr"><span class="n">2</span>Cognitive core (ACT-R)</h2>
-<p>Every memory has a <strong>base-level activation</strong> — its retrievability right now — computed
-from frequency and recency of access:</p>
-<pre><span class="c">// src/core/decay.ts — ACT-R base-level activation</span>
-B = ln(n + 1) − <span class="k">d</span> · ln(age / (n + 1))
-<span class="c">// n = access count · age = time since last touch · d = decay exponent (0.3-0.6, query-adaptive)</span></pre>
-
-<figure>
-<div class="svgwrap">
-<svg viewBox="0 0 760 220" role="img" aria-label="ACT-R activation decay curves">
-  <line x1="60" y1="180" x2="720" y2="180" stroke="#d0d5dd"/>
-  <line x1="60" y1="20" x2="60" y2="180" stroke="#d0d5dd"/>
-  <text x="390" y="208" text-anchor="middle" font-size="12" fill="#5b6472">time since last access &#8594;</text>
-  <text x="20" y="100" text-anchor="middle" font-size="12" fill="#5b6472" transform="rotate(-90 20 100)">activation</text>
-  <path d="M60,46 C220,60 420,86 720,120" fill="none" stroke="#0d9488" stroke-width="2.5"/>
-  <text x="560" y="104" font-size="11" fill="#0d9488">used often (high n) — persists</text>
-  <path d="M60,60 C160,120 320,164 720,176" fill="none" stroke="#be123c" stroke-width="2.5" stroke-dasharray="5 3"/>
-  <text x="430" y="170" font-size="11" fill="#be123c">one-off (low n) — fades</text>
-</svg>
-</div>
-<figcaption>Frequently-recalled memories decay slowly; one-off memories fade. Recall touches a memory and
-resets its clock, so what gets used stays sharp — practice effects, not a fixed TTL.</figcaption>
-</figure>
-
-<p>On top of base-level activation, AWM layers signals a pure vector store has no notion of:
-<strong>Hebbian edges</strong> (co-activated memories wire together; log-space strengthening with a
-validation gate), <strong>confidence</strong> (modulates decay and gates retrieval), and
-<strong>graph centrality</strong>. These feed the composite score (§4).</p>
-
-<!-- ============================ 3 ============================ -->
-<h2 id="write"><span class="n">3</span>Write path</h2>
-<p>A write is not an unconditional insert. <code>src/core/write-pipeline.ts</code>:</p>
-<table>
-  <tr><th>Stage</th><th>Mechanism</th></tr>
-  <tr><td>Embed</td><td>BGE-small &#8594; 384d vector (also reused for cosine novelty)</td></tr>
-  <tr><td>Salience</td><td>0.45·novelty + 0.15·surprise + 0.15·decision + 0.15·causal + 0.1·effort + type bonus &#8594; disposition <span class="tag">active &#8805;0.4</span> <span class="tag">staging &#8805;0.2</span> <span class="tag">discard</span></td></tr>
-  <tr><td>Novelty / reinforce</td><td>Same-concept match &#8594; reinforce existing engram (confidence + access count, content merge) instead of a near-duplicate</td></tr>
-  <tr><td>Supersede</td><td>Correction signal (surprise/friction) on a matched concept &#8594; new engram supersedes old; causal edge added; recall stops returning the stale value</td></tr>
-  <tr><td>Connection discovery</td><td>Queued; drained at consolidation — forms semantic/entity edges to related engrams</td></tr>
-</table>
-<div class="note why"><span class="lbl">Design rationale</span> Selective retention is the product, not a
-limitation: salience gating + reinforce-on-duplicate keep the store a <em>memory</em> (load-bearing
-facts) rather than a <em>log</em>. Supersede preserves decision history — recall returns the current value
-but the transition (old &#8594; new, and why) remains queryable.</div>
-
-<!-- ============================ 4 ============================ -->
-<h2 id="recall"><span class="n">4</span>Recall funnel</h2>
-<p>Recall is a cost-ordered funnel: cheap and wide first, expensive and precise last. Each stage narrows
-the set the next, more expensive stage must process.</p>
-
-<figure>
-<div class="svgwrap">
-<svg viewBox="0 0 560 252" role="img" aria-label="recall funnel with candidate counts">
-  <polygon points="40,18 520,18 470,52 90,52" fill="#64748b" stroke="#fff" stroke-width="2"/>
-  <text x="280" y="40" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">store — all active engrams</text>
-  <polygon points="90,56 470,56 432,90 128,90" fill="#5b6bd6" stroke="#fff" stroke-width="2"/>
-  <text x="280" y="78" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">candidate gen (BM25 &#8746; vector)</text>
-  <polygon points="128,94 432,94 400,128 160,128" fill="#4f46e5" stroke="#fff" stroke-width="2"/>
-  <text x="280" y="116" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">composite pre-filter &#8594; topN (8·limit)</text>
-  <polygon points="160,132 400,132 372,166 188,166" fill="#7c3aed" stroke="#fff" stroke-width="2"/>
-  <text x="280" y="154" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">graph walk</text>
-  <polygon points="188,170 372,170 344,204 216,204" fill="#0d9488" stroke="#fff" stroke-width="2"/>
-  <text x="280" y="192" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">cross-encoder rerank (&#8804;40)</text>
-  <polygon points="216,208 344,208 322,242 238,242" fill="#0f172a" stroke="#fff" stroke-width="2"/>
-  <text x="280" y="230" text-anchor="middle" font-size="12" font-weight="600" fill="#fff">top-k · or &#8709;</text>
-  <text x="528" y="38" text-anchor="end" font-size="11" fill="#475569" font-family="monospace">10&#179;-10&#8308;</text>
-</svg>
-</div>
-<figcaption>The funnel. Key design point (§5): the composite pre-filter must hand the reranker a
-<em>generous</em> shortlist — it should keep out obvious noise, not pick the winner.</figcaption>
-</figure>
-
-<table>
-  <tr><th>Stage</th><th>What it does</th><th>Notes</th></tr>
-  <tr><td>Coref</td><td>Resolve pronouns &#8594; entities before search</td><td>"it" &#8594; "Atlas"</td></tr>
-  <tr><td>Candidate gen</td><td>Dual BM25 (keyword) + vector (cosine &#8805; floor) &#8594; union</td><td><strong>Only</strong> eligibility gate; <code>AWM_SIM_CANDIDATE_FLOOR_*</code></td></tr>
-  <tr><td>Composite score</td><td>relevance-gated blend of textMatch, vectorMatch, ACT-R decay, Hebbian, centrality, confidence, feedback</td><td>Relevance gates the rest — popularity can't override irrelevance</td></tr>
-  <tr><td>PRF / entity / query bridge</td><td>Rocchio expansion; entity-tag lateral boost; query-named-entity boost (opt-in)</td><td>All recall-only — rerank still arbitrates</td></tr>
-  <tr><td>Graph walk</td><td>Beam (depth-2) over semantic/temporal/causal/entity edges</td><td>Boosts connected candidates already in pool</td></tr>
-  <tr><td>Cross-encoder rerank</td><td>ms-marco-MiniLM scores (query, passage) on the wide pool; adaptive blend with composite</td><td><strong>The precision cut</strong> — §5</td></tr>
-  <tr><td>Abstention gate</td><td>Multi-channel OOD agreement on the post-rerank top-K; returns &#8709; if channels disagree</td><td>Precision-first; the reason AWM is safe to wire into agent reasoning</td></tr>
-</table>
-
-<!-- ============================ 5 ============================ -->
-<h2 id="attribution"><span class="n">5</span>Attribution analysis &amp; tuning</h2>
-<p>The current recall defaults came from a <strong>pipeline-attribution study</strong>: instrument the
-funnel, run a labeled set (LoCoMo, N=616 answerable), and record the stage at which the gold evidence is
-lost. The result was counter-intuitive.</p>
-
-<figure>
-<div class="svgwrap">
-<svg viewBox="0 0 720 200" role="img" aria-label="stage attribution of answerable-query losses">
-  <text x="12" y="16" font-size="12" font-weight="600" fill="#0f172a">Where answerable queries land (baseline, pre-tuning)</text>
-  <g font-size="11" font-family="monospace" fill="#475569">
-  <rect x="200" y="30" width="402" height="18" rx="3" fill="#be123c"/>
-  <text x="194" y="44" text-anchor="end">lost@pool/scoring</text><text x="608" y="44" fill="#be123c">50.3%</text>
-  <rect x="200" y="54" width="233" height="18" rx="3" fill="#15803d"/>
-  <text x="194" y="68" text-anchor="end">success@1</text><text x="439" y="68" fill="#15803d">29.2%</text>
-  <rect x="200" y="78" width="77" height="18" rx="3" fill="#0d9488"/>
-  <text x="194" y="92" text-anchor="end">found@2-5</text><text x="283" y="92">9.6%</text>
-  <rect x="200" y="102" width="46" height="18" rx="3" fill="#5eead4"/>
-  <text x="194" y="116" text-anchor="end">found@6-10</text><text x="252" y="116">5.7%</text>
-  <rect x="200" y="126" width="38" height="18" rx="3" fill="#94a3b8"/>
-  <text x="194" y="140" text-anchor="end">lost@candidate-floor</text><text x="244" y="140">4.7%</text>
-  <rect x="200" y="150" width="6" height="18" rx="3" fill="#cbd5e1"/>
-  <text x="194" y="164" text-anchor="end">lost@rerank</text><text x="212" y="164">0.5%</text>
-  </g>
-</svg>
-</div>
-<figcaption>Gold cleared the candidate floor 89% of the time but only ~35% reached the reranker. The
-dominant loss (50%) was the <em>composite squeezing retrievable gold out of the rerank pool</em> — not
-candidate generation (4.7%) and not the reranker (0.5%, which lifts gold +3.29 ranks on average).</figcaption>
-</figure>
-
-<div class="note mech"><span class="lbl">Diagnosis</span> A <strong>weak ranker (composite) was
-gatekeeping a strong ranker (cross-encoder)</strong>. The composite is decay-compressed — for same-age
-memories the activation term dominates and flattens relevance separation — so genuinely relevant gold
-ranked below the rerank-pool cutoff and the reranker never saw it.</div>
-
-<h3>The fix — and the two-dial decoupling</h3>
-<p>Widen the pool the reranker sees (composite demoted to a cheap pre-filter), and scope the abstention
-gate to the <em>returned</em> top-K so pool width (recall) is decoupled from abstention (precision):</p>
-<pre><span class="c">// src/engine/activation.ts — defaults</span>
-topN        = limit * <span class="k">8</span>                 <span class="c">// was *3   (AWM_TOPN_MULT)</span>
-rerankPool  = max(limit * <span class="k">4</span>, <span class="k">40</span>)        <span class="c">// was max(*2,15)  (AWM_RERANK_POOL)</span>
-abstainGate = post-rerank top-<span class="k">5</span>          <span class="c">// was whole pool  (AWM_ABSTAIN_GATE_K)</span></pre>
-
-<div class="note warn"><span class="lbl">Benchmark provenance — read before quoting the KPIs below</span>
-The attribution study in this section was run on <strong>LoCoMo</strong>, and its conclusion — a weak
-composite was gatekeeping a strong reranker; widen the pool — is sound and shaped the defaults that still
-ship. But <strong>LoCoMo was retired as AWM's benchmark in 0.13.x</strong>: its passages are ~115 chars
-against a real store's ~2,000, it is seeded in one shot so decay and Hebbian signals contribute nothing,
-and it rewards indiscriminate retention, so the salience filter caps its score regardless of ranking
-quality. The absolute figures below (≈25% recall, ≈29% success@1) describe that benchmark, not this
-system. <strong>On a frozen copy of a real 30,000-memory store, with the clock pinned and each query
-scoped to its gold's own agent (v0.14.5), AWM returns the right memory first 92.7% of the time on
-identifier queries and 92.0% on topic queries, with adversarial abstention at 90.0%.</strong> Those
-figures, the fixtures, and the two instrument corrections that produced them are in
-<a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/benchmarks.md">docs/benchmarks.md</a>.
-The KPIs are kept as the historical record of the tuning decision.</div>
-
-<div class="kpi">
-  <div class="item"><div class="v">22.7 &#8594; <span class="up">25.7%</span></div><div class="l">LoCoMo overall recall <small>(retired)</small></div></div>
-  <div class="item"><div class="v">13.4 &#8594; <span class="up">17.3</span></div><div class="l">multi-hop <small>(LoCoMo)</small></div></div>
-  <div class="item"><div class="v">18.6 &#8594; <span class="up">23.5</span></div><div class="l">single-hop <small>(LoCoMo)</small></div></div>
-  <div class="item"><div class="v">73.4 &#8594; <span class="up">74.9</span></div><div class="l">adversarial (precision)</div></div>
-  <div class="item"><div class="v">35 &#8594; 77<small>ms</small></div><div class="l">recall latency (local)</div></div>
-</div>
-
-<div class="note result"><span class="lbl">Result</span> Strictly better on every axis — recall up across
-all categories <em>and</em> adversarial precision up — with no regression on the 4-suite / edge / workday
-eval. The "wasted" tail the pool reduction once trimmed was where half the answers lived. Latency cost
-(35&#8594;77 ms) is the tradeoff; the pool size is a single env knob.</div>
-
-<div class="note why"><span class="lbl">Why precision held</span> The two dials are independent: pool
-width drives recall; the abstention gate (judged on the returned top-K, not the wide pool) drives
-precision. A lone deep distractor in the wide pool no longer defeats abstention. Bundling the two — as a
-prior attempt did — is what made an earlier wider-pool experiment look like a precision regression.</div>
-
-<!-- ============================ 6 ============================ -->
-<h2 id="consolidation"><span class="n">6</span>Consolidation</h2>
-<p>A periodic offline "sleep" cycle (<code>src/engine/consolidation.ts</code>) reorganizes the graph:
-cluster (diameter-enforced) &#8594; strengthen &#8594; bridge cross-cluster &#8594; decay + forget
-(age/access-gated) &#8594; prune redundancy &#8594; homeostasis (cap per-node edge weight). Measured to
-<em>improve</em> retrieval at scale by removing keyword-similar noise that otherwise buries the relevant
-memory. Content of long-unrecalled engrams fades while cue pathways (concept, tags, embedding) persist —
-write-and-forget is safe.</p>
-
-<!-- ============================ 7 ============================ -->
-<h2 id="design"><span class="n">7</span>Design rationale</h2>
-<table>
-  <tr><th>Choice</th><th>Tradeoff accepted</th></tr>
-  <tr><td>Precision over recall</td><td>Will miss a loosely-related memory to almost never surface a wrong one — correct when the consumer is an LLM's own reasoning</td></tr>
-  <tr><td>ACT-R, not ad-hoc scores</td><td>Principled, predictable decay/strengthening over hand-tuned heuristics</td></tr>
-  <tr><td>Calibrated abstention</td><td>Costs a little recall; buys safety — the agent won't act on a hallucinated memory</td></tr>
-  <tr><td>Wide pre-filter &#8594; expert rerank</td><td>Composite is cheap/wide; the slow cross-encoder judges a shortlist — precision at tens of ms, local</td></tr>
-  <tr><td>Local, in-process</td><td>No network round-trip, nothing leaves the machine — at the cost of small (not giant) models, which the funnel makes sufficient</td></tr>
-  <tr><td>Supersede, not overwrite</td><td>A little bookkeeping for durable decision history</td></tr>
-</table>
-<p class="lede" style="font-size:1.05rem;color:var(--indigo)">AWM is the precise, fast, durable memory
-layer; the judgment — what to chain, what to ignore, when to act — is the agent's. Build with that
-division and it scales.</p>
-
-<!-- ============================ 8 ============================ -->
-<h2 id="config"><span class="n">8</span>Configuration surface</h2>
-<p>The recall defaults are validated values; every knob is an env override (see <code>docs/reference.md</code> &#8594; Recall tuning).</p>
-<table>
-  <tr><th>Env</th><th class="num">Default</th><th>Effect</th></tr>
-  <tr><td><code>AWM_RERANK_POOL</code></td><td class="num">max(limit·4,40)</td><td>candidates reaching the cross-encoder (recall &#8596; latency)</td></tr>
-  <tr><td><code>AWM_TOPN_MULT</code></td><td class="num">8</td><td>candidate breadth into graph-walk + rerank</td></tr>
-  <tr><td><code>AWM_ABSTAIN_GATE_K</code></td><td class="num">5</td><td>top-K the abstention gate judges (precision, decoupled from pool)</td></tr>
-  <tr><td><code>AWM_SIM_FLOOR_TARGETED</code></td><td class="num">0.50</td><td>raw-cosine floor for vector match (targeted queries)</td></tr>
-  <tr><td><code>AWM_QUERY_BRIDGE</code></td><td class="num">off</td><td>opt-in: query-named-entity boost (attribution use cases)</td></tr>
-</table>
+</main>
 
 <footer>
-  <p>AWM — Agent Working Memory · local, precision-first cognitive memory on ACT-R. Recall, write, and
-  consolidation pipelines as implemented; figures are schematic. §5 benchmark figures: LoCoMo (Snap
-  Research), retrieval-only, expansion-off — <strong>retired 0.13.x; current figures in docs/benchmarks.md</strong>.
-  Mechanism and config values re-verified against source 2026-09-11 (v0.14.5). Source: <span class="tag">src/engine/activation.ts</span>
-  <span class="tag">src/core/write-pipeline.ts</span> <span class="tag">src/engine/consolidation.ts</span>.</p>
+  <div class="wrap">
+    <p><b>AgentWorkingMemory</b> &mdash; local-first cognitive memory for agents. Mechanism and defaults
+    verified against source at v0.14.6:
+    <code>src/engine/activation.ts</code> &middot; <code>src/engine/confidence.ts</code> &middot;
+    <code>src/core/write-pipeline.ts</code> &middot; <code>src/core/decay.ts</code> &middot;
+    <code>src/engine/consolidation.ts</code>. Diagrams are schematic; every number links to its method.</p>
+    <p><a href="https://github.com/CompleteIdeas/agent-working-memory">GitHub</a> &middot;
+    <a href="https://www.npmjs.com/package/agent-working-memory">npm</a> &middot;
+    <a href="awm-for-agents.html">Agent playbook</a> &middot;
+    <a href="index.html">Docs home</a> &middot; Apache-2.0</p>
+  </div>
 </footer>
 
-</div>
 </body>
 </html>
