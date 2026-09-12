@@ -2,6 +2,32 @@
 
 All eval suites are included in the repository and can be reproduced locally.
 
+## How to read this file
+
+Numbers here were measured by different instruments, on different corpora, at different
+versions. **Four instrument defects have been found in this project** — a runner using
+k=7 against the shipped k=3, wall-clock decay ageing a supposedly frozen snapshot, a
+runner hardcoding `agentId: 'work'`, and a 400-char rerank truncation. Each was the same
+shape: a measurement quietly describing something other than the shipped thing. So every
+figure below carries its version and its corpus, and **a number without both is not
+quotable.**
+
+| | |
+|---|---|
+| **Current reference** | **v0.14.5**, measured 2026-09-11 against the frozen Aug-24 snapshot |
+| **v0.14.6** | No retrieval code changed — figures below still describe the shipped system |
+| **Confirming re-run** | Pending (`npm run bench`) |
+
+v0.14.6's diff against the `v0.14.5` tag is `src/adapters/`, `src/cli.ts`,
+`src/core/agent-id.ts`, `src/hooks/prime.ts`, and one refactor in `src/mcp.ts` that moves
+`deriveAgentFromDir` into the shared module unchanged. `src/engine/`, `activation.ts`,
+`recall-config.ts` and `write-pipeline.ts` are untouched. That is why 0.14.5's retrieval
+numbers are carried forward rather than re-stated as 0.14.6 measurements — they are the
+same code. A confirming run is still owed, and this table says so until it exists.
+
+**Superseded measurements are kept, not deleted**, with the defect that retired them named.
+This file's own history is the argument for the discipline.
+
 ## Running Evals
 
 ```bash
@@ -13,46 +39,99 @@ npm run test:ab         # AWM vs keyword baseline
 npm run test:tokens     # Token savings measurement
 npm run test:realworld  # Production codebase retrieval
 npm run test:sleep      # Consolidation impact
+
+npm run bench           # The real-store fixtures — the headline numbers
+npm run bench -- --all  # plus the four local challenge suites above
 ```
+
+**Use `npm run bench` for the real-store numbers, not a bare
+`tsx tests/realstore-eval/runner.ts`.** The runner defaults to the *baseline* arm — no
+`AWM_RERANK2`, no `AWM_RERANK_WINDOW=query`, no `AWM_RERANK_TAGS`, and the full
+`fixture.json` rather than the 300-query identifier sample. Invoked bare it reports roughly
+56–64%, not the 92.7% reference, and it would look like a regression rather than a different
+configuration. `bench` sets the three flags and the fixture, and stamps the output with the
+version and commit that produced it. There is deliberately no one-line npm alias, because
+npm scripts cannot set those env vars portably on Windows without another dependency — and
+an alias that silently measured the baseline is exactly the defect class this file records.
+
+`bench` refuses to start below 8 GB of commit headroom, because these suites load ONNX
+models natively and five earlier runs were OOM-killed, one mid-write. `BENCH_MIN_HEADROOM_GB`
+overrides the gate if you accept that risk.
 
 Each eval creates a fresh SQLite database, seeds it with test data, and runs structured challenges. No external services required.
 
 ## Results Summary
 
-| Eval | Score | Grade |
-|------|-------|-------|
-| Edge Cases | 100% (34/34) | EXCELLENT |
-| Stress Test | 92.3% (48/52) | EXCELLENT |
-| A/B Test | AWM 100% vs Baseline 83% | EXCELLENT |
-| Self-Test | 97.4% (31 checks) | EXCELLENT |
-| Real-World | 93.1% (16 challenges) | EXCELLENT |
-| Workday | 86.7% (14 challenges) | GOOD |
-| Token Savings | 64.5% savings, 65% recall | GOOD |
-| Production retrieval cost | 9.8× lower aggregate vs file_retrieval | EXCELLENT |
-| **Memory gauntlet** (end-to-end ablation, 2026-07-30) | **AWM 74%±5 vs no-memory 0%** on memory-dependent tasks | BASELINE |
-| **Real-store retrieval** (0.13.x recommended flags, 2026-08-24) | **s@1 56.4% → 63.8%**, adversarial held 90.0% | IMPROVED |
-| **Gauntlet re-run** (0.13.x flags, 2026-08-25) | 24/30 = 80.0% memory probes, k=3; baseline arm not retained | NULL |
-| **Gauntlet at k=10** (2026-08-26) | 74.3% baseline vs 76.7% +flags, Fisher p=1.000; 6/10 probes flip between identical runs | NULL — fix probe determinism, not k |
+| Eval | Score | Measured | Grade |
+|------|-------|----------|-------|
+| **Real-store retrieval — identifier** | **s@1 92.7%**, adversarial 90.0% | **v0.14.5, 2026-09-11** | **REFERENCE** |
+| **Real-store retrieval — category** | **s@1 92.0%**, adversarial 90.0% | **v0.14.5, 2026-09-11** | **REFERENCE** |
+| Edge Cases | 100% (34/34) | undated ⚠ | EXCELLENT |
+| Stress Test | 92.3% (48/52) | undated ⚠ | EXCELLENT |
+| A/B Test | AWM 100% vs Baseline 83% | undated ⚠ | EXCELLENT |
+| Self-Test | 97.4% (31 checks) | undated ⚠ | EXCELLENT |
+| Real-World | 93.1% (16 challenges) | undated ⚠ | EXCELLENT |
+| Workday | 86.7% (14 challenges) | undated ⚠ | GOOD |
+| Token Savings | 64.5% savings, 65% recall | undated ⚠ | GOOD |
+| Production retrieval cost | 9.8× lower aggregate vs file_retrieval | undated ⚠ | EXCELLENT |
+| Memory gauntlet (end-to-end ablation) | AWM 74%±5 vs no-memory 0% on memory-dependent tasks | 2026-07-30 | BASELINE |
+| Real-store retrieval (0.13.x recommended flags) | s@1 56.4% → 63.8%, adversarial held 90.0% | 0.13.x, 2026-08-24 | SUPERSEDED — instrument, see above |
+| Gauntlet re-run (0.13.x flags) | 24/30 = 80.0% memory probes, k=3; baseline arm not retained | 2026-08-25 | NULL |
+| Gauntlet at k=10 | 74.3% baseline vs 76.7% +flags, Fisher p=1.000; 6/10 probes flip between identical runs | 2026-08-26 | NULL — fix probe determinism, not k |
 
-## 10-day regression check — 2026-09-11 (v0.14.1)
+> **⚠ `undated` is a real gap, not a formatting placeholder.** Those eight rows predate the
+> provenance rule and no run record survives for them, so nothing here can say which version
+> produced them or whether they still hold. They are kept because the suites still exist and
+> still pass; they are marked because an unattributable number is exactly what this file has
+> been burned by four times. `npm run bench -- --all` re-measures the four local suites with
+> a version and commit attached, which clears four of the eight.
 
-Re-run against the **same frozen Aug-24 snapshot** and the same fixtures, so any movement
-is attributable to code rather than data.
+## Current reference baselines — v0.14.5
+
+**These are the numbers to quote.** Frozen Aug-24 snapshot, clock pinned to the snapshot's
+own newest timestamp, and every query issued as its gold's own agent. Carried forward to
+0.14.6 unchanged, because 0.14.6 changed no retrieval code — see *How to read this file*.
+
+| fixture | s@1 | s@5 | MRR | adversarial | NET tokens |
+|---|---|---|---|---|---|
+| **identifier** — 300 probes | **92.7%** (278/300) | 96.7% | 94.6% | 90.0% | +519/recall |
+| **category** — 450 probes (318 work / 132 personal) | **92.0%** (414/450) | 96.7% | 94.2% | 90.0% | — |
+
+Identifier sufficiency 99.3% (290/292). Split by agent, the identifier fixture reads
+work 204/222 = 91.9%, personal 74/78 = 94.9%.
+
+### Superseded identifier baselines
+
+Kept, with the defect that retired each one named, so the corrections stay legible.
+
+| reading | version | why it is not the reference |
+|---|---|---|
+| 70.0% / 67.0% s@1 | ≤0.14.3 | ACT-R decay took every age from the **wall clock**, so the "frozen" snapshot aged a day per day. The same bytes read 70.0% and 67.0% ~20 h apart |
+| **68.0%** s@1 (204/300) | 0.14.4 | Clock pinned, but the runner still queried every gold as `agent='work'`. The 78 personal-scoped golds were **0-of-78 retrievable by construction** — a product feature scored as a ranking defect |
+| −1383 tok/recall | pre-0.14.4 | Runner defaulted to `REALSTORE_K=7`; the product has shipped `limit: 3` since 0.13.8 |
+
+## 10-day regression check — 2026-08-24 vs 2026-09-11 (v0.14.1)
+
+Same configuration on both sides, same frozen snapshot, same fixtures, so any movement is
+attributable to code rather than data. **This is a regression check, not a source of
+reference numbers** — both columns predate the clock and agent-scoping fixes, so read it as
+"the code did not move", not as a quality figure.
 
 | metric | published 2026-08-24 | 2026-09-11 (v0.14.1) |
 |---|---|---|
 | category fixture success@1 | 63.8% | **63.8%** |
-| **category fixture success@1, clock pinned AND agent-aware (v0.14.5)** | — | **92.0%** (414/450; s@5 96.7%, MRR 94.2%, adversarial 90.0%) |
 | adversarial correctly silent | 90.0% | **90.0%** |
 | unit suite | 726 passing | **726 passing** |
 | identifier s@1 @ shipped k=3 | 70.0% | **70.0%** |
-| **identifier s@1, clock PINNED to snapshot (v0.14.4, the reproducible reference)** | — | **68.0%** (204/300; s@5 70.7%, MRR 69.3%, +71 tok/recall) |
-| **identifier s@1, clock pinned AND agent-aware (v0.14.5 — THE reference)** | — | **92.7%** (278/300; s@5 96.7%, MRR 94.6%, adversarial 90.0%, **+519 tok/recall**) |
 | identifier sufficiency | 99.3% | **99.3%** (290/292) |
 | identifier NET tokens | +115/recall | **+116/recall** |
 
 **No regression.** At the shipped configuration the run reproduces to within one token per
 recall. The category fixture's s@5 and MRR each moved 0.2pp (≈ one query in 450).
+
+The gap between 63.8% here and 92.0% in the reference table above is **entirely
+instrument**, not engine: same snapshot, same code path, measured once with a drifting
+clock and agent-blind queries, and once without.
 
 > **Correction (2026-09-11, v0.14.4).** The paragraph above originally attributed that drift
 > to "cross-encoder floating-point nondeterminism". It was not. ACT-R decay computed every
@@ -95,10 +174,24 @@ measurement quietly describing something other than the shipped thing.
 
 ## Retrieval quality — the 0.13.x wins (2026-08-24)
 
+> **What survives here and what does not.** This section is a *within-day A/B* — which
+> flags help, measured against each other on one day with one instrument — and that
+> comparison stands. Its **absolute** numbers (56.4%, 63.8%) do not: they were taken before
+> the clock and agent-scoping fixes, and the reference figures are in *Current reference
+> baselines* above. Quote the deltas from this section, not the levels.
+
 **Read the provenance column before quoting a number** — the three results below were
 not measured on the same corpus. The combined figure and the tags result use
-`tests/realstore-eval/`: a frozen snapshot of a real 11,294-engram store, ground truth
-by unique-identifier hold-out verified through FTS, correct abstention scored positively.
+`tests/realstore-eval/`: a frozen snapshot of a real store, ground truth by
+unique-identifier hold-out verified through FTS, correct abstention scored positively.
+
+**The corpus denominator, stated once.** `snapshot/store.db` holds **29,853 engrams
+total**. The **11,294** figure quoted for this corpus is `stage='active' AND NOT
+retracted` — the engrams recall can actually reach. Two neighbouring numbers are easy to
+confuse with it and are not it: **11,262** additionally excludes superseded engrams, and
+**11,337** is `stage='active'` before the retracted ones are removed. By agent the
+snapshot is 22,391 `work` / 2,586 `personal`, the remainder scattered across per-directory
+UUID spaces. Quote the denominator you mean.
 
 Run with all three enabled — they are default-OFF:
 
