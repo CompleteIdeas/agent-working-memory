@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.14.5",
+  "version": "0.14.6",
   "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
   "keywords": [
     "ai-agents",
@@ -27,7 +27,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && npm run check:release",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest",
@@ -47,7 +47,11 @@
     "test:perf": "tsx tests/perf-test/runner.ts",
     "eval": "tsx tests/eval/run.ts",
     "eval:generate": "tsx tests/eval/generate.ts",
-    "test:all": "vitest run && tsx tests/mcp-smoke.ts"
+    "test:all": "vitest run && tsx tests/mcp-smoke.ts",
+    "check:release": "node scripts/check-release.mjs",
+    "bench": "node scripts/bench-current.mjs",
+    "test:docker": "bash scripts/docker-release-test.sh",
+    "test:linux": "bash scripts/docker-release-test.sh linux"
   },
   "engines": {
     "node": ">=22.0.0"

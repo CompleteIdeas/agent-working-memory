@@ -168,8 +168,8 @@ clusters, decays unused links, and archives what has gone cold. Corrections supe
 than overwrite.
 
 The whole thing, one memory followed end to end with every threshold sourced:
-[`docs/walkthrough.md`](docs/walkthrough.md). The pipeline internals for engineers, with the
-attribution study behind the defaults: [`pipeline-walkthrough.html`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html).
+[`docs/walkthrough.md`](docs/walkthrough.md). The mental model an engineer needs to predict its
+behaviour — proposers, deciders, and when it stays silent: [`How AWM decides what to say`](https://completeideas.github.io/agent-working-memory/pipeline-walkthrough.html).
 The theory and its citations: [`docs/cognitive-model.md`](docs/cognitive-model.md).
 
 ---
@@ -188,7 +188,7 @@ Everything else, with evidence and workarounds: [`docs/known-limitations.md`](do
 
 ---
 
-## What's new — v0.14.5
+## What's new — v0.14.6
 
 Nothing in the retrieval engine changed in the last four point releases; what changed is how it
 is measured, invoked, and reports on itself.
@@ -229,15 +229,17 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 737 tests
+npx vitest run          # 760 tests
 npm run eval            # benchmark suites
+npm run test:docker     # clean-room install of the packed tarball
+npm run test:linux      # build + full suite on Linux (760/760)
 ```
 
 ---
 
 ## Status
 
-Active development, v0.14.5. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.14.6. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental. Real-store benchmark replaces LoCoMo as of 0.13.x.
 

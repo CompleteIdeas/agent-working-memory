@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.14.6 (2026-09-11) — `awm setup` catches up with the system it installs
+
+Everything 0.14.2–0.14.5 changed about how AWM is invoked lived in hand-edited files on one
+machine. A fresh `awm setup --global` still produced 0.14.1-era wiring: inline curl checkpoint
+hooks with the port fixed at 8401 (falling back to 8402) and the bearer secret baked into
+settings.json, **no prime hook at all**, guidance that never mentioned `recall_id`, and an MCP
+entry rewritten wholesale on every run — which on a real config would have dropped the three
+hand-set rerank flags and repointed the database at the package default.
+
+- **Hooks are shipped scripts, not inline curl.** `awm setup` writes `awm-find-sidecar.cjs`,
+  `awm-checkpoint.cjs` and `awm-prime.cjs` to `~/.claude/hooks/`. The finder resolves the
+  session's agent from the MCP config governing its cwd (nearest `.mcp.json` walking up, then
+  `~/.mcp.json`, `~/.claude.json`, then the record setup leaves in `awm-hooks.json`), probes
+  the port range and picks the sidecar whose `/health` reports that agent — newest version
+  first. The secret is read from the same config at run time, so a regenerated secret no
+  longer silently 401s. Every script fails open: no output, exit 0.
+- **Prime hook installed by default.** `UserPromptSubmit → awm-prime.cjs → POST /hooks/prime`
+  injects the sidecar's finished text as `additionalContext`, or nothing. `--no-prime` skips
+  it; an empty `~/.claude/hooks/awm-prime.disabled` turns it off without uninstalling.
+- **Checkpoint hooks forward the whole payload**, so the sidecar can parse `transcript_path`
+  for the current task and active files instead of writing a stub.
+- **`PRIME_DEFAULTS.minConfidence` 0.25 → 0.10.** Measured 2026-09-11 on the live store: 0.25
+  silenced two specific prompts with one clear winner (top score 0.26 / 0.38) and passed a vague
+  one at 0.92; the gate is on distribution shape, not relevance. Primed lines now carry
+  `[class · age]` so the volatility rubric is mechanical.
+- **Re-running setup upgrades instead of resetting.** Precedence for every owned value is
+  explicit flag → the existing entry → default; every other env key the user has is carried
+  over. `AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1` are written on a fresh install
+  (a value already present wins). Global default agent id is `work` (was `claude`), matching
+  what the server derives when the key is absent — one shared `deriveAgentFromDir` in
+  `core/agent-id.ts` now serves the server, the installer and the hooks' mirror.
+- **settings.json is merged, not overwritten**: AWM-owned groups on Stop / PreCompact /
+  SessionEnd / UserPromptSubmit / PostToolUse are replaced; the user's own hooks on those
+  events survive. `--hook-port-range` added.
+- **`awm doctor` probes the range**: lists live sidecars (`port=agent@version pid`), warns when
+  none serves the configured agent, flags pre-0.14.6 inline-curl hooks, a missing or disabled
+  prime hook, and missing recommended env.
+- **Generated CLAUDE.md guidance** now tells the agent to pass `recall_id` to `memory_feedback`,
+  explains `RECALL ABSTAINED` vs genuine absence, documents the hooks and the port range, and
+  drops stale `0.8.x`/`0.11.x`/`0.12.x` labels. Hand-maintained sections are still left alone.
+- `AWM_SETUP_HOME` overrides the home directory for `awm setup` / `awm doctor`, so an upgrade
+  can be rehearsed against a scratch tree.
+- New tests: `tests/adapters/hook-scripts.test.ts` (12 — real child processes against fake
+  sidecars) and `tests/adapters/claude-code-setup.test.ts` (11).
+- **`npm run check:release`** (`scripts/check-release.mjs`, wired into `prepublishOnly`) and
+  **`docs/RELEASE.md`**. Every release so far needed a follow-up commit for something
+  forgotten; the check blocks on version strings that disagree, on doc-asserted counts that
+  no longer match the code, and reports the blast radius of the headline benchmark figures.
+  It warns when engine code moved and `src/adapters/` did not — the exact shape of this
+  release's bug. Its first run caught two stale version strings in this very README.
+- **`npm run test:docker`** validates the release the way a new user receives it: packs the
+  real tarball, installs it globally into an empty `node:22-bookworm-slim`, and asserts 24
+  things no test on a configured developer machine can reach — `awm setup` writing hooks and
+  guidance from nothing, two servers both preferring 8401 where the second **walks to 8402**,
+  each shipped hook routing to the sidecar for its own agent, the prime off-switch, and
+  `awm doctor` seeing both. It needs no session restart, so it is also the only way to check
+  a release from a machine whose own MCP processes are running an older build.
+- **`npm run test:linux`** compiles from source inside Linux and runs the whole suite there:
+  **65 files, 760 tests, all passing**, matching the Windows baseline. Windows resolves a
+  wrong-cased import happily, so `forceConsistentCasingInFileNames` was enforced by nothing
+  until a case-sensitive filesystem ran it. The capability had existed before: images
+  `awm-linux-test:0.13.1`…`:v0133`, built 2026-08-23 over a copy of `src/` and `tests/` at
+  0.13.3, carry `CMD ["npm","run","test:run"]` — images built to do precisely this. But the
+  Dockerfile behind them was never committed and there is no CI, so the check quietly
+  stopped happening and nothing reported the gap. Both modes are one script
+  (`scripts/docker-release-test.sh release|linux|all`) so the Windows path handling cannot
+  drift between them.
+
 ## 0.14.5 (2026-09-11) — the eval queried as the wrong agent; the real identifier baseline is 92.7%
 
 With the clock pinned (0.14.4) the identifier fixture read 68.0% s@1, and the per-query trace
