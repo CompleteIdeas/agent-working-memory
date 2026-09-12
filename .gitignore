@@ -34,3 +34,10 @@ tests/locomo-eval/trace-log.jsonl
 tests/rerank2-eval/**/*.err
 tests/locomo-eval/bench/*.server.log
 tests/realstore-eval/snapshot/
+
+# Benchmark run artifacts (raw stdout + results.json per run)
+bench-runs/
+
+# Staging dir for the docker release test
+.release-stage/
+.release-checks/

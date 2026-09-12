@@ -43,3 +43,15 @@ npm run build
 ## License
 
 By contributing, you agree that your contributions will be licensed under the Apache 2.0 License.
+
+## Releasing
+
+See [docs/RELEASE.md](docs/RELEASE.md). Run `npm run check:release` before you tag —
+it catches the version strings, counts and adapter drift that every past release
+forgot at least one of. It also runs automatically on `npm publish`.
+
+Two clean-room checks run in Docker and touch nothing on your machine:
+`npm run test:docker` installs the packed tarball into an empty container the way a new
+user receives it, and `npm run test:linux` builds from source and runs the whole suite on
+Linux — the only thing that enforces `forceConsistentCasingInFileNames`, since Windows
+resolves a wrong-cased import without complaint.
