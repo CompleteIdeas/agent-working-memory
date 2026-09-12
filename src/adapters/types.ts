@@ -28,8 +28,12 @@ export interface SetupContext {
   hasDist: boolean;
   /** Hook sidecar secret token */
   hookSecret: string;
-  /** Hook sidecar port */
+  /** Hook sidecar port (preferred; the sidecar walks upward from here when busy) */
   hookPort: string;
+  /** How many ports upward from hookPort the sidecar may try (0.14.2) */
+  hookPortRange: string;
+  /** Install the UserPromptSubmit prime hook (0.14.6; `--no-prime` turns it off) */
+  installPrime: boolean;
   /** Whether to use global scope */
   isGlobal: boolean;
   /** Windows platform */
@@ -70,6 +74,13 @@ export interface CLIAdapter {
   /** Configure hooks (if supported). Returns action summary. */
   writeHooks(ctx: SetupContext, skip: boolean): string;
 
-  /** Validate that the setup is healthy. */
-  diagnose(ctx: SetupContext): DiagnosticResult[];
+  /** Validate that the setup is healthy. May probe the network, hence possibly async. */
+  diagnose(ctx: SetupContext): DiagnosticResult[] | Promise<DiagnosticResult[]>;
+
+  /**
+   * The env block of an AWM server entry this adapter previously wrote, if any.
+   * `awm setup` re-runs preserve these values unless a flag overrides them, so an
+   * upgrade never repoints the database or renames the agent (0.14.6).
+   */
+  readExistingEnv?(isGlobal: boolean, cwd: string): Record<string, string> | null;
 }

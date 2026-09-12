@@ -74,7 +74,10 @@ Setup options:
   --no-instructions   Skip instruction file (CLAUDE.md, AGENTS.md, etc.)
   --no-claude-md      Alias for --no-instructions
   --no-hooks          Skip hook installation
-  --hook-port PORT    Sidecar port for hooks (default: 8401)
+  --no-prime          Skip the UserPromptSubmit prime hook (auto-inject memories per prompt)
+  --hook-port PORT    Preferred sidecar port (default: 8401; each session walks upward when busy)
+  --hook-port-range N Ports to try upward from --hook-port (default: 10)
+  Re-running setup keeps your existing agent id, db path, port and any env you added.
 
 Examples:
   awm setup --global              Claude Code, global (recommended)
@@ -95,7 +98,9 @@ async function setup() {
   let skipInstructions = false;
   let isGlobal = false;
   let skipHooks = false;
-  let hookPort = '8401';
+  let installPrime = true;
+  let hookPort: string | undefined;
+  let hookPortRange: string | undefined;
 
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--agent-id' && args[i + 1]) {
@@ -106,8 +111,12 @@ async function setup() {
       skipInstructions = true;
     } else if (args[i] === '--no-hooks') {
       skipHooks = true;
+    } else if (args[i] === '--no-prime') {
+      installPrime = false;
     } else if (args[i] === '--hook-port' && args[i + 1]) {
       hookPort = args[++i];
+    } else if (args[i] === '--hook-port-range' && args[i + 1]) {
+      hookPortRange = args[++i];
     } else if (args[i] === '--global') {
       isGlobal = true;
     } else if (!args[i].startsWith('--')) {
@@ -133,8 +142,10 @@ async function setup() {
     isGlobal = true;
   }
 
-  // Build context
-  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort });
+  // Build context. A previous install's values survive unless a flag overrides them
+  // (0.14.6) — an upgrade must never repoint the database or rename the agent.
+  const existingEnv = adapter.readExistingEnv?.(isGlobal, process.cwd()) ?? null;
+  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort, hookPortRange, installPrime, existingEnv });
 
   // Run adapter
   const configAction = adapter.writeMcpConfig(ctx);
@@ -157,6 +168,7 @@ AWM configured for ${adapter.name}${isGlobal ? ' (global)' : ''}
 Next steps:
   1. Restart ${adapter.name} to pick up the MCP server
   2. Memory tools will appear automatically${adapter.id === 'codex' ? ' (verify with /mcp)' : ''}
+  3. \`awm doctor\` checks the install and lists the live sidecars
 `.trim());
 }
 
@@ -197,7 +209,9 @@ async function doctor() {
     }
 
     console.log(`  ${adapter.name}:`);
-    const results = adapter.diagnose(ctx);
+    const existingEnv = adapter.readExistingEnv?.(true, process.cwd()) ?? null;
+    const ctx = buildSetupContext({ isGlobal: true, existingEnv });
+    const results = await adapter.diagnose(ctx);
     for (const r of results) {
       const icon = r.status === 'ok' ? '+' : r.status === 'warn' ? '~' : 'x';
       console.log(`    [${icon}] ${r.check}: ${r.message}`);

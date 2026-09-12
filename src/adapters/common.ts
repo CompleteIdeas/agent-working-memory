@@ -14,6 +14,7 @@ import { randomBytes } from 'node:crypto';
 import { homedir as osHomedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { SetupContext } from './types.js';
+import { deriveAgentFromDir } from '../core/agent-id.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -47,20 +48,48 @@ export function resolveHookSecret(dbPath: string): string {
   return secret;
 }
 
-/** Build environment variables for the MCP server process. */
+/**
+ * Retrieval settings `awm setup` turns on for a new install (0.14.6).
+ *
+ * All three ship default-off in the engine so an existing process never changes
+ * behaviour on upgrade, but the README has recommended them together since 0.14.0:
+ * second-stage rerank by the cross-encoder's own score, a 400-char rerank window
+ * on the densest query-term region (25% → 87.5% on long memories), and tags in the
+ * rerank passage (+7.4pp). A value the user already has in their config wins.
+ */
+export const RECOMMENDED_ENV: Readonly<Record<string, string>> = {
+  AWM_RERANK2: '1',
+  AWM_RERANK_WINDOW: 'query',
+  AWM_RERANK_TAGS: '1',
+};
+
+/** Keys `awm setup` owns outright; everything else in an existing env block is the user's. */
+export const OWNED_ENV_KEYS = ['AWM_DB_PATH', 'AWM_AGENT_ID', 'AWM_HOOK_PORT', 'AWM_HOOK_PORT_RANGE', 'AWM_HOOK_SECRET'] as const;
+
+/**
+ * Build environment variables for the MCP server process.
+ *
+ * Layering, lowest to highest: recommended defaults → whatever the user's current
+ * entry already carries (rerank flags they tuned, AWM_WORKSPACE, backend choice…)
+ * → the keys setup owns. Before 0.14.6 the entry was replaced wholesale, which
+ * dropped hand-set flags on every re-run.
+ */
 export function buildEnvVars(
   dbPath: string,
   agentId: string,
   hookPort: string,
   hookSecret: string,
   isWindows: boolean,
+  opts: { hookPortRange?: string; existing?: Record<string, string> | null } = {},
 ): Record<string, string> {
-  return {
-    AWM_DB_PATH: isWindows ? dbPath.replace(/\\/g, '/') : dbPath,
+  const owned: Record<string, string> = {
+    AWM_DB_PATH: isWindows ? dbPath.split('\\').join('/') : dbPath,
     AWM_AGENT_ID: agentId,
     AWM_HOOK_PORT: hookPort,
     AWM_HOOK_SECRET: hookSecret,
   };
+  if (opts.hookPortRange && opts.hookPortRange !== '10') owned.AWM_HOOK_PORT_RANGE = opts.hookPortRange;
+  return { ...RECOMMENDED_ENV, ...(opts.existing ?? {}), ...owned };
 }
 
 /**
@@ -92,12 +121,26 @@ export function resolveMcpCommand(ctx: SetupContext): {
   };
 }
 
-/** Build a full SetupContext from parsed CLI flags. */
+/**
+ * Build a full SetupContext from parsed CLI flags.
+ *
+ * Precedence for every owned value: an explicit flag → the value in the entry a
+ * previous `awm setup` wrote (`existingEnv`) → the default. So re-running setup to
+ * pick up new hooks or guidance never repoints the database, renames the agent or
+ * moves the sidecar port underneath a working install.
+ *
+ * Global default agent id is `work` (was `claude` before 0.14.6): it matches what
+ * the server itself resolves to when AWM_AGENT_ID is unset (see core/agent-id.ts),
+ * so a config with and without the key name the same pool.
+ */
 export function buildSetupContext(opts: {
   agentId?: string;
   dbPath?: string | null;
   isGlobal: boolean;
-  hookPort: string;
+  hookPort?: string;
+  hookPortRange?: string;
+  installPrime?: boolean;
+  existingEnv?: Record<string, string> | null;
 }): SetupContext {
   const cwd = process.cwd();
   const projectName = basename(cwd).toLowerCase().replace(/[^a-z0-9-]/g, '-');
@@ -106,11 +149,16 @@ export function buildSetupContext(opts: {
   const mcpDist = join(packageRoot, 'dist', 'mcp.js');
   const hasDist = existsSync(mcpDist);
   const isWindows = process.platform === 'win32';
+  const existing = opts.existingEnv ?? null;
 
-  const agentId = opts.agentId ?? (opts.isGlobal ? 'claude' : projectName);
-  const dbPath = resolveDbPath(packageRoot, opts.dbPath);
+  const agentId = opts.agentId
+    ?? existing?.AWM_AGENT_ID
+    ?? (opts.isGlobal ? deriveAgentFromDir('') : projectName);
+  const dbPath = resolveDbPath(packageRoot, opts.dbPath ?? existing?.AWM_DB_PATH ?? null);
+  const hookPort = opts.hookPort ?? existing?.AWM_HOOK_PORT ?? '8401';
+  const hookPortRange = opts.hookPortRange ?? existing?.AWM_HOOK_PORT_RANGE ?? '10';
   const hookSecret = resolveHookSecret(dbPath);
-  const envVars = buildEnvVars(dbPath, agentId, opts.hookPort, hookSecret, isWindows);
+  const envVars = buildEnvVars(dbPath, agentId, hookPort, hookSecret, isWindows, { hookPortRange, existing });
 
   return {
     cwd,
@@ -122,16 +170,21 @@ export function buildSetupContext(opts: {
     mcpScript,
     hasDist,
     hookSecret,
-    hookPort: opts.hookPort,
+    hookPort,
+    hookPortRange,
+    installPrime: opts.installPrime ?? true,
     isGlobal: opts.isGlobal,
     isWindows,
     envVars,
   };
 }
 
-/** Home directory. */
+/**
+ * Home directory. `AWM_SETUP_HOME` overrides it so `awm setup` / `awm doctor` can be
+ * exercised against a scratch tree (tests do this; so does a cautious upgrade).
+ */
 export function homedir(): string {
-  return osHomedir();
+  return process.env.AWM_SETUP_HOME || osHomedir();
 }
 
 // ─── Instruction content ────────────────────────────────
@@ -282,7 +335,12 @@ you write them; AWM stays current because every agent reads + writes the same st
    than one filesystem search.
 4. **As you learn things**: call \`memory_write\` proactively. Don't batch.
 5. **Finishing a task**: call \`memory_task_end\` with a summary.
-6. **Auto-checkpoint** is handled by hooks (compaction, session-end, 15-min timer). No action needed.
+6. **Hooks do the rest.** \`awm setup\` installs three: a **prime** hook that recalls against
+   each prompt and injects what clears confidence (or nothing), and checkpoint hooks on
+   compaction and session end (plus a 15-min timer). Primed context arrives labelled
+   \`[class · age]\` — treat it by the volatility rubric, not as user input. If a turn
+   arrives with no primed context, that is a signal too: recall explicitly before
+   asserting anything.
 
 ### Write memory when:
 - A project decision is made or changed
@@ -478,10 +536,9 @@ When it isn't:
   return nothing, the memory probably isn't there — read the code instead of
   burning more recalls.
 
-### Recall tuning (0.8.x — opt-in parameters for higher-quality recall)
-Default \`memory_recall\` is tuned for the common case. The 0.8.x recall pipeline
-exposes four opt-in parameters that change the cost/quality tradeoff. Use them
-when the default doesn't match what you actually need.
+### Recall tuning — opt-in parameters
+Default \`memory_recall\` is tuned for the common case. Four opt-in parameters change
+the cost/quality tradeoff. Use them when the default doesn't match what you need.
 
 - **\`granularity: 'compact'\`** — every result carries a 200-char \`summary\`
   field with a query-aware snippet (the densest window of query terms in the
@@ -492,30 +549,37 @@ when the default doesn't match what you actually need.
   winner, it gets a longer summary while the rest are compact. If confidence
   is uniform across results, everything is compact. Use when you don't know
   in advance whether one result will dominate.
-- **\`require_confidence: 0.10 | 0.25 | 0.40\`** — opt-in abstention. AWM
-  returns \`[]\` instead of low-confidence noise. Use when you're about to ACT
-  on the recalled fact (grounding a decision, citing the memory verbatim,
-  contradicting a prior assumption). Thresholds: \`0.10\` strict — only abstain
-  on garbage; \`0.25\` balanced; \`0.40\` aggressive — prefer "I don't know"
-  over "best of bad." When abstention fires (empty result), treat it as a
-  signal — either the memory genuinely isn't there (read the code) or your
-  query missed (reformulate). Don't retry without the threshold.
+- **\`require_confidence\`** — abstention. The default (0.05) is already a light
+  gate: when the top results don't stand out from the rest, recall returns
+  nothing and the reply says **\`RECALL ABSTAINED\`** with the count it withheld.
+  An empty result *without* that line is genuine absence. The gate is on the
+  SHAPE of the score distribution, not relevance — so raising it silences
+  specific questions with one clear winner first (measured: 0.25 abstained on
+  two identifier queries scoring 0.26–0.38 while passing a vague one at 0.92).
+  Leave it alone for ordinary recall; \`0.10\` is the ceiling that still helps for
+  push-style use where nobody asked. When abstention fires, reformulate once
+  with the exact identifier, then read the code — don't retry with a lower
+  threshold to force an answer.
 - **\`workspace: "<name>"\`** — hive-mode recall across all agents in the
   workspace. Use when other agents may have written canonical knowledge you
   need. Default is agent-scoped (your own memories only). Can also be set
-  globally via the \`AWM_WORKSPACE\` env var.
+  globally via the \`AWM_WORKSPACE\` env var. Memories live in the agent pool
+  they were written to; if a session lands in an unexpected pool, \`memory_whoami\`
+  says which one before you conclude the memory is missing.
 
 ### Keep memory fresh
 - After recalling a memory, if you observe the real state is different → call
   \`memory_supersede\` immediately with the corrected version.
-- After using a recalled memory: call \`memory_feedback\` (useful/not-useful) so the
-  activation engine learns what's valuable.
+- After using a recalled memory: call \`memory_feedback\` (useful/not-useful) **with the
+  \`recall_id\`** printed at the end of the recall output (\`[recall_id: …]\`). That id
+  joins the feedback to the recall that produced it, which is what lets AWM learn
+  which recalls were worth their tokens; feedback without it is a bare vote.
 - If you discover a memory is factually wrong: \`memory_retract\` to remove it.
 - **If you bypass AWM (file-memory, in-context notes, "I'll just remember"), the memory
   drifts out of date. The system relies on you to keep it current. This is the #1
   failure mode.**
 
-### Cognition recipes — YOU do the thinking, AWM keeps the result (0.11.x)
+### Cognition recipes — YOU do the thinking, AWM keeps the result
 AWM contains no LLM. When memory needs real thinking — distilling a repeatable
 procedure, reflecting on a failure — AWM hands YOU a versioned recipe (prompt +
 strict output shape) and you run it as a SEPARATE focused pass, then write the
@@ -533,7 +597,7 @@ result back as an ordinary memory with provenance.
 - Re-deriving the same skill name reinforces the existing memory instead of
   duplicating it, so don't fear writing a skill you may have written before.
 
-### Content fade — write-and-forget is safe (0.8.x)
+### Content fade — write-and-forget is safe
 Un-recalled engrams gradually fade their content while preserving cue pathways
 (concept + tags + embedding stay intact). This is Paper 1 — storage
 degradation. Practical implications:
@@ -548,7 +612,7 @@ degradation. Practical implications:
   its fade clock. Frequently-recalled memories stay full-fidelity automatically.
 - **Supersede is the right tool for stale facts.** When you observe a memory
   is outdated, call \`memory_supersede\` — the new version inherits the old
-  one's coherent associations (counter-narrative replacement, 0.8.x) so cue
+  one's coherent associations (counter-narrative replacement) so cue
   pathways carry forward to the replacement.
 
 ### Example — good vs bad memory_write
@@ -600,7 +664,7 @@ comprehension cost. This is output-only: it never changes the data or your memor
 - Don't bother for small outputs — it only compresses when the saving is worthwhile
   and falls back to plain JSON if TOON wouldn't reproduce the data exactly.
 
-### Backend (SQLite vs PGlite, 0.8.x)
+### Backend (SQLite vs PGlite)
 AWM ships two storage backends. The installer picks SQLite by default; both
 are functionally equivalent for cognitive workloads, but differ in operational
 guarantees:
@@ -620,15 +684,26 @@ For the comparison table (recall quality parity, BM25 vs \`ts_rank_cd\`,
 multi-process guarantees), see \`docs/pglite-feature-parity.md\`.
 
 ### Diagnostics / escape hatches (env vars, only if you know why)
-The 0.7.6→0.7.14 work cut recall latency from 11s to ~300ms. The 0.8.x work
-added the write-path rewrite (per-write 300+ ms → under 10ms) and PGlite
-parity tuning. Each optimization is gated by an env-var so it can be disabled
-for A/B testing if a regression appears in your workload:
+Each optimisation is gated by an env var so it can be disabled for A/B testing if a
+regression appears in your workload. \`memory_whoami\` prints the active fingerprint.
 
-Recall pipeline (0.7.x):
+Retrieval (set ON by \`awm setup\` since 0.14.6 — the measured-good configuration):
+- \`AWM_RERANK2=1\` — second-stage rerank by the cross-encoder's own score.
+- \`AWM_RERANK_WINDOW=query\` — 400-char rerank window on the densest query-term
+  region instead of the prefix (25% → 87.5% on long memories).
+- \`AWM_RERANK_TAGS=1\` — tags fed into the rerank passage (+7.4pp s@1).
+
+Hook sidecar (0.14.2):
+- \`AWM_HOOK_PORT=8401\` / \`AWM_HOOK_PORT_RANGE=10\` — each MCP process binds the
+  first free port in the range, so several sessions can run at once. The shipped
+  hooks find their own session's sidecar by probing the range and matching
+  \`agentId\` on \`/health\`; \`memory_whoami\` reports the port actually bound.
+
+Recall pipeline:
 - \`AWM_DISABLE_POOL_FILTER=1\` — disables the candidate pool reduction
   pre-filter in recall. Reverts to scoring all active candidates.
-- \`AWM_ENTITY_INDEX_FETCH=1\` — see "Entity index" above (0.12.x, default off).
+- \`AWM_ENTITY_INDEX_FETCH=1\` — see "Entity index" above (default off; measured
+  no effect on the real-store benchmark, 0.14.5).
 - \`AWM_DISABLE_SLIM_CACHE=1\` — disables the in-memory slim cache.
   Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
 - \`AWM_DISABLE_RERANK_SKIP=1\` — disables the cross-encoder skip on
@@ -636,8 +711,8 @@ Recall pipeline (0.7.x):
 - \`AWM_DISABLE_EXPANSION_CACHE=1\` — disables the query expansion skip
   heuristic + LRU cache. Forces every recall through flan-t5-small.
 
-Write pipeline + lifecycle (0.8.x, plus 0.12.x telemetry):
-- \`AWM_SLOW_WRITE_MS=250\` (0.12.x) — any write slower than this logs one stderr
+Write pipeline + lifecycle:
+- \`AWM_SLOW_WRITE_MS=250\` — any write slower than this logs one stderr
   line with a phase-time breakdown (embed/novelty/persist, event-loop lag,
   embed-model cold-load ms). \`0\` disables. Useful for diagnosing why a session's
   first write/recall feels slow.
@@ -653,7 +728,7 @@ Write pipeline + lifecycle (0.8.x, plus 0.12.x telemetry):
 - \`AWM_GRANULARITY_FULL_LEN=1000\` — char budget for the top result in
   \`granularity: 'auto'\` mode when there's a clear winner.
 
-PGlite backend (0.8.x):
+PGlite backend:
 - \`AWM_PGLITE_BM25_M=1\` — multiplier on PGlite \`ts_rank_cd\` to calibrate
   against SQLite FTS5 BM25 distribution. M=1 (default) is passthrough;
   higher M boosts PGlite scores at the cost of recall-ranking precision

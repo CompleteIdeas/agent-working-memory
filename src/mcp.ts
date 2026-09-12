@@ -30,6 +30,7 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { deriveAgentFromDir as deriveAgentFromDirShared } from './core/agent-id.js';
 import { resolve, basename } from 'node:path';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -111,17 +112,10 @@ const BACKEND: StoreBackend = getConfiguredBackend();
 const DB_PATH = process.env.AWM_DB_PATH ?? (BACKEND === 'pglite' ? 'memory-pglite' : 'memory.db');
 
 // Fallback agent selection when AWM_AGENT_ID/WORKER_NAME are unset: derive from
-// the project directory so plain `claude` launches still bind to the right
-// store. Personal-Projects -> 'personal'; everything else -> 'work' (the
-// primary store). MUST stay in sync with the SessionStart hook
-// (~/.claude/hooks/awm-session-start.ps1) so the hook's restore and the
-// server's reads/writes never diverge. Guard the AWM package's own path
-// (it lives under Personal-Projects) so a stray server cwd can't mis-bind.
-function deriveAgentFromDir(): string {
-  const dir = (process.env.CLAUDE_PROJECT_DIR ?? process.cwd()).replace(/\\/g, '/');
-  if (/\/AgentSynapse\//i.test(dir)) return 'work';
-  return /\/Personal-Projects(\/|$)/i.test(dir) ? 'personal' : 'work';
-}
+// the project directory (core/agent-id.ts — one definition shared with `awm setup`
+// and mirrored in the shipped hook scripts, so the server, the installer and the
+// hooks always name the same pool for a given directory).
+const deriveAgentFromDir = () => deriveAgentFromDirShared(process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
 const AGENT_ID = process.env.AWM_AGENT_ID ?? process.env.WORKER_NAME ?? deriveAgentFromDir();
 const HOOK_PORT = parseInt(process.env.AWM_HOOK_PORT ?? '8401', 10);
 // 0.14.2: ports to try upward from HOOK_PORT when it is busy (see sidecar.ts).

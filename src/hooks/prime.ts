@@ -36,7 +36,12 @@ import { packRecallByBudget, estimateTokens, type PackedRecall } from '../core/t
 
 /** Shape returned by the sidecar's `activate` dependency. */
 export interface PrimeCandidate {
-  engram: { id: string; concept: string; content: string; memoryClass?: string; validTo?: string | null };
+  engram: {
+    id: string; concept: string; content: string; memoryClass?: string;
+    validTo?: string | null;
+    /** Used for the age label; Date from the store, string over HTTP. */
+    createdAt?: Date | string | null;
+  };
   score: number;
   summary?: string;
   confidence?: number;
@@ -64,21 +69,31 @@ export interface PrimeResult {
 export const PRIME_DEFAULTS = {
   maxTokens: 600,
   /**
-   * 0.25 = the "balanced" threshold AWM's own recall docs recommend for
-   * acting on a memory. Priming is acting on it without being asked, so it
-   * should not be looser than the value the docs suggest for deliberate use.
+   * 0.10 (was 0.25 until 0.14.6). The confidence this gates on describes the
+   * SHAPE of the score distribution — how far the top results stand out from
+   * the rest — not relevance. Measured 2026-09-11 on a 30k-memory store: at
+   * 0.25 two specific prompts with one clear winner (top score 0.26 and 0.38)
+   * were silenced while a vague prompt passed at 0.92. Those specific prompts
+   * are exactly what priming exists for. 0.10 passed all three and still
+   * abstains on the garbage case (confidence ≈ 0.05).
    */
-  minConfidence: 0.25,
+  minConfidence: 0.10,
   minScore: 0.10,
 } as const;
 
 /** One injected line. Deliberately terser than the MCP recall format — this is
  *  context the agent didn't ask for, so it should read as a brief note, not a
  *  report. The id is retained so the agent can act on it (feedback, supersede). */
-function formatPrimeLine(c: PrimeCandidate): string {
+function formatPrimeLine(c: PrimeCandidate, now: number = Date.now()): string {
   const body = c.summary ?? c.engram.content;
   const validity = c.engram.validTo ? ` [valid until ${c.engram.validTo}]` : '';
-  return `- ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
+  // Class + age make the volatility rubric mechanical: a 90-day-old working
+  // memory reads differently from a 2-day-old canonical one, and the agent
+  // should not have to look either up before deciding how much to trust it.
+  const cls = c.engram.memoryClass ?? 'working';
+  const created = c.engram.createdAt ? new Date(c.engram.createdAt as any).getTime() : NaN;
+  const age = Number.isFinite(created) ? ` · ${Math.max(0, Math.round((now - created) / 86_400_000))}d` : '';
+  return `- [${cls}${age}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
 }
 
 /**
