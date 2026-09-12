@@ -29,7 +29,7 @@
  * Run: npx tsx tests/realstore-eval/runner.ts
  *      REALSTORE_LIMIT=300 npx tsx tests/realstore-eval/runner.ts   (subset)
  */
-import { readFileSync, copyFileSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, copyFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { EngramStore } from '../../src/storage/sqlite.js';
@@ -54,6 +54,19 @@ const FALLBACK_TOKENS = 2106;
 // If the product default moves again, move this with it.
 const RECALL_LIMIT = Number(process.env.REALSTORE_K ?? 3);
 const GRANULARITY = (process.env.REALSTORE_GRANULARITY ?? 'full') as 'full' | 'compact' | 'auto';
+// 0.14.4: PIN THE CLOCK. ACT-R decay scores every engram by its age, and age was
+// computed from the wall clock — so this "frozen" snapshot scored differently
+// every day. Measured: the same 300 queries, same snapshot, same code read 70.0%
+// s@1 at 21:36 one evening and 67.0% ~20 h later (five identical runs, so not
+// noise). Default to the snapshot's own newest engram timestamp, which makes
+// every run see the store exactly as it was when frozen. Override with
+// REALSTORE_NOW=<ISO or ms> to deliberately test ageing.
+const SNAPSHOT_NOW_FALLBACK = Date.parse('2026-08-24T09:27:21.841Z');
+// Per-query trace so two runs can be diffed QUERY BY QUERY instead of by aggregate.
+// One JSON line per answerable query: {i, query, goldId, rank, top}. Written to
+// REALSTORE_TRACE if set, else next to the runner as trace-<snapshot>-<unix>.jsonl.
+const TRACE = process.env.REALSTORE_TRACE
+  ?? join(import.meta.dirname, `trace-${(process.env.REALSTORE_SNAPSHOT ?? 'store.db').replace(/\.db$/, '')}-${Math.floor(Date.now() / 1000)}.jsonl`);
 const est = (s: string) => Math.max(Math.ceil(s.split(/\s+/).filter(Boolean).length * 1.3), Math.ceil(s.length / 4));
 
 interface Item {
@@ -118,16 +131,32 @@ async function main() {
   // and still has to go read the code, so the token saving is illusory.
   let sufficient = 0, retrievedForSuff = 0;
 
+  // Resolve the pinned clock from the snapshot itself when possible.
+  let snapshotNow = SNAPSHOT_NOW_FALLBACK;
+  try {
+    const row = (store as any).db?.prepare?.('SELECT MAX(created_at) AS m FROM engrams')?.get?.() as { m?: string } | undefined;
+    if (row?.m) snapshotNow = Date.parse(row.m);
+  } catch { /* fall back to the constant */ }
+  if (process.env.REALSTORE_NOW) {
+    const v = process.env.REALSTORE_NOW;
+    snapshotNow = /^\d+$/.test(v) ? Number(v) : Date.parse(v);
+  }
+  console.log(`  clock pinned to ${new Date(snapshotNow).toISOString()}  (decay ages computed against the snapshot, not the wall clock)`);
+  const traceLines: string[] = [];
+
+  let qi = 0;
   for (const it of items) {
     const _t0 = process.hrtime.bigint();
     const res: any[] = await activation.activate({
       agentId: 'work', context: it.query, limit: RECALL_LIMIT,
       granularity: GRANULARITY, internal: true,
+      now: snapshotNow, asOf: snapshotNow,
     } as any);
     lat.push(Number(process.hrtime.bigint() - _t0) / 1e6);
     const idx = res.findIndex(r => r.engram.id === it.goldId);
     const hit1 = idx === 0;
     const hit5 = idx >= 0 && idx < 5;
+    traceLines.push(JSON.stringify({ i: qi++, query: it.query, goldId: it.goldId, rank: idx, top: res[0]?.engram?.id ?? null, topScore: res[0]?.score ?? null }));
     n++;
     if (hit1) s1++;
     if (hit5) s5++;
@@ -162,6 +191,7 @@ async function main() {
   for (const a of advs) {
     const res: any[] = await activation.activate({
       agentId: 'work', context: a.query, limit: 10, minScore: 0.3, abstentionThreshold: 0.3, internal: true,
+      now: snapshotNow, asOf: snapshotNow,
     } as any);
     if (res.length === 0) abstained++;
     else advWasteTok += est(res.map(r => `${r.engram.concept}: ${r.engram.content}`).join('\n'));
@@ -169,6 +199,7 @@ async function main() {
 
   store.close?.();
   for (const s of ['', '-wal', '-shm']) { try { if (existsSync(WORK + s)) unlinkSync(WORK + s); } catch {} }
+  try { writeFileSync(TRACE, traceLines.join('\n') + '\n'); console.log(`  per-query trace: ${TRACE}`); } catch { /* trace is best-effort */ }
 
   const pct = (k: number, d: number) => (d ? `${(100 * k / d).toFixed(1)}%` : '—');
   console.log(`  success@1 ${pct(s1, n)}   success@5 ${pct(s5, n)}   MRR ${(rr / Math.max(n, 1) * 100).toFixed(1)}%`);

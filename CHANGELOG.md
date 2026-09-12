@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.14.4 (2026-09-11) — the benchmark was ageing: decay clock is now pinnable, and the eval pins it
+
+The identifier-fixture benchmark read **70.0% success@1** one evening and **67.0%** the next
+afternoon on a byte-identical snapshot with identical code. The exact earlier commit, checked
+out fresh and run on the later day, also read 67.0% — so the code was innocent. Five same-day
+runs agreed to the query, so it was not noise.
+
+**Root cause:** ACT-R decay scored every engram by `(Date.now() − createdAt)`. `asOf` had
+pinned the temporal *parser* for evals, but decay still read the wall clock, so a "frozen"
+snapshot got one day older every day and its scores drifted with it — most on memories under
+30 days old, where `log(age)` moves fastest. `docs/benchmarks.md` had attributed the drift to
+cross-encoder floating-point nondeterminism; that note is corrected in place.
+
+- **`ActivationQuery.now?: number`** — decay clock override. Defaults to `Date.now()`, so
+  production recall still ages normally. Both decay sites in `activate()` read it.
+- **`tests/realstore-eval/runner.ts` pins `now` and `asOf` to the snapshot's own newest
+  `created_at`**, prints `clock pinned to <ts>`, and accepts `REALSTORE_NOW=<ISO|ms>` to test
+  ageing deliberately. Runs now reproduce across days.
+- **Per-query trace** written every run (`REALSTORE_TRACE`, default
+  `tests/realstore-eval/trace-<snapshot>-<unix>.jsonl`, one line per query:
+  `{i, query, goldId, rank, top, topScore}`), so the next unexplained aggregate gap gets
+  diffed query by query instead of re-derived from scratch.
+- New `tests/decay-clock.test.ts` (3). Full suite green.
+
+**Consequence for every published number:** cross-day comparisons in `benchmarks.md`
+(including the 0.13.x category wins and the 10-day regression check) were comparing scores
+taken on different days. Within-day A/B arms remain valid — they share a clock. The
+pinned-clock baseline recorded below is the new identifier-fixture reference; 70.0 and
+67.0 are both retired as artifacts of the hour they ran.
+
+Also in this release, measured with the clock pinned within-day (see `docs/benchmarks.md`):
+- `AWM_ENTITY_INDEX_FETCH=1` (D11) changes **0 of 300** answers even on a snapshot backfilled
+  from 3% to 74% entity coverage with 73% of gold reachable; +30–55 ms. Stays parked.
+- The graph channel touches 85% of top-3 results and changes **0 of 120** of them; the
+  cross-encoder ordering is never overturned. 77% of edges are ~0.01-weight `bridge` edges on
+  17,605 `pattern:` synthesis nodes, 100% of which have never been recalled.
+- New tools: `tests/realstore-eval/backfill-entities.ts` (idempotent entity-index backfill
+  from existing tags) and `tests/realstore-eval/graph-contribution-probe.ts`.
+
 ## 0.14.3 (2026-09-11) — feedback joins to the recall that produced it; memory_stats reports outcomes
 
 A telemetry review against the live store found that AWM instrumented what it *did* and

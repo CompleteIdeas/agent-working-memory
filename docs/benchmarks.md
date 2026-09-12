@@ -45,13 +45,24 @@ is attributable to code rather than data.
 | adversarial correctly silent | 90.0% | **90.0%** |
 | unit suite | 726 passing | **726 passing** |
 | identifier s@1 @ shipped k=3 | 70.0% | **70.0%** |
+| **identifier s@1, clock PINNED to snapshot (v0.14.4, the reproducible reference)** | — | **68.0%** (204/300; s@5 70.7%, MRR 69.3%, +71 tok/recall) |
 | identifier sufficiency | 99.3% | **99.3%** (290/292) |
 | identifier NET tokens | +115/recall | **+116/recall** |
 
 **No regression.** At the shipped configuration the run reproduces to within one token per
-recall. The category fixture's s@5 and MRR each moved 0.2pp (≈ one query in 450), which on a
-frozen snapshot with a seeded sample is cross-encoder floating-point nondeterminism, not a
-change in behaviour.
+recall. The category fixture's s@5 and MRR each moved 0.2pp (≈ one query in 450).
+
+> **Correction (2026-09-11, v0.14.4).** The paragraph above originally attributed that drift
+> to "cross-encoder floating-point nondeterminism". It was not. ACT-R decay computed every
+> engram's age from the **wall clock**, so the "frozen" snapshot aged one day per day and its
+> scores moved with it. Measured: the identifier fixture read **70.0% s@1 at 21:36 on 09-10
+> and 67.0% ~20 h later** on byte-identical data — and the *same commit* checked out fresh
+> read 67.0% today too, so the code was innocent. Five HEAD runs on one day agreed to the
+> query; the drift is deterministic and daily. **Every cross-day comparison in this file was
+> comparing different scores; within-day A/Bs remain valid.** From 0.14.4 the runner pins
+> `query.now` (and `asOf`) to the snapshot's own newest timestamp and prints
+> `clock pinned to …`, so runs reproduce across days. The pinned-clock baseline supersedes
+> both 70.0 and 67.0 as the identifier-fixture reference — see the 0.14.4 entry below.
 
 ### Instrument defect found and fixed
 

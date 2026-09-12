@@ -317,6 +317,15 @@ export interface ActivationQuery {
    * something different on every run.
    */
   asOf?: number;
+  /**
+   * 0.14.4: clock for ACT-R decay. Defaults to Date.now(). `asOf` pinned the
+   * temporal PARSER but decay still read the wall clock, so a "frozen" eval
+   * snapshot scored differently every day — a 300-query benchmark read 70.0%
+   * s@1 one evening and 67.0% the next afternoon on byte-identical data and
+   * code. Evals must pass the snapshot's own timestamp here. Production leaves
+   * it unset.
+   */
+  now?: number;
   bm25Only?: boolean;          // Skip embedding — fast text-only retrieval for bulk/benchmark scenarios
   /**
    * Output granularity (Paper 3: cognitive teaming, Brill 2018 ACT-R collaboration).

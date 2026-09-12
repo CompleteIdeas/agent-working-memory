@@ -502,8 +502,11 @@ export class ActivationEngine {
     // top-N (~30 candidates) — its on-demand `getAssociationsFor` lookups are
     // cheap (<5ms total).
     const assocStats = await this.store.getAssociationStatsForBatch(candidates.map(e => e.id));
+    // 0.14.4: decay clock is overridable (query.now) so evals against a frozen
+    // snapshot are reproducible across days. See ActivationQuery.now.
+    const nowMs = query.now ?? Date.now();
     const scored = candidates.map(engram => {
-      const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      const ageDays = (nowMs - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const stats = assocStats.get(engram.id) ?? { count: 0, sumWeight: 0 };
 
       // --- Text relevance (keyword signals) ---
@@ -638,7 +641,7 @@ export class ActivationEngine {
             candidateMap.set(r.engram.id, r.engram);
             // Score the new candidate
             const engram = r.engram;
-            const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+            const ageDays = (nowMs - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
             const associations = await this.store.getAssociationsFor(engram.id);
             const cTokens = tokenize(engram.concept);
             const ctTokens = tokenize(engram.content);
