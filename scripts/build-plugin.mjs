@@ -87,21 +87,21 @@ written.push(write(join('bin', 'awm-mcp-launcher.cjs'),
 
 // ── hooks.json — same five events `awm setup` wires, via ${CLAUDE_PLUGIN_ROOT} ──
 const cmd = (file) => `node "\${CLAUDE_PLUGIN_ROOT}/hooks/${file}"`;
-written.push(write(join('hooks', 'hooks.json'), JSON.stringify({
-  Stop: [{
-    matcher: '',
-    hooks: [{
-      type: 'command',
-      command: 'echo "MEMORY: (1) Did you learn anything new? Call memory_write. (2) Are you about to work on a topic you might have prior knowledge about? Call memory_recall. (3) Switching tasks? Call memory_task_begin."',
-      timeout: 5,
-      async: true,
+written.push(write(join('hooks', 'hooks.json'), JSON.stringify({ hooks: {
+    Stop: [{
+      matcher: '',
+      hooks: [{
+        type: 'command',
+        command: 'echo "MEMORY: (1) Did you learn anything new? Call memory_write. (2) Are you about to work on a topic you might have prior knowledge about? Call memory_recall. (3) Switching tasks? Call memory_task_begin."',
+        timeout: 5,
+        async: true,
+      }],
     }],
-  }],
-  PreCompact: [{ matcher: '', hooks: [{ type: 'command', command: cmd('awm-checkpoint.cjs'), timeout: 10 }] }],
-  SessionEnd: [{ matcher: '', hooks: [{ type: 'command', command: cmd('awm-checkpoint.cjs'), timeout: 8 }] }],
-  UserPromptSubmit: [{ matcher: '', hooks: [{ type: 'command', command: cmd('awm-prime.cjs'), timeout: 6 }] }],
-  PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: cmd('awm-db-mutation-reminder.cjs'), timeout: 5, async: true }] }],
-}, null, 2)));
+    PreCompact: [{ matcher: '', hooks: [{ type: 'command', command: cmd('awm-checkpoint.cjs'), timeout: 10 }] }],
+    SessionEnd: [{ matcher: '', hooks: [{ type: 'command', command: cmd('awm-checkpoint.cjs'), timeout: 8 }] }],
+    UserPromptSubmit: [{ matcher: '', hooks: [{ type: 'command', command: cmd('awm-prime.cjs'), timeout: 6 }] }],
+    PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: cmd('awm-db-mutation-reminder.cjs'), timeout: 5, async: true }] }],
+} }, null, 2)));
 
 // ── the guidance, as a skill rather than an append to the user's CLAUDE.md ────
 // Better than what setup does today: loaded on demand, versioned with the plugin, and it

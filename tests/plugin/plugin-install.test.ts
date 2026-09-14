@@ -103,8 +103,17 @@ describe('claude code plugin — the install path', () => {
     expect(skill.length).toBeGreaterThan(5000);
   });
 
+  // This test previously asserted the shape I had assumed rather than the documented one,
+  // so it passed while the plugin failed to load in Claude Code with event names at the top
+  // level. A plugin hooks file wraps them under "hooks", exactly as settings.json does.
+  it('hooks.json wraps events under a top-level "hooks" key', () => {
+    const raw = readJson(resolve(pluginDir, manifest.hooks));
+    expect(Object.keys(raw), 'hooks.json must have exactly one top-level key: "hooks"').toEqual(['hooks']);
+    expect(typeof raw.hooks).toBe('object');
+  });
+
   it('every hook command points at a script that exists and parses', () => {
-    const hooks = readJson(resolve(pluginDir, manifest.hooks));
+    const hooks = readJson(resolve(pluginDir, manifest.hooks)).hooks;
     const events = Object.keys(hooks);
     expect(events).toEqual(
       expect.arrayContaining(['Stop', 'PreCompact', 'SessionEnd', 'UserPromptSubmit', 'PostToolUse']),

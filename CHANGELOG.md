@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.15.1 (2026-09-14) — the plugin's hooks.json was malformed, so the whole plugin refused to load
+
+A plugin hooks file wraps its event names under a top-level `"hooks"` key, exactly as
+`settings.json` does. The generator emitted the event names at the top level instead, and
+Claude Code rejected the plugin with "couldn't be loaded".
+
+The symptom was misleading: the MCP server and the `awm-memory` skill both came up fine, so
+the 19 tools were there and only the hooks were missing — which reads as a partial failure
+rather than a malformed file.
+
+`tests/plugin/plugin-install.test.ts` did not catch it because it asserted the shape I had
+assumed rather than the documented one: it read `Object.keys(hooks)` and found the event
+names, which is exactly what the broken file contained. A test written from the same wrong
+belief as the code cannot fail. It now asserts the wrapper explicitly, against the spec.
+
+
 ## 0.15.0 (2026-09-13) — install it as a Claude Code plugin
 
 `awm setup --global` writes an MCP entry, four hook scripts, and a section appended to your
