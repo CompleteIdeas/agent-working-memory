@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs INSIDE a clean node:22 container. Validates the 0.14.6 tarball the way a brand-new
+# Runs INSIDE a clean node:22 container. Validates the CURRENT tarball the way a brand-new
 # user would get it: global install, `awm setup`, then the two things that cannot be
 # demonstrated on the host right now because its MCP processes are all 0.14.1 —
 #   (a) a second process walks to the next free hook port instead of giving up
@@ -91,7 +91,10 @@ chk "a sidecar bound the preferred port 8401"    "[ -n \"$A\" ]"
 chk "the second WALKED to 8402 instead of dying" "[ -n \"$B\" ]"
 chk "8401 and 8402 serve DIFFERENT agents"       "[ \"$A_AGENT\" = work ] && [ \"$B_AGENT\" = personal ]"
 chk "/health reports the real bound port"        "[ \"$A_PORT\" = 8401 ] && [ \"$B_PORT\" = 8402 ]"
-chk "/health reports the version"                "[ \"$A_VER\" = 0.14.6 ]"
+# Derived, never hardcoded: this assertion silently went stale at 0.14.6 and only failed
+# three releases later, when it looked like a product bug rather than a rotting test.
+EXPECTED_VER=$(node -e "console.log(require('/usr/local/lib/node_modules/agent-working-memory/package.json').version)")
+chk "/health reports the version ($EXPECTED_VER)"  "[ \"$A_VER\" = \"$EXPECTED_VER\" ]"
 
 echo
 echo "############ 7. the shipped hooks route to their OWN agent ############"

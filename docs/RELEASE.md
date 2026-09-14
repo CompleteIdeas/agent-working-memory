@@ -30,6 +30,7 @@ Do not read the whole list. Find the rows that match what you actually changed.
 | **Hook behaviour, ports, or the sidecar** | `src/adapters/hook-scripts.ts` **and** `AWM_HOOKS_VERSION`, `tests/adapters/hook-scripts.test.ts`, `docs/reference.md` hook section, `docs/claude-code-setup.md` |
 | **Anything that changes what a FRESH install should look like** | `src/adapters/` — see the box below. This is the one that cost a whole release |
 | **A claim in the README** | Check it is still true. The README is the most-read and least-verified file in the repo |
+| **A version number inside a test** | Derive it, do not write it. `tests/docker/release-test.sh` asserted `/health` returned `0.14.6`; it went stale immediately and only failed three releases later, where it read as a product bug rather than a rotting assertion |
 | **A new npm script** | The script block in `README.md`, the Releasing section in `CONTRIBUTING.md`, and the Verify list below. A script nobody can find is a script nobody runs |
 | **A new doc, or a generated one** | `docs/README.md` — it is the index, and an unindexed page is invisible. Say plainly whether the page is hand-written or generated |
 | **`src/plugin/awm-mcp-launcher.cjs`** | `npm run build:plugin` **and** `npm run build:mcpb` — both surfaces ship the same launcher, and both are drift-gated |
