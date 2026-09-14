@@ -32,6 +32,17 @@ function expand(s: string, vars: Record<string, string>): string {
   return out;
 }
 
+/** Kill a child and WAIT for it to actually exit before touching its files. */
+function stopAndWait(child: any): Promise<void> {
+  return new Promise(res => {
+    if (child.exitCode !== null || child.signalCode !== null) return res();
+    const done = () => res();
+    child.once('exit', done);
+    child.kill();
+    setTimeout(() => { child.off('exit', done); res(); }, 10_000);
+  });
+}
+
 describe('claude desktop extension (.mcpb)', () => {
   let manifest: any;
 
@@ -87,9 +98,10 @@ describe('claude desktop extension (.mcpb)', () => {
   // The behaviour that manifest validation cannot reach.
   it('the launcher survives the empty strings Desktop sends for cleared settings', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'awm-mcpb-'));
+    let child: any;
     try {
       const launcher = join(BUNDLE, manifest.server.entry_point);
-      const child = spawn(process.execPath, [launcher], {
+      child = spawn(process.execPath, [launcher], {
         env: {
           ...process.env,
           AWM_DB_PATH: join(dir, 'scratch.db'),
@@ -125,7 +137,11 @@ describe('claude desktop extension (.mcpb)', () => {
 
       expect(info?.serverInfo?.name).toBe('agent-working-memory');
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      // Wait for the process to release the store before deleting it. rmSync straight after
+      // kill() raced the OS and failed with EBUSY once the backend fix made these tests
+      // create a real SQLite file rather than a PGlite directory.
+      await stopAndWait(child);
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* temp dir; best-effort */ }
     }
   }, 120_000);
 

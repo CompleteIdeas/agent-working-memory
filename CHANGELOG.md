@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.15.2 (2026-09-14) — a new store at an explicit path could silently become PGlite
+
+Found by the new cross-surface end-to-end test, which is the whole argument for having one.
+
+`detectBackendFromDisk()` inferred the backend from `AWM_DB_PATH` only when that path already
+existed. For a **new** store it fell through to the conventional defaults in the current
+working directory — so running from a checkout that happens to contain a `memory-pglite/`
+directory turned `AWM_DB_PATH=/tmp/new-store.db` into a PGlite **directory** at that path.
+
+That is worse than an odd file layout. PGlite is single-process: two surfaces pointed at
+"one shared store" would have had the second refuse to start, which is exactly the promise
+the Desktop extension is built on. An explicit path now defaults to SQLite and stops, rather
+than consulting files that have nothing to do with the path it was given. `AWM_STORE_BACKEND`
+still selects PGlite deliberately, and an existing directory is still detected as PGlite.
+
+- **`tests/plugin/cross-surface-e2e.test.ts`** — unzips the real packed `.mcpb`, expands the
+  manifest the way Desktop does, writes a memory through the Desktop launcher, then recalls
+  it through the Claude Code plugin launcher from the same SQLite file, and checks the
+  `surface=` tags. It repacks the artifact on every run after the first version of it caught
+  a `.mcpb` built twenty minutes before a manifest change.
+- Three regression tests in `tests/storage/factory.test.ts` for the backend rule.
+- Two existing tests were racing `kill()` with `rmSync` and failed with EBUSY once the fix
+  made them create a real SQLite file rather than a directory. They now wait for the process
+  to exit before deleting its store — never race a killed process.
+
+Suite 786.
+
+
 ## 0.15.1 (2026-09-14) — the plugin's hooks.json was malformed, so the whole plugin refused to load
 
 A plugin hooks file wraps its event names under a top-level `"hooks"` key, exactly as

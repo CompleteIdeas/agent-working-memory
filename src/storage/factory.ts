@@ -49,12 +49,24 @@ export type StoreBackend = 'sqlite' | 'pglite' | 'postgres';
 function detectBackendFromDisk(): StoreBackend | null {
   // If AWM_DB_PATH is set, infer from its shape.
   const explicitPath = process.env.AWM_DB_PATH;
-  if (explicitPath && existsSync(explicitPath)) {
-    try {
-      const stat = statSync(explicitPath);
-      if (stat.isDirectory()) return 'pglite'; // PGlite uses a directory
-      if (stat.isFile()) return 'sqlite';      // SQLite is a single file
-    } catch { /* fall through */ }
+  if (explicitPath) {
+    if (existsSync(explicitPath)) {
+      try {
+        const stat = statSync(explicitPath);
+        if (stat.isDirectory()) return 'pglite'; // PGlite uses a directory
+        if (stat.isFile()) return 'sqlite';      // SQLite is a single file
+      } catch { /* fall through to the default below */ }
+    }
+    // The caller named a path that does not exist yet — a brand-new store. Default it to
+    // SQLite and STOP: falling through to the cwd conventions below would pick the backend
+    // from files that have nothing to do with the path that was asked for.
+    //
+    // Not hypothetical. Running from a checkout containing a `memory-pglite/` directory
+    // made a fresh AWM_DB_PATH=/tmp/new-store.db resolve to PGlite, which is
+    // single-process — so two surfaces pointed at 'the same store' would have had the
+    // second refuse to start. Found by the cross-surface end-to-end test.
+    // PGlite at a new path is still reachable via AWM_STORE_BACKEND=pglite.
+    return 'sqlite';
   }
 
   // Otherwise look for the conventional defaults in cwd.

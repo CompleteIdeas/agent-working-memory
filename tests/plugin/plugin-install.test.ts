@@ -41,6 +41,17 @@ function pathsIn(command: string, pluginRoot: string): string[] {
   return [...expanded.matchAll(/"([^"]+\.(?:cjs|mjs|js))"/g)].map(m => m[1]);
 }
 
+/** Kill a child and WAIT for it to actually exit before touching its files. */
+function stopAndWait(child: any): Promise<void> {
+  return new Promise(res => {
+    if (child.exitCode !== null || child.signalCode !== null) return res();
+    const done = () => res();
+    child.once('exit', done);
+    child.kill();
+    setTimeout(() => { child.off('exit', done); res(); }, 10_000);
+  });
+}
+
 describe('claude code plugin — the install path', () => {
   let marketplace: any;
   let pluginDir: string;
@@ -145,9 +156,10 @@ describe('claude code plugin — the install path', () => {
   // Claude Code does, and require the full tool surface back.
   it('the launcher starts the MCP server and serves every tool', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'awm-plugin-'));
+    let child: any;
     try {
       const launcher = join(pluginDir, 'bin', 'awm-mcp-launcher.cjs');
-      const child = spawn(process.execPath, [launcher], {
+      child = spawn(process.execPath, [launcher], {
         env: {
           ...process.env,
           AWM_DB_PATH: join(dir, 'scratch.db'),   // never the real store
@@ -189,7 +201,11 @@ describe('claude code plugin — the install path', () => {
       expect(tools).toContain('memory_whoami');
       expect(tools.length).toBeGreaterThanOrEqual(19);
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      // Wait for the process to release the store before deleting it. rmSync straight after
+      // kill() raced the OS and failed with EBUSY once the backend fix made these tests
+      // create a real SQLite file rather than a PGlite directory.
+      await stopAndWait(child);
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* temp dir; best-effort */ }
     }
   }, 120_000);
 

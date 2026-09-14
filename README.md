@@ -244,7 +244,7 @@ npm run test:linux      # build + full suite on Linux (781/781)
 
 ## Status
 
-Active development, v0.15.1. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.15.2. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

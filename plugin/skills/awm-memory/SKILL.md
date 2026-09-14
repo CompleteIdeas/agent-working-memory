@@ -10,7 +10,7 @@ description: >-
 
 # Agent Working Memory
 
-Generated from `src/adapters/common.ts` (AWM v0.15.1) — the same guidance
+Generated from `src/adapters/common.ts` (AWM v0.15.2) — the same guidance
 `awm setup` writes into CLAUDE.md. Do not edit here; edit the source and re-run
 `npm run build:plugin`.
 

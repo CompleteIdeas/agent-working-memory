@@ -23,6 +23,43 @@ afterEach(() => {
   try { rmSync(TMP_BASE, { recursive: true, force: true }); } catch { /* noop */ }
 });
 
+  // REGRESSION. A brand-new store at an explicit AWM_DB_PATH used to inherit its backend
+  // from whatever happened to be lying in the current working directory, because
+  // detectBackendFromDisk fell through to the `memory-pglite` / `memory.db` conventions
+  // when the named path did not exist yet.
+  //
+  // Running from a checkout containing memory-pglite/ therefore turned
+  // AWM_DB_PATH=/tmp/new.db into a PGlite DIRECTORY. PGlite is single-process, so two
+  // surfaces pointed at "one shared store" would have had the second refuse to start —
+  // which is the entire premise of the Desktop extension. Found by the cross-surface
+  // end-to-end test, not by any unit test.
+  it('does not take the backend from cwd when AWM_DB_PATH names a store that does not exist yet', () => {
+    const cwdWithPglite = join(TMP_BASE, 'checkout');
+    mkdirSync(join(cwdWithPglite, 'memory-pglite'), { recursive: true });
+    process.chdir(cwdWithPglite);
+
+    process.env.AWM_DB_PATH = join(TMP_BASE, 'brand-new', 'store.db');
+    expect(getConfiguredBackend()).toBe('sqlite');
+  });
+
+  it('still honours an explicit AWM_STORE_BACKEND=pglite at a new path', () => {
+    const cwdWithPglite = join(TMP_BASE, 'checkout2');
+    mkdirSync(cwdWithPglite, { recursive: true });
+    process.chdir(cwdWithPglite);
+
+    process.env.AWM_DB_PATH = join(TMP_BASE, 'brand-new-2');
+    process.env.AWM_STORE_BACKEND = 'pglite';
+    expect(getConfiguredBackend()).toBe('pglite');
+  });
+
+  it('still detects pglite from an AWM_DB_PATH that already exists as a directory', () => {
+    const dir = join(TMP_BASE, 'existing-pglite');
+    mkdirSync(dir, { recursive: true });
+    process.env.AWM_DB_PATH = dir;
+    expect(getConfiguredBackend()).toBe('pglite');
+  });
+
+
 describe('Storage factory', () => {
   it('honors explicit AWM_STORE_BACKEND=sqlite', () => {
     process.env.AWM_STORE_BACKEND = 'sqlite';
