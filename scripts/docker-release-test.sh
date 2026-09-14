@@ -64,6 +64,28 @@ run_release() {
   docker run --rm --memory=6g --memory-swap=6g "${MOUNTS[@]}" node:22-bookworm-slim bash /test.sh
 }
 
+run_desktop() {
+  # The clean-room case the E2E test cannot cover: no checkout anywhere, so the launcher has
+  # to resolve the GLOBAL npm install. That is the path a real Desktop user takes.
+  local VERSION STAGE HOST_STAGE TGZ
+  VERSION=$(node -e "console.log(require('./package.json').version)")
+  STAGE="$ROOT/.release-stage"; HOST_STAGE="$HOST/.release-stage"
+  mkdir -p "$STAGE"
+  trap 'rm -rf "$ROOT/.release-stage"' EXIT
+
+  echo "Packing the package and the Desktop extension (v$VERSION)..."
+  npm run build >/dev/null || { echo "build failed"; return 1; }
+  node scripts/build-mcpb.mjs --pack >/dev/null || { echo "mcpb pack failed — npm i -g @anthropic-ai/mcpb"; return 1; }
+  TGZ=$(npm pack --pack-destination "$HOST_STAGE" --loglevel=error | tail -1)
+  test -f "$STAGE/$TGZ" || { echo "pack produced nothing"; return 1; }
+  local EXT="dist-mcpb/agent-working-memory-$VERSION.mcpb"
+  test -f "$ROOT/$EXT" || { echo "no .mcpb at $EXT"; return 1; }
+  echo "  $TGZ + $(basename "$EXT")"
+
+  docker run --rm --memory=6g --memory-swap=6g     -v "$HOST_STAGE/$TGZ:/tmp/awm.tgz:ro"     -v "$HOST/$EXT:/tmp/ext.mcpb:ro"     -v "$HOST/tests/docker/desktop-extension-test.sh:/test.sh:ro"     node:22-bookworm-slim bash /test.sh
+}
+
+
 run_linux() {
   # The repo goes in READ-ONLY. `npm ci` inside the container must never reach the host
   # checkout: it would swap node_modules for linux-x64 binaries and break the developer's
@@ -122,10 +144,11 @@ run_linux() {
 
 case "$MODE" in
   release) run_release ;;
+  desktop) run_desktop ;;
   linux)   run_linux ;;
   all)     run_release; R=$?; echo; echo "=========================================="; echo;
            run_linux;   L=$?
            echo; echo "release: $([ $R = 0 ] && echo PASS || echo FAIL)   linux: $([ $L = 0 ] && echo PASS || echo FAIL)"
            [ $R = 0 ] && [ $L = 0 ] ;;
-  *)       echo "usage: npm run test:docker [-- release|linux|all]"; exit 2 ;;
+  *)       echo "usage: npm run test:docker [-- release|linux|desktop|all]"; exit 2 ;;
 esac

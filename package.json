@@ -54,7 +54,8 @@
     "check:release": "node scripts/check-release.mjs",
     "bench": "node scripts/bench-current.mjs",
     "test:docker": "bash scripts/docker-release-test.sh",
-    "test:linux": "bash scripts/docker-release-test.sh linux"
+    "test:linux": "bash scripts/docker-release-test.sh linux",
+    "test:desktop": "bash scripts/docker-release-test.sh desktop"
   },
   "engines": {
     "node": ">=22.0.0"
