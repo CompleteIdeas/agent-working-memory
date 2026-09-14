@@ -70,6 +70,32 @@ hooks find the sidecar serving *their* agent rather than whichever process start
 
 ---
 
+## Where this plugin works
+
+| Surface | Works? | |
+|---|---|---|
+| **Claude Code** | **Yes** | Everything: 19 tools, all five hooks, the skill |
+| **Claude Cowork** | **No — do not install it there** | The skill loads and hooks run, but the memory tools do not |
+| **Claude Desktop** | Not yet | Needs an `.mcpb` bundle; Desktop does support local stdio MCP, so this is a packaging job rather than a limitation |
+
+### Why not Cowork
+
+Cowork supports plugins, and it supports skills, slash commands, sub-agents and hooks. What
+it does not support is a **local stdio MCP server**, which is exactly what AWM is. Anthropic's
+documentation is explicit: *"In Cowork, connectors reach external services through Anthropic's
+cloud, not through your local network,"* and a custom connector *"must point to a server that's
+reachable over the public internet from Anthropic's IP ranges."*
+
+So installing this plugin in Cowork produces the worst kind of failure — one that looks like
+success. The plugin appears installed, the `awm-memory` skill loads and tells Claude to call
+`memory_recall`, and the tools are not there. The hooks would run but POST to `127.0.0.1:8401`,
+which in Cowork is not your machine, so they find no sidecar and fail open: silent, exit 0.
+
+Making AWM work in Cowork is not a packaging change. It would need a StreamableHTTP or SSE
+transport (AWM is stdio-only), OAuth, and a server reachable from Anthropic's IP ranges — which
+means the store leaves your machine. That contradicts the thing the product is for, so it is a
+product decision, not a build step.
+
 ## Plugin or `awm setup`?
 
 Both produce a working install. They differ in what they touch:
