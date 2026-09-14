@@ -32,6 +32,7 @@ Do not read the whole list. Find the rows that match what you actually changed.
 | **A claim in the README** | Check it is still true. The README is the most-read and least-verified file in the repo |
 | **A new npm script** | The script block in `README.md`, the Releasing section in `CONTRIBUTING.md`, and the Verify list below. A script nobody can find is a script nobody runs |
 | **A new doc, or a generated one** | `docs/README.md` — it is the index, and an unindexed page is invisible. Say plainly whether the page is hand-written or generated |
+| **`src/plugin/awm-mcp-launcher.cjs`** | `npm run build:plugin` **and** `npm run build:mcpb` — both surfaces ship the same launcher, and both are drift-gated |
 | **Anything under `src/adapters/`** | `npm run build && npm run build:plugin`, and commit `plugin/`. It is generated from those modules, so a change there silently makes the shipped plugin wrong. `check:release` blocks on the drift |
 | **A new top-level directory** | The staging list in `tests/docker/linux-suite.sh`. It is an explicit allowlist, so a new directory is silently absent inside the container and its tests are skipped rather than failed. `plugin/` hit exactly this |
 | **Any `.sh` or `.cjs` read by a container** | Nothing — `.gitattributes` pins them to LF. Do not remove those rules: `core.autocrlf=true` is normal on a Windows checkout, and a CRLF shell script fails inside Linux as `set: -: invalid option`, which reads as a broken test |

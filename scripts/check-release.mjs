@@ -267,6 +267,16 @@ const VERSION = pkg.version;
   }
 
 
+  // The Desktop bundle is generated from the same source as the plugin; same drift risk.
+  if (existsSync(join(ROOT, 'mcpb'))) {
+    const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'build-mcpb.mjs'), '--check'],
+      { cwd: ROOT, encoding: 'utf-8' });
+    if (r.status === 0) note('mcpb', (r.stdout || '').trim() || 'mcpb/ is in sync');
+    else err('mcpb', 'mcpb/ has drifted from src/',
+      'Run: npm run build && npm run build:mcpb, then commit mcpb/');
+  }
+
+
   // Sibling checkout that vendors this package.
   const sibling = join(ROOT, '..', 'AgentSynapse', 'packages', 'awm', 'package.json');
   if (existsSync(sibling)) {

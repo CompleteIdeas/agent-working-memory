@@ -26,7 +26,8 @@
       "env": {
         "AWM_RERANK2": "1",
         "AWM_RERANK_WINDOW": "query",
-        "AWM_RERANK_TAGS": "1"
+        "AWM_RERANK_TAGS": "1",
+        "AWM_SURFACE": "claude-code"
       }
     }
   }

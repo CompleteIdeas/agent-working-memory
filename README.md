@@ -130,6 +130,7 @@ and whether anything needs a re-run of setup.
 | Install, first write, first recall | [`docs/quickstart.md`](docs/quickstart.md) |
 | Separate pools per project, incognito mode, hooks | [`docs/claude-code-setup.md`](docs/claude-code-setup.md) |
 | As a Claude Code plugin | [`docs/plugin.md`](docs/plugin.md) |
+| In Claude Desktop | [`docs/desktop.md`](docs/desktop.md) |
 | Teams and multi-agent | [`docs/team-setup-guide.md`](docs/team-setup-guide.md) |
 | Custom agents over HTTP | [`docs/reference.md`](docs/reference.md) |
 
@@ -232,11 +233,11 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 769 tests
+npx vitest run          # 781 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
-npm run test:linux      # build + full suite on Linux (769/769)
+npm run test:linux      # build + full suite on Linux (781/781)
 ```
 
 ---

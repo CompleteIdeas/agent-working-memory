@@ -29,6 +29,14 @@ const { spawn, execFileSync } = require('node:child_process');
 
 const NL = '\n';
 
+// Claude Desktop substitutes user_config values into env, and a field the user cleared
+// arrives as an empty string rather than being absent. An empty AWM_AGENT_ID would override
+// the server's directory-derived default with nothing, so drop empties before anything reads
+// them and let the normal defaults apply.
+for (const k of ['AWM_DB_PATH', 'AWM_AGENT_ID', 'AWM_HOOK_PORT', 'AWM_PACKAGE_ROOT']) {
+  if (process.env[k] !== undefined && String(process.env[k]).trim() === '') delete process.env[k];
+}
+
 // An explicit AWM_DB_PATH always wins, so per-project pools still work.
 if (!process.env.AWM_DB_PATH) {
   process.env.AWM_DB_PATH = join(homedir(), '.awm', 'memory.db').split(sep).join('/');

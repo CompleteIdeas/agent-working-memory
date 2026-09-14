@@ -28,7 +28,9 @@
   "scripts": {
     "build": "tsc",
     "build:plugin": "node scripts/build-plugin.mjs",
-    "prepublishOnly": "npm run build && npm run build:plugin && npm run check:release",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "pack:mcpb": "node scripts/build-mcpb.mjs --pack",
+    "prepublishOnly": "npm run build && npm run build:plugin && npm run build:mcpb && npm run check:release",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest",
