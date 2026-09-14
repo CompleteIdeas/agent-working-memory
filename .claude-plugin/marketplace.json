@@ -1,0 +1,17 @@
+{
+  "name": "agent-working-memory",
+  "description": "Agent Working Memory — persistent, local-first memory for AI agents",
+  "owner": {
+    "name": "Robert Winter",
+    "url": "https://github.com/CompleteIdeas"
+  },
+  "plugins": [
+    {
+      "name": "awm",
+      "description": "Persistent local memory: 19 MCP tools, session hooks that checkpoint and prime, and the usage guidance as a skill. Shares ~/.awm/memory.db with an `awm setup` install.",
+      "source": "./plugin",
+      "category": "development",
+      "keywords": ["memory", "mcp", "recall", "agent", "local-first"]
+    }
+  ]
+}

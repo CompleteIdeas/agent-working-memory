@@ -33,6 +33,12 @@ Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboa
 
 > First install takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
 
+> **There is a plugin now.** `/plugin marketplace add CompleteIdeas/agent-working-memory`
+> then `/plugin install awm@agent-working-memory` wires the same MCP server, hooks and
+> guidance without a setup step, and upgrades with `/plugin update`. It never edits
+> `settings.json` or your `CLAUDE.md`. Both share `~/.awm/memory.db`, so it is a preference
+> rather than a fork — see [`plugin.md`](plugin.md). This guide covers the CLI install.
+
 ### What `awm setup --global` creates
 
 | File | Purpose |

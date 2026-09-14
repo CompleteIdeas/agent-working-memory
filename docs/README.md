@@ -21,6 +21,7 @@ covers everything else.
 
 | Doc | What it covers |
 |---|---|
+| **[plugin.md](plugin.md)** | **Install as a Claude Code plugin** — two slash commands, no setup step; what it installs, how it shares the store with a CLI install, and when to prefer `awm setup` |
 | [claude-code-setup.md](claude-code-setup.md) | MCP wiring, hooks, agent identity |
 | [team-setup-guide.md](team-setup-guide.md) | Multi-agent / hive configuration |
 | [deployment.md](deployment.md) | Running it as a real service |

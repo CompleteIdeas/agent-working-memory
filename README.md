@@ -85,6 +85,17 @@ npm install -g agent-working-memory
 awm setup --global          # MCP config, CLAUDE.md guidance, hooks
 ```
 
+Or install it as a Claude Code plugin instead, which wires the same things without a setup
+step and upgrades with `/plugin update`:
+
+```
+/plugin marketplace add CompleteIdeas/agent-working-memory
+/plugin install awm@agent-working-memory
+```
+
+Both share one store at `~/.awm/memory.db`, so it is a preference, not a fork — the
+trade-offs are in [`docs/plugin.md`](docs/plugin.md). Install the npm package either way.
+
 Requires **Node.js 22+**. Restart Claude Code.
 
 **What to expect.** The first conversation is ~30 s slower while three small ONNX models download
@@ -118,6 +129,7 @@ and whether anything needs a re-run of setup.
 |---|---|
 | Install, first write, first recall | [`docs/quickstart.md`](docs/quickstart.md) |
 | Separate pools per project, incognito mode, hooks | [`docs/claude-code-setup.md`](docs/claude-code-setup.md) |
+| As a Claude Code plugin | [`docs/plugin.md`](docs/plugin.md) |
 | Teams and multi-agent | [`docs/team-setup-guide.md`](docs/team-setup-guide.md) |
 | Custom agents over HTTP | [`docs/reference.md`](docs/reference.md) |
 
@@ -220,17 +232,18 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 760 tests
+npx vitest run          # 769 tests
 npm run bench           # benchmark suites
+npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
-npm run test:linux      # build + full suite on Linux (760/760)
+npm run test:linux      # build + full suite on Linux (769/769)
 ```
 
 ---
 
 ## Status
 
-Active development, v0.14.6. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.15.0. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

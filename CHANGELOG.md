@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.15.0 (2026-09-13) — install it as a Claude Code plugin
+
+`awm setup --global` writes an MCP entry, four hook scripts, and a section appended to your
+CLAUDE.md. All of that can be one versioned artifact instead, which removes the setup step
+that the previous release was entirely about drifting out of date.
+
+```
+/plugin marketplace add CompleteIdeas/agent-working-memory
+/plugin install awm@agent-working-memory
+```
+
+- **`plugin/` is generated, never hand-written.** `npm run build:plugin` emits it from the
+  same modules the installer uses — `HOOK_SCRIPTS` and `AWM_HOOKS_VERSION`,
+  `DB_MUTATION_HOOK_SCRIPT`, `AWM_INSTRUCTION_CONTENT`, `RECOMMENDED_ENV`. Maintaining it by
+  hand would have made the plugin a *third* copy of the hook wiring, going stale on the same
+  schedule as the second one did. `check:release` runs the generator with `--check` and
+  **blocks** when the committed output differs.
+- **It never edits `settings.json` or your `CLAUDE.md`.** Claude Code owns the wiring and AWM
+  only declares it, so the plugin cannot repeat the 0.14.6 rehearsal bug where the hook
+  ownership check matched too broadly and deleted two hand-written hooks it had never
+  installed. The guidance ships as the `awm-memory` skill instead of being appended to a file
+  you own.
+- **The store is shared, deliberately.** `bin/awm-mcp-launcher.cjs` defaults `AWM_DB_PATH` to
+  `~/.awm/memory.db` — the same file `awm setup --global` writes. A plugin that opened its own
+  database would look like it worked while showing you an empty memory. It also resolves the
+  server across five locations (explicit override, an AWM checkout, local `node_modules`, the
+  global npm root, then `npx` last, because a cold `npx` rebuilds `better-sqlite3` and is
+  indistinguishable from a hang).
+- **`tests/plugin/plugin-install.test.ts`** walks the install path the way Claude Code does:
+  resolves the marketplace entry, expands `${CLAUDE_PLUGIN_ROOT}`, checks every referenced
+  file exists and parses, asserts the shipped hooks are byte-identical to `HOOK_SCRIPTS`, then
+  starts the MCP server over stdio and requires all 19 tools back. Against a scratch database,
+  because the launcher's whole job is to default to the real one.
+- New: `docs/plugin.md`, `npm run build:plugin`, `.claude-plugin/marketplace.json`.
+  `src/plugin/awm-mcp-launcher.cjs` is a real source file rather than a string inside the
+  generator — it is real code, and four layers of backslash escaping inside a template literal
+  produced three broken builds before it was moved out.
+
+
 ## 0.14.6 (2026-09-11) — `awm setup` catches up with the system it installs
 
 Everything 0.14.2–0.14.5 changed about how AWM is invoked lived in hand-edited files on one

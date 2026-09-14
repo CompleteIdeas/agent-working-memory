@@ -50,6 +50,9 @@ See [docs/RELEASE.md](docs/RELEASE.md). Run `npm run check:release` before you t
 it catches the version strings, counts and adapter drift that every past release
 forgot at least one of. It also runs automatically on `npm publish`.
 
+`plugin/` is generated — run `npm run build && npm run build:plugin` after changing anything
+in `src/adapters/`, and commit the result. `check:release` blocks if it has drifted.
+
 Two clean-room checks run in Docker and touch nothing on your machine:
 `npm run test:docker` installs the packed tarball into an empty container the way a new
 user receives it, and `npm run test:linux` builds from source and runs the whole suite on
