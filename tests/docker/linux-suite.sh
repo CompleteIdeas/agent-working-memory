@@ -22,13 +22,24 @@ echo "############ 1. stage a writable copy of the source ############"
 mkdir -p /app
 # Deliberately explicit: node_modules and dist are the two things we must NOT inherit,
 # because they hold Windows-native binaries and Windows-built output.
-for item in package.json package-lock.json tsconfig.json vitest.config.ts src tests; do
+# This list is another copy of "what this project consists of", so it goes stale the moment a
+# new top-level artifact appears. It did: plugin/ and .claude-plugin/ were added and the
+# plugin install test failed in here with ENOENT while passing on the host. A missing entry
+# is now a hard failure rather than a printed note, because a skipped test file is a silently
+# weaker suite.
+MISSING=0
+for item in package.json package-lock.json tsconfig.json vitest.config.ts src tests plugin .claude-plugin; do
   if [ -e "/src/$item" ]; then
     cp -r "/src/$item" /app/
   else
     echo "  MISSING from /src: $item"
+    MISSING=1
   fi
 done
+if [ "$MISSING" = 1 ]; then
+  echo "  refusing to run a partial checkout — fix the staging list in tests/docker/linux-suite.sh"
+  exit 1
+fi
 echo "  staged: $(ls /app | tr '\n' ' ')"
 echo "  node $(node --version)  npm $(npm --version)  $(uname -sm)"
 
