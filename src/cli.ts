@@ -47,6 +47,7 @@ AgentWorkingMemory — Cognitive memory for AI agents
 
 Usage:
   awm setup [target] [options]                      Configure AWM for an AI CLI
+  awm plugin                                        Install as a Claude Code plugin (local, no GitHub)
   awm doctor [target|--all]                         Validate AWM integrations
   awm mcp                                           Start MCP server (stdio)
   awm serve [--port <port>]                         Start HTTP API server
@@ -172,6 +173,58 @@ Next steps:
   3. \`awm doctor\` checks the install and lists the live sidecars
 `.trim());
 }
+
+// ─── PLUGIN ──────────────────────────────────────
+
+/**
+ * Print the two lines that install AWM as a Claude Code plugin FROM THIS INSTALL.
+ *
+ * Most users are on Windows and will never clone the repository, so
+ * `/plugin marketplace add CompleteIdeas/agent-working-memory` — which needs GitHub — is the
+ * wrong default for them. npm has already put a complete marketplace on their disk; they
+ * just have no way to know where it is. This tells them, with the real resolved path.
+ */
+function pluginInfo(): void {
+  // dist/cli.js -> package root
+  const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const marketplace = join(pkgRoot, '.claude-plugin', 'marketplace.json');
+
+  if (!existsSync(marketplace)) {
+    console.log(`
+AWM ${VERSION} — plugin not found in this install
+
+  Looked for: ${marketplace}
+
+  This happens when AWM is running from a source checkout that has not been built,
+  or from a package published before the plugin was bundled (< 0.15.3).
+
+  From a checkout:  npm run build && npm run build:plugin
+  Otherwise:        npm install -g agent-working-memory@latest
+`.trimStart());
+    return;
+  }
+
+  console.log(`
+AWM ${VERSION} — install as a Claude Code plugin
+
+  Paste these two lines into Claude Code:
+
+    /plugin marketplace add ${pkgRoot}
+    /plugin install awm@agent-working-memory
+
+  Then restart Claude Code. You get 19 memory tools, the session hooks, and the
+  usage guidance as a skill.
+
+  No GitHub access needed — the marketplace is this npm install, already on disk.
+
+  The store defaults to the same file \`awm setup --global\` uses, so a plugin
+  install and a CLI install share one memory rather than quietly keeping two.
+
+  Check it worked:  awm doctor claude-code
+  More:             https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/plugin.md
+`.trimStart());
+}
+
 
 // ─── DOCTOR ──────────────────────────────────────
 
@@ -804,6 +857,9 @@ switch (command) {
   case 'setup':
     await setup();
     break;
+    case 'plugin':
+      pluginInfo();
+      break;
   case 'doctor':
     await doctor();
     break;

@@ -86,11 +86,11 @@ awm setup --global          # MCP config, CLAUDE.md guidance, hooks
 ```
 
 Or install it as a Claude Code plugin instead, which wires the same things without a setup
-step and upgrades with `/plugin update`:
+step and upgrades with `/plugin update`. The npm package carries the plugin, so this needs no
+GitHub access:
 
-```
-/plugin marketplace add CompleteIdeas/agent-working-memory
-/plugin install awm@agent-working-memory
+```bash
+awm plugin                  # prints the two lines to paste, with the path on your machine
 ```
 
 Both share one store at `~/.awm/memory.db`, so it is a preference, not a fork — the
@@ -244,7 +244,7 @@ npm run test:linux      # build + full suite on Linux (781/781)
 
 ## Status
 
-Active development, v0.15.2. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.15.3. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

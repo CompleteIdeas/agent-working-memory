@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.15.3 (2026-09-14) — the plugin now installs from npm, with no GitHub access
+
+Most AWM users are on Windows and will never clone the repository, so
+`/plugin marketplace add CompleteIdeas/agent-working-memory` was the wrong default for them:
+it needs GitHub, and it was the only path offered.
+
+The npm package now ships the marketplace. `plugin/` and `.claude-plugin/` are in `files[]`
+— 80 KB — so `npm install -g agent-working-memory` puts a complete, installable plugin on
+disk. Nothing has to be fetched.
+
+- **`awm plugin`** prints the two lines to paste, with the resolved path for that machine.
+  It exists because the path is OS- and install-specific — on Windows typically
+  `%APPDATA%
+pm
+ode_modulesgent-working-memory` — and nobody should be asked to type
+  that from memory. It also says plainly when the plugin is missing from the install, and
+  which command fixes it.
+- The clean-room container test gained eight assertions covering exactly this: that a global
+  npm install contains the marketplace, the plugin manifest, the hooks, the skill and the
+  launcher; that the marketplace's `source` resolves relative to the package root; and that
+  the path `awm plugin` prints really is a marketplace directory. 33 assertions, all passing.
+
+The GitHub route still works and is documented as the alternative for anyone tracking the
+repository rather than the release.
+
+
 ## 0.15.2 (2026-09-14) — a new store at an explicit path could silently become PGlite
 
 Found by the new cross-surface end-to-end test, which is the whole argument for having one.

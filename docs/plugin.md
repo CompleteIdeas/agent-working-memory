@@ -1,11 +1,34 @@
 # AWM as a Claude Code plugin
 
-Two commands instead of a setup step:
+Two commands instead of a setup step. **Install the package first** — it carries the
+plugin with it, so nothing here needs GitHub:
+
+```bash
+npm install -g agent-working-memory
+awm plugin                  # prints the two lines below, with the real path on YOUR machine
+```
+
+```
+/plugin marketplace add <the path awm plugin printed>
+/plugin install awm@agent-working-memory
+```
+
+`awm plugin` exists because that path differs per machine and per OS. On Windows it is
+typically `C:\Users\<you>\AppData\Roaming\npm\node_modules\agent-working-memory`,
+which is not something anyone should be expected to type from memory.
+
+<details>
+<summary>Installing from GitHub instead</summary>
+
+If you have a checkout, or would rather track the repository than the npm release:
 
 ```
 /plugin marketplace add CompleteIdeas/agent-working-memory
 /plugin install awm@agent-working-memory
 ```
+
+That route needs GitHub access. The npm route above does not.
+</details>
 
 Restart Claude Code. You get the 19 memory tools, the session hooks, and the usage guidance —
 the same things `awm setup --global` installs, but as one versioned artifact that updates

@@ -17,6 +17,28 @@ echo "  awm on PATH: $(command -v awm)"
 echo "  version    : $(awm --version 2>/dev/null || node -e "console.log(require('/usr/local/lib/node_modules/agent-working-memory/package.json').version)")"
 
 echo
+echo "############ 1b. the plugin marketplace ships INSIDE the npm package ############"
+# Most users are on Windows and will never clone the repo, so the GitHub marketplace is the
+# wrong default for them. npm has to put a complete, installable marketplace on disk.
+GROOT=$(npm root -g)
+PKG="$GROOT/agent-working-memory"
+chk "marketplace.json shipped"          "test -f \"$PKG/.claude-plugin/marketplace.json\""
+chk "plugin manifest shipped"           "test -f \"$PKG/plugin/.claude-plugin/plugin.json\""
+chk "hook scripts shipped"              "test -f \"$PKG/plugin/hooks/awm-prime.cjs\""
+chk "hooks.json shipped"                "test -f \"$PKG/plugin/hooks/hooks.json\""
+chk "the skill shipped"                 "test -f \"$PKG/plugin/skills/awm-memory/SKILL.md\""
+chk "launcher shipped"                  "test -f \"$PKG/plugin/bin/awm-mcp-launcher.cjs\""
+# The marketplace `source` must resolve relative to the package root, or /plugin install fails.
+SRC=$(node -e "console.log(require('$PKG/.claude-plugin/marketplace.json').plugins[0].source)")
+chk "marketplace source resolves: $SRC" "test -f \"$PKG/$SRC/.claude-plugin/plugin.json\""
+
+echo "  --- what \`awm plugin\` tells a user ---"
+awm plugin | sed 's/^/    /'
+PLUGIN_PATH=$(awm plugin | grep -oP '/plugin marketplace add \K.*' | head -1)
+chk "awm plugin prints a real path"     "test -n \"$PLUGIN_PATH\" && test -d \"$PLUGIN_PATH\""
+chk "that path IS a marketplace"        "test -f \"$PLUGIN_PATH/.claude-plugin/marketplace.json\""
+
+echo
 echo "############ 2. awm setup claude-code --global ############"
 export HOME=/root
 mkdir -p /work/proj /work/personal-proj /data

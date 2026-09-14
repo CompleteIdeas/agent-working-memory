@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.15.2",
+  "version": "0.15.3",
   "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
   "keywords": [
     "ai-agents",
@@ -64,6 +64,8 @@
   "files": [
     "dist/",
     "src/",
+    "plugin/",
+    ".claude-plugin/",
     "package.json",
     "README.md",
     "LICENSE"
