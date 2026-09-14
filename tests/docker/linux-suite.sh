@@ -20,24 +20,33 @@ cd /
 
 echo "############ 1. stage a writable copy of the source ############"
 mkdir -p /app
-# Deliberately explicit: node_modules and dist are the two things we must NOT inherit,
-# because they hold Windows-native binaries and Windows-built output.
-# This list is another copy of "what this project consists of", so it goes stale the moment a
-# new top-level artifact appears. It did: plugin/ and .claude-plugin/ were added and the
-# plugin install test failed in here with ENOENT while passing on the host. A missing entry
-# is now a hard failure rather than a printed note, because a skipped test file is a silently
-# weaker suite.
+# A DENY list, not an allow list. The allow list rotted three times — plugin/ and
+# .claude-plugin/ first, then mcpb/ and scripts/ — and each time the symptom was tests
+# SKIPPED rather than failed, which reads as success at a glance. Anything new at the top
+# level is now staged automatically; only the things that must not come are named.
+#
+#   node_modules  Windows-native binaries; npm ci rebuilds them for linux-x64
+#   dist          Windows-built output; npx tsc rebuilds it here
+#   .git          large and pointless inside the container
+#   data          ~1 GB of ONNX models; mounted separately at /models-ro
+#   bench-runs    benchmark artefacts
+#   .release-*    host-side stamps and staging
+for item in /src/* /src/.[!.]*; do
+  [ -e "$item" ] || continue
+  base=$(basename "$item")
+  case "$base" in
+    node_modules|dist|.git|data|bench-runs|dist-mcpb|.release-stage|.release-checks) continue ;;
+  esac
+  cp -r "$item" /app/ 2>/dev/null || true
+done
+
+# Sanity: the suite is worthless if the things it tests did not arrive.
 MISSING=0
-for item in package.json package-lock.json tsconfig.json vitest.config.ts src tests plugin .claude-plugin; do
-  if [ -e "/src/$item" ]; then
-    cp -r "/src/$item" /app/
-  else
-    echo "  MISSING from /src: $item"
-    MISSING=1
-  fi
+for required in package.json tsconfig.json vitest.config.ts src tests scripts plugin mcpb; do
+  if [ ! -e "/app/$required" ]; then echo "  MISSING from /src: $required"; MISSING=1; fi
 done
 if [ "$MISSING" = 1 ]; then
-  echo "  refusing to run a partial checkout — fix the staging list in tests/docker/linux-suite.sh"
+  echo "  refusing to run a partial checkout — check the deny list in tests/docker/linux-suite.sh"
   exit 1
 fi
 echo "  staged: $(ls /app | tr '\n' ' ')"
@@ -75,6 +84,19 @@ for (const m of ['better-sqlite3','onnxruntime-node']) {
 }" 2>/dev/null
 
 echo
+# The cross-surface end-to-end test packs a real .mcpb, so it needs the MCPB CLI. Installing
+# it here rather than letting that test skip: a skipped end-to-end test is the one that most
+# looks like a pass. It also means the Desktop extension path is exercised on Linux, which
+# matters now that Claude Desktop has a Linux build.
+echo "############ 3b. MCPB CLI (for the Desktop extension tests) ############"
+if npm install -g @anthropic-ai/mcpb --loglevel=error >/tmp/mcpb-cli.log 2>&1; then
+  echo "  mcpb $(mcpb --version 2>/dev/null || echo installed)"
+else
+  echo "  WARNING: mcpb CLI did not install — the .mcpb tests will fail rather than skip"
+  tail -5 /tmp/mcpb-cli.log
+fi
+
+
 echo "############ 4. BUILD on a case-sensitive filesystem ############"
 # forceConsistentCasingInFileNames is on, but Windows resolves a wrong-cased import
 # anyway and tsc never sees the conflict. Linux is where it surfaces.
