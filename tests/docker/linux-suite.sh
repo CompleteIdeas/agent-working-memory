@@ -20,35 +20,37 @@ cd /
 
 echo "############ 1. stage a writable copy of the source ############"
 mkdir -p /app
-# A DENY list, not an allow list. The allow list rotted three times — plugin/ and
-# .claude-plugin/ first, then mcpb/ and scripts/ — and each time the symptom was tests
-# SKIPPED rather than failed, which reads as success at a glance. Anything new at the top
-# level is now staged automatically; only the things that must not come are named.
+# What to stage is DERIVED from git on the host and handed in at /tmp/stage-list.txt.
 #
-#   node_modules  Windows-native binaries; npm ci rebuilds them for linux-x64
-#   dist          Windows-built output; npx tsc rebuilds it here
-#   .git          large and pointless inside the container
-#   data          ~1 GB of ONNX models; mounted separately at /models-ro
-#   bench-runs    benchmark artefacts
-#   .release-*    host-side stamps and staging
-for item in /src/* /src/.[!.]*; do
-  [ -e "$item" ] || continue
-  base=$(basename "$item")
-  case "$base" in
-    node_modules|dist|.git|data|bench-runs|dist-mcpb|.release-stage|.release-checks) continue ;;
-  esac
-  cp -r "$item" /app/ 2>/dev/null || true
-done
+# An allow list maintained here rotted three times (plugin/, .claude-plugin/, then mcpb/ and
+# scripts/) and each failure showed up as tests SKIPPED rather than failed, which reads as
+# success. The deny list that replaced it went the other way and copied 958 MB of ONNX models
+# and 115 MB of backups plus a dozen stray memory-pglite/ directories. git already knows what
+# the project is; ask it instead of describing it twice.
+#
+# node_modules and dist are untracked, so they are excluded for free — which is what we want:
+# they hold Windows-native binaries and Windows-built output. data/ is tracked but its models
+# are not; they arrive separately at /models-ro.
+if [ ! -f /tmp/stage-list.txt ]; then
+  echo "  no stage list was provided — refusing to guess at what the project is"
+  exit 1
+fi
+while IFS= read -r item; do
+  [ -n "$item" ] || continue
+  [ -e "/src/$item" ] || continue
+  cp -r "/src/$item" /app/ 2>/dev/null || true
+done < /tmp/stage-list.txt
 
-# Sanity: the suite is worthless if the things it tests did not arrive.
+# The suite is worthless if the things it tests did not arrive.
 MISSING=0
 for required in package.json tsconfig.json vitest.config.ts src tests scripts plugin mcpb; do
   if [ ! -e "/app/$required" ]; then echo "  MISSING from /src: $required"; MISSING=1; fi
 done
 if [ "$MISSING" = 1 ]; then
-  echo "  refusing to run a partial checkout — check the deny list in tests/docker/linux-suite.sh"
+  echo "  refusing to run a partial checkout"
   exit 1
 fi
+
 echo "  staged: $(ls /app | tr '\n' ' ')"
 echo "  node $(node --version)  npm $(npm --version)  $(uname -sm)"
 

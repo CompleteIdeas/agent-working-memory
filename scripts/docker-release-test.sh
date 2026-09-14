@@ -90,7 +90,15 @@ run_linux() {
   # The repo goes in READ-ONLY. `npm ci` inside the container must never reach the host
   # checkout: it would swap node_modules for linux-x64 binaries and break the developer's
   # ability to run tsc or vitest on Windows until a full reinstall.
-  local MOUNTS=(-v "$HOST:/src:ro")
+  # What to stage is DERIVED from git, never hand-maintained. An allow list rotted three
+  # times, and the deny list that replaced it copied 958 MB of models and 115 MB of backups
+  # into the container along with a dozen stray memory-pglite/ directories. git already
+  # knows exactly what the project is.
+  mkdir -p "$ROOT/.release-stage"
+  git -C "$HOST" ls-files | cut -d/ -f1 | sort -u > "$ROOT/.release-stage/stage-list.txt"
+  echo "  staging $(wc -l < "$ROOT/.release-stage/stage-list.txt") tracked top-level paths"
+
+  local MOUNTS=(-v "$HOST:/src:ro" -v "$HOST/.release-stage/stage-list.txt:/tmp/stage-list.txt:ro")
   if [ -d "$ROOT/data/models" ]; then
     MOUNTS+=(-v "$HOST/data/models:/models-ro:ro")
     echo "  mounting cached models read-only (mirrored writable inside)"
