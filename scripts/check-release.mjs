@@ -25,7 +25,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => { try { return readFileSync(join(ROOT, p), 'utf-8'); } catch { return null; } };
@@ -249,6 +249,21 @@ const VERSION = pkg.version;
     } catch { note('linux-suite', `.release-checks/linux-${VERSION}.json is unreadable — re-run: npm run test:linux`); }
   } else {
     note('linux-suite', `No Linux run recorded for v${VERSION} — run: npm run test:linux`);
+  }
+
+
+  // The plugin is generated from the same modules `awm setup` uses. If it has drifted it is
+  // a third copy of the hook wiring going stale — the exact failure 0.14.6 was about.
+  if (existsSync(join(ROOT, 'plugin'))) {
+    const r = spawnSync(process.execPath, [join(ROOT, 'scripts', 'build-plugin.mjs'), '--check'],
+      { cwd: ROOT, encoding: 'utf-8' });
+    if (r.status === 0) {
+      note('plugin', (r.stdout || '').trim() || 'plugin/ is in sync');
+    } else {
+      const detail = ((r.stdout || '') + (r.stderr || '')).split('\n').map(s => s.trim()).filter(Boolean).slice(1, 4).join('; ');
+      err('plugin', `plugin/ has drifted from src/: ${detail}`,
+        'Run: npm run build && npm run build:plugin, then commit plugin/');
+    }
   }
 
 

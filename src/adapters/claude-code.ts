@@ -23,7 +23,7 @@ import { request as httpRequest } from 'node:http';
  * script INSERT broke a production upload six days later, and no recall could
  * surface a cause that was never written.
  */
-const DB_MUTATION_HOOK_SCRIPT = `#!/usr/bin/env node
+export const DB_MUTATION_HOOK_SCRIPT = `#!/usr/bin/env node
 // AWM DB-mutation reminder hook (PostToolUse on Bash|PowerShell). Installed by awm setup.
 let raw = '';
 process.stdin.on('data', (d) => (raw += d));

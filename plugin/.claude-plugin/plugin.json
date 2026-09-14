@@ -1,0 +1,33 @@
+{
+  "name": "awm",
+  "displayName": "Agent Working Memory",
+  "version": "0.14.6",
+  "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
+  "author": {
+    "name": "Robert Winter"
+  },
+  "homepage": "https://completeideas.github.io/agent-working-memory/",
+  "repository": "https://github.com/CompleteIdeas/agent-working-memory",
+  "license": "Apache-2.0",
+  "keywords": [
+    "memory",
+    "mcp",
+    "recall",
+    "agent"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": {
+    "agent-working-memory": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/awm-mcp-launcher.cjs"
+      ],
+      "env": {
+        "AWM_RERANK2": "1",
+        "AWM_RERANK_WINDOW": "query",
+        "AWM_RERANK_TAGS": "1"
+      }
+    }
+  }
+}
