@@ -32,7 +32,7 @@ That route needs GitHub access. The npm route above does not.
 
 Restart Claude Code. You get the 19 memory tools, the session hooks, and the usage guidance —
 the same things `awm setup --global` installs, but as one versioned artifact that updates
-with `/plugin update` instead of by re-running a script.
+with two commands instead of by re-running a script.
 
 ---
 
@@ -93,6 +93,32 @@ hooks find the sidecar serving *their* agent rather than whichever process start
 
 ---
 
+## Upgrading — it is not automatic
+
+**A marketplace installed from a local directory never refreshes on its own.** Measured on a
+real machine: two GitHub-sourced marketplaces both refreshed within the same second (a
+scheduled refresh), while two directory-sourced ones had moved only when somebody ran the
+command — one of them last touched **167 days** earlier.
+
+Since the npm install route registers a *directory* marketplace, upgrading AWM is two steps,
+and `npm update` alone is not enough:
+
+```bash
+npm install -g agent-working-memory@latest     # 1. new code
+```
+
+```
+/plugin marketplace update agent-working-memory   # 2. re-read the manifest
+/plugin install awm@agent-working-memory          #    (or /plugin update awm@…)
+```
+
+Then restart Claude Code. Skipping step 2 leaves the old hooks and skill in
+`~/.claude/plugins/cache/` while the MCP server may already be running new code — which is
+confusing precisely because it half-works.
+
+`memory_whoami` reports the version the server is actually running, which is the fastest way
+to tell what you have.
+
 ## Where this plugin works
 
 | Surface | Works? | |
@@ -126,7 +152,7 @@ Both produce a working install. They differ in what they touch:
 | | Plugin | `awm setup --global` |
 |---|---|---|
 | Install | Two slash commands | `npm i -g` then `awm setup --global` |
-| Upgrade | `/plugin update` | Re-run `awm setup` |
+| Upgrade | `/plugin marketplace update agent-working-memory` **then** `/plugin update awm@agent-working-memory` | Re-run `awm setup --global` |
 | `~/.claude/settings.json` | **Never touched** | AWM-owned hook groups rewritten |
 | `~/.claude/CLAUDE.md` | **Never touched** — guidance is a skill | AWM section upserted |
 | Guidance | Loaded on demand, versioned with the plugin | Always in context |

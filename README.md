@@ -86,8 +86,7 @@ awm setup --global          # MCP config, CLAUDE.md guidance, hooks
 ```
 
 Or install it as a Claude Code plugin instead, which wires the same things without a setup
-step and upgrades with `/plugin update`. The npm package carries the plugin, so this needs no
-GitHub access:
+step. The npm package carries the plugin, so this needs no GitHub access:
 
 ```bash
 awm plugin                  # prints the two lines to paste, with the path on your machine
