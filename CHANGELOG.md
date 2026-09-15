@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.15.4 (2026-09-15) — provenance tag renamed `surface=` to `client=`
+
+Caught during live verification, before the tag reached more than one row.
+
+`memory_whoami` already reports a `surface` field, and it means the TRANSPORT — `mcp` or
+`http`. The new provenance tag used the same word for the CLIENT APPLICATION, so AWM would
+print "Surface: mcp" while tagging the same write `surface=claude-code`. Two concepts, one
+word, both correct in their own terms, and an hour lost by whoever hits it in six months.
+
+Transport is how the request arrived; client is which application it arrived from. The tag
+is now `client=claude-code` / `client=claude-desktop` / `client=cursor`, set from
+`AWM_CLIENT`. `whoami`'s `surface` is untouched.
+
+One row in the live store carries the old `surface=claude-code` — the verification write that
+exposed the collision. It is left as it is: a single tag from a name that existed for a day,
+and rewriting history to hide the evidence of a good catch would be the wrong instinct.
+
+
 ## 0.15.3 (2026-09-14) — the plugin now installs from npm, with no GitHub access
 
 Most AWM users are on Windows and will never clone the repository, so
@@ -44,7 +62,7 @@ still selects PGlite deliberately, and an existing directory is still detected a
 - **`tests/plugin/cross-surface-e2e.test.ts`** — unzips the real packed `.mcpb`, expands the
   manifest the way Desktop does, writes a memory through the Desktop launcher, then recalls
   it through the Claude Code plugin launcher from the same SQLite file, and checks the
-  `surface=` tags. It repacks the artifact on every run after the first version of it caught
+  `client=` tags. It repacks the artifact on every run after the first version of it caught
   a `.mcpb` built twenty minutes before a manifest change.
 - Three regression tests in `tests/storage/factory.test.ts` for the backend rule.
 - Two existing tests were racing `kill()` with `rmSync` and failed with EBUSY once the fix

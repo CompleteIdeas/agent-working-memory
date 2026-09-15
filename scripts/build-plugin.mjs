@@ -142,9 +142,9 @@ written.push(write(join('.claude-plugin', 'plugin.json'), JSON.stringify({
     'agent-working-memory': {
       command: 'node',
       args: ['${CLAUDE_PLUGIN_ROOT}/bin/awm-mcp-launcher.cjs'],
-      // AWM_SURFACE stamps every write with `surface=claude-code` so the store records
+      // AWM_CLIENT stamps every write with `client=claude-code` so the store records
       // which surface a memory came from. Set here, not by the caller.
-      env: { ...RECOMMENDED_ENV, AWM_SURFACE: 'claude-code' },
+      env: { ...RECOMMENDED_ENV, AWM_CLIENT: 'claude-code' },
     },
   },
 }, null, 2)));

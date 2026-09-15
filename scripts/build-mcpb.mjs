@@ -113,8 +113,8 @@ written.push(write('manifest.json', JSON.stringify({
         AWM_AGENT_ID: '${user_config.agent_id}',
         // Lets someone with a checkout skip the global install entirely.
         AWM_PACKAGE_ROOT: '${user_config.package_root}',
-        // Stamps every write with `surface=claude-desktop`.
-        AWM_SURFACE: 'claude-desktop',
+        // Stamps every write with `client=claude-desktop`.
+        AWM_CLIENT: 'claude-desktop',
         ...RECOMMENDED_ENV,
       },
     },

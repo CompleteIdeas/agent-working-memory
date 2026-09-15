@@ -492,17 +492,22 @@ async function createNewEngram(
   const tags = [...(input.tags ?? [])];
   if (isLowSalience && !tags.includes('low-salience')) tags.push('low-salience');
 
-  // Which surface wrote this: `surface=claude-code`, `surface=claude-desktop`, ...
-  // AWM_SURFACE is set by the thing that launches the server (the Claude Code plugin, the
+  // Which CLIENT wrote this: `client=claude-code`, `client=claude-desktop`, `client=cursor`.
+  //
+  // Deliberately not called `surface`: memory_whoami already reports a `surface` field
+  // meaning the TRANSPORT (mcp | http), and one word for two concepts is how you lose an
+  // hour six months from now. Transport is how the request arrived; client is which
+  // application it arrived from.
+  // AWM_CLIENT is set by the thing that launches the server (the Claude Code plugin, the
   // Desktop extension, `awm setup`), never by the caller, so it records where a memory came
   // from rather than what the writer claims.
   //
   // Captured by default rather than behind a flag, because provenance is one-way: a tag can
   // be ignored or stripped later, but the origin of a memory written without one is gone for
-  // good. An explicit `surface=` in the caller's tags always wins.
-  const surface = (process.env.AWM_SURFACE ?? '').trim();
-  if (surface && !tags.some(t => t.toLowerCase().startsWith('surface='))) {
-    tags.push(`surface=${surface}`);
+  // good. An explicit `client=` in the caller's tags always wins.
+  const client = (process.env.AWM_CLIENT ?? '').trim();
+  if (client && !tags.some(t => t.toLowerCase().startsWith('client='))) {
+    tags.push(`client=${client}`);
   }
 
   // Auto-tag meta-tags (default-OFF, AWM_AUTOTAG=1). extractMetaTags emits

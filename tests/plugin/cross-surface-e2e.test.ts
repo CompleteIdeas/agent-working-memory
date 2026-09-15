@@ -143,9 +143,14 @@ describe('end-to-end: one store, two surfaces', () => {
     const dir = join(ROOT, 'dist-mcpb');
     const packed = spawnSync(process.execPath, [join(ROOT, 'scripts', 'build-mcpb.mjs'), '--pack'],
       { cwd: ROOT, encoding: 'utf-8' });
-    const art = existsSync(dir) ? readdirSync(dir).filter(f => f.endsWith('.mcpb'))[0] : undefined;
-    if (!art) {
-      throw new Error('could not pack a .mcpb — is the CLI installed? '
+    // Select the artifact for THIS version by name. readdirSync()[0] picked 0.15.3 over
+    // 0.15.4 purely because it sorts first, so the test asserted against a stale bundle and
+    // failed a rename that was actually correct. An artifact test that cannot say which
+    // artifact it is testing is not an artifact test.
+    const version = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')).version;
+    const art = `agent-working-memory-${version}.mcpb`;
+    if (!existsSync(join(dir, art))) {
+      throw new Error(`could not pack ${art} — is the MCPB CLI installed? `
         + '`npm i -g @anthropic-ai/mcpb`\n' + (packed.stderr ?? ''));
     }
 
@@ -178,7 +183,7 @@ describe('end-to-end: one store, two surfaces', () => {
     for (const [k, v] of Object.entries<string>(cfg.env)) desktopEnv[k] = expandDesktop(v, vars);
 
     expect(desktopEnv.AWM_DB_PATH, 'Desktop must open the configured store').toBe(dbPath);
-    expect(desktopEnv.AWM_SURFACE).toBe('claude-desktop');
+    expect(desktopEnv.AWM_CLIENT).toBe('claude-desktop');
 
     const desktop = mcpSession(
       cfg.command,
@@ -219,7 +224,7 @@ describe('end-to-end: one store, two surfaces', () => {
       AWM_HOOK_PORT: '18610',
       AWM_HOOK_PORT_RANGE: '4',
     };
-    expect(codeEnv.AWM_SURFACE).toBe('claude-code');
+    expect(codeEnv.AWM_CLIENT).toBe('claude-code');
 
     const code = mcpSession(
       pServer.command,
@@ -278,7 +283,7 @@ describe('end-to-end: one store, two surfaces', () => {
 
     const desktopRow = rows.find(r => String(r.concept).includes(MARKER));
     expect(desktopRow, 'the Desktop write is not in the shared store').toBeTruthy();
-    expect(String(desktopRow.tags)).toContain('surface=claude-desktop');
+    expect(String(desktopRow.tags)).toContain('client=claude-desktop');
   }, 300_000);
 
 });

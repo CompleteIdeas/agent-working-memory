@@ -100,7 +100,7 @@ const out = {
 require("fs").writeFileSync("/tmp/launch.json", JSON.stringify(out, null, 2));
 console.log("  command : " + out.command + " " + out.args.join(" "));
 console.log("  db      : " + out.env.AWM_DB_PATH);
-console.log("  surface : " + out.env.AWM_SURFACE);
+console.log("  client  : " + out.env.AWM_CLIENT);
 console.log("  pkgroot : " + JSON.stringify(out.env.AWM_PACKAGE_ROOT) + "   <- empty on purpose");
 '
 mkdir -p /data
@@ -173,7 +173,7 @@ try {
   db.close();
 } catch (e) { console.log('    sqlite check skipped: ' + e.message.slice(0, 80)); }
 "
-chk "write carries surface=claude-desktop" "node -e \"const p=require('$GLOBAL_ROOT/agent-working-memory/node_modules/better-sqlite3');const db=p('/data/desktop-store.db');const r=db.prepare(\\\"SELECT tags FROM engrams WHERE concept LIKE '%DESKTOPCLEANROOM1%'\\\").get();db.close();process.exit(r&&String(r.tags).includes('surface=claude-desktop')?0:1)\""
+chk "write carries client=claude-desktop" "node -e \"const p=require('$GLOBAL_ROOT/agent-working-memory/node_modules/better-sqlite3');const db=p('/data/desktop-store.db');const r=db.prepare(\\\"SELECT tags FROM engrams WHERE concept LIKE '%DESKTOPCLEANROOM1%'\\\").get();db.close();process.exit(r&&String(r.tags).includes('client=claude-desktop')?0:1)\""
 
 echo
 echo "================ RESULT: $PASS passed, $FAIL failed ================"

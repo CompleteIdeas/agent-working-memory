@@ -146,8 +146,8 @@ async function setup() {
   // Build context. A previous install's values survive unless a flag overrides them
   // (0.14.6) — an upgrade must never repoint the database or rename the agent.
   const existingEnv = adapter.readExistingEnv?.(isGlobal, process.cwd()) ?? null;
-  // `awm setup claude-code` -> surface=claude-code, cursor -> surface=cursor, and so on.
-  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort, hookPortRange, installPrime, existingEnv, surface: target });
+  // `awm setup claude-code` -> client=claude-code, cursor -> client=cursor, and so on.
+  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort, hookPortRange, installPrime, existingEnv, client: target });
 
   // Run adapter
   const configAction = adapter.writeMcpConfig(ctx);

@@ -1,7 +1,7 @@
 {
   "name": "awm",
   "displayName": "Agent Working Memory",
-  "version": "0.15.3",
+  "version": "0.15.4",
   "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
   "author": {
     "name": "Robert Winter"
@@ -27,7 +27,7 @@
         "AWM_RERANK2": "1",
         "AWM_RERANK_WINDOW": "query",
         "AWM_RERANK_TAGS": "1",
-        "AWM_SURFACE": "claude-code"
+        "AWM_CLIENT": "claude-code"
       }
     }
   }

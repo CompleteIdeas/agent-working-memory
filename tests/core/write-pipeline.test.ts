@@ -28,42 +28,42 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
   // Provenance: which surface wrote this. Captured by default because it is one-way — a tag
   // can be ignored later, but the origin of a memory written without one cannot be recovered.
   describe('surface provenance', () => {
-    const saved = process.env.AWM_SURFACE;
+    const saved = process.env.AWM_CLIENT;
     afterEach(() => {
-      if (saved === undefined) delete process.env.AWM_SURFACE;
-      else process.env.AWM_SURFACE = saved;
+      if (saved === undefined) delete process.env.AWM_CLIENT;
+      else process.env.AWM_CLIENT = saved;
     });
 
-    it('stamps surface= from the environment the server was launched with', async () => {
-      process.env.AWM_SURFACE = 'claude-desktop';
+    it('stamps client= from the environment the server was launched with', async () => {
+      process.env.AWM_CLIENT = 'claude-desktop';
       const r = await performWrite({ store, connectionEngine }, {
         agentId: AGENT,
         concept: 'Desktop provenance probe',
-        content: 'Written while AWM_SURFACE is claude-desktop, so it should carry surface=claude-desktop.',
+        content: 'Written while AWM_CLIENT is claude-desktop, so it should carry client=claude-desktop.',
       });
-      expect(r.engram!.tags).toContain('surface=claude-desktop');
+      expect(r.engram!.tags).toContain('client=claude-desktop');
     });
 
     it('writes no surface tag when the launcher did not set one', async () => {
-      delete process.env.AWM_SURFACE;
+      delete process.env.AWM_CLIENT;
       const r = await performWrite({ store, connectionEngine }, {
         agentId: AGENT,
         concept: 'No provenance probe',
-        content: 'Written with AWM_SURFACE unset, so no surface tag should appear at all.',
+        content: 'Written with AWM_CLIENT unset, so no surface tag should appear at all.',
       });
-      expect((r.engram!.tags ?? []).some((t: string) => t.startsWith('surface='))).toBe(false);
+      expect((r.engram!.tags ?? []).some((t: string) => t.startsWith('client='))).toBe(false);
     });
 
     it('does not override a surface the caller set explicitly', async () => {
-      process.env.AWM_SURFACE = 'claude-desktop';
+      process.env.AWM_CLIENT = 'claude-desktop';
       const r = await performWrite({ store, connectionEngine }, {
         agentId: AGENT,
         concept: 'Explicit provenance probe',
-        content: 'Caller passed surface=imported, which must win over the launcher environment.',
-        tags: ['surface=imported'],
+        content: 'Caller passed client=imported, which must win over the launcher environment.',
+        tags: ['client=imported'],
       });
-      expect(r.engram!.tags).toContain('surface=imported');
-      expect(r.engram!.tags).not.toContain('surface=claude-desktop');
+      expect(r.engram!.tags).toContain('client=imported');
+      expect(r.engram!.tags).not.toContain('client=claude-desktop');
     });
   });
 

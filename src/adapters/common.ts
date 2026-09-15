@@ -64,7 +64,7 @@ export const RECOMMENDED_ENV: Readonly<Record<string, string>> = {
 };
 
 /** Keys `awm setup` owns outright; everything else in an existing env block is the user's. */
-export const OWNED_ENV_KEYS = ['AWM_DB_PATH', 'AWM_AGENT_ID', 'AWM_HOOK_PORT', 'AWM_HOOK_PORT_RANGE', 'AWM_HOOK_SECRET', 'AWM_SURFACE'] as const;
+export const OWNED_ENV_KEYS = ['AWM_DB_PATH', 'AWM_AGENT_ID', 'AWM_HOOK_PORT', 'AWM_HOOK_PORT_RANGE', 'AWM_HOOK_SECRET', 'AWM_CLIENT'] as const;
 
 /**
  * Build environment variables for the MCP server process.
@@ -80,7 +80,7 @@ export function buildEnvVars(
   hookPort: string,
   hookSecret: string,
   isWindows: boolean,
-  opts: { hookPortRange?: string; existing?: Record<string, string> | null; surface?: string } = {},
+  opts: { hookPortRange?: string; existing?: Record<string, string> | null; client?: string } = {},
 ): Record<string, string> {
   const owned: Record<string, string> = {
     AWM_DB_PATH: isWindows ? dbPath.split('\\').join('/') : dbPath,
@@ -141,8 +141,8 @@ export function buildSetupContext(opts: {
   hookPortRange?: string;
   installPrime?: boolean;
   existingEnv?: Record<string, string> | null;
-  /** Which surface this install is for — stamped onto every write as a `surface=` tag. */
-  surface?: string;
+  /** Which surface this install is for — stamped onto every write as a `client=` tag. */
+  client?: string;
 }): SetupContext {
   const cwd = process.cwd();
   const projectName = basename(cwd).toLowerCase().replace(/[^a-z0-9-]/g, '-');
@@ -160,7 +160,7 @@ export function buildSetupContext(opts: {
   const hookPort = opts.hookPort ?? existing?.AWM_HOOK_PORT ?? '8401';
   const hookPortRange = opts.hookPortRange ?? existing?.AWM_HOOK_PORT_RANGE ?? '10';
   const hookSecret = resolveHookSecret(dbPath);
-  const envVars = buildEnvVars(dbPath, agentId, hookPort, hookSecret, isWindows, { hookPortRange, existing, surface: opts.surface });
+  const envVars = buildEnvVars(dbPath, agentId, hookPort, hookSecret, isWindows, { hookPortRange, existing, client: opts.client });
 
   return {
     cwd,
