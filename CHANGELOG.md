@@ -14,8 +14,14 @@ is now `client=claude-code` / `client=claude-desktop` / `client=cursor`, set fro
 `AWM_CLIENT`. `whoami`'s `surface` is untouched.
 
 One row in the live store carries the old `surface=claude-code` — the verification write that
-exposed the collision. It is left as it is: a single tag from a name that existed for a day,
-and rewriting history to hide the evidence of a good catch would be the wrong instinct.
+exposed the collision. Left as it is: rewriting history to hide the evidence of a good catch
+would be the wrong instinct.
+
+Worth noting for anyone querying these tags: neither word is unique to the feature. The store
+already held a hand-written `surface=` tag from a 0.14.6 memory and a `client=` tag from a
+July note where "client" meant a customer. `client=` is still the better key — it does not
+collide with a field `whoami` prints — but a query on it should not assume every hit is
+machine-written provenance.
 
 
 ## 0.15.3 (2026-09-14) — the plugin now installs from npm, with no GitHub access
