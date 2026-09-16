@@ -254,7 +254,7 @@ Example for `C:\Users\you\work\.mcp.json`:
       "command": "node",
       "args": ["C:/path/to/agent-working-memory/dist/mcp.js"],
       "env": {
-        "AWM_DB_PATH": "C:/path/to/agent-working-memory/data/memory.db",
+        "AWM_DB_PATH": "C:/Users/you/.awm/memory.db",
         "AWM_AGENT_ID": "work",
         "AWM_HOOK_PORT": "8401",
         "AWM_HOOK_SECRET": "your-secret-here"
@@ -285,12 +285,12 @@ In each folder, ask Claude: *"Call memory_stats"* — it will show the agent ID 
 | `~/.mcp.json` | MCP server config (tells Claude Code to load AWM) |
 | `~/.claude/CLAUDE.md` | Memory workflow instructions for Claude |
 | `~/.claude/settings.json` | Hooks config (auto-checkpoint, reminders) |
-| `data/memory.db` | SQLite database (all memories) |
-| `data/awm.log` | Activity log (writes, recalls, checkpoints) |
+| `~/.awm/memory.db` | SQLite database (all memories) — NEVER inside the package |
+| `~/.awm/awm.log` | Activity log (writes, recalls, checkpoints) |
 | `~/.claude/hooks/awm-*.cjs` | The shipped hook scripts `awm setup` installs |
 | `~/.claude/hooks/awm-hooks.json` | Record of what setup installed, used by the hooks to find the server |
 
-To start fresh, delete `data/memory.db` and Claude starts with a blank slate.
+To start fresh, delete `~/.awm/memory.db` and Claude starts with a blank slate.
 
 ---
 

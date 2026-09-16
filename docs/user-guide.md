@@ -113,22 +113,27 @@ AWM integrates directly with Claude Code via the Model Context Protocol.
 
 ### Setup
 
-The project includes a `.mcp.json` that registers the MCP server:
+Run `awm setup claude-code --global` and it writes this for you. The result looks like:
 
 ```json
 {
   "mcpServers": {
     "agent-working-memory": {
-      "command": "npx",
-      "args": ["tsx", "src/mcp.ts"],
+      "command": "node",
+      "args": ["C:/Users/you/AppData/Roaming/npm/node_modules/agent-working-memory/dist/mcp.js"],
       "env": {
-        "AWM_DB_PATH": "memory.db",
-        "AWM_AGENT_ID": "claude-code"
+        "AWM_DB_PATH": "C:/Users/you/.awm/memory.db",
+        "AWM_AGENT_ID": "work"
       }
     }
   }
 }
 ```
+
+Two things matter here. **`AWM_DB_PATH` must point outside the installed package** —
+`~/.awm/memory.db` is the default for exactly that reason, because a store inside
+`node_modules` is deleted by `npm update`. And **`AWM_AGENT_ID` is the memory pool**:
+only `work` and `personal` are valid.
 
 After restarting Claude Code, check `/mcp` to verify the server is connected with **19 tools** (17 memory + 2 onboarding).
 

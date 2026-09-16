@@ -71,7 +71,7 @@ Setup targets:
 Setup options:
   --global            Use global scope (recommended for claude-code)
   --agent-id <id>     Agent identifier (default: project name)
-  --db-path <path>    Database path (default: <awm>/data/memory.db)
+  --db-path <path>    Database path (default: ~/.awm/memory.db)
   --no-instructions   Skip instruction file (CLAUDE.md, AGENTS.md, etc.)
   --no-claude-md      Alias for --no-instructions
   --no-hooks          Skip hook installation

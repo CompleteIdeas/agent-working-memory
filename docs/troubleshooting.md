@@ -59,14 +59,14 @@ WHERE timestamp > datetime('now', '-1 hour');
 ### Tools not appearing in Claude Code
 1. Verify `.mcp.json` exists in the project root (not in `src/` or `docs/`)
 2. Check the file is valid JSON: `cat .mcp.json | python -m json.tool`
-3. The `command` must be `npx` and `args` must include `tsx` and the full path to `src/mcp.ts`
+3. For an installed package the `command` is `node` and `args` is the full path to `dist/mcp.js` (run `awm setup claude-code --global` to write it correctly). `npx tsx src/mcp.ts` applies only in a source checkout.
 4. Restart Claude Code (MCP servers load on startup)
 5. Run `npm run test:mcp` to verify the protocol works independently
 
 ### MCP server crashes on startup
 - Check Node.js version: `node --version` (must be >= 20)
 - Check `npx tsx` works: `npx tsx --version`
-- Run manually to see errors: `npx tsx src/mcp.ts` (should print to stderr and wait)
+- Run manually to see errors: `node <path>/dist/mcp.js` (should print to stderr and wait). In a source checkout: `npx tsx src/mcp.ts`
 
 ### MCP works but memories aren't persisting
 - Check `AWM_DB_PATH` in `.mcp.json` — it should point to an absolute path

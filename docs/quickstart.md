@@ -127,7 +127,7 @@ By default, `awm setup --global` creates one shared memory pool across all proje
       "command": "node",
       "args": ["C:/path/to/agent-working-memory/dist/mcp.js"],
       "env": {
-        "AWM_DB_PATH": "C:/path/to/agent-working-memory/data/memory.db",
+        "AWM_DB_PATH": "C:/Users/you/.awm/memory.db",
         "AWM_AGENT_ID": "work",
         "AWM_HOOK_PORT": "8401",
         "AWM_HOOK_SECRET": "your-secret-here"
@@ -145,7 +145,7 @@ By default, `awm setup --global` creates one shared memory pool across all proje
       "command": "node",
       "args": ["C:/path/to/agent-working-memory/dist/mcp.js"],
       "env": {
-        "AWM_DB_PATH": "C:/path/to/agent-working-memory/data/memory.db",
+        "AWM_DB_PATH": "C:/Users/you/.awm/memory.db",
         "AWM_AGENT_ID": "personal",
         "AWM_HOOK_PORT": "8402",
         "AWM_HOOK_SECRET": "your-secret-here"

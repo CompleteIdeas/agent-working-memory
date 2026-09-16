@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.15.7 (2026-09-16) — the docs still taught the store location 0.15.6 exists to prevent
+
+0.15.6 moved the default store out of the installed package because `npm install -g` deletes
+anything inside it. The code was fixed. **The documentation was not**, and a reader following
+it landed in exactly the configuration the release was written to stop.
+
+Found while onboarding a second user onto AWM: `awm --help` still advertised
+`--db-path <path>    Database path (default: <awm>/data/memory.db)`, and the two pages a new
+install is most likely to be set up from both handed out an `AWM_DB_PATH` pointing inside the
+package. A code fix and a doc that contradicts it is not a fix — whichever one the user reads
+is the one that decides where their memories live.
+
+- **`src/cli.ts`** — `--help` now states the real default, `~/.awm/memory.db`.
+- **`docs/quickstart.md`, `docs/team-setup-guide.md`** — the `.mcp.json` examples set
+  `AWM_DB_PATH` to `C:/Users/you/.awm/memory.db` instead of
+  `C:/path/to/agent-working-memory/data/memory.db`. The setup guide's file table also listed
+  `data/memory.db` as the database and told readers to delete it to start fresh.
+- **`docs/user-guide.md`** — the MCP config example was a source-checkout invocation
+  (`npx tsx src/mcp.ts`) with a relative `memory.db` and `AWM_AGENT_ID: "claude-code"`, which
+  is not a valid pool. It now shows what `awm setup` actually writes, and says why the store
+  must live outside the package and that only `work` and `personal` are valid pools.
+- **`docs/troubleshooting.md`, `docs/faq.md`** — told users their `command` *must* be `npx`
+  with `tsx src/mcp.ts`. That is the dev invocation; an installed package runs
+  `node <path>/dist/mcp.js`. Both forms are now given, labelled.
+
+No engine change. Nothing to re-run beyond the upgrade itself — but if you configured AWM by
+following any of those pages, check `awm doctor` and confirm `Store location` is not inside
+`node_modules`.
+
 ## 0.15.6 (2026-09-16) — DATA LOSS FIX: the default store lived inside the npm package
 
 **Upgrade to this release before running `npm install -g agent-working-memory@latest` again.**

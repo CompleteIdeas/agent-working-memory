@@ -171,10 +171,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.15.6
+## What's new — v0.15.7
 
 | | |
 |---|---|
+| **0.15.6–7** | **Data-loss fix.** The default store used to sit inside the installed npm package, where `npm install -g` deletes it on upgrade. It is now `~/.awm/memory.db`; re-running `awm setup` copies an affected store to safety and `awm doctor` fails on it. 0.15.7 corrects the docs that still taught the old location |
 | **0.15.x** | Runs as a **Claude Code plugin** and a **Claude Desktop extension**, both sharing one store with the CLI. Installs from npm with no GitHub access — `awm plugin` prints the two lines to paste. Every write now records which client produced it (`client=claude-code`) |
 | **0.14.6** | `awm setup` caught up with four releases of engine changes it had silently fallen behind. Added the release checks that now block on that kind of drift |
 | **0.14.5** | Benchmark instrument corrected: the eval had been querying as the wrong agent, so a product feature scored as a ranking failure. The real identifier baseline is **92.7%**, not 68% |
@@ -283,18 +284,18 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 781 tests
+npx vitest run          # 789 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
-npm run test:linux      # build + full suite on Linux (781/781)
+npm run test:linux      # build + full suite on Linux (789/789)
 ```
 
 ---
 
 ## Status
 
-Active development, v0.15.6. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.15.7. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

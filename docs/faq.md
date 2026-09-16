@@ -84,7 +84,7 @@ Yes: `AWM_DB_PATH=/path/to/your/memory.db npx tsx src/index.ts`
 
 1. Check that `.mcp.json` exists in the project root
 2. Verify `npx tsx` works: `npx tsx --version`
-3. Test manually: `npx tsx src/mcp.ts` (should wait for stdin)
+3. Test manually: `node <path>/dist/mcp.js` (should wait for stdin). In a source checkout: `npx tsx src/mcp.ts`
 4. Run `npm run test:mcp` to verify the protocol works
 5. Restart Claude Code and check `/mcp`
 
