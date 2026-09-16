@@ -157,6 +157,23 @@ async function setup() {
   // Seed the onboarding skill so a cold store can teach the agent how to warm itself.
   const skillAction = await seedOnboardSkill(ctx.dbPath, ctx.agentId);
 
+  // A rescue must be loud. The user did not ask for their store to move, and the reason it
+  // moved is that the old location was about to be deleted by their next npm upgrade.
+  if (ctx.rescuedDbFrom) {
+    console.log(`
+  !! YOUR MEMORY STORE WAS MOVED
+
+     from: ${ctx.rescuedDbFrom}
+       to: ${ctx.dbPath}
+
+     The old path is inside the installed npm package. \`npm install -g\` renames that
+     directory aside and deletes it, so the next upgrade would have taken your memories
+     with it — and \`npm uninstall -g\` would have done the same without a word.
+
+     The file was COPIED, not moved: the original is still there if you want to check it.
+     Once you are satisfied, the old copy can be deleted.`);
+  }
+
   console.log(`
 AWM configured for ${adapter.name}${isGlobal ? ' (global)' : ''}
 

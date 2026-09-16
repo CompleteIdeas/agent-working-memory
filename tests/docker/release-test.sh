@@ -46,6 +46,26 @@ cd /work/proj
 awm setup claude-code --global --db-path /data/work.db 2>&1 | sed 's/^/  /'
 
 echo
+echo "############ 2b. the DEFAULT store must not live inside the package ############"
+# Every existing assertion passed --db-path, so nothing exercised the default — which is
+# exactly how a data-loss bug shipped: `awm setup` put the store in <package>/data/memory.db,
+# and `npm install -g` deletes that directory on the next upgrade.
+mkdir -p /work/defaultproj && cd /work/defaultproj
+HOME=/root/defaulthome awm setup claude-code --global >/tmp/default-setup.log 2>&1
+DEFAULT_DB=$(node -e "
+  const fs=require('fs');
+  try {
+    const c=JSON.parse(fs.readFileSync('/root/defaulthome/.mcp.json','utf8'));
+    process.stdout.write(c.mcpServers['agent-working-memory'].env.AWM_DB_PATH || '');
+  } catch(e) { process.stdout.write(''); }
+")
+echo "  default AWM_DB_PATH: ${DEFAULT_DB:-<none>}"
+chk "a default setup chooses a store path"        "[ -n \"$DEFAULT_DB\" ]"
+chk "default store is NOT inside node_modules"    "! echo \"$DEFAULT_DB\" | grep -q node_modules"
+chk "default store is under the user home"        "echo \"$DEFAULT_DB\" | grep -q '\.awm'"
+cd /work/proj
+
+
 echo "############ 3. what did setup write? ############"
 chk "~/.mcp.json created"                      "test -f \$HOME/.mcp.json"
 chk "~/.claude/settings.json created"          "test -f \$HOME/.claude/settings.json"

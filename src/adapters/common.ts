@@ -8,7 +8,7 @@
  * environment variables, MCP command building, and the AWM instruction snippet.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
 import { resolve, join, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { homedir as osHomedir } from 'node:os';
@@ -25,9 +25,28 @@ export function resolvePackageRoot(): string {
   return resolve(__dirname, '..', '..');
 }
 
-/** Resolve the database path — default to <packageRoot>/data/memory.db. */
+/** A store inside the installed package is destroyed by the next `npm install -g`. */
+export function isInsidePackage(dbPath: string): boolean {
+  return /[\\/]node_modules[\\/]/.test(dbPath);
+}
+
+/**
+ * Resolve the database path — default `~/.awm/memory.db`.
+ *
+ * It used to default to `<packageRoot>/data/memory.db`, i.e. INSIDE the installed npm
+ * package. That is a data-loss bug, not an untidiness: `npm install -g
+ * agent-working-memory@latest` renames the package directory aside and deletes it, so an
+ * upgrade takes every memory with it, and `npm uninstall -g` does the same silently.
+ *
+ * Reported from a real machine: the upgrade failed with EBUSY because a running AWM
+ * process held memory.db open. That failure was the LUCKY outcome — with Claude Code
+ * closed, the upgrade would have succeeded and the store would have gone with it.
+ *
+ * `~/.awm/memory.db` is what the plugin and Desktop launchers already used, so until now
+ * the same product had two different defaults depending on how it was installed.
+ */
 export function resolveDbPath(packageRoot: string, explicit?: string | null): string {
-  const dbPath = explicit ?? join(packageRoot, 'data', 'memory.db');
+  const dbPath = explicit ?? join(homedir(), '.awm', 'memory.db');
   const dbDir = dirname(dbPath);
   if (!existsSync(dbDir)) {
     mkdirSync(dbDir, { recursive: true });
@@ -156,13 +175,35 @@ export function buildSetupContext(opts: {
   const agentId = opts.agentId
     ?? existing?.AWM_AGENT_ID
     ?? (opts.isGlobal ? deriveAgentFromDir('') : projectName);
-  const dbPath = resolveDbPath(packageRoot, opts.dbPath ?? existing?.AWM_DB_PATH ?? null);
+  // An existing AWM_DB_PATH is normally preserved — that is what makes re-running setup an
+  // upgrade rather than a reset. There is one exception: a store INSIDE the installed
+  // package is deleted by the next `npm install -g`, so preserving it would be preserving a
+  // data-loss bug. Move it to the safe default, copying the file rather than pointing at an
+  // empty one, and leave the original where it is so nothing is destroyed by the rescue.
+  const requested = opts.dbPath ?? existing?.AWM_DB_PATH ?? null;
+  let dbPath: string;
+  let rescuedFrom: string | null = null;
+  if (!opts.dbPath && requested && isInsidePackage(requested)) {
+    const safe = resolveDbPath(packageRoot, null);
+    if (existsSync(requested) && !existsSync(safe)) {
+      mkdirSync(dirname(safe), { recursive: true });
+      copyFileSync(requested, safe);
+      for (const side of ['-wal', '-shm']) {
+        if (existsSync(requested + side)) copyFileSync(requested + side, safe + side);
+      }
+      rescuedFrom = requested;
+    }
+    dbPath = safe;
+  } else {
+    dbPath = resolveDbPath(packageRoot, requested);
+  }
   const hookPort = opts.hookPort ?? existing?.AWM_HOOK_PORT ?? '8401';
   const hookPortRange = opts.hookPortRange ?? existing?.AWM_HOOK_PORT_RANGE ?? '10';
   const hookSecret = resolveHookSecret(dbPath);
   const envVars = buildEnvVars(dbPath, agentId, hookPort, hookSecret, isWindows, { hookPortRange, existing, client: opts.client });
 
   return {
+    rescuedDbFrom: rescuedFrom,
     cwd,
     projectName,
     agentId,

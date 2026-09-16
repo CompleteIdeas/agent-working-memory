@@ -10,6 +10,8 @@
  */
 
 export interface SetupContext {
+  /** Set when setup moved a store out of the installed package. The old file is left in place. */
+  rescuedDbFrom?: string | null;
   /** Current working directory */
   cwd: string;
   /** Lowercase project name derived from cwd */

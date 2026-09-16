@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
-import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection } from './common.js';
+import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection, isInsidePackage } from './common.js';
 import { HOOK_SCRIPTS, AWM_HOOKS_VERSION, PRIME_DISABLE_FILE, type HooksRecord } from './hook-scripts.js';
 import { request as httpRequest } from 'node:http';
 
@@ -271,6 +271,23 @@ const adapter: CLIAdapter = {
 
     // Check MCP entrypoint
     if (ctx.hasDist) {
+      // The store must never live inside the installed package: `npm install -g` renames that
+      // directory aside and deletes it, so an upgrade silently destroys every memory. Checked
+      // here as well as in setup, because the people most at risk are the ones who upgrade
+      // without re-running setup.
+      const configuredDb = configuredEnv.AWM_DB_PATH;
+      if (configuredDb && isInsidePackage(configuredDb)) {
+        results.push({
+          check: 'Store location',
+          status: 'fail',
+          message: `Your memory store is INSIDE the installed package (${configuredDb}). `
+            + 'The next `npm install -g` will delete it.',
+          fix: `Copy it somewhere safe, then ${rerun} — setup will move it to ~/.awm/memory.db and keep the original`,
+        });
+      } else if (configuredDb) {
+        results.push({ check: 'Store location', status: 'ok', message: configuredDb });
+      }
+
       results.push({ check: 'MCP entrypoint', status: 'ok', message: `dist/mcp.js exists` });
     } else {
       results.push({ check: 'MCP entrypoint', status: 'warn', message: 'dist/mcp.js not found — using dev mode (npx tsx)', fix: 'Run: npm run build' });

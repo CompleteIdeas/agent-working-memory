@@ -257,3 +257,29 @@ describe('diagnose', () => {
     }
   });
 });
+
+// A store inside the installed package is destroyed by the next `npm install -g`: npm renames
+// the package directory aside and deletes it. Reported from a real machine as an EBUSY on
+// upgrade — which was the lucky outcome, because a running process held the file open.
+describe('the store must never live inside the installed package', () => {
+  it('flags a store inside node_modules, on both path shapes', async () => {
+    const { isInsidePackage } = await import('../../src/adapters/common.js');
+    expect(isInsidePackage('C:\\Users\\jason\\AppData\\Roaming\\npm\\node_modules\\agent-working-memory\\data\\memory.db')).toBe(true);
+    expect(isInsidePackage('/usr/local/lib/node_modules/agent-working-memory/data/memory.db')).toBe(true);
+  });
+
+  it('does not flag a store in the user home', async () => {
+    const { isInsidePackage } = await import('../../src/adapters/common.js');
+    expect(isInsidePackage('C:/Users/robert/.awm/memory.db')).toBe(false);
+    expect(isInsidePackage('/home/x/.awm/memory.db')).toBe(false);
+  });
+
+  it('defaults to ~/.awm even when the package root is inside node_modules', async () => {
+    const { resolveDbPath, isInsidePackage } = await import('../../src/adapters/common.js');
+    const p = resolveDbPath('/usr/local/lib/node_modules/agent-working-memory');
+    expect(isInsidePackage(p)).toBe(false);
+    expect(p).toContain('.awm');
+    expect(p).toContain('memory.db');
+  });
+});
+

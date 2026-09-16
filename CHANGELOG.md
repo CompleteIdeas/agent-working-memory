@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.15.6 (2026-09-16) — DATA LOSS FIX: the default store lived inside the npm package
+
+**Upgrade to this release before running `npm install -g agent-working-memory@latest` again.**
+
+`awm setup` defaulted the database to `<packageRoot>/data/memory.db` — inside the installed
+package. `npm install -g` renames that directory aside and deletes it, so an upgrade took
+every memory with it, and `npm uninstall -g` did the same without a word.
+
+Found because a user's upgrade failed with `EBUSY: resource busy or locked` on
+`...
+pm
+ode_modulesgent-working-memory\data\memory.db`. **That failure was the lucky
+outcome** — a running AWM process held the file open and npm aborted. With Claude Code closed
+it would have succeeded, and the store would have been gone with no error at all.
+
+- **The default is now `~/.awm/memory.db`**, which is what the plugin and Desktop launchers
+  already used. Until now the same product had two different defaults depending on how it was
+  installed, and only one of them was safe.
+- **Re-running `awm setup` rescues an existing store.** Preserving the user's `AWM_DB_PATH` is
+  normally the whole point of re-running setup, but not when the preserved value is a
+  data-loss bug. Setup now detects a store inside the package, COPIES it (with any `-wal` and
+  `-shm` sidecars) to `~/.awm/memory.db`, points the config there, and prints a loud notice.
+  The original is left untouched, so the rescue itself cannot destroy anything.
+- **`awm doctor` fails on it**, for people who upgrade without re-running setup — the ones most
+  at risk.
+
+If you are already affected, copy the file out before your next npm upgrade:
+
+```powershell
+mkdir ~/.awm -Force
+copy "$env:APPDATA
+pm
+ode_modulesgent-working-memory\data\memory.db" ~/.awm/memory.db
+awm setup --global --db-path ~/.awm/memory.db
+```
+
+
 ## 0.15.5 (2026-09-16) — the README had no upgrade instructions
 
 Spotted on the published npm page, which is the only place most people will ever read this.
