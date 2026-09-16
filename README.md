@@ -135,6 +135,57 @@ and whether anything needs a re-run of setup.
 
 ---
 
+## Upgrading
+
+```bash
+npm install -g agent-working-memory@latest
+```
+
+**That alone is not enough** — it updates the engine, not the wiring. Do the second step for
+however you installed it:
+
+| Installed as | Second step |
+|---|---|
+| CLI (`awm setup`) | `awm setup --global` again. It upgrades in place: your database, agent id, ports and any env you set are all preserved |
+| Claude Code plugin | `/plugin marketplace update agent-working-memory` then `/plugin install awm@agent-working-memory` |
+| Claude Desktop | Rebuild the `.mcpb` and re-install it |
+
+Then **restart Claude Code** (or Desktop). A running MCP connection keeps the code it loaded
+at spawn time, so nothing changes until a fresh session starts.
+
+**A plugin marketplace installed from a local directory does not refresh itself.** Measured:
+a GitHub-sourced marketplace on one machine refreshed on a schedule, while a directory-sourced
+one had not moved in 167 days. Since the npm route registers a directory marketplace, the
+`/plugin marketplace update` line above is required, not optional — skip it and you get new
+engine code with old hooks, which half-works and is confusing for it.
+
+```
+memory_whoami
+```
+
+reports the version, store and agent the running process **actually** has. It is the fastest
+way to confirm an upgrade landed, and the only one that cannot be fooled by a stale cache.
+
+Your memories are not touched by any of this. Every release so far has been backward
+compatible, and the store is the same SQLite file before and after.
+
+---
+
+## What's new — v0.15.5
+
+| | |
+|---|---|
+| **0.15.x** | Runs as a **Claude Code plugin** and a **Claude Desktop extension**, both sharing one store with the CLI. Installs from npm with no GitHub access — `awm plugin` prints the two lines to paste. Every write now records which client produced it (`client=claude-code`) |
+| **0.14.6** | `awm setup` caught up with four releases of engine changes it had silently fallen behind. Added the release checks that now block on that kind of drift |
+| **0.14.5** | Benchmark instrument corrected: the eval had been querying as the wrong agent, so a product feature scored as a ranking failure. The real identifier baseline is **92.7%**, not 68% |
+| **0.14.2** | Each session's sidecar binds the first free port instead of giving up, so several projects can run at once |
+| **0.14.1** | An empty recall says `RECALL ABSTAINED` with the withheld count, rather than claiming the memory is absent |
+
+Full history, including every benchmark figure that was corrected and why:
+[CHANGELOG.md](CHANGELOG.md).
+
+---
+
 ## Why it works when a vector store doesn't
 
 Most "memory for AI" stores everything and retrieves by similarity. AWM makes the opposite bet:
@@ -243,7 +294,7 @@ npm run test:linux      # build + full suite on Linux (781/781)
 
 ## Status
 
-Active development, v0.15.4. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.15.5. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

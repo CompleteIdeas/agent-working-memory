@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "agent-working-memory",
   "display_name": "Agent Working Memory",
-  "version": "0.15.4",
+  "version": "0.15.5",
   "description": "Persistent local memory for Claude. Requires `npm install -g agent-working-memory` first.",
   "long_description": "Gives Claude a memory that survives the conversation — and knows when to stay quiet.\n\nNineteen memory tools: write what you learn, recall it later, correct it when reality\nchanges. Selective by design — it filters what is worth keeping and returns nothing when\nnothing fits, rather than the best of a bad set.\n\nEverything stays on this machine: one SQLite file, three small local models, no cloud and\nno API keys. By default it opens `~/.awm/memory.db`, the same store the Claude Code\ninstall uses, so memory written in one is recalled in the other.\n\n**Prerequisite:** this extension ships the wiring, not the engine. Install the package\nfirst with `npm install -g agent-working-memory` (Node 22+). Without it the extension\nfalls back to `npx`, which works but rebuilds a native dependency on first run and can\nlook like a hang.",
   "author": {

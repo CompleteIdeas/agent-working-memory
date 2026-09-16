@@ -248,7 +248,24 @@ const VERSION = pkg.version;
       else if (head && st.commit !== head) note('linux-suite', `that run was at ${st.commit}, HEAD is now ${head} — re-run if the change touches src/`);
     } catch { note('linux-suite', `.release-checks/linux-${VERSION}.json is unreadable — re-run: npm run test:linux`); }
   } else {
-    note('linux-suite', `No Linux run recorded for v${VERSION} — run: npm run test:linux`);
+    // No stamp for THIS version. That is only a real gap if src/ actually moved: a
+    // docs-only release cannot behave differently on Linux, and a gate that demands a
+    // six-minute container run to prove a README change is a gate people learn to skip.
+    const prior = existsSync(join(ROOT, '.release-checks'))
+      ? readdirSync(join(ROOT, '.release-checks')).filter(f => f.startsWith('linux-')).sort().pop()
+      : null;
+    let carried = false;
+    if (prior) {
+      try {
+        const st = JSON.parse(readFileSync(join(ROOT, '.release-checks', prior), 'utf-8'));
+        const moved = git(`diff --name-only ${st.commit}..HEAD -- src/`);
+        if (st.commit && !st.commit.endsWith('-dirty') && !moved) {
+          note('linux-suite', `no run for v${VERSION}, but src/ is unchanged since v${st.version} (${st.commit}) which passed ${st.files} files / ${st.tests} tests on Linux`);
+          carried = true;
+        }
+      } catch { /* fall through to the plain warning */ }
+    }
+    if (!carried) note('linux-suite', `No Linux run recorded for v${VERSION} — run: npm run test:linux`);
   }
 
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.15.5 (2026-09-16) — the README had no upgrade instructions
+
+Spotted on the published npm page, which is the only place most people will ever read this.
+There was an install path and no upgrade path at all.
+
+`npm install -g agent-working-memory@latest` updates the engine, not the wiring, and the
+second step differs by how it was installed: re-run `awm setup --global` for the CLI,
+`/plugin marketplace update` + `/plugin install` for the plugin, rebuild the bundle for
+Desktop. Then restart, because a running MCP connection keeps the code it loaded at spawn.
+`memory_whoami` reports what is really running and cannot be fooled by a stale cache.
+
+The plugin line is the one that bites: a marketplace installed from a local directory does
+not refresh itself, and the npm route registers exactly that. Skipping it leaves new engine
+code with old hooks — which half-works, and is confusing for it.
+
+`check:release` also stops demanding a Linux run for a release that cannot behave
+differently. When there is no stamp for the current version it now looks at the newest one
+and carries it forward if `src/` has not moved since, naming the version and commit it is
+relying on. A gate that wants a six-minute container run to approve a README edit is a gate
+people learn to skip, and this release is exactly that case.
+
+
 ## 0.15.4 (2026-09-15) — provenance tag renamed `surface=` to `client=`
 
 Caught during live verification, before the tag reached more than one row.
