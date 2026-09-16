@@ -155,7 +155,7 @@ const adapter: CLIAdapter = {
     if (skip) return 'CLAUDE.md: skipped (--no-instructions)';
 
     const title = ctx.isGlobal ? '# Global Instructions' : `# ${basename(ctx.cwd)}`;
-    return upsertAwmSection(claudeMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title });
+    return upsertAwmSection(claudeMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title, force: ctx.forceInstructions });
   },
 
   writeHooks(ctx: SetupContext, skip: boolean): string {

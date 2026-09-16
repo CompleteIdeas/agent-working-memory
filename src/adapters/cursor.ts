@@ -54,7 +54,7 @@ const adapter: CLIAdapter = {
 
     if (skip) return '.cursorrules: skipped (--no-instructions)';
 
-    return upsertAwmSection(rulesPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: '# Agent Working Memory' });
+    return upsertAwmSection(rulesPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: '# Agent Working Memory', force: ctx.forceInstructions });
   },
 
   writeHooks(_ctx: SetupContext, _skip: boolean): string {

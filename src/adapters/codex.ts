@@ -166,7 +166,7 @@ const adapter: CLIAdapter = {
     if (skip) return 'AGENTS.md: skipped (--no-instructions)';
 
     const title = `# ${basename(ctx.cwd)} — Agent Instructions`;
-    return upsertAwmSection(agentsMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title });
+    return upsertAwmSection(agentsMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title, force: ctx.forceInstructions });
   },
 
   writeHooks(_ctx: SetupContext, _skip: boolean): string {

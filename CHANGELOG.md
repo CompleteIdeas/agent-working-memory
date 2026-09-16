@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.15.8 (2026-09-16) — `--force` existed in the code, but nothing could reach it
+
+`upsertAwmSection` has accepted a `force` option since generated markers were introduced,
+and it was unit-tested. Nothing ever passed it. There was no CLI flag, and not one adapter
+set it — so the option was dead code, and the refusal message it belonged to told users to
+"re-run with force", which was impossible.
+
+The effect on anyone whose instruction file predates the markers is an unbreakable loop:
+every `awm setup` writes another timestamped backup and refuses to touch the section, and
+the advice for getting out of it cannot be followed. Measured on a real install
+(2026-09-16): **four byte-identical backups in 35 minutes.**
+
+- **`awm setup --force`** now replaces a legacy unmarked section, wrapping the result in
+  generated markers so later runs update in place instead of backing up. Content outside
+  the section is preserved as always. Default remains off — an unmarked section cannot be
+  told apart from the user's own notes, and replacing one measured 169 of 381 lines lost
+  on a real file.
+- Threaded through every adapter, not just claude-code: codex (`AGENTS.md`), cursor
+  (`.cursorrules`) and http (`AWM-INSTRUCTIONS.md`) had the same dead option.
+- The refusal message now says `--force`, naming a flag that exists.
+
+**Without `--force` you can still fix it by hand:** move anything you want to keep ABOVE
+the `## Memory (AWM)` heading, delete the section, and re-run setup — it appends a properly
+marked block. Or wrap the existing section in
+`<!-- AWM:GENERATED:BEGIN -->` / `<!-- AWM:GENERATED:END -->` yourself.
+
+The unit test on the option was passing the whole time; it tested the function, not the
+wiring. The new test drives the adapter and was confirmed to fail with the wiring removed.
+
 ## 0.15.7 (2026-09-16) — the docs still taught the store location 0.15.6 exists to prevent
 
 0.15.6 moved the default store out of the installed package because `npm install -g` deletes

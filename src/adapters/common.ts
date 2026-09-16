@@ -159,6 +159,8 @@ export function buildSetupContext(opts: {
   hookPort?: string;
   hookPortRange?: string;
   installPrime?: boolean;
+  /** `--force`: replace a legacy unmarked instruction section rather than refusing. */
+  forceInstructions?: boolean;
   existingEnv?: Record<string, string> | null;
   /** Which surface this install is for — stamped onto every write as a `client=` tag. */
   client?: string;
@@ -216,6 +218,7 @@ export function buildSetupContext(opts: {
     hookPort,
     hookPortRange,
     installPrime: opts.installPrime ?? true,
+    forceInstructions: opts.forceInstructions ?? false,
     isGlobal: opts.isGlobal,
     isWindows,
     envVars,
@@ -338,7 +341,7 @@ export function upsertAwmSection(
            `notes inside it cannot be told apart from generated text and would be lost. ` +
            `Backup written to ${basename(backup)}. To upgrade: move any notes you want to keep ` +
            `ABOVE the '## Memory (AWM)' heading (content outside the section is always preserved), ` +
-           `then re-run with force. Nothing has been changed.`;
+           `then re-run with --force. Nothing has been changed.`;
   }
 
   const before = existing.slice(0, startMatch.index).trimEnd();

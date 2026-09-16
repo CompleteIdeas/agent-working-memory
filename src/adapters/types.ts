@@ -36,6 +36,12 @@ export interface SetupContext {
   hookPortRange: string;
   /** Install the UserPromptSubmit prime hook (0.14.6; `--no-prime` turns it off) */
   installPrime: boolean;
+  /**
+   * Replace a legacy, unmarked AWM instruction section instead of backing it up and
+   * refusing (`--force`). Off by default: an unmarked section cannot be told apart from
+   * the user's own notes, and replacing one measured 169 of 381 lines lost on a real install.
+   */
+  forceInstructions: boolean;
   /** Whether to use global scope */
   isGlobal: boolean;
   /** Windows platform */

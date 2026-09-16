@@ -56,6 +56,7 @@ const adapter: CLIAdapter = {
     return upsertAwmSection(instrPath, AWM_INSTRUCTION_CONTENT, {
       titleIfNew: '# Agent Working Memory',
       suffix: HTTP_ADDENDUM,
+      force: ctx.forceInstructions,
     });
   },
 

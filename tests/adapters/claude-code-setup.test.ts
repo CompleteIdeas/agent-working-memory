@@ -11,7 +11,7 @@
  * SessionEnd arrays, deleting any hook the user had added on those events.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer, type Server } from 'node:http';
@@ -283,3 +283,58 @@ describe('the store must never live inside the installed package', () => {
   });
 });
 
+
+/**
+ * `--force` has to actually REACH upsertAwmSection.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * upsertAwmSection has taken a `force` option since generated markers were introduced,
+ * and it was unit-tested. But nothing ever passed it: there was no CLI flag, and no
+ * adapter set it. So a user with a legacy unmarked section hit an unbreakable loop —
+ * every `awm setup` wrote another timestamped backup and refused, and the refusal message
+ * told them to "re-run with force", which was impossible.
+ *
+ * Measured on a real install 2026-09-16: four byte-identical backups in 35 minutes.
+ *
+ * The unit test on the option passing is not enough; this covers the WIRING.
+ */
+describe('claude-code: --force reaches the instruction writer', () => {
+  const LEGACY = '# Global Instructions\n\n## Memory (AWM) — MANDATORY\n\nOld unmarked text.\nA hand-written note worth keeping.\n';
+
+  it('defaults to false: a legacy section is backed up and left alone', () => {
+    const claudeMd = join(home, '.claude', 'CLAUDE.md');
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    writeFileSync(claudeMd, LEGACY);
+
+    const msg = adapter.writeInstructions(ctxFor(), false);
+
+    expect(msg).toMatch(/NOT updated/);
+    expect(readFileSync(claudeMd, 'utf-8')).toBe(LEGACY);       // untouched
+    expect(msg).toMatch(/--force/);                              // and the advice is followable
+    const backups = readdirSync(join(home, '.claude')).filter(f => f.includes('.awm-backup-'));
+    expect(backups).toHaveLength(1);
+  });
+
+  it('forceInstructions: true replaces the section and marks it, so the loop ends', () => {
+    const claudeMd = join(home, '.claude', 'CLAUDE.md');
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    writeFileSync(claudeMd, LEGACY);
+
+    const msg = adapter.writeInstructions(ctxFor({ forceInstructions: true }), false);
+    // Match the SUCCESS message specifically: the refusal message also contains the word
+    // "force" (it says "re-run with --force"), so /force/ would pass even unwired.
+    expect(msg).toMatch(/replaced with a marked generated block/);
+
+    const out = readFileSync(claudeMd, 'utf-8');
+    expect(out).toContain('<!-- AWM:GENERATED:END -->');
+    expect(out).toContain('# Global Instructions');              // content above survives
+    expect(out).not.toContain('Old unmarked text.');             // the section itself is replaced
+
+    // And now that it carries markers, a further run is a no-op rather than a backup.
+    const again = adapter.writeInstructions(ctxFor(), false);
+    expect(again).toMatch(/up-to-date|updated/);
+    const backups = readdirSync(join(home, '.claude')).filter(f => f.includes('.awm-backup-'));
+    expect(backups).toHaveLength(0);
+  });
+});

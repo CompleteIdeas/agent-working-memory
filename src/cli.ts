@@ -76,6 +76,9 @@ Setup options:
   --no-claude-md      Alias for --no-instructions
   --no-hooks          Skip hook installation
   --no-prime          Skip the UserPromptSubmit prime hook (auto-inject memories per prompt)
+  --force             Replace a legacy instruction section that has no generated markers.
+                      Without it setup backs the file up and refuses, because your own
+                      notes inside that section cannot be told apart from generated text.
   --hook-port PORT    Preferred sidecar port (default: 8401; each session walks upward when busy)
   --hook-port-range N Ports to try upward from --hook-port (default: 10)
   Re-running setup keeps your existing agent id, db path, port and any env you added.
@@ -100,6 +103,7 @@ async function setup() {
   let isGlobal = false;
   let skipHooks = false;
   let installPrime = true;
+  let forceInstructions = false;
   let hookPort: string | undefined;
   let hookPortRange: string | undefined;
 
@@ -114,6 +118,8 @@ async function setup() {
       skipHooks = true;
     } else if (args[i] === '--no-prime') {
       installPrime = false;
+    } else if (args[i] === '--force') {
+      forceInstructions = true;
     } else if (args[i] === '--hook-port' && args[i + 1]) {
       hookPort = args[++i];
     } else if (args[i] === '--hook-port-range' && args[i + 1]) {
@@ -147,7 +153,7 @@ async function setup() {
   // (0.14.6) — an upgrade must never repoint the database or rename the agent.
   const existingEnv = adapter.readExistingEnv?.(isGlobal, process.cwd()) ?? null;
   // `awm setup claude-code` -> client=claude-code, cursor -> client=cursor, and so on.
-  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort, hookPortRange, installPrime, existingEnv, client: target });
+  const ctx = buildSetupContext({ agentId, dbPath, isGlobal, hookPort, hookPortRange, installPrime, forceInstructions, existingEnv, client: target });
 
   // Run adapter
   const configAction = adapter.writeMcpConfig(ctx);
