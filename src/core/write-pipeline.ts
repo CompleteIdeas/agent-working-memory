@@ -288,6 +288,24 @@ export async function performWrite(
                 && superseder.supersededBy == null) {
               result = await reinforceMatched(store, superseder, noveltyResult, salience, input.content, input.concept);
             }
+          } else if (matched.stage === 'archived' && matched.supersededBy == null && !matched.retracted) {
+            // R1b (2026-09-22 fix, evidence in tests/core/reinforcement-floor-bug.test.ts
+            // and real production data from the /freshdesk-support hourly sweep "family of
+            // stubs" incident): a same-concept match that consolidation's Phase 6.5
+            // redundancy-prune archived (it archives a "loser" near-duplicate WITHOUT
+            // merging its confidence into a survivor — see engine/consolidation.ts) is
+            // still the same fact being restated. A fresh matching write is exactly the
+            // "repeat" signal R1 exists to act on. Without this branch an archived match
+            // is a permanent dead end: isHealthy above requires stage==='active', so it can
+            // never be reinforced again, and it isn't superseded either — every later
+            // matching write fell through to create() forever, producing an
+            // ever-growing, never-consolidating family of near-duplicate archived stubs
+            // that still rank in recall (archived != excluded from search) and crowd out
+            // the genuinely current one. REVIVE it: reinforce as usual, then flip it back
+            // to active so it behaves like any other reinforced engram going forward.
+            result = await reinforceMatched(store, matched, noveltyResult, salience, input.content, input.concept);
+            await store.updateStage(matched.id, 'active');
+            result.engram.stage = 'active';
           }
         }
       }

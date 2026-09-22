@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.15.8",
+  "version": "0.15.9",
   "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
   "keywords": [
     "ai-agents",

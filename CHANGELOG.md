@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.15.9 (2026-09-22) — an archived duplicate could never be reinforced again
+
+Phase 6.5 (redundancy-prune) archives a "loser" near-duplicate during consolidation to keep
+recall clean, but never merges its confidence into the survivor. Reinforcement's R2 health
+check required `stage === 'active'`, so once a matching engram was archived — no matter how
+high its confidence — it could never be reinforced again, and it wasn't superseded either.
+Every later write of the same fact fell through to `create()` instead, so the family kept
+growing rather than converging into one strengthened memory.
+
+Found via a real incident: an hourly recurring memory ("Freshdesk sweep — hourly re-run")
+split into 7 near-duplicate engrams over two weeks, 5 of them archived at confidence
+0.29–0.85, none reinforceable and none superseded — recall kept surfacing a two-week-stale
+one instead of the true latest.
+
+- A same-concept match that is `archived` (not superseded, not retracted) is now revived on
+  reinforcement instead of treated as a dead end: it reinforces as usual, then its stage
+  flips back to `active`.
+- New test: `tests/core/reinforcement-floor-bug.test.ts` reproduces both the archived-match
+  dead end (now fixed) and a separate, non-bug finding — writing the same recurring fact
+  under different concept wording forks a permanent new lineage by design (R1's match pivot
+  is exact concept equality on purpose; see the file header for why).
+
 ## 0.15.8 (2026-09-16) — `--force` existed in the code, but nothing could reach it
 
 `upsertAwmSection` has accepted a `force` option since generated markers were introduced,

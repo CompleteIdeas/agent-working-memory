@@ -22,7 +22,7 @@ The launcher defaults `AWM_DB_PATH` to `~/.awm/memory.db` — **the same file
 than quietly starting an empty one. Set `AWM_DB_PATH` yourself to override.
 
 It prefers an installed copy of the package (global, or a local `node_modules`) and falls
-back to `npx -p agent-working-memory@0.15.8`. The npx path rebuilds
+back to `npx -p agent-working-memory@0.15.9`. The npx path rebuilds
 `better-sqlite3` on a cold cache, which is slow enough to look like a hang, so a real
 install is worth having:
 

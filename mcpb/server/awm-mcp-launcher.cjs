@@ -6,7 +6,7 @@
 //
 // This is a REAL source file, not a string inside the generator, because it is real code:
 // it gets syntax-checked, linted and tested like everything else. `npm run build:plugin`
-// copies it to plugin/bin/ and substitutes 0.15.8.
+// copies it to plugin/bin/ and substitutes 0.15.9.
 //
 // Two jobs a bare `mcpServers` entry in plugin.json cannot do:
 //
@@ -95,7 +95,7 @@ if (found) {
   const isWin = process.platform === 'win32';
   const child = spawn(
     isWin ? 'npx.cmd' : 'npx',
-    ['-y', '-p', 'agent-working-memory@0.15.8', 'awm', 'mcp'],
+    ['-y', '-p', 'agent-working-memory@0.15.9', 'awm', 'mcp'],
     { stdio: 'inherit', env: process.env, shell: isWin }
   );
   child.on('error', (e) => {
