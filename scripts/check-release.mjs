@@ -307,6 +307,19 @@ const VERSION = pkg.version;
 // ─────────────────────────────────────────────────────────────────────────────
 // Report
 // ─────────────────────────────────────────────────────────────────────────────
+// llms.txt is the LLM-facing entry point. GitHub Pages publishes from /docs, so
+// the conventional <site>/llms.txt URL needs a copy there; the root copy is what
+// anyone reading the repository finds. Two files, one source of truth — so guard
+// the drift rather than trusting whoever edits next to remember.
+{
+  const a = read('llms.txt');
+  const b = read('docs/llms.txt');
+  if (!a) err('llms.txt', 'llms.txt is missing from the repository root', 'restore it — the README links to it');
+  else if (!b) err('llms.txt', 'docs/llms.txt is missing, so <site>/llms.txt will 404', 'cp llms.txt docs/llms.txt');
+  else if (a !== b) err('llms.txt', 'llms.txt and docs/llms.txt have drifted', 'cp llms.txt docs/llms.txt  (root is the source of truth)');
+  else note('llms.txt', `present and in sync (${a.length} chars)`);
+}
+
 const pad = (s) => String(s).padEnd(18);
 console.log(`\nRelease check — v${VERSION}\n`);
 for (const n of notes)    console.log(`  ·  ${pad(n.check)} ${n.msg}`);

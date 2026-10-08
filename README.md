@@ -20,7 +20,8 @@ Restart Claude Code. 19 tools appear. No cloud, no API keys, nothing leaves your
 <p align="center">
   <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md"><b>Deciding whether to adopt it? →</b></a> &nbsp;·&nbsp;
   <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md"><b>Want the mechanism walked through? →</b></a> &nbsp;·&nbsp;
-  <a href="https://completeideas.github.io/agent-working-memory/"><b>Docs site →</b></a>
+  <a href="https://completeideas.github.io/agent-working-memory/"><b>Docs site →</b></a> &nbsp;·&nbsp;
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/llms.txt"><b>Are you an LLM? Read llms.txt →</b></a>
 </p>
 
 ---
