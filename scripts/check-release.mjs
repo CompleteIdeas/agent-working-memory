@@ -307,6 +307,31 @@ const VERSION = pkg.version;
 // ─────────────────────────────────────────────────────────────────────────────
 // Report
 // ─────────────────────────────────────────────────────────────────────────────
+// docs/traceability.md claims a symbol lives in a file. It drifted for months
+// without anyone noticing, because nothing checked it: all 42 symbols still
+// resolved while every cited line number was wrong by 2-4x. Line numbers are
+// gone; this verifies what is left.
+{
+  const tr = read('docs/traceability.md');
+  if (!tr) {
+    warn('traceability', 'docs/traceability.md is missing', 'restore it or drop the check');
+  } else {
+    const rows = [...tr.matchAll(/\|\s*`([A-Za-z0-9_.\/-]+\.(?:ts|mjs|js))`\s*\|\s*`([^`]+?)`\s*\|/g)];
+    const bad = [];
+    for (const [, path, sym] of rows) {
+      const src = read(path);
+      if (src === null) { bad.push(`${path} (file missing)`); continue; }
+      let needle = sym.split('(')[0].trim();
+      const verb = needle.match(/^(?:POST|GET|PUT|DELETE)\s+(.*)$/);
+      if (verb) needle = verb[1];
+      if (!src.includes(needle)) bad.push(`${path} -> ${sym}`);
+    }
+    if (rows.length === 0) warn('traceability', 'no file:symbol rows parsed — did the table format change?', 'check the regex in check-release.mjs');
+    else if (bad.length) err('traceability', `${bad.length} stale row(s): ${bad.slice(0, 4).join('; ')}${bad.length > 4 ? ' ...' : ''}`, 'update docs/traceability.md to name the symbol that exists now');
+    else note('traceability', `${rows.length} file:symbol rows all resolve`);
+  }
+}
+
 // llms.txt is the LLM-facing entry point. GitHub Pages publishes from /docs, so
 // the conventional <site>/llms.txt URL needs a copy there; the root copy is what
 // anyone reading the repository finds. Two files, one source of truth — so guard
