@@ -31,8 +31,8 @@ But a **prefix** is the wrong 400 characters to spend.
 
 The truncation lands almost exclusively on `canonical` — the class AWM designates
 as source-of-truth. Real examples of terms the reranker could never see:
-`psql-equihub-dev2.postgres.database.azure.com`, `memory_supersede`,
-`api-equihub-dev.scm.azurewebsites.net`, `_web_pass`.
+`psql-example-dev.postgres.database.azure.com`, `memory_supersede`,
+`api-example-dev.scm.azurewebsites.net`, `_web_token`.
 
 This directly contradicts AWM's own writing guidance, which instructs authors to
 *"include 2+ retrievable identifiers… the literal terms a future query will

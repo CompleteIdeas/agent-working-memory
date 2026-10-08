@@ -777,7 +777,7 @@ Default half-life: 7 days
 ### entity_mentions (D9, 2026-07-30)
 | Column | Type | Notes |
 |--------|------|-------|
-| entity | TEXT | Normalized `key:value` (e.g. `person:seetha`, `ticket:18999`) — PK with engram_id |
+| entity | TEXT | Normalized `key:value` (e.g. `person:avery`, `ticket:10002`) — PK with engram_id |
 | engram_id | TEXT | Engram mentioning the entity |
 | agent_id | TEXT | Agent scope (indexed with entity) |
 

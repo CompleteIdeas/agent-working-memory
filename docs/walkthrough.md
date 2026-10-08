@@ -14,7 +14,7 @@ is taken from the current source or a recorded measurement.*
 
 An AI coding assistant is working a support ticket. It has just learned something worth
 keeping: a particular database report misses riders whose membership was digital-only,
-and the fix involves a function called `fn_member_valid_on_date`. Without AWM, that
+and the fix involves a function called `fn_entity_valid_on_date`. Without AWM, that
 knowledge exists only in this conversation and dies with it. With AWM, four things happen.
 
 ## 1. The assistant writes a memory
@@ -23,9 +23,9 @@ It calls one tool, `memory_write`, with a short label and the detail:
 
 ```
 concept: "Invalid Membership report misses Digital-only members"
-content: "The report filters on fn_member_valid_on_date, which excludes members
-          whose only membership is Digital. Ticket 19445. Affects Starter division."
-tags:    ticket=19445, topic=invalid-membership-report, project=USEA
+content: "The report filters on fn_entity_valid_on_date, which excludes members
+          whose only membership is Digital. Ticket 10004. Affects Starter division."
+tags:    ticket=10004, topic=invalid-membership-report, project=USEA
 ```
 
 That is the whole write. The assistant does not decide whether it is important — AWM does.
@@ -74,7 +74,7 @@ and goes active.
 ## 3. Someone asks a question, and AWM recalls
 
 Three days later, a different session — no shared context, maybe a different developer —
-is working ticket 19449 about the same report. The assistant calls `memory_recall` with a
+is working ticket 10005 about the same report. The assistant calls `memory_recall` with a
 plain description of what it is doing:
 
 ```
@@ -127,8 +127,8 @@ For our query, the top result is the memory written in step 1. It arrives as:
 
 ```
 1. **Invalid Membership report misses Digital-only members** (0.61) [id: 4760bd43-…]
-   The report filters on fn_member_valid_on_date, which excludes members whose
-   only membership is Digital. Ticket 19445. Affects Starter division.
+   The report filters on fn_entity_valid_on_date, which excludes members whose
+   only membership is Digital. Ticket 10004. Affects Starter division.
 [recall_id: 7c2e…]
 ```
 
@@ -145,7 +145,7 @@ in step 3's liveness scoring it now outranks its peers. Memories that keep being
 keep being found.
 
 **The link forms.** If the assistant also recalled a second memory in the same query — say,
-the ticket 19449 note — AWM records that the two were used together. Next time either one
+the ticket 10005 note — AWM records that the two were used together. Next time either one
 is a strong candidate, the other gets a nudge. This is the graph from step 3, being built.
 
 And if the assistant reports back — `memory_feedback: useful` with the `recall_id` from

@@ -49,3 +49,11 @@ tests/realstore-eval/trace-store-*.jsonl
 # Packed Desktop extension (build artifact; mcpb/ itself is generated and committed)
 dist-mcpb/
 *.mcpb
+
+# Derived eval artifacts. These are GENERATED from a private snapshot of a real
+# memory store (see tests/realstore-eval/build-*.mjs, which ARE tracked so the
+# methodology stays public). The generated files quote real queries and real
+# memory text, so they must not be published. Regenerate locally instead.
+tests/realstore-eval/fixture*.json*
+tests/realstore-eval/trace-*.jsonl
+tests/realstore-eval/miss-*.jsonl

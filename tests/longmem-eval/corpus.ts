@@ -69,7 +69,7 @@ const DOMAINS = [
     name: 'deploy',
     conceptFmt: (i: number) => `Deployment pipeline finding ${i} — build and release path`,
     facts: [
-      { id: 'psql-equihub-dev2.postgres.database.azure.com', sentence: (id: string) => `The dev database host is ${id} and it is the only host that accepts the migration runner's service principal.`, q: (id: string) => `which database host does the migration runner connect to` },
+      { id: 'psql-example-dev.postgres.database.azure.com', sentence: (id: string) => `The dev database host is ${id} and it is the only host that accepts the migration runner's service principal.`, q: (id: string) => `which database host does the migration runner connect to` },
       { id: 'KUDU_DEPLOY_TOKEN', sentence: (id: string) => `Deployments authenticate with ${id}, which must be rotated manually because the pipeline does not refresh it.`, q: (id: string) => `what credential do deployments authenticate with` },
       { id: 'azure-pipelines-nightly.yml', sentence: (id: string) => `The nightly job is defined in ${id}, separate from the main pipeline definition.`, q: (id: string) => `where is the nightly build job defined` },
     ],

@@ -14,9 +14,9 @@ describe('densestWindow', () => {
   it('finds a term buried far past the truncation point', () => {
     // The exact failure the live store hits: a hostname at char ~1500 that a
     // prefix-truncating reranker can never see.
-    const content = pad(1500) + ' the host is psql-equihub-dev2.postgres.database.azure.com here ' + pad(1500);
+    const content = pad(1500) + ' the host is psql-example-dev.postgres.database.azure.com here ' + pad(1500);
     const win = densestWindow(content, 'which database host does the migration runner use', 400);
-    expect(win).toContain('psql-equihub-dev2');
+    expect(win).toContain('psql-example-dev');
     expect(win.length).toBeLessThanOrEqual(402 + 2);  // budget + ellipses
   });
 

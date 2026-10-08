@@ -433,7 +433,7 @@ export class ActivationEngine {
     }
 
     // ── D11 (2026-07-30): ENTITY-INDEX CANDIDATE INJECTION (default-OFF, AWM_ENTITY_INDEX_FETCH=1) ──
-    // The D9 inverted index resolves query-NAMED entities ("Seetha", "ticket 18999") to every
+    // The D9 inverted index resolves query-NAMED entities ("Avery", "ticket 10002") to every
     // engram indexed under them — deterministic exact lookup, immune to embedding/BM25 vocabulary
     // mismatch. Injected candidates get NO score boost; instead they are GUARANTEED a rerank
     // audition (exempt from the topN cut, the minScore pool filter, the rerank-pool slice, and

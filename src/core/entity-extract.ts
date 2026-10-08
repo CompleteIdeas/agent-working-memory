@@ -5,7 +5,7 @@
  * Entity extraction for the entity inverted index (D9, 2026-07-30).
  *
  * v1 is deliberately conservative for precision: entities come ONLY from
- * structured sources — prefix tags (`person=Seetha`, `ticket=18999`) and
+ * structured sources — prefix tags (`person=Avery`, `ticket=10002`) and
  * auto-tagger `entity:` tags — never from free-text guessing. Each entity is
  * normalized to `key:value` lowercase so lookups are exact.
  *
