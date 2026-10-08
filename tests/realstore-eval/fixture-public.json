@@ -1,0 +1,4076 @@
+{
+  "generated": "unique-identifier hold-out over public-store.db",
+  "snapshot": "public-store.db",
+  "agents": [
+    "work",
+    "personal"
+  ],
+  "corpusEngrams": 400,
+  "answerable": 400,
+  "adversarial": 10,
+  "beyondTruncation": 325,
+  "items": [
+    {
+      "query": "Carrier manifest feed rejects declarations with digestd.eu1.harborview.test",
+      "goldId": "00ec4ab2-45a2-4964-80bc-4160e16e4a72",
+      "identifier": "digestd.eu1.harborview.test",
+      "offset": 687,
+      "contentLen": 1659,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with dispatchd.eu2.harborview.test",
+      "goldId": "01a2f3f4-e527-4f5b-b708-0b8d80a0bae7",
+      "identifier": "dispatchd.eu2.harborview.test",
+      "offset": 467,
+      "contentLen": 1427,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_dispatch_settlement",
+      "goldId": "0302f3d9-dce6-4394-8a65-b5b2b8fbf583",
+      "identifier": "sp_dispatch_settlement",
+      "offset": 701,
+      "contentLen": 1396,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_reconcile_surcharge",
+      "goldId": "03607c8a-41f3-4345-9275-6e8b8b51f54b",
+      "identifier": "sp_reconcile_surcharge",
+      "offset": 1139,
+      "contentLen": 1889,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with authd.us1.harborview.test",
+      "goldId": "03a73aa8-2841-4633-801a-3dcbf4a036ae",
+      "identifier": "authd.us1.harborview.test",
+      "offset": 2362,
+      "contentLen": 3332,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with feedproxy.us2.harborview.test",
+      "goldId": "03b93c3b-86e9-45e4-9d4a-4103fb84795c",
+      "identifier": "feedproxy.us2.harborview.test",
+      "offset": 2318,
+      "contentLen": 3291,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_refresh_manifest",
+      "goldId": "045f1973-3737-47b8-ab0e-46b1c14c22f9",
+      "identifier": "sp_refresh_manifest",
+      "offset": 216,
+      "contentLen": 938,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest settlement_runs.surcharge_basis",
+      "goldId": "04ee6737-8a7f-40e0-ae52-cbc1c0ad697d",
+      "identifier": "settlement_runs.surcharge_basis",
+      "offset": 439,
+      "contentLen": 956,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that template_blocks.window_opens",
+      "goldId": "054e818f-d6a3-4a17-94ab-523180f4b821",
+      "identifier": "template_blocks.window_opens",
+      "offset": 1628,
+      "contentLen": 2136,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_reassign_depot_window",
+      "goldId": "064be69c-3754-4077-9005-7661973d33fa",
+      "identifier": "sp_reassign_depot_window",
+      "offset": 700,
+      "contentLen": 1439,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits ingestd.sa1.harborview.test",
+      "goldId": "0719d65d-c86b-4f9d-b9f5-51205df05cd9",
+      "identifier": "ingestd.sa1.harborview.test",
+      "offset": 1145,
+      "contentLen": 2146,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1012",
+      "goldId": "07258b94-3436-4c70-a7c9-6d07d8c24bd9",
+      "identifier": "hvfr1012",
+      "offset": 1630,
+      "contentLen": 2810,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_replay_settlement",
+      "goldId": "0828a36a-c853-4e91-a2ff-2d7cd8605ce4",
+      "identifier": "sp_replay_settlement",
+      "offset": 1112,
+      "contentLen": 1848,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1082",
+      "goldId": "08b78746-037f-4d18-958b-5c6446ae0fcb",
+      "identifier": "hvfr1082",
+      "offset": 2319,
+      "contentLen": 3535,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1038",
+      "goldId": "08f85ce0-139d-4443-b94b-b53316df851f",
+      "identifier": "hvfr1038",
+      "offset": 1152,
+      "contentLen": 2294,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1033",
+      "goldId": "094b7906-77f1-4e3b-8998-6b4b4017048e",
+      "identifier": "hvfr1033",
+      "offset": 435,
+      "contentLen": 1648,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest aggregate_states.surcharge_basis",
+      "goldId": "0a5b55a0-906d-4eb4-8e7e-1dd87a509749",
+      "identifier": "aggregate_states.surcharge_basis",
+      "offset": 2291,
+      "contentLen": 2799,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with feedproxy.eu2.harborview.test",
+      "goldId": "0ae3e924-d00c-4edf-81ba-32875bd1f2cd",
+      "identifier": "feedproxy.eu2.harborview.test",
+      "offset": 453,
+      "contentLen": 1456,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits auditd.sa1.harborview.test",
+      "goldId": "0af36991-de92-4d35-b295-342d2533bf24",
+      "identifier": "auditd.sa1.harborview.test",
+      "offset": 693,
+      "contentLen": 1646,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_repartition_consignment",
+      "goldId": "0bdb8595-d3e1-4830-995b-3e945e146a50",
+      "identifier": "sp_repartition_consignment",
+      "offset": 664,
+      "contentLen": 1430,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes customsd.us1.harborview.test",
+      "goldId": "0be7c1a1-5c8e-4555-aed2-a4d1307dfc29",
+      "identifier": "customsd.us1.harborview.test",
+      "offset": 2325,
+      "contentLen": 3296,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits notifyd.eu2.harborview.test",
+      "goldId": "0c1cf147-bd35-4b13-b787-dcb930174f0e",
+      "identifier": "notifyd.eu2.harborview.test",
+      "offset": 1182,
+      "contentLen": 2149,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_snapshot_consignment",
+      "goldId": "0e14739b-7a59-4885-ae6c-6c57758231e8",
+      "identifier": "sp_snapshot_consignment",
+      "offset": 1091,
+      "contentLen": 1817,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_delegate_consignment",
+      "goldId": "0e294d52-6ec4-4892-a735-c0dc7e37036a",
+      "identifier": "sp_delegate_consignment",
+      "offset": 710,
+      "contentLen": 1420,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_dispatch_surcharge",
+      "goldId": "0e40dd2c-0f10-4b94-a461-ae1f532b9c07",
+      "identifier": "sp_dispatch_surcharge",
+      "offset": 471,
+      "contentLen": 1229,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1076",
+      "goldId": "0ecf966f-5207-4147-a8ff-b7519711b84a",
+      "identifier": "hvfr1076",
+      "offset": 220,
+      "contentLen": 1404,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1016",
+      "goldId": "1010744c-9577-467b-9435-eae0d846e892",
+      "identifier": "hvfr1016",
+      "offset": 220,
+      "contentLen": 1402,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Template rendering drops digest footer single-item depot_windows.surcharge_basis",
+      "goldId": "10789fef-a829-44db-94b2-5bf29b70e111",
+      "identifier": "depot_windows.surcharge_basis",
+      "offset": 443,
+      "contentLen": 961,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_allocate_settlement",
+      "goldId": "10890a18-fb44-42d2-bff0-204c43100aca",
+      "identifier": "sp_allocate_settlement",
+      "offset": 1108,
+      "contentLen": 1827,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with dispatchd.ap2.harborview.test",
+      "goldId": "10a2c13d-51e2-4bcb-9edd-1609c98745b5",
+      "identifier": "dispatchd.ap2.harborview.test",
+      "offset": 1160,
+      "contentLen": 2148,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee apigw.eu2.harborview.test",
+      "goldId": "10ae1354-485d-4f41-8d5c-9cf04c1592c3",
+      "identifier": "apigw.eu2.harborview.test",
+      "offset": 2337,
+      "contentLen": 3329,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status billingd.sa1.harborview.test",
+      "goldId": "118112bb-f4f5-4d73-a65f-012aef9c70d9",
+      "identifier": "billingd.sa1.harborview.test",
+      "offset": 1196,
+      "contentLen": 2176,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1053",
+      "goldId": "127c8a99-26ac-4f26-8a34-2c5a9c73ab3f",
+      "identifier": "hvfr1053",
+      "offset": 450,
+      "contentLen": 1584,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1035",
+      "goldId": "133a5fda-f7e3-4044-a3cf-4e02f026856a",
+      "identifier": "hvfr1035",
+      "offset": 231,
+      "contentLen": 1427,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee feedproxy.sa1.harborview.test",
+      "goldId": "136a77b7-02dd-496c-bf3b-f0e9b7a380ac",
+      "identifier": "feedproxy.sa1.harborview.test",
+      "offset": 235,
+      "contentLen": 1183,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_declare_settlement",
+      "goldId": "136da23c-b9d1-4532-a79f-d2a4ed157241",
+      "identifier": "sp_declare_settlement",
+      "offset": 1644,
+      "contentLen": 2365,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1085",
+      "goldId": "1449c712-9352-48ad-857e-6c989169c2df",
+      "identifier": "hvfr1085",
+      "offset": 1163,
+      "contentLen": 2357,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item delivery_attempts.surcharge_basis",
+      "goldId": "14682cc0-af64-4da8-a8bd-71d23eed6914",
+      "identifier": "delivery_attempts.surcharge_basis",
+      "offset": 1600,
+      "contentLen": 2094,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that session_tokens.accrual_bucket",
+      "goldId": "14f5fc67-d342-4259-b5ac-182c94c438f1",
+      "identifier": "session_tokens.accrual_bucket",
+      "offset": 1620,
+      "contentLen": 2137,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1091",
+      "goldId": "15050c04-3529-45b1-9ac8-eef53595775c",
+      "identifier": "hvfr1091",
+      "offset": 1588,
+      "contentLen": 2806,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_settle_consignment",
+      "goldId": "15314be0-6e44-450e-b1a7-4a511e4f7418",
+      "identifier": "sp_settle_consignment",
+      "offset": 461,
+      "contentLen": 1183,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_snapshot_manifest",
+      "goldId": "1539e14f-54d6-4b17-b9b8-497a678d8d49",
+      "identifier": "sp_snapshot_manifest",
+      "offset": 680,
+      "contentLen": 1401,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that aggregate_states.consignee_ref",
+      "goldId": "164740ff-c964-453d-867c-495ae46926ae",
+      "identifier": "aggregate_states.consignee_ref",
+      "offset": 1629,
+      "contentLen": 2110,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_replay_consignment",
+      "goldId": "1670a582-77db-441c-b80b-e6b970456c43",
+      "identifier": "sp_replay_consignment",
+      "offset": 1167,
+      "contentLen": 1863,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement template_blocks.consignee_ref",
+      "goldId": "1686baad-2ac8-4734-b014-f90507dfc309",
+      "identifier": "template_blocks.consignee_ref",
+      "offset": 2397,
+      "contentLen": 2890,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1049",
+      "goldId": "168b6dda-eaf1-4b4a-825a-963513fffdc5",
+      "identifier": "hvfr1049",
+      "offset": 1633,
+      "contentLen": 2776,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee authd.eu2.harborview.test",
+      "goldId": "16d05695-a44b-4a5a-a234-c9ce2fef4304",
+      "identifier": "authd.eu2.harborview.test",
+      "offset": 485,
+      "contentLen": 1430,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1019",
+      "goldId": "16f856b7-3d34-4e13-b64c-9211416ca509",
+      "identifier": "hvfr1019",
+      "offset": 453,
+      "contentLen": 1668,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_allocate_consignment",
+      "goldId": "17056ac9-669d-4f4c-8b0f-fdeaabf3c428",
+      "identifier": "sp_allocate_consignment",
+      "offset": 683,
+      "contentLen": 1418,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest aggregate_states.window_opens",
+      "goldId": "17b4cfed-a6cf-41fb-8bb4-b74af38f8f49",
+      "identifier": "aggregate_states.window_opens",
+      "offset": 2329,
+      "contentLen": 2837,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle extractd.us2.harborview.test",
+      "goldId": "17bdc341-805a-411b-96ea-23b22dbfedd1",
+      "identifier": "extractd.us2.harborview.test",
+      "offset": 470,
+      "contentLen": 1444,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee apigw.ap2.harborview.test",
+      "goldId": "1962a81c-1ee1-441d-906d-1e8a5b85f4f1",
+      "identifier": "apigw.ap2.harborview.test",
+      "offset": 2310,
+      "contentLen": 3284,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes billingd.us2.harborview.test",
+      "goldId": "19fe187b-3a58-4ef4-8df0-ab765e011873",
+      "identifier": "billingd.us2.harborview.test",
+      "offset": 224,
+      "contentLen": 1240,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee digestd.us2.harborview.test",
+      "goldId": "1b56bb8b-8a7f-4427-868b-4facca2b4835",
+      "identifier": "digestd.us2.harborview.test",
+      "offset": 667,
+      "contentLen": 1646,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1052",
+      "goldId": "1c36ac4c-d587-4742-aa9e-246fdd1c76ee",
+      "identifier": "hvfr1052",
+      "offset": 220,
+      "contentLen": 1372,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_expire_surcharge",
+      "goldId": "1ce72d83-404e-4ec5-a8ed-6ea2e1013e1e",
+      "identifier": "sp_expire_surcharge",
+      "offset": 233,
+      "contentLen": 938,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle notifyd.us1.harborview.test",
+      "goldId": "1d9854b5-f455-4ef5-a01b-51f26e469153",
+      "identifier": "notifyd.us1.harborview.test",
+      "offset": 688,
+      "contentLen": 1640,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest carrier_feeds.accrual_bucket",
+      "goldId": "1db9ee3e-12da-47a2-a437-c594fc33039a",
+      "identifier": "carrier_feeds.accrual_bucket",
+      "offset": 665,
+      "contentLen": 1163,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status billingd.us1.harborview.test",
+      "goldId": "1e5ddb34-cfe1-4e98-9bd1-68141b1ea667",
+      "identifier": "billingd.us1.harborview.test",
+      "offset": 712,
+      "contentLen": 1688,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs digest_batches.surcharge_basis",
+      "goldId": "1ea53b80-5c00-4969-8f62-0a018e3a4cdf",
+      "identifier": "digest_batches.surcharge_basis",
+      "offset": 2303,
+      "contentLen": 2795,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1088",
+      "goldId": "1f7ab0a6-fe22-4baa-9d81-37c53f6780f5",
+      "identifier": "hvfr1088",
+      "offset": 2287,
+      "contentLen": 3453,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits settled.eu2.harborview.test",
+      "goldId": "1fac96b9-cb7b-41bf-8078-03768b911afb",
+      "identifier": "settled.eu2.harborview.test",
+      "offset": 443,
+      "contentLen": 1460,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1084",
+      "goldId": "1fe862e3-6c1c-412a-9de6-9d8622f28413",
+      "identifier": "hvfr1084",
+      "offset": 1606,
+      "contentLen": 2831,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs delivery_attempts.accrual_bucket",
+      "goldId": "20505c5e-5290-44c4-a2b1-cf56c6aae8de",
+      "identifier": "delivery_attempts.accrual_bucket",
+      "offset": 1647,
+      "contentLen": 2162,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs customs_entries.window_opens",
+      "goldId": "20966c4c-bc45-4ef0-9fd3-ae4587fd9842",
+      "identifier": "customs_entries.window_opens",
+      "offset": 1632,
+      "contentLen": 2129,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_replay_manifest",
+      "goldId": "222c3469-d82b-471b-bc16-2da6e1215dc1",
+      "identifier": "sp_replay_manifest",
+      "offset": 2473,
+      "contentLen": 3236,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1087",
+      "goldId": "231ce10e-a09b-4092-b0ac-4bb272b604b3",
+      "identifier": "hvfr1087",
+      "offset": 700,
+      "contentLen": 1932,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge digest_batches.accrual_bucket",
+      "goldId": "2469fa18-16c0-4923-b9b1-fa17f35cbd7e",
+      "identifier": "digest_batches.accrual_bucket",
+      "offset": 1147,
+      "contentLen": 1640,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with apigw.us1.harborview.test",
+      "goldId": "2480fb86-2bd2-4c44-87f4-046e11c97837",
+      "identifier": "apigw.us1.harborview.test",
+      "offset": 455,
+      "contentLen": 1454,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest session_tokens.surcharge_basis",
+      "goldId": "253f8b9f-3bf0-4017-a7b7-2d615690a79f",
+      "identifier": "session_tokens.surcharge_basis",
+      "offset": 1159,
+      "contentLen": 1694,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_repartition_depot_window",
+      "goldId": "26e6f2e1-6e21-44ef-9b31-bcaa329030c8",
+      "identifier": "sp_repartition_depot_window",
+      "offset": 1099,
+      "contentLen": 1852,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs tenant_scopes.accrual_bucket",
+      "goldId": "27182110-d0d1-43ab-9a85-82a15af44ae4",
+      "identifier": "tenant_scopes.accrual_bucket",
+      "offset": 699,
+      "contentLen": 1231,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1011",
+      "goldId": "27411b81-7bfc-4553-8016-10b94730da9f",
+      "identifier": "hvfr1011",
+      "offset": 231,
+      "contentLen": 1437,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1068",
+      "goldId": "27a2da4f-2e0e-4e8e-9b5c-f6a232835046",
+      "identifier": "hvfr1068",
+      "offset": 679,
+      "contentLen": 1850,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_validate_consignment",
+      "goldId": "283b345d-7819-491c-a525-663f29d0fd07",
+      "identifier": "sp_validate_consignment",
+      "offset": 671,
+      "contentLen": 1398,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement template_blocks.accrual_bucket",
+      "goldId": "288f4028-6f5c-4b9b-a25b-ff476f519093",
+      "identifier": "template_blocks.accrual_bucket",
+      "offset": 244,
+      "contentLen": 747,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement partition_maps.window_opens",
+      "goldId": "293e09ac-ab37-4c6c-b7cb-27c23276d38b",
+      "identifier": "partition_maps.window_opens",
+      "offset": 698,
+      "contentLen": 1190,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge manifest_lines.accrual_bucket",
+      "goldId": "29fabc06-ea5e-4ac5-8c62-addc82ed1d00",
+      "identifier": "manifest_lines.accrual_bucket",
+      "offset": 469,
+      "contentLen": 971,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1034",
+      "goldId": "2a9e9ef6-070d-451c-82ae-e010ba84b5e5",
+      "identifier": "hvfr1034",
+      "offset": 2317,
+      "contentLen": 3490,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_roster_surcharge",
+      "goldId": "2b762952-93ba-4d1d-9738-1cb8fdfef466",
+      "identifier": "sp_roster_surcharge",
+      "offset": 1152,
+      "contentLen": 1899,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee dispatchd.ap1.harborview.test",
+      "goldId": "2b922a61-0c36-42d8-a991-284a36926a7d",
+      "identifier": "dispatchd.ap1.harborview.test",
+      "offset": 459,
+      "contentLen": 1429,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge audit_entries.window_opens",
+      "goldId": "2c42b3e5-abca-4bd1-9c95-a6e645191343",
+      "identifier": "audit_entries.window_opens",
+      "offset": 241,
+      "contentLen": 781,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_expire_manifest",
+      "goldId": "2d6a4290-9004-4f5c-a896-4253d3fd0486",
+      "identifier": "sp_expire_manifest",
+      "offset": 221,
+      "contentLen": 967,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_rebuild_surcharge",
+      "goldId": "2dab864c-183b-4d0e-abc7-d809dc884d71",
+      "identifier": "sp_rebuild_surcharge",
+      "offset": 233,
+      "contentLen": 966,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1051",
+      "goldId": "2db742fa-7b64-4f51-ba31-63b8d8492421",
+      "identifier": "hvfr1051",
+      "offset": 216,
+      "contentLen": 1427,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs depot_windows.consignee_ref",
+      "goldId": "2e7a52f2-2da4-4f6a-ae9c-c09f08069522",
+      "identifier": "depot_windows.consignee_ref",
+      "offset": 456,
+      "contentLen": 973,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1039",
+      "goldId": "2f751c29-ab5b-4906-804a-4714b8754bba",
+      "identifier": "hvfr1039",
+      "offset": 435,
+      "contentLen": 1606,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1092",
+      "goldId": "300441a8-073f-432f-8148-40dc0585a93d",
+      "identifier": "hvfr1092",
+      "offset": 2293,
+      "contentLen": 3498,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1047",
+      "goldId": "31148e34-9e6c-423a-989e-37dedaa03f2c",
+      "identifier": "hvfr1047",
+      "offset": 231,
+      "contentLen": 1394,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1020",
+      "goldId": "31bf8df6-0760-47fa-8a8b-48a9c7555828",
+      "identifier": "hvfr1020",
+      "offset": 468,
+      "contentLen": 1629,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes schedd.ap2.harborview.test",
+      "goldId": "3259df5f-517b-4440-9379-0171680d4e3d",
+      "identifier": "schedd.ap2.harborview.test",
+      "offset": 1152,
+      "contentLen": 2102,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1046",
+      "goldId": "338d103f-0e89-417b-8c8a-7ebd48bfbbe2",
+      "identifier": "hvfr1046",
+      "offset": 444,
+      "contentLen": 1585,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_roster_settlement",
+      "goldId": "34d69e1d-c31f-40e5-af44-6f7fd0936e15",
+      "identifier": "sp_roster_settlement",
+      "offset": 645,
+      "contentLen": 1435,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes billingd.ap2.harborview.test",
+      "goldId": "36ed204c-8b6e-4875-a096-bb688391b4f4",
+      "identifier": "billingd.ap2.harborview.test",
+      "offset": 224,
+      "contentLen": 1184,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1031",
+      "goldId": "372ef818-a2d3-49c7-b7cc-392e77828ef7",
+      "identifier": "hvfr1031",
+      "offset": 220,
+      "contentLen": 1425,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_validate_depot_window",
+      "goldId": "37d4229b-eb47-414c-b759-bac5810e0649",
+      "identifier": "sp_validate_depot_window",
+      "offset": 703,
+      "contentLen": 1446,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement aggregate_states.settled_at",
+      "goldId": "387675dc-0ae6-4001-ae51-a93b0484eb4e",
+      "identifier": "aggregate_states.settled_at",
+      "offset": 1172,
+      "contentLen": 1685,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee authd.us2.harborview.test",
+      "goldId": "38e261f9-e5ec-46f4-a97e-65e380157d3e",
+      "identifier": "authd.us2.harborview.test",
+      "offset": 1202,
+      "contentLen": 2127,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item manifest_lines.settled_at",
+      "goldId": "39203711-670f-4cd6-a8c4-552b002fb89e",
+      "identifier": "manifest_lines.settled_at",
+      "offset": 220,
+      "contentLen": 706,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle notifyd.ap1.harborview.test",
+      "goldId": "39e7a440-631f-48dc-9628-9fda3e21e0e2",
+      "identifier": "notifyd.ap1.harborview.test",
+      "offset": 232,
+      "contentLen": 1244,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_snapshot_settlement",
+      "goldId": "3b776c95-98ec-4eab-95e8-b0d25b8684b1",
+      "identifier": "sp_snapshot_settlement",
+      "offset": 2324,
+      "contentLen": 3042,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1036",
+      "goldId": "3b9b13a6-9bbe-420c-9233-aa45ee2d1e19",
+      "identifier": "hvfr1036",
+      "offset": 2470,
+      "contentLen": 3409,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1094",
+      "goldId": "3c179d1b-a7c1-409d-9f08-1016b1df5a84",
+      "identifier": "hvfr1094",
+      "offset": 445,
+      "contentLen": 1572,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee digestd.ap2.harborview.test",
+      "goldId": "3d9d9261-585c-4f9c-ab0b-430849fe09a8",
+      "identifier": "digestd.ap2.harborview.test",
+      "offset": 2507,
+      "contentLen": 3443,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_declare_surcharge",
+      "goldId": "3ee2036a-816c-4414-9e87-293468c90e63",
+      "identifier": "sp_declare_surcharge",
+      "offset": 1620,
+      "contentLen": 2361,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1030",
+      "goldId": "3ef6b2c2-c94b-4e3b-bf7e-83b0f60feb36",
+      "identifier": "hvfr1030",
+      "offset": 692,
+      "contentLen": 1934,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1007",
+      "goldId": "40613bb0-da3b-409c-8642-b3a3da8e2740",
+      "identifier": "hvfr1007",
+      "offset": 442,
+      "contentLen": 1662,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1075",
+      "goldId": "40e360c8-6aee-4980-9974-6d90627c5a35",
+      "identifier": "hvfr1075",
+      "offset": 216,
+      "contentLen": 1337,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1001",
+      "goldId": "41288a6d-2cfc-41c4-b3e6-0294da1003d4",
+      "identifier": "hvfr1001",
+      "offset": 1809,
+      "contentLen": 2959,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_allocate_surcharge",
+      "goldId": "41979477-b468-48eb-82d5-49dc13e346d0",
+      "identifier": "sp_allocate_surcharge",
+      "offset": 471,
+      "contentLen": 1167,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest bounce_records.consignee_ref",
+      "goldId": "42138b5c-93f7-4392-86f4-1335fc6864cf",
+      "identifier": "bounce_records.consignee_ref",
+      "offset": 2310,
+      "contentLen": 2829,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_refresh_surcharge",
+      "goldId": "4329034f-401a-4d1f-8a54-5ad2d46318a9",
+      "identifier": "sp_refresh_surcharge",
+      "offset": 1127,
+      "contentLen": 1884,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1080",
+      "goldId": "43cf2796-0973-4532-9ed5-07b7ddd7b58a",
+      "identifier": "hvfr1080",
+      "offset": 1168,
+      "contentLen": 2375,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1004",
+      "goldId": "4427fc52-f322-416c-aa1f-c34378ade934",
+      "identifier": "hvfr1004",
+      "offset": 2502,
+      "contentLen": 3452,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits settled.ap2.harborview.test",
+      "goldId": "45e39d80-a549-474d-ae52-9caeb18d1501",
+      "identifier": "settled.ap2.harborview.test",
+      "offset": 457,
+      "contentLen": 1431,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item audit_entries.accrual_bucket",
+      "goldId": "474bdb0a-7a5c-42df-9731-d71dcc29beb8",
+      "identifier": "audit_entries.accrual_bucket",
+      "offset": 2289,
+      "contentLen": 2819,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that session_tokens.consignee_ref",
+      "goldId": "47a89d67-e78a-4f5d-bee3-ab40850a9987",
+      "identifier": "session_tokens.consignee_ref",
+      "offset": 230,
+      "contentLen": 766,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1037",
+      "goldId": "47fa1f4e-0ad1-4f2b-9339-28dcdb954c5f",
+      "identifier": "hvfr1037",
+      "offset": 458,
+      "contentLen": 1645,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle ingestd.us2.harborview.test",
+      "goldId": "49136797-7020-4ceb-891f-8213d6cab0ca",
+      "identifier": "ingestd.us2.harborview.test",
+      "offset": 685,
+      "contentLen": 1619,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge delivery_attempts.settled_at",
+      "goldId": "49a8cafc-e783-4274-8967-1ca77ddccb10",
+      "identifier": "delivery_attempts.settled_at",
+      "offset": 481,
+      "contentLen": 970,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1000",
+      "goldId": "4b3230a4-58b9-4834-a758-7783594170d2",
+      "identifier": "hvfr1000",
+      "offset": 2346,
+      "contentLen": 3505,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_checksum_surcharge",
+      "goldId": "4b454a34-c5f6-4ce0-a9d2-4b909e9fbdf5",
+      "identifier": "sp_checksum_surcharge",
+      "offset": 671,
+      "contentLen": 1408,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_reconcile_settlement",
+      "goldId": "4b4d5ff1-2731-4a0a-8149-0be925e391e5",
+      "identifier": "sp_reconcile_settlement",
+      "offset": 1186,
+      "contentLen": 1921,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_roster_consignment",
+      "goldId": "4bbaf926-8a85-4a27-9efb-1060b1778126",
+      "identifier": "sp_roster_consignment",
+      "offset": 1631,
+      "contentLen": 2357,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement consignment_legs.window_opens",
+      "goldId": "4bd83626-681f-4c9f-94f0-d661ddc56217",
+      "identifier": "consignment_legs.window_opens",
+      "offset": 1189,
+      "contentLen": 1699,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1029",
+      "goldId": "4c0e32dd-4cbd-4dcf-bf2f-9f11bd79e039",
+      "identifier": "hvfr1029",
+      "offset": 1156,
+      "contentLen": 2389,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1070",
+      "goldId": "4c9ce52d-8faa-4ab8-a3a6-0fdaad2a8dd3",
+      "identifier": "hvfr1070",
+      "offset": 1634,
+      "contentLen": 2841,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status schedd.us1.harborview.test",
+      "goldId": "4ca8c4ea-aeb5-407f-bfe8-7b711f8703f9",
+      "identifier": "schedd.us1.harborview.test",
+      "offset": 1604,
+      "contentLen": 2560,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1026",
+      "goldId": "4daf9f97-5885-4a5b-bab0-c84fc9448675",
+      "identifier": "hvfr1026",
+      "offset": 1127,
+      "contentLen": 2276,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1048",
+      "goldId": "4df97ade-5d94-47fb-a48a-b91ac15f2481",
+      "identifier": "hvfr1048",
+      "offset": 686,
+      "contentLen": 1872,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs lineage_edges.window_opens",
+      "goldId": "4e24abac-c5f0-416c-85da-7c7c6eeb8119",
+      "identifier": "lineage_edges.window_opens",
+      "offset": 471,
+      "contentLen": 961,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1017",
+      "goldId": "4e390c8d-8a1a-4d20-bed6-5373b857e79d",
+      "identifier": "hvfr1017",
+      "offset": 692,
+      "contentLen": 1849,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_revoke_consignment",
+      "goldId": "4e7e4135-42c1-452f-8c10-89e3b5f62038",
+      "identifier": "sp_revoke_consignment",
+      "offset": 441,
+      "contentLen": 1170,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_aggregate_consignment",
+      "goldId": "4e923ebc-add5-4c70-b1cf-c88ba7e70489",
+      "identifier": "sp_aggregate_consignment",
+      "offset": 707,
+      "contentLen": 1441,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_suppress_manifest",
+      "goldId": "507da8c9-d602-42c1-9b85-3f3e577d8e04",
+      "identifier": "sp_suppress_manifest",
+      "offset": 2377,
+      "contentLen": 3082,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_checksum_manifest",
+      "goldId": "509b663c-6a26-456b-974f-7fe60c7926f6",
+      "identifier": "sp_checksum_manifest",
+      "offset": 468,
+      "contentLen": 1182,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1043",
+      "goldId": "50a844cf-7ade-4110-8473-37628b9be925",
+      "identifier": "hvfr1043",
+      "offset": 1106,
+      "contentLen": 2290,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1009",
+      "goldId": "50bfae54-0f10-417c-b752-625c46f1b67e",
+      "identifier": "hvfr1009",
+      "offset": 694,
+      "contentLen": 1880,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle ingestd.ap2.harborview.test",
+      "goldId": "5104577b-b987-4344-81a3-323c02b16c3e",
+      "identifier": "ingestd.ap2.harborview.test",
+      "offset": 1165,
+      "contentLen": 2103,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement driver_shifts.accrual_bucket",
+      "goldId": "516b0d73-a27f-4237-b289-4bcf0c2d13b5",
+      "identifier": "driver_shifts.accrual_bucket",
+      "offset": 714,
+      "contentLen": 1235,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1062",
+      "goldId": "5203b45c-46e4-4483-addf-3ef02e6ef703",
+      "identifier": "hvfr1062",
+      "offset": 1147,
+      "contentLen": 2283,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item delivery_attempts.window_opens",
+      "goldId": "52873c1b-cfff-4e69-94f6-b15d5056ab1f",
+      "identifier": "delivery_attempts.window_opens",
+      "offset": 654,
+      "contentLen": 1139,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_refresh_depot_window",
+      "goldId": "52ad6add-c52e-48c7-9a1d-6141b6ad6920",
+      "identifier": "sp_refresh_depot_window",
+      "offset": 681,
+      "contentLen": 1422,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs depot_windows.accrual_bucket",
+      "goldId": "530233a6-cfcc-4c63-b9a5-b0984f9cc123",
+      "identifier": "depot_windows.accrual_bucket",
+      "offset": 2312,
+      "contentLen": 2844,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_refresh_consignment",
+      "goldId": "539a39f2-f9d1-42f7-a850-b3e080859491",
+      "identifier": "sp_refresh_consignment",
+      "offset": 681,
+      "contentLen": 1398,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status lineaged.eu1.harborview.test",
+      "goldId": "53b8d7bd-871f-4df2-8a3c-bd714fa1e775",
+      "identifier": "lineaged.eu1.harborview.test",
+      "offset": 225,
+      "contentLen": 1165,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_reassign_consignment",
+      "goldId": "547287b9-528e-4132-8db0-b0e024a1cf47",
+      "identifier": "sp_reassign_consignment",
+      "offset": 238,
+      "contentLen": 967,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status schedd.ap1.harborview.test",
+      "goldId": "54fc17da-cd07-43f9-8c93-e31c86c414ed",
+      "identifier": "schedd.ap1.harborview.test",
+      "offset": 453,
+      "contentLen": 1431,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs customs_entries.surcharge_basis",
+      "goldId": "550c0bb4-7b1d-4f8d-b6a2-09a5ddca6684",
+      "identifier": "customs_entries.surcharge_basis",
+      "offset": 231,
+      "contentLen": 723,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_allocate_manifest",
+      "goldId": "55a0dfe7-f42f-46d6-8422-8047dd894985",
+      "identifier": "sp_allocate_manifest",
+      "offset": 1608,
+      "contentLen": 2313,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes lineaged.ap2.harborview.test",
+      "goldId": "56164cf0-da3b-4389-95b3-0907e459f7c3",
+      "identifier": "lineaged.ap2.harborview.test",
+      "offset": 463,
+      "contentLen": 1454,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item lineage_edges.settled_at",
+      "goldId": "57592041-b05c-40b8-adff-5b45500faedb",
+      "identifier": "lineage_edges.settled_at",
+      "offset": 710,
+      "contentLen": 1219,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status lineaged.ap1.harborview.test",
+      "goldId": "5773bd89-03fd-4e57-a936-9de686f666ba",
+      "identifier": "lineaged.ap1.harborview.test",
+      "offset": 1607,
+      "contentLen": 2610,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_expire_settlement",
+      "goldId": "58b68074-10ae-4b68-9c57-a5e0d4d01eaa",
+      "identifier": "sp_expire_settlement",
+      "offset": 458,
+      "contentLen": 1219,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_expire_depot_window",
+      "goldId": "5c2c81aa-0daa-487c-a653-18142fa9b40a",
+      "identifier": "sp_expire_depot_window",
+      "offset": 441,
+      "contentLen": 1207,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits extractd.us1.harborview.test",
+      "goldId": "5ca7476d-50a9-497c-8045-c9af8cdc47be",
+      "identifier": "extractd.us1.harborview.test",
+      "offset": 701,
+      "contentLen": 1676,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_settle_surcharge",
+      "goldId": "5cfbedd6-c60d-4e3d-b24f-72389f910023",
+      "identifier": "sp_settle_surcharge",
+      "offset": 439,
+      "contentLen": 1183,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs lineage_edges.surcharge_basis",
+      "goldId": "5da655ff-fb72-47c4-85e7-2ba71fcb59ce",
+      "identifier": "lineage_edges.surcharge_basis",
+      "offset": 681,
+      "contentLen": 1197,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1071",
+      "goldId": "5ddb66d5-fadc-40bc-a9b5-5b56e198c120",
+      "identifier": "hvfr1071",
+      "offset": 231,
+      "contentLen": 1434,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_suppress_consignment",
+      "goldId": "5e0759f1-e7ce-4f1d-94b7-0f83198e05c1",
+      "identifier": "sp_suppress_consignment",
+      "offset": 1629,
+      "contentLen": 2332,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_repartition_settlement",
+      "goldId": "5e6ab035-0af0-4b94-94df-c70f163a58db",
+      "identifier": "sp_repartition_settlement",
+      "offset": 2510,
+      "contentLen": 3266,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_replay_depot_window",
+      "goldId": "5e98268b-505a-4a76-be02-d9a065ee0e53",
+      "identifier": "sp_replay_depot_window",
+      "offset": 460,
+      "contentLen": 1177,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status billingd.eu1.harborview.test",
+      "goldId": "5e9958e3-760a-45d6-b3ed-51142f5dedb0",
+      "identifier": "billingd.eu1.harborview.test",
+      "offset": 1130,
+      "contentLen": 2084,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee dispatchd.sa1.harborview.test",
+      "goldId": "5eb04323-58f1-4498-abff-0f3b8f8e932d",
+      "identifier": "dispatchd.sa1.harborview.test",
+      "offset": 1107,
+      "contentLen": 2063,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_dispatch_consignment",
+      "goldId": "5ee82050-7334-4991-983c-356a1d5bad45",
+      "identifier": "sp_dispatch_consignment",
+      "offset": 1650,
+      "contentLen": 2376,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_suppress_depot_window",
+      "goldId": "5ef43e07-031a-4c05-9ad7-474b65b34dae",
+      "identifier": "sp_suppress_depot_window",
+      "offset": 456,
+      "contentLen": 1173,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge customs_entries.consignee_ref",
+      "goldId": "5f132a83-00e5-41a5-9555-d749a939aa66",
+      "identifier": "customs_entries.consignee_ref",
+      "offset": 719,
+      "contentLen": 1197,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs tenant_scopes.consignee_ref",
+      "goldId": "5fc3568f-d7d4-48ab-91c5-7aa8afcba197",
+      "identifier": "tenant_scopes.consignee_ref",
+      "offset": 231,
+      "contentLen": 745,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge depot_windows.settled_at",
+      "goldId": "610a6d28-874a-4cd9-9e48-ab52d511c823",
+      "identifier": "depot_windows.settled_at",
+      "offset": 696,
+      "contentLen": 1186,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1041",
+      "goldId": "61774cc3-b10c-4e70-a3b1-06cbcffbc9a4",
+      "identifier": "hvfr1041",
+      "offset": 663,
+      "contentLen": 1822,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_aggregate_settlement",
+      "goldId": "62bd2137-274f-4a6b-ba8d-74d2befdb219",
+      "identifier": "sp_aggregate_settlement",
+      "offset": 1598,
+      "contentLen": 2354,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1024",
+      "goldId": "63072d1a-9d7e-4b13-9f06-6ce4f82e31d5",
+      "identifier": "hvfr1024",
+      "offset": 712,
+      "contentLen": 1895,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1064",
+      "goldId": "631434f1-f290-423d-a197-b687de6cdfaf",
+      "identifier": "hvfr1064",
+      "offset": 1165,
+      "contentLen": 2326,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle auditd.us2.harborview.test",
+      "goldId": "631843bb-3300-40c9-adb8-69b38f72adec",
+      "identifier": "auditd.us2.harborview.test",
+      "offset": 705,
+      "contentLen": 1657,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that template_blocks.surcharge_basis",
+      "goldId": "632fbb4f-3a3b-4f0b-bb0c-9f532ea93ac7",
+      "identifier": "template_blocks.surcharge_basis",
+      "offset": 1643,
+      "contentLen": 2151,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_backfill_surcharge",
+      "goldId": "6343e3f9-aabf-4f6b-aa30-854365add37f",
+      "identifier": "sp_backfill_surcharge",
+      "offset": 1154,
+      "contentLen": 1895,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item tenant_scopes.surcharge_basis",
+      "goldId": "64523bae-b5b2-451d-9675-e1f255f5bc36",
+      "identifier": "tenant_scopes.surcharge_basis",
+      "offset": 220,
+      "contentLen": 741,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status customsd.us2.harborview.test",
+      "goldId": "64c33730-a360-47f2-a9da-3efe949f8ef0",
+      "identifier": "customsd.us2.harborview.test",
+      "offset": 225,
+      "contentLen": 1172,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge lineage_edges.accrual_bucket",
+      "goldId": "651ab908-459d-468d-8251-9c881596fd6f",
+      "identifier": "lineage_edges.accrual_bucket",
+      "offset": 1191,
+      "contentLen": 1688,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status schedd.eu1.harborview.test",
+      "goldId": "65752483-1cf3-4535-b932-34b5ee0ce90d",
+      "identifier": "schedd.eu1.harborview.test",
+      "offset": 1156,
+      "contentLen": 2111,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_delegate_settlement",
+      "goldId": "69f819fc-876c-4866-bcd4-80df24fe6a7d",
+      "identifier": "sp_delegate_settlement",
+      "offset": 691,
+      "contentLen": 1398,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest partition_maps.accrual_bucket",
+      "goldId": "6a04a6fd-5a84-453d-b461-69d8f37418fe",
+      "identifier": "partition_maps.accrual_bucket",
+      "offset": 2451,
+      "contentLen": 2969,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes reportd.ap1.harborview.test",
+      "goldId": "6a71fe46-2d1e-4f4e-af2f-9b849c52acfb",
+      "identifier": "reportd.ap1.harborview.test",
+      "offset": 685,
+      "contentLen": 1663,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1057",
+      "goldId": "6c62a152-2c23-4d17-ae16-a5ba909fd598",
+      "identifier": "hvfr1057",
+      "offset": 696,
+      "contentLen": 1883,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes lineaged.us2.harborview.test",
+      "goldId": "6cda2213-0da7-44a0-9451-1909da5cb7a9",
+      "identifier": "lineaged.us2.harborview.test",
+      "offset": 2483,
+      "contentLen": 3445,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes schedd.us2.harborview.test",
+      "goldId": "6da7e394-a325-49ee-a4fc-2d61925c8165",
+      "identifier": "schedd.us2.harborview.test",
+      "offset": 455,
+      "contentLen": 1396,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee feedproxy.eu1.harborview.test",
+      "goldId": "6e19353a-2244-48b0-9a39-ff307f62784d",
+      "identifier": "feedproxy.eu1.harborview.test",
+      "offset": 235,
+      "contentLen": 1173,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with digestd.us1.harborview.test",
+      "goldId": "6e19f7a9-eece-4675-9a40-6c987a864b9b",
+      "identifier": "digestd.us1.harborview.test",
+      "offset": 448,
+      "contentLen": 1375,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_reconcile_depot_window",
+      "goldId": "6e37a0e0-c244-4038-97e4-c686d77587a9",
+      "identifier": "sp_reconcile_depot_window",
+      "offset": 1120,
+      "contentLen": 1863,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle notifyd.sa1.harborview.test",
+      "goldId": "6f2bc81b-77b2-4efa-8c45-b019f8569b0e",
+      "identifier": "notifyd.sa1.harborview.test",
+      "offset": 685,
+      "contentLen": 1656,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1023",
+      "goldId": "6f60467e-aec4-4e19-a638-797b326090d7",
+      "identifier": "hvfr1023",
+      "offset": 705,
+      "contentLen": 1829,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1089",
+      "goldId": "6f6f9cb9-8a97-44cf-b9c8-2f55798ddb31",
+      "identifier": "hvfr1089",
+      "offset": 2515,
+      "contentLen": 3446,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs manifest_lines.surcharge_basis",
+      "goldId": "7058736b-4e71-4f39-a123-89ab7198a1b5",
+      "identifier": "manifest_lines.surcharge_basis",
+      "offset": 231,
+      "contentLen": 731,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_validate_manifest",
+      "goldId": "709eb411-ff61-4a59-8d4f-038c08e7c596",
+      "identifier": "sp_validate_manifest",
+      "offset": 458,
+      "contentLen": 1153,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle settled.eu1.harborview.test",
+      "goldId": "710ce52d-6a96-441d-8cfa-be120d0636ea",
+      "identifier": "settled.eu1.harborview.test",
+      "offset": 232,
+      "contentLen": 1205,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest template_blocks.settled_at",
+      "goldId": "725108be-bdb3-4201-a43e-c48f7b02dd1e",
+      "identifier": "template_blocks.settled_at",
+      "offset": 1125,
+      "contentLen": 1635,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1061",
+      "goldId": "742f0e8b-eb68-48d8-a699-2acd99a44186",
+      "identifier": "hvfr1061",
+      "offset": 1810,
+      "contentLen": 3012,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits ingestd.ap1.harborview.test",
+      "goldId": "750c713a-76c2-4a1e-bc94-fde281b0c320",
+      "identifier": "ingestd.ap1.harborview.test",
+      "offset": 690,
+      "contentLen": 1661,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item depot_windows.window_opens",
+      "goldId": "7778aac5-3171-4874-9b0e-ad9d7767d1a7",
+      "identifier": "depot_windows.window_opens",
+      "offset": 682,
+      "contentLen": 1184,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1050",
+      "goldId": "780dac45-4177-4d8d-8a6f-f0a15075d41c",
+      "identifier": "hvfr1050",
+      "offset": 1190,
+      "contentLen": 2350,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits extractd.ap1.harborview.test",
+      "goldId": "78514c8d-227e-4340-9225-4045210d862a",
+      "identifier": "extractd.ap1.harborview.test",
+      "offset": 715,
+      "contentLen": 1735,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge extract_windows.window_opens",
+      "goldId": "7907d886-24ee-4019-babb-59fda851aaf1",
+      "identifier": "extract_windows.window_opens",
+      "offset": 709,
+      "contentLen": 1214,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_revoke_manifest",
+      "goldId": "790b6d8f-8722-4e9e-aac4-335034b9364b",
+      "identifier": "sp_revoke_manifest",
+      "offset": 464,
+      "contentLen": 1218,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_declare_manifest",
+      "goldId": "790fa7c6-ee68-489e-9ef2-2aa0bde6af55",
+      "identifier": "sp_declare_manifest",
+      "offset": 1793,
+      "contentLen": 2537,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle auditd.eu2.harborview.test",
+      "goldId": "7adcedf4-00b8-4c6a-851c-1a2a31388ca0",
+      "identifier": "auditd.eu2.harborview.test",
+      "offset": 1131,
+      "contentLen": 2125,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs manifest_lines.window_opens",
+      "goldId": "7df768d9-0666-4c1f-a3ec-0f797c72bc13",
+      "identifier": "manifest_lines.window_opens",
+      "offset": 2290,
+      "contentLen": 2837,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1006",
+      "goldId": "7e06ab21-8f61-443e-b3a3-c3696f46ab4a",
+      "identifier": "hvfr1006",
+      "offset": 217,
+      "contentLen": 1372,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Template rendering drops digest footer single-item extract_windows.consignee_ref",
+      "goldId": "7eeef407-b994-41a6-9b88-0341c93ea5ad",
+      "identifier": "extract_windows.consignee_ref",
+      "offset": 220,
+      "contentLen": 737,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_validate_settlement",
+      "goldId": "7f3b986a-44ff-4f81-a7c4-32faea6aaa00",
+      "identifier": "sp_validate_settlement",
+      "offset": 233,
+      "contentLen": 998,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1054",
+      "goldId": "8027c97b-033a-4551-98c9-74f42c1f1644",
+      "identifier": "hvfr1054",
+      "offset": 675,
+      "contentLen": 1875,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with apigw.ap1.harborview.test",
+      "goldId": "80a8d714-696d-4433-9447-7d2477129544",
+      "identifier": "apigw.ap1.harborview.test",
+      "offset": 2297,
+      "contentLen": 3264,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1022",
+      "goldId": "81c2ff5b-b75b-4dcd-a868-3a64ac4b044d",
+      "identifier": "hvfr1022",
+      "offset": 688,
+      "contentLen": 1826,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item digest_batches.settled_at",
+      "goldId": "836fa66a-4962-454c-b1ba-5058ed203cda",
+      "identifier": "digest_batches.settled_at",
+      "offset": 669,
+      "contentLen": 1211,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1077",
+      "goldId": "83f27e52-052d-4841-87e1-8ea0681caae3",
+      "identifier": "hvfr1077",
+      "offset": 231,
+      "contentLen": 1403,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_revoke_surcharge",
+      "goldId": "856e5821-c778-44d7-a11e-f333dc07aabb",
+      "identifier": "sp_revoke_surcharge",
+      "offset": 680,
+      "contentLen": 1390,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle notifyd.eu1.harborview.test",
+      "goldId": "85f5cb3e-f4f4-46d8-a39a-5f35c1ccc5f2",
+      "identifier": "notifyd.eu1.harborview.test",
+      "offset": 232,
+      "contentLen": 1227,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes customsd.ap1.harborview.test",
+      "goldId": "87f0f1a9-fbd1-4a0e-901c-6e015642da78",
+      "identifier": "customsd.ap1.harborview.test",
+      "offset": 670,
+      "contentLen": 1650,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that carrier_feeds.settled_at",
+      "goldId": "883628a3-bf70-4907-a725-3062820ad63b",
+      "identifier": "carrier_feeds.settled_at",
+      "offset": 684,
+      "contentLen": 1189,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement session_tokens.settled_at",
+      "goldId": "8961288b-c8b2-4db2-b4ae-7b62a3b0e51a",
+      "identifier": "session_tokens.settled_at",
+      "offset": 1601,
+      "contentLen": 2073,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1021",
+      "goldId": "8a26b4bf-57f7-4481-80e9-5385e8dfa87f",
+      "identifier": "hvfr1021",
+      "offset": 216,
+      "contentLen": 1394,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1083",
+      "goldId": "8abb4d0b-5539-4692-ae70-d1ff5ea353c1",
+      "identifier": "hvfr1083",
+      "offset": 2303,
+      "contentLen": 3495,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_checksum_consignment",
+      "goldId": "8aedf41b-f2a7-41b9-a76b-df7fdbce3132",
+      "identifier": "sp_checksum_consignment",
+      "offset": 226,
+      "contentLen": 961,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier feed retries replay manifests that settlement_runs.accrual_bucket",
+      "goldId": "8b647779-199a-4489-b12c-bad9ce09575a",
+      "identifier": "settlement_runs.accrual_bucket",
+      "offset": 1807,
+      "contentLen": 2326,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits auditd.eu1.harborview.test",
+      "goldId": "8b75966d-35ee-4749-9706-c3aa51505319",
+      "identifier": "auditd.eu1.harborview.test",
+      "offset": 681,
+      "contentLen": 1650,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_roster_depot_window",
+      "goldId": "8c126f0c-3a77-4275-bb1c-6cbc6bddaefd",
+      "identifier": "sp_roster_depot_window",
+      "offset": 462,
+      "contentLen": 1209,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes reportd.eu1.harborview.test",
+      "goldId": "8c6c6241-f61d-4530-a1e0-b868dd4e4974",
+      "identifier": "reportd.eu1.harborview.test",
+      "offset": 1623,
+      "contentLen": 2580,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1008",
+      "goldId": "8dc2f481-c578-432c-9dc0-e59b2a48fd32",
+      "identifier": "hvfr1008",
+      "offset": 230,
+      "contentLen": 1385,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier feed retries replay manifests that consignment_legs.settled_at",
+      "goldId": "90a7e08b-5567-4d3e-9fbb-89ddffe37284",
+      "identifier": "consignment_legs.settled_at",
+      "offset": 2308,
+      "contentLen": 2832,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with authd.ap1.harborview.test",
+      "goldId": "92cfc7a0-64f5-4c61-b89a-f6c071753ac2",
+      "identifier": "authd.ap1.harborview.test",
+      "offset": 1672,
+      "contentLen": 2631,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1045",
+      "goldId": "92e5a6cd-9aeb-47fb-b689-4d255d68732f",
+      "identifier": "hvfr1045",
+      "offset": 654,
+      "contentLen": 1848,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1065",
+      "goldId": "93a0fbf8-90a5-4126-95fe-2988a85e2da5",
+      "identifier": "hvfr1065",
+      "offset": 707,
+      "contentLen": 1861,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge extract_windows.surcharge_basis",
+      "goldId": "940e58f6-5777-452a-86ba-09a597780d1b",
+      "identifier": "extract_windows.surcharge_basis",
+      "offset": 475,
+      "contentLen": 967,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits extractd.eu1.harborview.test",
+      "goldId": "945e04b1-e00d-41bf-8709-3fc98955fd03",
+      "identifier": "extractd.eu1.harborview.test",
+      "offset": 2323,
+      "contentLen": 3283,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_snapshot_surcharge",
+      "goldId": "951bf224-be97-41bb-9bab-baa7d7d8eada",
+      "identifier": "sp_snapshot_surcharge",
+      "offset": 238,
+      "contentLen": 981,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs digest_batches.window_opens",
+      "goldId": "960dc488-dff9-4c18-973b-ef38af06fbb5",
+      "identifier": "digest_batches.window_opens",
+      "offset": 455,
+      "contentLen": 971,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_aggregate_manifest",
+      "goldId": "9636a615-7257-44cc-b167-bd3b333fdaec",
+      "identifier": "sp_aggregate_manifest",
+      "offset": 680,
+      "contentLen": 1396,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_backfill_settlement",
+      "goldId": "96b464bd-23b1-4e02-919f-a5c32a2ec94b",
+      "identifier": "sp_backfill_settlement",
+      "offset": 233,
+      "contentLen": 943,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1025",
+      "goldId": "976e6ed1-1434-42da-8af9-a43bbba145e1",
+      "identifier": "hvfr1025",
+      "offset": 220,
+      "contentLen": 1428,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier feed retries replay manifests that partition_maps.settled_at",
+      "goldId": "97b0d50a-7c8c-45c8-868c-89cbb2cb6f2f",
+      "identifier": "partition_maps.settled_at",
+      "offset": 688,
+      "contentLen": 1187,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge lineage_edges.consignee_ref",
+      "goldId": "988f2cd7-7579-430f-b7f7-c7bee0ccdc06",
+      "identifier": "lineage_edges.consignee_ref",
+      "offset": 1153,
+      "contentLen": 1669,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1073",
+      "goldId": "989f4172-917b-4d5c-9783-fda8a1476262",
+      "identifier": "hvfr1073",
+      "offset": 668,
+      "contentLen": 1879,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1059",
+      "goldId": "98a58966-c384-41fd-9526-838597098d05",
+      "identifier": "hvfr1059",
+      "offset": 452,
+      "contentLen": 1639,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest principal_grants.settled_at",
+      "goldId": "98c39f93-c3c4-4b45-92ef-641a21c59d02",
+      "identifier": "principal_grants.settled_at",
+      "offset": 451,
+      "contentLen": 977,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement bounce_records.window_opens",
+      "goldId": "990e807b-2f3d-447c-a69a-d66ddd183b5e",
+      "identifier": "bounce_records.window_opens",
+      "offset": 717,
+      "contentLen": 1227,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement carrier_feeds.surcharge_basis",
+      "goldId": "994125db-cb14-4d83-a7d9-5330a6ad9378",
+      "identifier": "carrier_feeds.surcharge_basis",
+      "offset": 2350,
+      "contentLen": 2841,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement driver_shifts.consignee_ref",
+      "goldId": "99a5d870-c289-4047-8064-a384f63e279d",
+      "identifier": "driver_shifts.consignee_ref",
+      "offset": 244,
+      "contentLen": 740,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier feed retries replay manifests that settlement_runs.consignee_ref",
+      "goldId": "9a4aba51-d5d7-48bc-a251-84d32f2c304e",
+      "identifier": "settlement_runs.consignee_ref",
+      "offset": 2360,
+      "contentLen": 2856,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_backfill_manifest",
+      "goldId": "9a765a09-82b2-4094-a674-6761e9706c90",
+      "identifier": "sp_backfill_manifest",
+      "offset": 1611,
+      "contentLen": 2359,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement settlement_runs.settled_at",
+      "goldId": "9af85336-aeb3-4178-8f07-f3382f485c68",
+      "identifier": "settlement_runs.settled_at",
+      "offset": 2336,
+      "contentLen": 2825,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with authd.eu1.harborview.test",
+      "goldId": "9be4dba6-0349-4776-88a6-a2328d6f2ba5",
+      "identifier": "authd.eu1.harborview.test",
+      "offset": 467,
+      "contentLen": 1413,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge manifest_lines.consignee_ref",
+      "goldId": "9be8c3a0-a914-4fdf-8885-79943da3afe8",
+      "identifier": "manifest_lines.consignee_ref",
+      "offset": 2329,
+      "contentLen": 2848,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes reportd.sa1.harborview.test",
+      "goldId": "9d410337-507e-4fa5-b44a-e0b5c38d19f0",
+      "identifier": "reportd.sa1.harborview.test",
+      "offset": 224,
+      "contentLen": 1138,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement consignment_legs.surcharge_basis",
+      "goldId": "9deb8847-d87a-4b81-b44d-1c9e56b9746f",
+      "identifier": "consignment_legs.surcharge_basis",
+      "offset": 712,
+      "contentLen": 1203,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1081",
+      "goldId": "9f14f77b-2e4b-4424-81df-2aaab3f0f751",
+      "identifier": "hvfr1081",
+      "offset": 216,
+      "contentLen": 1419,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest partition_maps.consignee_ref",
+      "goldId": "9fc13dd1-d1c4-42ca-81c8-1a2c1ee3b0a1",
+      "identifier": "partition_maps.consignee_ref",
+      "offset": 453,
+      "contentLen": 961,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1067",
+      "goldId": "9fe06f48-525f-4edd-aa23-442e45f65111",
+      "identifier": "hvfr1067",
+      "offset": 1163,
+      "contentLen": 2396,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs delivery_attempts.consignee_ref",
+      "goldId": "a04fd62f-1d21-45f5-8353-f86ab9813bf0",
+      "identifier": "delivery_attempts.consignee_ref",
+      "offset": 455,
+      "contentLen": 967,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1099",
+      "goldId": "a4055016-a322-49b6-8d2f-747d053abb55",
+      "identifier": "hvfr1099",
+      "offset": 433,
+      "contentLen": 1636,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_settle_depot_window",
+      "goldId": "a495d683-5e8f-4d17-bdce-005a395381d7",
+      "identifier": "sp_settle_depot_window",
+      "offset": 233,
+      "contentLen": 964,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_suppress_settlement",
+      "goldId": "a4a08807-0ee1-40f6-92fa-d201649ad874",
+      "identifier": "sp_suppress_settlement",
+      "offset": 238,
+      "contentLen": 951,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1093",
+      "goldId": "a4e8d1e9-fc65-4524-98d5-4c6c86ad824e",
+      "identifier": "hvfr1093",
+      "offset": 216,
+      "contentLen": 1410,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee apigw.us2.harborview.test",
+      "goldId": "a66f51bd-1da1-4e45-a67a-05ffc3e15f0b",
+      "identifier": "apigw.us2.harborview.test",
+      "offset": 235,
+      "contentLen": 1193,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits auditd.ap1.harborview.test",
+      "goldId": "a6827522-c574-4c7e-9123-9949c47e9ac9",
+      "identifier": "auditd.ap1.harborview.test",
+      "offset": 2366,
+      "contentLen": 3320,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that principal_grants.window_opens",
+      "goldId": "a6ceebb2-3d38-4b34-99a3-45005d760773",
+      "identifier": "principal_grants.window_opens",
+      "offset": 230,
+      "contentLen": 716,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge digest_batches.consignee_ref",
+      "goldId": "a701dda8-524c-4f08-80d2-3481c8dc933c",
+      "identifier": "digest_batches.consignee_ref",
+      "offset": 1641,
+      "contentLen": 2153,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1058",
+      "goldId": "a9053f63-7615-41e4-bae8-6237b01f9ae4",
+      "identifier": "hvfr1058",
+      "offset": 1661,
+      "contentLen": 2840,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee dispatchd.eu1.harborview.test",
+      "goldId": "aad45d4d-38e3-4331-95fd-69bd3c9e9950",
+      "identifier": "dispatchd.eu1.harborview.test",
+      "offset": 1626,
+      "contentLen": 2612,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_rebuild_depot_window",
+      "goldId": "aaf05a39-9c39-4ae4-a084-310a61e06026",
+      "identifier": "sp_rebuild_depot_window",
+      "offset": 1164,
+      "contentLen": 1926,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_reassign_surcharge",
+      "goldId": "ab8edcd8-ba23-4eeb-a624-ca3a55a34772",
+      "identifier": "sp_reassign_surcharge",
+      "offset": 1173,
+      "contentLen": 1951,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs invoice_items.settled_at",
+      "goldId": "acd67a4b-bbc7-4b20-b65d-9d0e307b2eb3",
+      "identifier": "invoice_items.settled_at",
+      "offset": 1177,
+      "contentLen": 1694,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs extract_windows.settled_at",
+      "goldId": "adb31ae8-c298-4c56-b312-496657644cb0",
+      "identifier": "extract_windows.settled_at",
+      "offset": 1137,
+      "contentLen": 1645,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item extract_windows.accrual_bucket",
+      "goldId": "ae5eeb27-9f2c-4fd4-8dee-6944a22cc3de",
+      "identifier": "extract_windows.accrual_bucket",
+      "offset": 220,
+      "contentLen": 715,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1013",
+      "goldId": "ae8dbf13-bfe2-4fcf-a5d7-6b7247a4747d",
+      "identifier": "hvfr1013",
+      "offset": 2508,
+      "contentLen": 3454,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Manifest validation accepts declaration with customs audit_entries.settled_at",
+      "goldId": "afc50160-aba5-4d18-8697-df30fbff02c6",
+      "identifier": "audit_entries.settled_at",
+      "offset": 2327,
+      "contentLen": 2806,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle auditd.ap2.harborview.test",
+      "goldId": "afe33e69-aba7-44c4-9f88-54e4628dddc4",
+      "identifier": "auditd.ap2.harborview.test",
+      "offset": 695,
+      "contentLen": 1628,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with feedproxy.ap2.harborview.test",
+      "goldId": "b05ee268-7be9-478f-94a7-270efeffc17d",
+      "identifier": "feedproxy.ap2.harborview.test",
+      "offset": 234,
+      "contentLen": 1223,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits ingestd.us1.harborview.test",
+      "goldId": "b238a732-e6a7-4199-af90-d22427ac5ee1",
+      "identifier": "ingestd.us1.harborview.test",
+      "offset": 1137,
+      "contentLen": 2087,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee feedproxy.ap1.harborview.test",
+      "goldId": "b379e421-3338-4ecc-b5af-5e1db0452c63",
+      "identifier": "feedproxy.ap1.harborview.test",
+      "offset": 1163,
+      "contentLen": 2155,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item tenant_scopes.window_opens",
+      "goldId": "b3b955d6-feaf-4d89-8109-dd3a9dbf2cfb",
+      "identifier": "tenant_scopes.window_opens",
+      "offset": 2297,
+      "contentLen": 2781,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_dispatch_depot_window",
+      "goldId": "b3f6d6a4-6684-4d36-82a3-36b8f1ae0489",
+      "identifier": "sp_dispatch_depot_window",
+      "offset": 2492,
+      "contentLen": 3197,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes billingd.eu2.harborview.test",
+      "goldId": "b51c162b-3ea6-4d1b-b4c1-ab4e23c866a2",
+      "identifier": "billingd.eu2.harborview.test",
+      "offset": 224,
+      "contentLen": 1207,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest bounce_records.accrual_bucket",
+      "goldId": "b6047a65-77db-480a-8bdb-cc9633fb2be7",
+      "identifier": "bounce_records.accrual_bucket",
+      "offset": 468,
+      "contentLen": 958,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status billingd.ap1.harborview.test",
+      "goldId": "b67d3a93-2fef-4149-92b2-ea1f831468e8",
+      "identifier": "billingd.ap1.harborview.test",
+      "offset": 444,
+      "contentLen": 1397,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge invoice_items.window_opens",
+      "goldId": "b6acdbf4-31a2-40da-8490-8187d70ac8fc",
+      "identifier": "invoice_items.window_opens",
+      "offset": 1614,
+      "contentLen": 2105,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1063",
+      "goldId": "b718e8b3-c2fa-43c5-833b-51b3975b5af9",
+      "identifier": "hvfr1063",
+      "offset": 660,
+      "contentLen": 1818,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_aggregate_surcharge",
+      "goldId": "b84dec0d-0a0c-4e40-bfb0-f66f290e3748",
+      "identifier": "sp_aggregate_surcharge",
+      "offset": 221,
+      "contentLen": 953,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1079",
+      "goldId": "b880d9e8-d6a5-43ef-b59b-38dd740d9f04",
+      "identifier": "hvfr1079",
+      "offset": 719,
+      "contentLen": 1886,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1003",
+      "goldId": "b8ee3f5c-6712-485b-8bb3-f936cb215a6c",
+      "identifier": "hvfr1003",
+      "offset": 450,
+      "contentLen": 1650,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle settled.us1.harborview.test",
+      "goldId": "ba32e112-2f05-4839-b38a-f68fe25628eb",
+      "identifier": "settled.us1.harborview.test",
+      "offset": 1154,
+      "contentLen": 2111,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_validate_surcharge",
+      "goldId": "ba357a3e-6117-4ac7-8d2e-55269344aeec",
+      "identifier": "sp_validate_surcharge",
+      "offset": 1174,
+      "contentLen": 1914,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits auditd.us1.harborview.test",
+      "goldId": "bae20a77-0828-493d-8080-4b64db6a083b",
+      "identifier": "auditd.us1.harborview.test",
+      "offset": 230,
+      "contentLen": 1178,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1028",
+      "goldId": "bb42a99f-41af-4b60-8ecc-3af9a205e2f9",
+      "identifier": "hvfr1028",
+      "offset": 1606,
+      "contentLen": 2768,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_reconcile_consignment",
+      "goldId": "bbee7268-4078-40aa-8c9e-f9e571193793",
+      "identifier": "sp_reconcile_consignment",
+      "offset": 1150,
+      "contentLen": 1907,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_reconcile_manifest",
+      "goldId": "bd855d7d-f166-44c6-8e14-d789a99edb59",
+      "identifier": "sp_reconcile_manifest",
+      "offset": 1147,
+      "contentLen": 1871,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1018",
+      "goldId": "bdc216cc-39fe-48bd-bbe9-55f31eb9ed9f",
+      "identifier": "hvfr1018",
+      "offset": 441,
+      "contentLen": 1603,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest carrier_feeds.consignee_ref",
+      "goldId": "bdc4fb7d-186c-414c-8dad-4c6f288426fd",
+      "identifier": "carrier_feeds.consignee_ref",
+      "offset": 669,
+      "contentLen": 1177,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_backfill_consignment",
+      "goldId": "bdc90270-351c-4724-afa6-164958162508",
+      "identifier": "sp_backfill_consignment",
+      "offset": 1106,
+      "contentLen": 1845,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1096",
+      "goldId": "bee365c2-b7db-451e-940b-a81dbc0a18fa",
+      "identifier": "hvfr1096",
+      "offset": 675,
+      "contentLen": 1874,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1005",
+      "goldId": "bf300f14-e108-4643-834a-14a698dea7d2",
+      "identifier": "hvfr1005",
+      "offset": 668,
+      "contentLen": 1845,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge customs_entries.accrual_bucket",
+      "goldId": "bf4ea17d-9116-4f4d-9a71-488d19d3319c",
+      "identifier": "customs_entries.accrual_bucket",
+      "offset": 715,
+      "contentLen": 1206,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest settlement_runs.window_opens",
+      "goldId": "bfc5f960-3a8d-45fb-94c1-fd5211118574",
+      "identifier": "settlement_runs.window_opens",
+      "offset": 218,
+      "contentLen": 727,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with apigw.sa1.harborview.test",
+      "goldId": "c0152644-4f3a-4a9a-b759-67dcdaf661df",
+      "identifier": "apigw.sa1.harborview.test",
+      "offset": 1633,
+      "contentLen": 2573,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits notifyd.us2.harborview.test",
+      "goldId": "c0578f9f-5954-4a7b-98d8-cea33e263db8",
+      "identifier": "notifyd.us2.harborview.test",
+      "offset": 1189,
+      "contentLen": 2186,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_revoke_settlement",
+      "goldId": "c09a448a-aed7-4062-a773-bd8825b362da",
+      "identifier": "sp_revoke_settlement",
+      "offset": 1128,
+      "contentLen": 1860,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_backfill_depot_window",
+      "goldId": "c0adcb23-1df7-459f-a892-1178759a1fdd",
+      "identifier": "sp_backfill_depot_window",
+      "offset": 1123,
+      "contentLen": 1854,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_reassign_settlement",
+      "goldId": "c0e37d75-09c2-4d0c-9be3-aa6ec55d61c3",
+      "identifier": "sp_reassign_settlement",
+      "offset": 1102,
+      "contentLen": 1814,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1014",
+      "goldId": "c0f10b84-9c23-43c8-aca0-66b1f113309b",
+      "identifier": "hvfr1014",
+      "offset": 690,
+      "contentLen": 1852,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1066",
+      "goldId": "c119c686-a6f3-4ac1-bd93-ca6ad5e8f210",
+      "identifier": "hvfr1066",
+      "offset": 1141,
+      "contentLen": 2334,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_declare_depot_window",
+      "goldId": "c19904f9-2cd7-46cf-9689-e00d89d62b78",
+      "identifier": "sp_declare_depot_window",
+      "offset": 1666,
+      "contentLen": 2379,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_roster_manifest",
+      "goldId": "c23fcef6-12b5-4802-a4d6-2abb829767d7",
+      "identifier": "sp_roster_manifest",
+      "offset": 1110,
+      "contentLen": 1844,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_dispatch_manifest",
+      "goldId": "c322c75a-5401-4a2c-9ed6-38a6c048131f",
+      "identifier": "sp_dispatch_manifest",
+      "offset": 2321,
+      "contentLen": 3031,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement principal_grants.consignee_ref",
+      "goldId": "c340bb0d-1f22-4a1d-98f2-c2898b0c88c1",
+      "identifier": "principal_grants.consignee_ref",
+      "offset": 1165,
+      "contentLen": 1661,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that driver_shifts.surcharge_basis",
+      "goldId": "c3609cf1-840a-42b5-8b4f-d2e2623682a7",
+      "identifier": "driver_shifts.surcharge_basis",
+      "offset": 2365,
+      "contentLen": 2873,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that principal_grants.surcharge_basis",
+      "goldId": "c377be96-3829-4d11-9e65-6ef50602dd79",
+      "identifier": "principal_grants.surcharge_basis",
+      "offset": 1626,
+      "contentLen": 2129,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_delegate_manifest",
+      "goldId": "c38c4394-6ba2-4139-b317-1de833c96324",
+      "identifier": "sp_delegate_manifest",
+      "offset": 1195,
+      "contentLen": 1906,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1015",
+      "goldId": "c4d3625f-c6e7-4092-9ef3-d667a1799e27",
+      "identifier": "hvfr1015",
+      "offset": 441,
+      "contentLen": 1639,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_revoke_depot_window",
+      "goldId": "c64fc599-bbea-4c0d-9627-e4626b1ce1af",
+      "identifier": "sp_revoke_depot_window",
+      "offset": 1598,
+      "contentLen": 2305,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item customs_entries.settled_at",
+      "goldId": "c6b07e48-bc0e-4d66-87af-32a565ee4d2e",
+      "identifier": "customs_entries.settled_at",
+      "offset": 220,
+      "contentLen": 734,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with authd.sa1.harborview.test",
+      "goldId": "c6c36b85-ad63-43fb-b2e1-90d483b87935",
+      "identifier": "authd.sa1.harborview.test",
+      "offset": 1633,
+      "contentLen": 2615,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_snapshot_depot_window",
+      "goldId": "c72b9b23-2919-48df-a754-38165765183b",
+      "identifier": "sp_snapshot_depot_window",
+      "offset": 697,
+      "contentLen": 1455,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status reportd.us2.harborview.test",
+      "goldId": "ca6902c5-cfd1-4724-bb63-c68e3cc2c00b",
+      "identifier": "reportd.us2.harborview.test",
+      "offset": 694,
+      "contentLen": 1622,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with dispatchd.us2.harborview.test",
+      "goldId": "ca728fa8-a1a3-4b47-b47c-5cf0b8273cc9",
+      "identifier": "dispatchd.us2.harborview.test",
+      "offset": 234,
+      "contentLen": 1168,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1042",
+      "goldId": "cad7404e-607c-4e28-bbf0-4f251bb03b28",
+      "identifier": "hvfr1042",
+      "offset": 2321,
+      "contentLen": 3529,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_replay_surcharge",
+      "goldId": "cbfa0712-1723-4394-94ae-1a21ebc3d232",
+      "identifier": "sp_replay_surcharge",
+      "offset": 2329,
+      "contentLen": 3023,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item audit_entries.consignee_ref",
+      "goldId": "cc0b66c7-08f1-498b-96ba-b2ed86c97d0d",
+      "identifier": "audit_entries.consignee_ref",
+      "offset": 2304,
+      "contentLen": 2785,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item invoice_items.accrual_bucket",
+      "goldId": "cc450daf-9231-4e23-9d74-d0f29e5cbd89",
+      "identifier": "invoice_items.accrual_bucket",
+      "offset": 669,
+      "contentLen": 1183,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge audit_entries.surcharge_basis",
+      "goldId": "cd1ecdbe-1399-45ef-8084-55711ae8d14b",
+      "identifier": "audit_entries.surcharge_basis",
+      "offset": 1583,
+      "contentLen": 2098,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge invoice_items.surcharge_basis",
+      "goldId": "cd4a6781-4993-4ebc-8a71-5de8ce89d9a0",
+      "identifier": "invoice_items.surcharge_basis",
+      "offset": 485,
+      "contentLen": 979,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee digestd.eu2.harborview.test",
+      "goldId": "cef3484b-98e3-4376-9e6c-db3c9d9f6adf",
+      "identifier": "digestd.eu2.harborview.test",
+      "offset": 235,
+      "contentLen": 1205,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement partition_maps.surcharge_basis",
+      "goldId": "cf5e8a82-b5dc-46f2-b5a7-cd3928e42cf0",
+      "identifier": "partition_maps.surcharge_basis",
+      "offset": 244,
+      "contentLen": 754,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_rebuild_consignment",
+      "goldId": "cf6de8fe-de7d-4bf7-935b-319cb56ed3a0",
+      "identifier": "sp_rebuild_consignment",
+      "offset": 2508,
+      "contentLen": 3239,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1032",
+      "goldId": "d1b1cefc-b2ef-4bec-b419-4f9183709c58",
+      "identifier": "hvfr1032",
+      "offset": 230,
+      "contentLen": 1407,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_allocate_depot_window",
+      "goldId": "d424cfba-1ad8-4aca-9da9-dc8c5ba0fa27",
+      "identifier": "sp_allocate_depot_window",
+      "offset": 2364,
+      "contentLen": 3123,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement carrier_feeds.window_opens",
+      "goldId": "d4b97f42-7d42-4830-8cf5-d694446d1347",
+      "identifier": "carrier_feeds.window_opens",
+      "offset": 1169,
+      "contentLen": 1652,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Template rendering drops digest footer single-item invoice_items.consignee_ref",
+      "goldId": "d4e8ac9a-3301-45e9-b421-62827a3db608",
+      "identifier": "invoice_items.consignee_ref",
+      "offset": 220,
+      "contentLen": 723,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier feed retries replay manifests that bounce_records.settled_at",
+      "goldId": "d511074f-0379-4c3a-a463-2bb87aa4d122",
+      "identifier": "bounce_records.settled_at",
+      "offset": 1172,
+      "contentLen": 1665,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that aggregate_states.accrual_bucket",
+      "goldId": "d6952460-43b6-48b7-881e-1ba1451e9f11",
+      "identifier": "aggregate_states.accrual_bucket",
+      "offset": 691,
+      "contentLen": 1210,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits settled.us2.harborview.test",
+      "goldId": "d70e7a31-6e39-4d4f-ae42-71aa3eeb3311",
+      "identifier": "settled.us2.harborview.test",
+      "offset": 1160,
+      "contentLen": 2149,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_repartition_surcharge",
+      "goldId": "d827ce39-cd19-4236-aca1-6ef5dc4dd295",
+      "identifier": "sp_repartition_surcharge",
+      "offset": 238,
+      "contentLen": 965,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Extract partitioning splits consignment across reporting sp_aggregate_depot_window",
+      "goldId": "d832af2e-032e-4a2c-b11b-626e45176546",
+      "identifier": "sp_aggregate_depot_window",
+      "offset": 1155,
+      "contentLen": 1863,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1074",
+      "goldId": "d916d530-8db3-48b2-bf11-2cd9ab27320a",
+      "identifier": "hvfr1074",
+      "offset": 1637,
+      "contentLen": 2822,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits notifyd.ap2.harborview.test",
+      "goldId": "da00fd10-c458-4728-81c8-b3a1d843fcfa",
+      "identifier": "notifyd.ap2.harborview.test",
+      "offset": 686,
+      "contentLen": 1657,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_settle_settlement",
+      "goldId": "db8bb7a5-ab5a-4276-b990-0269548587a3",
+      "identifier": "sp_settle_settlement",
+      "offset": 666,
+      "contentLen": 1435,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1097",
+      "goldId": "dc0a6ce0-76f3-4765-97ea-2d5300f2420e",
+      "identifier": "hvfr1097",
+      "offset": 220,
+      "contentLen": 1394,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement principal_grants.accrual_bucket",
+      "goldId": "dca6eec7-8afa-444d-be28-37e6c9d65d93",
+      "identifier": "principal_grants.accrual_bucket",
+      "offset": 244,
+      "contentLen": 761,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Surcharge rounding disagrees between invoice settlement bounce_records.surcharge_basis",
+      "goldId": "dd14ce0c-5427-42f5-8b3c-68b839f8e470",
+      "identifier": "bounce_records.surcharge_basis",
+      "offset": 2371,
+      "contentLen": 2900,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Aggregate refresh reads partition extract finished sp_checksum_settlement",
+      "goldId": "dd9872a1-7511-4e53-b26a-abfeebcf1e90",
+      "identifier": "sp_checksum_settlement",
+      "offset": 238,
+      "contentLen": 970,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes reportd.us1.harborview.test",
+      "goldId": "ddb3df72-3f02-46b9-a050-47106824fec5",
+      "identifier": "reportd.us1.harborview.test",
+      "offset": 1170,
+      "contentLen": 2166,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest consignment_legs.accrual_bucket",
+      "goldId": "de00b588-6b98-43a4-b4b7-91ff8fcf2d82",
+      "identifier": "consignment_legs.accrual_bucket",
+      "offset": 449,
+      "contentLen": 948,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1044",
+      "goldId": "defb9943-2d38-439c-b08a-c13d305f15ed",
+      "identifier": "hvfr1044",
+      "offset": 230,
+      "contentLen": 1417,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_settle_manifest",
+      "goldId": "e114f1c4-2461-47e6-8588-aa7d6076c8a6",
+      "identifier": "sp_settle_manifest",
+      "offset": 443,
+      "contentLen": 1148,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1078",
+      "goldId": "e1bcae5d-9505-4354-b963-a05788a34955",
+      "identifier": "hvfr1078",
+      "offset": 217,
+      "contentLen": 1370,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status schedd.sa1.harborview.test",
+      "goldId": "e3004068-9b2e-4693-b727-f25f563f363d",
+      "identifier": "schedd.sa1.harborview.test",
+      "offset": 1642,
+      "contentLen": 2590,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle extractd.eu2.harborview.test",
+      "goldId": "e303fb3b-ad17-4bfd-af18-e1b15cf419c0",
+      "identifier": "extractd.eu2.harborview.test",
+      "offset": 232,
+      "contentLen": 1188,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_declare_consignment",
+      "goldId": "e32ecb54-fc51-47f7-85d4-dcbe5cebf10b",
+      "identifier": "sp_declare_consignment",
+      "offset": 2294,
+      "contentLen": 3024,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_delegate_depot_window",
+      "goldId": "e33c1fa7-f905-4b9c-9bd5-2c2210bde34b",
+      "identifier": "sp_delegate_depot_window",
+      "offset": 686,
+      "contentLen": 1372,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1027",
+      "goldId": "e39f3955-30e8-4f9d-a764-6126dd69dbd1",
+      "identifier": "hvfr1027",
+      "offset": 216,
+      "contentLen": 1415,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest session_tokens.window_opens",
+      "goldId": "e50b555e-0fb9-4bbb-be75-8665c333c0d9",
+      "identifier": "session_tokens.window_opens",
+      "offset": 458,
+      "contentLen": 962,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_reassign_manifest",
+      "goldId": "e5798235-b6fb-40a2-a4d4-6dbb80f27957",
+      "identifier": "sp_reassign_manifest",
+      "offset": 1124,
+      "contentLen": 1883,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle ingestd.eu2.harborview.test",
+      "goldId": "e57f1d00-d150-4569-8fb8-540dedb33b66",
+      "identifier": "ingestd.eu2.harborview.test",
+      "offset": 493,
+      "contentLen": 1519,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Settlement accrual double-counts partial consignment credits ingestd.eu1.harborview.test",
+      "goldId": "e7f593bd-40ec-4fe7-a906-9084d8966e3f",
+      "identifier": "ingestd.eu1.harborview.test",
+      "offset": 1609,
+      "contentLen": 2585,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status reportd.ap2.harborview.test",
+      "goldId": "e903bfb7-a1c4-4b25-98ac-46b5b88f0ac2",
+      "identifier": "reportd.ap2.harborview.test",
+      "offset": 1608,
+      "contentLen": 2551,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1056",
+      "goldId": "e9127e57-f423-4175-a26b-d95dfc673bc3",
+      "identifier": "hvfr1056",
+      "offset": 1616,
+      "contentLen": 2803,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee authd.ap2.harborview.test",
+      "goldId": "e95d58ee-cc2a-4ceb-a1e6-f7c9c6cace3b",
+      "identifier": "authd.ap2.harborview.test",
+      "offset": 1631,
+      "contentLen": 2586,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1040",
+      "goldId": "eb367d4d-ebd7-4365-81a7-9d6c2485b185",
+      "identifier": "hvfr1040",
+      "offset": 1644,
+      "contentLen": 2795,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status customsd.eu2.harborview.test",
+      "goldId": "ebcc7068-1944-4e82-81d7-07af3304d379",
+      "identifier": "customsd.eu2.harborview.test",
+      "offset": 1135,
+      "contentLen": 2070,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_refresh_settlement",
+      "goldId": "ebcea46b-55cb-44ba-a6d7-8e4f34819e77",
+      "identifier": "sp_refresh_settlement",
+      "offset": 2287,
+      "contentLen": 3030,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes schedd.eu2.harborview.test",
+      "goldId": "ec7c57e4-06ca-4cfd-91f1-f56eee84db74",
+      "identifier": "schedd.eu2.harborview.test",
+      "offset": 688,
+      "contentLen": 1621,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with digestd.ap1.harborview.test",
+      "goldId": "ed1620f9-eded-446e-b8e6-40175d98139c",
+      "identifier": "digestd.ap1.harborview.test",
+      "offset": 699,
+      "contentLen": 1671,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status lineaged.us1.harborview.test",
+      "goldId": "ed71b9d9-b7aa-4e8d-975b-f6cdc84fe72d",
+      "identifier": "lineaged.us1.harborview.test",
+      "offset": 2287,
+      "contentLen": 3261,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1098",
+      "goldId": "ee3c4eaa-4e7a-4a32-b889-1fb3128762a5",
+      "identifier": "hvfr1098",
+      "offset": 230,
+      "contentLen": 1418,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Carrier manifest feed rejects declarations with apigw.eu1.harborview.test",
+      "goldId": "ee4da696-f9b3-4842-b1c6-7d109708c3ed",
+      "identifier": "apigw.eu1.harborview.test",
+      "offset": 1798,
+      "contentLen": 2724,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status customsd.ap2.harborview.test",
+      "goldId": "ee4f1ad6-3808-4f79-828c-760ee7f42a50",
+      "identifier": "customsd.ap2.harborview.test",
+      "offset": 708,
+      "contentLen": 1663,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Audit trail omits acting principal when hvfr1069",
+      "goldId": "efb2ac6e-21ee-4a9a-93c4-9df17bc3185b",
+      "identifier": "hvfr1069",
+      "offset": 450,
+      "contentLen": 1623,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes lineaged.eu2.harborview.test",
+      "goldId": "eff72eb4-1758-4789-a84e-22232f1e8013",
+      "identifier": "lineaged.eu2.harborview.test",
+      "offset": 1167,
+      "contentLen": 2122,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest consignment_legs.consignee_ref",
+      "goldId": "f03bdd41-4542-4f0d-abd2-556f9ab6e32a",
+      "identifier": "consignment_legs.consignee_ref",
+      "offset": 2288,
+      "contentLen": 2783,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle extractd.ap2.harborview.test",
+      "goldId": "f0e1ba81-6815-478d-bf4a-363f65cabf81",
+      "identifier": "extractd.ap2.harborview.test",
+      "offset": 232,
+      "contentLen": 1184,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_repartition_manifest",
+      "goldId": "f17b8b3b-85d9-472f-a9f8-719cf7363b09",
+      "identifier": "sp_repartition_manifest",
+      "offset": 459,
+      "contentLen": 1202,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1090",
+      "goldId": "f1b506f1-5a73-4a66-9b4c-40cdef8625a4",
+      "identifier": "hvfr1090",
+      "offset": 217,
+      "contentLen": 1380,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1060",
+      "goldId": "f1cb02a8-0684-4ea0-bb10-c573daca9ed6",
+      "identifier": "hvfr1060",
+      "offset": 1640,
+      "contentLen": 2787,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1086",
+      "goldId": "f1dbc8a8-bac8-46de-ae8c-e753fa6c5d90",
+      "identifier": "hvfr1086",
+      "offset": 473,
+      "contentLen": 1621,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_rebuild_settlement",
+      "goldId": "f2cd0d5d-9633-4bec-9332-f49da4bc0941",
+      "identifier": "sp_rebuild_settlement",
+      "offset": 221,
+      "contentLen": 948,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Refresh ordering lets stale aggregate over hvfr1095",
+      "goldId": "f3ca437c-d0b3-473c-9a4d-85d9292800d2",
+      "identifier": "hvfr1095",
+      "offset": 1151,
+      "contentLen": 2300,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee dispatchd.us1.harborview.test",
+      "goldId": "f3fc6257-28e0-4390-b25d-e301512e05bb",
+      "identifier": "dispatchd.us1.harborview.test",
+      "offset": 1605,
+      "contentLen": 2594,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Suppression entries expire silently delivery resumes customsd.eu1.harborview.test",
+      "goldId": "f5732221-e56f-4db0-a701-e029214d125f",
+      "identifier": "customsd.eu1.harborview.test",
+      "offset": 224,
+      "contentLen": 1193,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": false
+    },
+    {
+      "query": "Tenant scope check runs client-side only hvfr1072",
+      "goldId": "f5a48a73-cf2e-47f2-85d5-42a9c066baed",
+      "identifier": "hvfr1072",
+      "offset": 685,
+      "contentLen": 1832,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Customs declaration parsing drops second consignee feedproxy.us1.harborview.test",
+      "goldId": "f5d0df2e-340c-47ac-ac04-b3a6aac0f72c",
+      "identifier": "feedproxy.us1.harborview.test",
+      "offset": 1153,
+      "contentLen": 2124,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Invoice reconciliation misses consignments cancelled mid-cycle settled.ap1.harborview.test",
+      "goldId": "f6ae6390-ed2f-426a-9127-673e550577eb",
+      "identifier": "settled.ap1.harborview.test",
+      "offset": 1635,
+      "contentLen": 2593,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Bounce suppression list consulted nightly digest driver_shifts.settled_at",
+      "goldId": "f8332b02-9cd4-4277-8740-d40bb4e7fe3c",
+      "identifier": "driver_shifts.settled_at",
+      "offset": 2325,
+      "contentLen": 2879,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Driver rostering ignores window depot actually hvfr1055",
+      "goldId": "f9195ec6-9a28-46fb-83ce-c825046b457a",
+      "identifier": "hvfr1055",
+      "offset": 688,
+      "contentLen": 1925,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Principal delegation survives session revocation should sp_expire_consignment",
+      "goldId": "f996ea78-4fa0-41e7-987d-cc154fe81fb2",
+      "identifier": "sp_expire_consignment",
+      "offset": 655,
+      "contentLen": 1401,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Snapshot lineage breaks when partition rebuilt hvfr1002",
+      "goldId": "f9b376d4-eee9-40c8-b9c9-43b9e1ed8a8e",
+      "identifier": "hvfr1002",
+      "offset": 452,
+      "contentLen": 1635,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Delivery webhook retries overwrite later status reportd.eu2.harborview.test",
+      "goldId": "fb0a0d92-c0ec-4dbf-a93b-24909de3e8e8",
+      "identifier": "reportd.eu2.harborview.test",
+      "offset": 442,
+      "contentLen": 1379,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Consignment invoice reconciliation drifts when surcharge tenant_scopes.settled_at",
+      "goldId": "fb8f1902-a733-46e2-aaec-643bb705def3",
+      "identifier": "tenant_scopes.settled_at",
+      "offset": 1605,
+      "contentLen": 2101,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_suppress_surcharge",
+      "goldId": "fbe6433e-b66d-407d-9d7f-41c389b8cdd0",
+      "identifier": "sp_suppress_surcharge",
+      "offset": 1599,
+      "contentLen": 2325,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Session fixation possible when tenant switches sp_delegate_surcharge",
+      "goldId": "fc06694e-b140-4711-a967-72b3ddf7d5fb",
+      "identifier": "sp_delegate_surcharge",
+      "offset": 453,
+      "contentLen": 1181,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Depot dispatch windows overlap across daylight-saving sp_checksum_depot_window",
+      "goldId": "fe41c902-2c55-4d1c-b15d-8794ead1b4bf",
+      "identifier": "sp_checksum_depot_window",
+      "offset": 2474,
+      "contentLen": 3211,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Dispatch slot allocation starves smaller depots sp_rebuild_manifest",
+      "goldId": "ff11c644-3f56-493f-9b48-c0b73909f923",
+      "identifier": "sp_rebuild_manifest",
+      "offset": 1141,
+      "contentLen": 1855,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Slot reservation leaks when dispatch reassigned hvfr1010",
+      "goldId": "ff47375d-5489-417b-8722-9ef1c4643e2b",
+      "identifier": "hvfr1010",
+      "offset": 2469,
+      "contentLen": 3397,
+      "memoryClass": "canonical",
+      "agent": "personal",
+      "beyondTruncation": true
+    },
+    {
+      "query": "Carrier feed retries replay manifests that driver_shifts.window_opens",
+      "goldId": "ff8d8614-a131-40f9-bff6-b3d0962dc8ae",
+      "identifier": "driver_shifts.window_opens",
+      "offset": 1134,
+      "contentLen": 1634,
+      "memoryClass": "canonical",
+      "agent": "work",
+      "beyondTruncation": true
+    }
+  ],
+  "adversarialItems": [
+    {
+      "query": "kubernetes helm chart rollback strategy staging cluster",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "swift ios push notification entitlement provisioning profile",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "rust borrow checker lifetime annotation generic trait",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "terraform state lock dynamodb backend migration",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "redis cluster resharding slot migration failover",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "graphql schema stitching federation gateway resolver",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "elasticsearch analyzer tokenizer synonym filter mapping",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "kafka consumer group offset commit rebalance protocol",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "webpack module federation remote entry chunk splitting",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    },
+    {
+      "query": "flutter widget state lifecycle dispose controller",
+      "goldId": null,
+      "identifier": null,
+      "adversarial": true
+    }
+  ]
+}

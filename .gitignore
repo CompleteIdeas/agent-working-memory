@@ -55,5 +55,9 @@ dist-mcpb/
 # methodology stays public). The generated files quote real queries and real
 # memory text, so they must not be published. Regenerate locally instead.
 tests/realstore-eval/fixture*.json*
+# ...except the public one: it is derived from the SYNTHETIC corpus
+# (public-corpus.mjs), carries no private text, and is worth publishing so a
+# reviewer can read the ground truth without building anything first.
+!tests/realstore-eval/fixture-public.json
 tests/realstore-eval/trace-*.jsonl
 tests/realstore-eval/miss-*.jsonl

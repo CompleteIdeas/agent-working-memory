@@ -1,6 +1,7 @@
 {
   "name": "agent-working-memory",
   "version": "0.15.9",
+  "mcpName": "io.github.CompleteIdeas/agent-working-memory",
   "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
   "keywords": [
     "ai-agents",
@@ -53,6 +54,8 @@
     "test:all": "vitest run && tsx tests/mcp-smoke.ts",
     "check:release": "node scripts/check-release.mjs",
     "bench": "node scripts/bench-current.mjs",
+    "bench:public:build": "tsx tests/realstore-eval/build-public-snapshot.ts",
+    "bench:public": "node scripts/bench-public.mjs",
     "test:docker": "bash scripts/docker-release-test.sh",
     "test:linux": "bash scripts/docker-release-test.sh linux",
     "test:desktop": "bash scripts/docker-release-test.sh desktop"

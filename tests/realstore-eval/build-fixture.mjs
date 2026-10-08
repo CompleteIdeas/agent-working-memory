@@ -40,14 +40,20 @@ import Database from 'better-sqlite3';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SNAP = join(import.meta.dirname, 'snapshot', 'store.db');
-const OUT = join(import.meta.dirname, 'fixture.json');
+// Selectable so the SAME ground-truth derivation runs against the private
+// snapshot and against the reproducible public one (snapshot/public-store.db,
+// built by build-public-snapshot.ts). The env var names match the runner's, so
+// one set of three drives build and score alike. There is deliberately only one
+// hold-out implementation: a reviewer who checks the method on the public
+// corpus has checked the method used on the private one.
+const SNAP = join(import.meta.dirname, 'snapshot', process.env.REALSTORE_SNAPSHOT ?? 'store.db');
+const OUT = join(import.meta.dirname, process.env.REALSTORE_FIXTURE ?? 'fixture.json');
 const db = new Database(SNAP, { readonly: true });
 
 // Real work agents only. UUID agent spaces are the unpinned fallback and carry
 // eval/test traffic ("chord progression harmony tension"); including them would
 // reintroduce exactly the synthetic-data problem we are trying to leave behind.
-const AGENTS = ['work', 'personal'];
+const AGENTS = (process.env.REALSTORE_AGENTS ?? 'work,personal').split(',').map(a => a.trim()).filter(Boolean);
 const rows = db.prepare(`
   SELECT id, agent_id, concept, content, memory_class, tags
   FROM engrams
@@ -150,7 +156,9 @@ const adversarial = [
 ].map(q => ({ query: q, goldId: null, identifier: null, adversarial: true }));
 
 const fixture = {
-  generated: 'unique-identifier hold-out over a frozen snapshot of the live store',
+  generated: `unique-identifier hold-out over ${process.env.REALSTORE_SNAPSHOT ?? 'store.db'}`,
+  snapshot: process.env.REALSTORE_SNAPSHOT ?? 'store.db',
+  agents: AGENTS,
   corpusEngrams: rows.length,
   answerable: kept.length,
   adversarial: adversarial.length,
