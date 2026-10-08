@@ -1,6 +1,6 @@
 import { densestWindow } from '../../src/core/rerank-window.js';
 const content = 'routine deployment and scheduling notes with review process detail. '.repeat(75);
-const query = 'which database host does the migration runner connect to for equihub dev';
+const query = 'which database host does the migration runner connect to for the example dev environment';
 const N = 40, ITERS = 200;
 const t0 = process.hrtime.bigint();
 for (let i = 0; i < ITERS; i++) for (let j = 0; j < N; j++) densestWindow(content, query, 400);

@@ -78,9 +78,9 @@ const DOMAINS = [
     name: 'scoring',
     conceptFmt: (i: number) => `Scoring subsystem finding ${i} — phase and results handling`,
     facts: [
-      { id: 'tblMeeCompRes.dressage_penalties', sentence: (id: string) => `The establishment signal is ${id} being non-null, which is what marks a valid starter.`, q: (id: string) => `what marks an entry as a valid starter` },
+      { id: 'manifest_lines.customs_code', sentence: (id: string) => `The establishment signal is ${id} being non-null, which is what marks a valid starter.`, q: (id: string) => `what marks an entry as a valid starter` },
       { id: 'sp_api_results_division_GET', sentence: (id: string) => `RunStatus is computed inside ${id}, not in the frontend, so the public view can disagree with the internal one.`, q: (id: string) => `where is RunStatus computed` },
-      { id: 'schedule_slot', sentence: (id: string) => `Division reassignment updates the entry row but historically never released the ${id} records, leaving phantom slots behind.`, q: (id: string) => `what gets orphaned when a division is reassigned` },
+      { id: 'depot_window', sentence: (id: string) => `Division reassignment updates the entry row but historically never released the ${id} records, leaving phantom slots behind.`, q: (id: string) => `what gets orphaned when a division is reassigned` },
     ],
   },
   {
@@ -98,7 +98,7 @@ const DOMAINS = [
     facts: [
       { id: 'fee_assignment', sentence: (id: string) => `Duplicate charges come from rows landing in both ${id} and the invoice item table during import.`, q: (id: string) => `where do duplicate charges come from` },
       { id: 'DUNNING', sentence: (id: string) => `After three failed attempts the invoice is parked in ${id} for manual review rather than retried further.`, q: (id: string) => `what state does an invoice enter after repeated failures` },
-      { id: 'closePeriod', sentence: (id: string) => `The blocked-state check lives in ${id} server-side; a client-only check previously allowed a bypass.`, q: (id: string) => `where is the period close block enforced` },
+      { id: 'closeRun', sentence: (id: string) => `The blocked-state check lives in ${id} server-side; a client-only check previously allowed a bypass.`, q: (id: string) => `where is the settlement lock enforced` },
     ],
   },
 ];

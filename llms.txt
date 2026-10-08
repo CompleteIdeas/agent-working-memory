@@ -258,7 +258,7 @@ than feels natural: the head of the body is what all three channels weight most.
 - **Put the decisive identifier early** — before character 400 if you can. See
   §2.
 - **Include two or more retrievable identifiers**: file paths, function names,
-  column names, error strings, ticket ids. `AccountingService.closePeriod()`
+  column names, error strings, ticket ids. `SettlementService.closeRun()`
   beats "the accounting code".
 - **Name the category as well as the specifics.** A memory about scaling an
   Azure App Service Plan that never contains the words "Azure" or "App Service

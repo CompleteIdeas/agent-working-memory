@@ -70,9 +70,9 @@ extraction all see most strongly.
   a noisy bucket where it competes with everything else in the area.
 - **Include 2+ retrievable identifiers.** File paths, function names, table
   columns, ticket IDs, exact error strings, the literal terms a future query
-  will use. `AccountingService.closePeriod()` beats "the accounting code."
+  will use. `SettlementService.closeRun()` beats "the accounting code."
   `tblMemberDetails.activation_date` beats "the activation column."
-  `schema/072-period-close.sql` beats "the migration."
+  `schema/072-settlement-lock.sql` beats "the migration."
 - **Write in the vocabulary of the future question.** When you imagine asking
   this in three months, what nouns will you use? Use those nouns. Don't
   paraphrase the user's domain language into your own neutral summary.
@@ -125,7 +125,7 @@ and entity-bridge boosts at recall time.
 **Always add identifier tags when present in the content:**
 - `ticket=<id>` for Freshdesk tickets
 - `member=<id>` for member IDs
-- `horse=<id>` for horse_member_id
+- `asset=<id>` for a domain record id
 - `usef=<id>` for USEF lookups
 - `date=YYYY-MM-DD` for temporal anchoring (ISO format)
 - `person=<Name>` for stakeholder quotes / decisions
@@ -334,7 +334,7 @@ memory_write(
 ```
 memory_write(
   concept="EquiHub period-close BLOCKED check missing server-side",
-  content="apps/web/app/(accounting)/accounting/period-close/page.tsx had client-only BLOCKED enforcement. Fixed by adding server-side check in AccountingService.closePeriod() per schema/072-period-close.sql. Without server-side check a malicious request could bypass via direct API call.",
+  content="apps/web/app/(billing)/billing/settlement-lock/page.tsx had client-only BLOCKED enforcement. Fixed by adding server-side check in SettlementService.closeRun() per schema/072-settlement-lock.sql. Without server-side check a malicious request could bypass via direct API call.",
   project="EquiHub",
   topic="accounting",
   intent="finding",

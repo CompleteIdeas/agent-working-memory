@@ -26,7 +26,7 @@ agent get the answer it needs at low token cost without hallucinating*.
 Recall quality is mostly set at **write** time:
 - **Lead with the fact**, not backstory. The first 1–2 sentences carry the most retrieval weight.
 - **Include 2+ retrievable identifiers** — names, dates, file paths, IDs, the literal terms a
-  future query will use. `AccountingService.closePeriod()` beats "the accounting code."
+  future query will use. `SettlementService.closeRun()` beats "the accounting code."
 - **Pick a specific topic/concept**, not a generic bucket.
 - **Reserve `canonical` for stable invariants** (decisions, requirements). Working class is the
   right default for observations.

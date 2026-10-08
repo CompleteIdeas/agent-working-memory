@@ -60,7 +60,7 @@ const est = (s: string) => Math.max(Math.ceil(s.split(/\s+/).filter(Boolean).len
 /** [concept, content, a query that SHOULD find it] */
 const SEEDS: Array<[string, string, string]> = [
   ['period close BLOCKED enforced server-side',
-   'AccountingService.closePeriod() enforces the BLOCKED state server-side per schema/072-period-close.sql. A client-only check let a direct API call bypass it, which is how period 2026-03 was closed twice.',
+   'SettlementService.closeRun() enforces the BLOCKED state server-side per schema/072-settlement-lock.sql. A client-only check let a direct API call bypass it, which is how run 2026-03 was closed twice.',
    'why can an accounting period be closed twice'],
   ['magic-link rate limit 5 per 15 minutes',
    'The magic-link endpoint rate limits to 5 requests per 15 minutes per email in AuthService.requestMagicLink(), backed by the login_attempts table. Exceeding it returns 429 with Retry-After.',

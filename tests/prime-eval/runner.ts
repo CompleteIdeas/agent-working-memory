@@ -72,7 +72,7 @@ async function prime(body: any): Promise<any> {
 
 const MEMORIES: Array<[string, string]> = [
   ['period close BLOCKED enforced server-side',
-   'AccountingService.closePeriod() enforces the BLOCKED state server-side per schema/072-period-close.sql. A client-only check previously allowed a direct API call to bypass it, which is how period 2026-03 got closed twice.'],
+   'SettlementService.closeRun() enforces the BLOCKED state server-side per schema/072-settlement-lock.sql. A client-only check previously allowed a direct API call to bypass it, which is how run 2026-03 got closed twice.'],
   ['magic-link rate limit is 5 per 15 minutes',
    'The magic-link endpoint rate limits to 5 requests per 15 minutes per email, enforced in AuthService.requestMagicLink() against the login_attempts table. Exceeding it returns 429 with Retry-After.'],
   ['state management standardised on Zustand',

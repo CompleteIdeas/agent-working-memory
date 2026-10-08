@@ -15,7 +15,7 @@ describe('parseTemporal — MUST be a strict no-op without a temporal cue', () =
   // invisible because results would still look plausible.
   const noCue = [
     'azure app service plan capacity increase internal application',
-    'showconnect scoring dressage penalties valid starter',
+    'harborview manifest customs penalties valid consignment',
     'why do we get duplicate score rows',
     'equihub workspace assignment coordination hive',
     'the last item in the list',            // "last" WITHOUT a time unit
@@ -120,7 +120,7 @@ describe('parseTemporal — stripping (this is where the measured loss came from
   });
 
   it('leaves the subject intact rather than shredding the query', () => {
-    const r = parseTemporal('showconnect scoring finalize from last week', ASOF);
+    const r = parseTemporal('harborview manifest finalize from last week', ASOF);
     expect(r!.stripped.split(/\s+/).length).toBeGreaterThanOrEqual(3);
   });
 });

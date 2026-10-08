@@ -64,14 +64,21 @@ const estTokens = (s: string) => {
 // Realistic memory bodies — long, prose-heavy, the shape AWM actually stores.
 const TOPICS = [
   ['auth magic-link rate limit', 'The magic-link endpoint rate limits to 5 requests per 15 minutes per email, enforced in AuthService.requestMagicLink() against the login_attempts table. Exceeding it returns 429 with a Retry-After header. This was added after a credential-stuffing probe in March filled the sessions table with dead rows.'],
-  ['period close BLOCKED check', 'AccountingService.closePeriod() enforces the BLOCKED state server-side per schema/072-period-close.sql. A client-only check previously allowed a direct API call to bypass the guard entirely, which is how period 2026-03 was closed twice.'],
-  ['dressage score entry shorthand', 'The two-digit dressage shorthand converts only when the value is a multiple of five, so 65 becomes 6.5 but 68 is rejected. Mouse focus does not select existing content, so typing into an already-scored box appends rather than replaces.'],
-  ['schedule slot release on scratch', 'Scratching an entry clears its pinny and releases schedule_slot rows by setting division_entry_id NULL and status open. Phase A and phase B disciplines are never released because the release is written as three hardcoded discipline comparisons.'],
-  ['ride time swap divisionEntryId', 'The conflicts-tab swap payload omits divisionEntryId, which the new-scheduler branch has required since the scratched-entry guard was added. Every swap on a new-scheduler event therefore returns a 400 with No entry supplied for ride-time assignment.'],
-  ['area championship placing rule', 'Area VII qualification requires a top-five placing at one Area VII event with five or more starters inside the published window, and current USEA membership. The published criteria say nothing about amateur or junior upgrade placings, unlike Area 1.'],
-  ['USEF results export pipeline', 'Competition results reach USEF through a manual export tracked by results_sent_to_USEF on tbl_USEA_USEF_event_ids. It is a separate pipeline from the nightly AEC qualifying-results export tables, and the two fail independently.'],
-  ['duplicate score rows root cause', 'Duplicate score rows come from a non-atomic find-or-create that runs on scoring-screen load, combined with a JPA OneToOne mapping the schema never enforced with a unique index. Two tabs or a refresh race both insert.'],
+  ['settlement run lock check', 'SettlementService.closeRun() enforces the LOCKED state server-side per schema/072-settlement-lock.sql. A client-only check previously allowed a direct API call to bypass the guard entirely, which is how run 2026-03 was closed twice.'],
+  ['surcharge shorthand entry', 'The two-digit surcharge shorthand converts only when the value is a multiple of five, so 65 becomes 6.5 but 68 is rejected. Mouse focus does not select existing content, so typing into an already-filled box appends rather than replaces.'],
+  ['depot slot release on cancel', 'Cancelling a consignment clears its slot_hold_until and releases depot_window rows by setting consignment_leg_id NULL and status open. Leg A and leg B routes are never released because the release is written as three hardcoded route comparisons.'],
+  ['dispatch swap consignmentLegId', 'The conflicts-tab swap payload omits consignmentLegId, which the new-scheduler branch has required since the cancelled-consignment guard was added. Every swap on a new-scheduler depot therefore returns a 400 with No leg supplied for dispatch assignment.'],
+  ['regional priority rule', 'Region EU2 priority requires a top-five ranking at one EU2 depot with five or more consignments inside the published window, and a current carrier agreement. The published criteria say nothing about partner or trial upgrades, unlike Region EU1.'],
+  ['customs results export pipeline', 'Declaration outcomes reach the customs authority through a manual export tracked by results_sent_to_authority on tbl_declaration_authority_ids. It is a separate pipeline from the nightly aggregate qualifying-results export tables, and the two fail independently.'],
+  ['duplicate charge rows root cause', 'Duplicate charge rows come from a non-atomic find-or-create that runs on invoice-screen load, combined with an ORM OneToOne mapping the schema never enforced with a unique index. Two tabs or a refresh race both insert.'],
 ];
+
+// The bodies above are invented, in the fictional Harborview freight domain
+// used by tests/realstore-eval/public-corpus.mjs. They were previously real
+// memories from a private work store, naming real tables, stored procedures,
+// business rules and one production incident. The eval measures token cost
+// against realistic long prose; the domain is irrelevant to it, so there was
+// never a reason for the fixture to carry someone's internal schema.
 
 async function main() {
   console.log('Token-Budget Evaluation');

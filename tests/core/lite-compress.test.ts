@@ -38,7 +38,7 @@ describe('liteCompress', () => {
   });
 
   it('passes prose through untouched', () => {
-    const prose = 'AccountingService.closePeriod() must check BLOCKED server-side per schema/072.';
+    const prose = 'SettlementService.closeRun() must check BLOCKED server-side per schema/072-settlement-lock.sql.';
     const r = liteCompress(prose);
     expect(r.format).toBe('passthrough');
     expect(r.text).toBe(prose);
