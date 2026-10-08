@@ -364,6 +364,11 @@ Two benchmark paths, and the difference matters:
   (`tests/realstore-eval/public-corpus.mjs`), derives ground truth with **the
   same hold-out code** as the private path, and scores with the same runner.
 
+**Mind the noise floor.** Two full builds differing only in corpus seed gave
+`s@1` 56.3% and 52.0% — the corpus *shape* reproduces to 0.2pp and every
+qualitative result holds, but the absolute moves about 4 points between draws.
+A 2pp move is not a result; confirm on a second seed.
+
 **Do not quote public-benchmark numbers as the published ones.** The synthetic
 corpus scores *lower*, because generated prose is more self-similar than real
 prose and same-domain neighbours are harder to separate. Use it for the method

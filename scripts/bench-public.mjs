@@ -28,6 +28,25 @@
  *      number that a reviewer can reproduce on their own machine.
  *
  * Use the delta. Do not use the absolute.
+ *
+ * AND MIND THE NOISE FLOOR, MEASURED
+ * ----------------------------------
+ * Two full builds, 400 probes each, identical code and flags, differing
+ * only in corpus seed:
+ *
+ *            seed 20261008   seed 99
+ *   s@1          56.3%        52.0%
+ *   s@5          62.0%        58.5%
+ *   MRR          58.9%        54.8%
+ *   beyond-400   81.3%        81.5%     <- corpus SHAPE is stable
+ *   visible n       75           74
+ *   silence       100%         100%
+ *   sufficiency   100%         100%
+ *
+ * The corpus reproduces in shape to a fifth of a point and every
+ * qualitative result holds across draws — but absolute s@1 moves about
+ * FOUR POINTS between seeds. A 2pp 'improvement' on one seed is noise.
+ * To claim a retrieval win, move the number on two seeds, or report both.
  */
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -70,7 +89,8 @@ if (!existsSync(SNAP)) {
 
 console.log('PUBLIC retrieval benchmark — synthetic corpus, reproducible from this repository.');
 console.log('These numbers are NOT docs/benchmarks-current.md and are not comparable to it.');
-console.log('A synthetic corpus is easier than a real one; use the DELTA, not the absolute.');
+console.log('It scores LOWER, not higher — generated prose is more self-similar, so same-domain');
+console.log('neighbours are harder to separate. Use the DELTA, not the absolute.');
 
 run('deriving ground truth (same hold-out as the private snapshot)',
   'node', ['tests/realstore-eval/build-fixture.mjs'], PUBLIC);
@@ -78,5 +98,8 @@ run('deriving ground truth (same hold-out as the private snapshot)',
 run('scoring (same runner as the private snapshot)',
   'npx', ['tsx', 'tests/realstore-eval/runner.ts'], { ...FLAGS, ...PUBLIC });
 
-console.log('\nDone. Rebuild the corpus with a different seed to check you are not fitting one draw:');
-console.log('  PUBLIC_CORPUS_SEED=99 npm run bench:public:build && npm run bench:public');
+console.log('\nSeed noise on this corpus is about 4pp of s@1 (measured: 56.3% on seed 20261008,');
+console.log('52.0% on seed 99). A 2pp move is NOT a result — confirm it on a second seed,');
+console.log('built into its own snapshot so the committed one survives:');
+console.log('  PUBLIC_CORPUS_SEED=99 REALSTORE_SNAPSHOT=public-store-seed99.db npm run bench:public:build');
+console.log('  REALSTORE_SNAPSHOT=public-store-seed99.db REALSTORE_FIXTURE=fixture-public-seed99.json npm run bench:public');
