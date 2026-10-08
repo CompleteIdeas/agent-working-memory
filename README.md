@@ -28,9 +28,17 @@ Restart Claude Code. 19 tools appear. No cloud, no API keys, nothing leaves your
 
 ## What it does, measured
 
-Reproducible from this repository against a frozen copy of a **real 30,000-memory store**, not
-synthetic data. Current numbers, stamped with the commit that produced them:
-[`docs/benchmarks-current.md`](docs/benchmarks-current.md).
+Measured against a frozen copy of a **real work store — 29,853 engrams, 11,262 of them
+retrievable**, which is the honest denominator for a retrieval score. Not synthetic data, and
+not a corpus we can publish: it is a real store with real colleagues and real decisions in it,
+so it is gitignored and so is everything derived from it.
+
+What you *can* run: **`npm run bench:public`** scores the same runner through the same
+ground-truth derivation against a synthetic corpus you rebuild yourself. It verifies the method,
+not the figures — a synthetic corpus scores lower. Current numbers, stamped with the commit that
+produced them, are in [`docs/benchmarks-current.md`](docs/benchmarks-current.md); every claim
+below, what produced it, and **who can reproduce it** is in [`docs/claims.md`](docs/claims.md),
+including the ones we think are weakest.
 
 | | |
 |---|---|
