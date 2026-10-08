@@ -43,7 +43,9 @@ import { performWrite } from '../../src/core/write-pipeline.js';
 import { buildPublicCorpus } from './public-corpus.mjs';
 
 const SNAP_DIR = join(import.meta.dirname, 'snapshot');
-const DB = join(SNAP_DIR, 'public-store.db');
+// Name is selectable so a second-seed verification run can be built alongside
+// the committed one instead of overwriting it. Same var the runner reads.
+const DB = join(SNAP_DIR, process.env.REALSTORE_SNAPSHOT ?? 'public-store.db');
 
 /** Newest engram lands exactly here, so the runner's auto-pinned clock is stable. */
 const NEWEST = Date.parse('2026-10-01T12:00:00.000Z');
