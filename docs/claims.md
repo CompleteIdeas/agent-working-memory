@@ -45,10 +45,13 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 > Scoped recall answers in **~630 tokens flat**. Carrying the store instead: **~1.3M tokens**
 
-- **~630 tokens:** produced by the runner's token accounting, which credits only recalls that actually **deliver** the answer-bearing identifier — a recall that returns a pointer the agent cannot use is scored as a miss, not a save. The counterfactual is the ~2,106 tokens measured for the agent going and reading the codebase instead.
-- **Reproducibility:** **Method public.** The public corpus reports **+245 tokens net per recall** (seed 20261008) and **+181** (seed 99).
-- **~1.3M tokens: WEAKLY EVIDENCED, and we should fix this.** The figure appears in `README.md` and as a label in `docs/awm-for-agents.html`. **No script in this repository derives it.** It is a plausible order of magnitude for carrying 11,262 memories as context, but the arithmetic is not shown, so a reviewer cannot check it and neither can we.
-  - **Action:** either derive it in `npm run bench` so it is stamped like every other number, or state it as an estimate and show the multiplication.
+**Both halves of this row are weakly evidenced, and it is the weakest claim on the page.**
+
+- **`~630 tokens`: no derivation in this repository.** It appears in `README.md` and in `docs/awm-for-agents.html`, and nothing computes it. The runner reports two *different* quantities — total **token spend** across a run, and **net** tokens saved against the ~2,106 measured cost of the agent reading the codebase instead. Neither is a "~630 per recall" cost figure, so the public benchmark's **+245 net per recall** does not reproduce it. Two quantities under one name.
+- **`~1.3M tokens`: no derivation either.** A plausible order of magnitude for carrying 11,262 memories as context, but the arithmetic is not shown. Worse, `docs/awm-for-agents.html` compares the same ~630 figure against a **29M-token project**, so the repository publishes two different denominators for one claim without distinguishing them.
+- **What *is* reproducible:** net token economics, by the accounting actually implemented — a recall is credited only when the delivered text contains the answer-bearing identifier, so a recall that returns an unusable pointer scores as a miss rather than a save. Public corpus: **+245** net per recall (seed 20261008), **+181** (seed 99). Private snapshot at the stamped commit: **+519**.
+- **Reproducibility:** **Method public** for net economics. **Not reproducible** for the ~630 and ~1.3M headline figures as written.
+- **Action, and it should come before any outreach:** either derive both numbers in `npm run bench` so they are stamped like everything else, or replace the row with the net figure the runner does compute and state the rest as an estimate with the arithmetic shown. Reconcile 1.3M against 29M while doing it.
 
 ## 4. Cheap model + AWM beats a frontier model
 
@@ -111,7 +114,9 @@ identifier position: **97.3%** where the reranker can see the identifier,
 
 Listed deliberately, in the order we would attack it ourselves:
 
-1. **`~1.3M tokens` has no derivation in the repository** (§3).
+1. **Neither `~630 tokens` nor `~1.3M tokens` is derived anywhere in the
+   repository**, and a second page compares the same 630 against a different
+   denominator (29M) (§3).
 2. **The headline numbers are a version behind what ships** (§7).
 3. **The two most rhetorically effective claims — 14/15 and 49-vs-100 — are
    `n = 15` and `n = 4`, and neither is reproducible** (§4, §5).

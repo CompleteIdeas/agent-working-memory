@@ -73,9 +73,10 @@ Then two things that matter less than they sound:
   text.
 - **The reranker reads a 400-character window.** Anything past it is not seen
   by the stage that decides final order. This is not a rounding error — on the
-  public benchmark corpus, `s@1` is **96.7%** when the answer-bearing
-  identifier sits inside the window and **38.1%** when it sits beyond it.
-  Put the decisive identifier **early** in the body.
+  by the stage that decides final order. This is not a rounding error — on the
+  public benchmark corpus (`npm run bench:public`, 400 probes), `s@1` is
+  **97.3%** when the answer-bearing identifier sits inside the window and
+  **46.8%** when it sits beyond it. Put the decisive identifier **early**.
 - **Multi-hop is your job.** "Who owns the table that the failing report
   reads?" is two recalls that you make, not one traversal AWM performs. One hop
   per call.
@@ -133,14 +134,24 @@ Restart Claude Code. **19 tools** appear. `awm setup` also writes agent
 instructions into your global `CLAUDE.md` and installs hooks that checkpoint on
 compaction and session end.
 
-Flags: `--no-instructions` (skip the CLAUDE.md edit), `--no-hooks`,
-`--no-prime` (skip the session-start recall), `--force`.
+Flags: `--no-instructions` (skip the CLAUDE.md edit), `--no-hooks`, `--force`,
+and `--no-prime`, which skips the **UserPromptSubmit prime hook** — the thing
+that injects relevant memories on *every prompt*. Without it, as `awm doctor`
+says, "memory reaches the agent only when it chooses to call memory_recall."
+If an agent seems not to be using its memory, check this first.
 
-### B. Claude Code, one project only
+### B. Separate pools per project
 
-Run `awm setup` without `--global` from the project directory. Scopes the MCP
-server and the instructions to that project. Use this when one repository
-should not see another's memories.
+Not a different install — a different **agent id**. One database file, isolation
+by agent. Give each project its own `.mcp.json` with a distinct `AWM_AGENT_ID`:
+
+```
+~/work/project-a/.mcp.json  →  AWM_AGENT_ID: "project-a"
+~/work/project-b/.mcp.json  →  AWM_AGENT_ID: "project-b"
+```
+
+Each then gets its own namespace in the same store. See
+`docs/claude-code-setup.md` ("Separate Memory Pools").
 
 ### C. Claude Code plugin
 
@@ -154,11 +165,15 @@ says so explicitly.
 
 ### D. Claude Desktop (MCPB bundle)
 
-`npm run pack:mcpb` produces the bundle, or take it from a release. See
-`docs/desktop.md`. The bundle is intentionally small because the ONNX models
-are fetched on first run rather than packed in. **It shares the same
-`~/.awm/memory.db` as your CLI setup, which is the point** — Desktop and Claude
-Code see each other's memories.
+`npm run pack:mcpb` produces the bundle, or take it from a release. Install it
+by double-clicking the `.mcpb`, dragging it onto the Claude Desktop window, or
+**Settings → Extensions → Advanced settings → Install Extension…**. Desktop then
+asks for two settings: **Memory database** (default `${HOME}/.awm/memory.db` —
+leave it to share one store with Claude Code) and **Memory pool** (default
+`work`). Restart Desktop and you should have nineteen tools.
+
+**Sharing the store with your CLI install is the point** — Desktop and Claude
+Code then see each other's memories. See `docs/desktop.md`.
 
 ### E. Server / container
 
@@ -290,7 +305,8 @@ facts.
 ## 7. Gotchas, in the order they bite
 
 1. **Retrieval flags unset.** §3. Silent, and the largest single effect.
-2. **The decisive identifier sits past character 400.** 96.7% → 38.1%.
+2. **The decisive identifier sits past character 400.** 97.3% -> 46.8% on the
+   public corpus.
 3. **Terms that exist only in tags.** Invisible to the embedding and (without
    `AWM_RERANK_TAGS=1`) to the reranker.
 4. **Unpinned agent identity.** Writes vanish into a per-directory UUID space.

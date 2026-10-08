@@ -43,9 +43,32 @@ import { performWrite } from '../../src/core/write-pipeline.js';
 import { buildPublicCorpus } from './public-corpus.mjs';
 
 const SNAP_DIR = join(import.meta.dirname, 'snapshot');
-// Name is selectable so a second-seed verification run can be built alongside
-// the committed one instead of overwriting it. Same var the runner reads.
-const DB = join(SNAP_DIR, process.env.REALSTORE_SNAPSHOT ?? 'public-store.db');
+export const DEFAULT_SEED = 20261008;
+
+/**
+ * Resolve the seed and the snapshot it writes to.
+ *
+ * `--seed N` is the documented way in, because `VAR=x npm run ...` does not
+ * work in cmd or PowerShell and this repository has no cross-env. A non-default
+ * seed writes to its own file, so a verification run never overwrites the
+ * committed snapshot. Explicit REALSTORE_SNAPSHOT still wins if set.
+ */
+export function resolvePublicTarget(argv = process.argv.slice(2)) {
+  const i = argv.indexOf('--seed');
+  const fromArg = i >= 0 && argv[i + 1] ? Number(argv[i + 1]) : NaN;
+  const seed = Number.isFinite(fromArg)
+    ? fromArg
+    : Number(process.env.PUBLIC_CORPUS_SEED ?? DEFAULT_SEED);
+  const suffix = seed === DEFAULT_SEED ? '' : `-seed${seed}`;
+  return {
+    seed,
+    snapshot: process.env.REALSTORE_SNAPSHOT ?? `public-store${suffix}.db`,
+    fixture: process.env.REALSTORE_FIXTURE ?? `fixture-public${suffix}.json`,
+  };
+}
+
+const TARGET = resolvePublicTarget();
+const DB = join(SNAP_DIR, TARGET.snapshot);
 
 /** Newest engram lands exactly here, so the runner's auto-pinned clock is stable. */
 const NEWEST = Date.parse('2026-10-01T12:00:00.000Z');
@@ -54,7 +77,7 @@ const SPAN_DAYS = 180;
 
 async function main() {
   const n = Number(process.env.PUBLIC_CORPUS_N ?? 400);
-  const seed = Number(process.env.PUBLIC_CORPUS_SEED ?? 20261008);
+  const seed = TARGET.seed;
 
   mkdirSync(SNAP_DIR, { recursive: true });
   for (const ext of ['', '-wal', '-shm']) {

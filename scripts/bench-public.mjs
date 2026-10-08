@@ -54,16 +54,33 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SNAP = join(ROOT, 'tests', 'realstore-eval', 'snapshot', 'public-store.db');
+
+const DEFAULT_SEED = 20261008;
+// `--seed N` rather than an env var, because `VAR=x npm run ...` does not work
+// in cmd or PowerShell and this repository deliberately has no cross-env. The
+// previous version printed an env-var recipe that silently re-ran the default
+// seed: PUBLIC below is spread AFTER process.env, so it overrode exactly the
+// variables the user had just set. A reproducibility tool whose documented
+// reproduction step reports the wrong numbers is the failure this project
+// markets against, so it is now derived in one place and passed explicitly.
+const argv = process.argv.slice(2);
+const seedArgIdx = argv.indexOf('--seed');
+const seedArg = seedArgIdx >= 0 && argv[seedArgIdx + 1] ? Number(argv[seedArgIdx + 1]) : NaN;
+const SEED = Number.isFinite(seedArg) ? seedArg : Number(process.env.PUBLIC_CORPUS_SEED ?? DEFAULT_SEED);
+const SUFFIX = SEED === DEFAULT_SEED ? '' : `-seed${SEED}`;
+const SNAP_NAME = process.env.REALSTORE_SNAPSHOT ?? `public-store${SUFFIX}.db`;
+const FIXTURE_NAME = process.env.REALSTORE_FIXTURE ?? `fixture-public${SUFFIX}.json`;
+const SNAP = join(ROOT, 'tests', 'realstore-eval', 'snapshot', SNAP_NAME);
 
 /** The recommended retrieval configuration — what `awm setup` installs. */
 const FLAGS = { AWM_RERANK2: '1', AWM_RERANK_WINDOW: 'query', AWM_RERANK_TAGS: '1' };
 
 /** One env set drives both the ground-truth builder and the runner. */
 const PUBLIC = {
-  REALSTORE_SNAPSHOT: 'public-store.db',
-  REALSTORE_FIXTURE: 'fixture-public.json',
+  REALSTORE_SNAPSHOT: SNAP_NAME,
+  REALSTORE_FIXTURE: FIXTURE_NAME,
   REALSTORE_AGENTS: 'work,personal',
+  PUBLIC_CORPUS_SEED: String(SEED),
 };
 
 function run(label, cmd, args, env) {
@@ -82,12 +99,13 @@ function run(label, cmd, args, env) {
 
 if (!existsSync(SNAP)) {
   console.error('No public snapshot yet.\n');
-  console.error('  Build it first:  npm run bench:public:build');
+  console.error(`  Build it first:  npm run bench:public:build${SEED === DEFAULT_SEED ? '' : ` -- --seed ${SEED}`}`);
   console.error('\nIt takes about 70 seconds and writes tests/realstore-eval/snapshot/public-store.db.');
   process.exit(1);
 }
 
-console.log('PUBLIC retrieval benchmark — synthetic corpus, reproducible from this repository.');
+console.log(`PUBLIC retrieval benchmark — seed ${SEED}, snapshot ${SNAP_NAME}, fixture ${FIXTURE_NAME}.`);
+console.log('Synthetic corpus, reproducible from this repository.');
 console.log('These numbers are NOT docs/benchmarks-current.md and are not comparable to it.');
 console.log('It scores LOWER, not higher — generated prose is more self-similar, so same-domain');
 console.log('neighbours are harder to separate. Use the DELTA, not the absolute.');
@@ -101,5 +119,5 @@ run('scoring (same runner as the private snapshot)',
 console.log('\nSeed noise on this corpus is about 4pp of s@1 (measured: 56.3% on seed 20261008,');
 console.log('52.0% on seed 99). A 2pp move is NOT a result — confirm it on a second seed,');
 console.log('built into its own snapshot so the committed one survives:');
-console.log('  PUBLIC_CORPUS_SEED=99 REALSTORE_SNAPSHOT=public-store-seed99.db npm run bench:public:build');
-console.log('  REALSTORE_SNAPSHOT=public-store-seed99.db REALSTORE_FIXTURE=fixture-public-seed99.json npm run bench:public');
+console.log('  npm run bench:public:build -- --seed 99');
+console.log('  npm run bench:public -- --seed 99');
