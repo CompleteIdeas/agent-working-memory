@@ -64,8 +64,23 @@ function commitHeadroomGB() {
   const out = sh('powershell -NoProfile -Command "$c=Get-Counter \'\\Memory\\Committed Bytes\',\'\\Memory\\Commit Limit\'; ($c.CounterSamples | ForEach-Object { $_.CookedValue }) -join \',\'"');
   const [committed, limit] = out.split(',').map(Number);
   if (!Number.isFinite(committed) || !Number.isFinite(limit)) return null;
-  return (limit - committed) / 1024 ** 3;
+  const commitGB = (limit - committed) / 1024 ** 3;
+
+  // Commit headroom counts the page file, so it can read comfortably high while
+  // free RESIDENT memory is nearly gone. On 2026-10-08 this function returned
+  // 46.1 GB, the preflight passed, and the run was reaped for low memory minutes
+  // later with under 11 GB of physical memory free — a five-fold overstatement of
+  // the real bound. That is precisely the failure this guard exists to prevent
+  // (see the five OOM-killed runs in preflight's own note), and the Linux branch
+  // never had it, because MemAvailable is a physical measure. So bound on both.
+  const freeKb = Number(sh('powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory"'));
+  if (!Number.isFinite(freeKb) || freeKb <= 0) return commitGB;   // fall back rather than block
+  const physGB = freeKb / 1024 / 1024;
+  MEM_DETAIL = `commit ${commitGB.toFixed(1)} GB, physical ${physGB.toFixed(1)} GB`;
+  return Math.min(commitGB, physGB);
 }
+/** Set by commitHeadroomGB on Windows, so preflight can name the binding constraint. */
+let MEM_DETAIL = '';
 
 function preflight() {
   const gb = commitHeadroomGB();
@@ -74,7 +89,8 @@ function preflight() {
     return true;
   }
   const ok = gb >= MIN_HEADROOM_GB;
-  console.log(`  ${ok ? '+' : 'x'} memory headroom: ${gb.toFixed(1)} GB free of commit (need ${MIN_HEADROOM_GB})`);
+  console.log(`  ${ok ? '+' : 'x'} memory headroom: ${gb.toFixed(1)} GB free (need ${MIN_HEADROOM_GB})`
+    + (MEM_DETAIL ? ` — lower of ${MEM_DETAIL}` : ''));
   if (!ok) {
     console.log('');
     console.log('  These suites load ONNX models natively — memory --max-old-space-size does not bound.');
