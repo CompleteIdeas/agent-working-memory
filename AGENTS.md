@@ -1,5 +1,11 @@
 # awm — Agent Instructions
 
+> This file is the short version: when to call which tool. If you are a model
+> and you need to actually understand or install AWM — how retrieval works, the
+> configuration that is not optional, setup per scenario, and what breaks
+> quietly when it is misconfigured — read [`llms.txt`](llms.txt) instead. It is
+> written to be read whole.
+
 ## Memory (AWM)
 You have persistent memory via the agent-working-memory MCP server.
 
