@@ -47,11 +47,22 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 **Both halves of this row are weakly evidenced, and it is the weakest claim on the page.**
 
-- **`~630 tokens`: no derivation in this repository.** It appears in `README.md` and in `docs/awm-for-agents.html`, and nothing computes it. The runner reports two *different* quantities — total **token spend** across a run, and **net** tokens saved against the ~2,106 measured cost of the agent reading the codebase instead. Neither is a "~630 per recall" cost figure, so the public benchmark's **+245 net per recall** does not reproduce it. Two quantities under one name.
-- **`~1.3M tokens`: no derivation either.** A plausible order of magnitude for carrying 11,262 memories as context, but the arithmetic is not shown. Worse, `docs/awm-for-agents.html` compares the same ~630 figure against a **29M-token project**, so the repository publishes two different denominators for one claim without distinguishing them.
+- **`~630 tokens`: not derived, and the harness measures something 2.4x larger.** It appears in `README.md` and in `docs/awm-for-agents.html`, and nothing computes it. What the runner *does* measure, at the shipped `k=3` on the private snapshot, is the delivered-token spend per recall:
+
+  | Suite | spend | recalls | mean per recall |
+  |---|---|---|---|
+  | Identifier | 452,979 | 300 | **1,510** |
+  | Topic | 714,610 | 450 | **1,588** |
+
+  So a scoped recall costs roughly **1.5k tokens**, not ~630, and the published figure understates the cost of the product's central operation by about 2.4x — an error in AWM's own favour, which is the direction that most deserves scrutiny.
+
+  **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,510 x 0.30 is about 450, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
+
+  Note also that **net** economics and **cost** are different quantities, and were conflated here previously: the runner reports +519 net per recall on the identifier suite (what a successful recall saves against the ~2,106-token cost of the agent reading the codebase instead), which is not a cost figure and does not reproduce ~630.
+- **`~1.3M tokens`: now derived, and it holds.** `npm run bench` computes it from the snapshot and stamps it in the provenance table, using the same token estimator the runner applies to what a recall delivers, so both sides of the comparison are measured alike. Over the 11,262 retrievable engrams: **1,234,429** tokens of `concept + content`, **1,545,526** including tags, mean **110** per engram. The published "~1.3M" sits between those two and was correct all along — it simply had no arithmetic behind it. Separately, `docs/awm-for-agents.html` compares the same ~630 against a **29M-token project**: that is a *different* denominator (a codebase, not the store), and the figures are not in conflict, but neither page says which it is using.
 - **What *is* reproducible:** net token economics, by the accounting actually implemented — a recall is credited only when the delivered text contains the answer-bearing identifier, so a recall that returns an unusable pointer scores as a miss rather than a save. Public corpus: **+245** net per recall (seed 20261008), **+181** (seed 99). Private snapshot at the stamped commit: **+519**.
-- **Reproducibility:** **Method public** for net economics. **Not reproducible** for the ~630 and ~1.3M headline figures as written.
-- **Action, and it should come before any outreach:** either derive both numbers in `npm run bench` so they are stamped like everything else, or replace the row with the net figure the runner does compute and state the rest as an estimate with the arithmetic shown. Reconcile 1.3M against 29M while doing it.
+- **Reproducibility:** **Maintainer only** for `~1.3M` — the derivation is published and runs on any store, but reproducing *this* figure needs the private snapshot. **Not reproducible** for `~630` as written, because nothing derives it. **Method public** for net economics.
+- **Action remaining:** `~1.3M` is done. `~630` needs resolving before outreach: re-measure the identifier suite with `REALSTORE_GRANULARITY=compact` to test whether that is the figure's origin, then either qualify the claim with the mode or replace it with the measured ~1.5k. Both pages should also say which denominator they are using, so ~1.3M (the store) and 29M (a codebase) stop reading as a contradiction.
 
 ## 4. Cheap model + AWM beats a frontier model
 
@@ -114,9 +125,13 @@ identifier position: **97.3%** where the reranker can see the identifier,
 
 Listed deliberately, in the order we would attack it ourselves:
 
-1. **Neither `~630 tokens` nor `~1.3M tokens` is derived anywhere in the
-   repository**, and a second page compares the same 630 against a different
-   denominator (29M) (§3).
+1. **`~630 tokens` is not derived, and the harness measures ~1,510 instead** —
+   the published figure understates the cost of a scoped recall by about 2.4x,
+   in the product's favour (§3).
+   `~1.3M` now is — `npm run bench` computes 1,234,429 from the snapshot and
+   stamps it — and it confirmed the published figure rather than contradicting
+   it. Two pages still fail to say which denominator they use, so ~1.3M (the
+   store) and 29M (a codebase) read as a conflict when they are not.
 2. **The headline numbers are a version behind what ships** (§7).
 3. **The two most rhetorically effective claims — 14/15 and 49-vs-100 — are
    `n = 15` and `n = 4`, and neither is reproducible** (§4, §5).
