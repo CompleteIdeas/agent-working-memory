@@ -118,6 +118,31 @@ async function snapshotFacts() {
       // ~29.9k. Two docs quoted the two figures without saying which; record both.
       facts.engramsRetrievable = c("SELECT COUNT(*) c FROM engrams WHERE stage='active' AND retracted=0 AND superseded_by IS NULL");
       facts.newestCreatedAt = db.prepare('SELECT MAX(created_at) m FROM engrams').get().m;
+
+      // DERIVE the "carrying the store instead" figure instead of asserting it.
+      // README quoted "~1.3M tokens" and docs/awm-for-agents.html quoted the same
+      // ~630-token recall against a 29M-token denominator, and nothing in the
+      // repository computed either. docs/claims.md listed this as the weakest
+      // claim on the page. Same estimator the runner uses for what a recall
+      // delivers, so the two sides of the comparison are measured alike.
+      const est = (t) => Math.max(
+        Math.ceil((t || '').split(/\s+/).filter(Boolean).length * 1.3),
+        Math.ceil((t || '').length / 4),
+      );
+      const rows = db.prepare(
+        "SELECT concept, content, tags FROM engrams WHERE stage='active' AND retracted=0 AND superseded_by IS NULL",
+      ).all();
+      let body = 0, withTags = 0;
+      for (const r of rows) {
+        const head = `${r.concept ?? ''}
+${r.content ?? ''}`;
+        body += est(head);
+        withTags += est(`${head}
+${r.tags ?? ''}`);
+      }
+      facts.carryAllTokens = body;
+      facts.carryAllTokensWithTags = withTags;
+      facts.meanTokensPerEngram = rows.length ? Math.round(body / rows.length) : 0;
       db.close();
     }
   } catch { /* counts are a nicety, not a gate */ }
@@ -260,6 +285,10 @@ function render(meta, results) {
       L.push(`| Engrams in snapshot | **${meta.snapshot.engramsTotal.toLocaleString()}** total · **${meta.snapshot.engramsRetrievable.toLocaleString()}** retrievable (active, not retracted, not superseded) |`);
     }
     if (meta.snapshot.newestCreatedAt) L.push(`| Decay clock pinned to | ${meta.snapshot.newestCreatedAt} |`);
+    if (meta.snapshot.carryAllTokens) {
+      L.push(`| Cost of carrying the whole store | **${meta.snapshot.carryAllTokens.toLocaleString()}** tokens of concept+content `
+        + `(${meta.snapshot.carryAllTokensWithTags.toLocaleString()} with tags) · mean **${meta.snapshot.meanTokensPerEngram}**/engram |`);
+    }
   }
   L.push('');
   L.push('> **Which engram count to quote.** Recall can only ever return the *retrievable*');
