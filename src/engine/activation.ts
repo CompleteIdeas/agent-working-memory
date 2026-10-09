@@ -35,6 +35,7 @@ import { strengthenAssociation, CoActivationBuffer, ValidationGatedBuffer } from
 import { embed, cosineSimilarity } from '../core/embeddings.js';
 import { rerank } from '../core/reranker.js';
 import { expandQuery } from '../core/query-expander.js';
+import { startRecallProfile } from '../core/recall-telemetry.js';
 import { computeRecallConfidence } from './confidence.js';
 import type {
   Engram, ActivationResult, ActivationQuery, Association, PhaseScores, QueryMode,
@@ -191,6 +192,7 @@ export class ActivationEngine {
    */
   async activate(query: ActivationQuery): Promise<ActivationResult[]> {
     const startTime = performance.now();
+    const prof = startRecallProfile();
     const limit = query.limit ?? 10;
     const minScore = query.minScore ?? 0.01; // Default: filter out zero-relevance results
     const useReranker = query.useReranker ?? true;
@@ -205,9 +207,11 @@ export class ActivationEngine {
     const adaptive = resolveAdaptiveParams(query);
 
     // Resolve workspace scope: if workspace is set, search across all agents in that workspace
+    prof.begin('agents');
     const agentIds = query.workspace
       ? await this.store.getWorkspaceAgentIds(query.agentId, query.workspace)
       : [query.agentId];
+    prof.end('agents');
     const isWorkspaceScoped = agentIds.length > 1;
 
     // ── Phase -2: temporal expression ──
@@ -230,6 +234,7 @@ export class ActivationEngine {
     }
     const pronounPattern = /\b(she|he|they|her|his|him|their|it|that|this|there)\b/i;
     if (pronounPattern.test(queryContext)) {
+      prof.begin('pronounEntities');
       try {
         const recentEntities = (await this.store.getEngramsByAgents(agentIds, 'active'))
           .sort((a, b) => b.accessCount - a.accessCount)
@@ -243,6 +248,7 @@ export class ActivationEngine {
       } catch { /* non-fatal */ }
     }
 
+    prof.end('pronounEntities');
     // Phase 0: Query expansion — add related terms to improve BM25 recall
     let searchContext = queryContext;
 
@@ -255,6 +261,7 @@ export class ActivationEngine {
     // RELEVANCE, so a hub alias cannot drag an irrelevant memory to the top.
     const aliasAdded = aliasTermsFor(queryContext);
     if (aliasAdded.length > 0) searchContext = `${searchContext} ${aliasAdded.join(' ')}`;
+    prof.begin('expansion');
     if (useExpansion) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -269,22 +276,27 @@ export class ActivationEngine {
       }
     }
 
+    prof.end('expansion');
     // Phase 1: Embed query for vector similarity (uses coref-expanded context)
     let queryEmbedding: number[] | null = null;
+    prof.begin('embed');
     try {
       queryEmbedding = await embed(queryContext);
     } catch {
       // Embedding unavailable — fall back to text-only matching
     }
+    prof.end('embed');
 
     // Phase 2: Parallel retrieval — dual BM25 + all active engrams
     // Two-pass BM25: (1) keyword-stripped query for precision, (2) expanded query for recall.
     // Uses queryContext, not query.context: temporal words must not reach BM25.
+    prof.begin('bm25');
     const keywordQuery = Array.from(tokenize(queryContext)).join(' ');
     const bm25Keyword = keywordQuery.length > 2
       ? await this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3)
       : [];
     const bm25Expanded = await this.store.searchBM25WithRankMultiAgent(agentIds, searchContext, limit * 3);
+    prof.end('bm25');
 
     // Merge: take the best BM25 score per engram from either pass
     const bm25ScoreMap = new Map<string, number>();
@@ -344,7 +356,9 @@ export class ActivationEngine {
     if (queryEmbedding) {
       for (const aid of agentIds) {
         try {
+          prof.begin('vector');
           const hits = await this.store.searchByVector(aid, queryEmbedding, VECTOR_TOP_K);
+          prof.end('vector');
           for (const h of hits) {
             // pgvector cosine distance: 0 = identical, 2 = opposite.
             // For unit-norm BGE vectors, distance ≈ 1 - cosineSimilarity.
@@ -415,7 +429,9 @@ export class ActivationEngine {
       }
       if (ents.size > 0) {
         try {
+          prof.begin('entityBridge');
           const entHits = await this.store.searchBM25WithRankMultiAgent(agentIds, Array.from(ents).slice(0, 8).join(' '), ENT_CAP);
+          prof.end('entityBridge');
           let added = 0;
           for (const h of entHits) {
             if (added >= ENT_CAP) break;
@@ -457,7 +473,9 @@ export class ActivationEngine {
         let added = 0;
         for (const term of Array.from(terms).slice(0, 4)) {
           if (added >= IDX_CAP) break;
+          prof.begin('entitySearch');
           const entities = await this.store.searchEntities(term, 6);
+          prof.end('entitySearch');
           for (const entity of entities) {
             if (added >= IDX_CAP) break;
             for (const agentId of agentIds) {
@@ -474,7 +492,9 @@ export class ActivationEngine {
                   if (inPool.stage === 'active' && !(inPool as any).retracted && !inPool.supersededBy) { injectedIds.add(id); added++; }
                   continue;
                 }
+                prof.begin('entityFetch');
                 const n = await this.store.getEngram(id);
+                prof.end('entityFetch');
                 if (!n || n.stage !== 'active' || (n as any).retracted || n.supersededBy) continue;
                 if (query.memoryType && n.memoryType !== query.memoryType) continue;
                 candidateMap.set(id, n);
@@ -501,10 +521,14 @@ export class ActivationEngine {
     // Graph walk still needs full Association objects, but it operates on the
     // top-N (~30 candidates) — its on-demand `getAssociationsFor` lookups are
     // cheap (<5ms total).
+    prof.note('candidates', candidates.length);
+    prof.begin('assocStats');
     const assocStats = await this.store.getAssociationStatsForBatch(candidates.map(e => e.id));
+    prof.end('assocStats');
     // 0.14.4: decay clock is overridable (query.now) so evals against a frozen
     // snapshot are reproducible across days. See ActivationQuery.now.
     const nowMs = query.now ?? Date.now();
+    prof.begin('scoring');
     const scored = candidates.map(engram => {
       const ageDays = (nowMs - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const stats = assocStats.get(engram.id) ?? { count: 0, sumWeight: 0 };
@@ -619,6 +643,7 @@ export class ActivationEngine {
       // associations: empty in 0.7.12+ — graph walk lazy-fetches per engram on demand
       return { engram, score: composite, phaseScores, associations: [] as Association[] };
     });
+    prof.end('scoring');
 
     // Phase 3.5: Rocchio pseudo-relevance feedback — expand query with top result terms
     // then re-search BM25 to find candidates that keyword search missed
@@ -635,14 +660,18 @@ export class ActivationEngine {
       // Take top 5 feedback terms and re-search
       const extraTerms = Array.from(feedbackTerms).slice(0, 5).join(' ');
       if (extraTerms) {
+        prof.begin('feedbackBM25');
         const feedbackBM25 = await this.store.searchBM25WithRankMultiAgent(agentIds, `${searchContext} ${extraTerms}`, limit * 2);
+        prof.end('feedbackBM25');
         for (const r of feedbackBM25) {
           if (!candidateMap.has(r.engram.id)) {
             candidateMap.set(r.engram.id, r.engram);
             // Score the new candidate
             const engram = r.engram;
             const ageDays = (nowMs - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+            prof.begin('feedbackAssoc');
             const associations = await this.store.getAssociationsFor(engram.id);
+            prof.end('feedbackAssoc');
             const cTokens = tokenize(engram.concept);
             const ctTokens = tokenize(engram.content);
             const cJac = jaccard(queryTokens, cTokens);
@@ -851,11 +880,13 @@ export class ActivationEngine {
         if (injectedIds.has(item.engram.id)) topN.push(item);
       }
     }
+    prof.begin('graph');
     if (process.env.AWM_SPREAD === '1' && query.spread !== false) {
       await this.spreadActivation(topN);
     } else {
       await this.graphWalk(topN, 2, adaptive.hopPenalty, adaptive.beamWidth);
     }
+    prof.end('graph');
 
     // Phase 6: Initial filter and sort for re-ranking pool
     // (D11 guard 2/4: injected entity-index candidates are exempt from the minScore floor.)
@@ -909,6 +940,8 @@ export class ActivationEngine {
       }
     }
 
+    prof.note('rerankPool', rerankPool.length);
+    prof.note('rerankSkipped', rerankSkipped);
     if (useReranker && !rerankSkipped && rerankPool.length > 0) {
       try {
         // Passage selection for the cross-encoder. Truncation exists for a real
@@ -927,15 +960,21 @@ export class ActivationEngine {
         // AWM_RERANK_WINDOW=query spends the SAME budget on the window that
         // actually contains the query terms. Cost is unchanged. See
         // src/core/rerank-window.ts.
+        prof.begin('passages');
         const rrBudget = rerankTruncation();
         const rrMode = rerankWindowMode();
         const passages = rerankPool.map(r =>
           buildRerankPassage(r.engram.concept, r.engram.content, queryContext, rrBudget, rrMode, r.engram.tags));
+        prof.end('passages');
+        prof.note('passageChars', passages.reduce((s, p) => s + p.length, 0));
+        prof.note('passageMaxChars', passages.reduce((m, p) => Math.max(m, p.length), 0));
         let rerankTimer: ReturnType<typeof setTimeout> | undefined;
+        prof.begin('rerank');
         const rerankResults = await Promise.race([
           rerank(queryContext, passages),
           new Promise<never>((_, reject) => { rerankTimer = setTimeout(() => reject(new Error('reranker timeout')), 10000); }),
         ]).finally(() => { if (rerankTimer) clearTimeout(rerankTimer); });
+        prof.end('rerank');
 
         // Adaptive reranker blend (Codex recommendation):
         // When BM25/text signals are strong, trust them more; when weak, lean on reranker.
@@ -1008,12 +1047,14 @@ export class ActivationEngine {
       // on raw cosine against the mode floor (targeted=0.50, exploratory=0.35).
       const semanticFloor = adaptive.zScoreGate > 0.5 ? 0.50 : 0.35;
       if (channelsAgreeing < requiredChannels && maxRawCosine < semanticFloor) {
+        prof.finish({ results: 0, abstained: 'channels' });
         return [];
       }
 
       // Soft penalty: only 1 channel agrees or margin is thin
       if (channelsAgreeing < 2 || margin < 0.05) {
         if (abstentionThreshold > 0) {
+          prof.finish({ results: 0, abstained: 'soft' });
           return [];
         }
         for (const item of rerankPool) {
@@ -1033,6 +1074,7 @@ export class ActivationEngine {
       const variance = topRerankerScores.reduce((s, v) => s + (v - meanScore) ** 2, 0) / topRerankerScores.length;
 
       if (maxScore < abstentionThreshold || (maxScore < 0.5 && variance < 0.01)) {
+        prof.finish({ results: 0, abstained: 'legacy' });
         return [];
       }
     }
@@ -1067,6 +1109,7 @@ export class ActivationEngine {
         confidence,
         threshold: requireConfidence,
       });
+      prof.finish({ results: 0, abstained: 'confidence' });
       return [];
     }
 
@@ -1210,8 +1253,11 @@ export class ActivationEngine {
     // Side effects: touch, co-activate, defer Hebbian to validation gate (skip for internal/system calls)
     if (!query.internal) {
       for (const id of activatedIds) {
+        prof.begin('touch');
         await this.store.touchEngram(id);
+        prof.end('touch');
       }
+      prof.begin('hebbian');
       this.coActivationBuffer.pushBatch(activatedIds);
       // Validation-gated Hebbian: defer strengthening until feedback arrives
       const pairs = this.coActivationBuffer.getCoActivatedPairs(10_000);
@@ -1222,9 +1268,11 @@ export class ActivationEngine {
         if (!seen.has(key)) { seen.add(key); uniquePairs.push([a, b]); }
       }
       this.validationGate.addPending(activatedIds, uniquePairs);
+      prof.end('hebbian');
 
       // Log activation event for eval
       const latencyMs = performance.now() - startTime;
+      prof.begin('logEvent');
       const eventId = randomUUID();
       await this.store.logActivationEvent({
         id: eventId,
@@ -1236,6 +1284,7 @@ export class ActivationEngine {
         latencyMs,
         engramIds: activatedIds,
       });
+      prof.end('logEvent');
       // 0.14.3: expose the event id so callers can hand it back on
       // memory_feedback. Before this, the id was generated here and dropped —
       // every one of the 872 retrieval_feedback rows in the live store has
@@ -1246,6 +1295,7 @@ export class ActivationEngine {
       this.lastActivationEventId = eventId;
     }
 
+    prof.finish({ results: results.length });
     return results;
   }
 

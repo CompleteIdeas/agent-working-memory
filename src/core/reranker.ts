@@ -24,6 +24,19 @@ import { ensureModelCacheDir } from './model-cache.js';
 const DEFAULT_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
 const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
 
+/**
+ * Weight precision for the cross-encoder. fp32 is the shipped default and the
+ * only value any published number was measured at.
+ *
+ * It is exposed because the cross-encoder is 77% of warm recall latency
+ * (measured, `npm run profile:recall`), which makes precision the largest
+ * single latency lever in the system — and an unmeasurable one while it was a
+ * literal. 'q8' typically runs 2-4x faster on CPU; whether it keeps this
+ * store's ranking is an empirical question, so changing it is opt-in and the
+ * default is untouched.
+ */
+const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'fp32') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
+
 // --- In-process fallback ---
 
 let tokenizer: PreTrainedTokenizer | null = null;
@@ -36,8 +49,8 @@ async function ensureLoaded(): Promise<void> {
   initPromise = (async () => {
     ensureModelCacheDir();
     tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID);
-    model = await AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: 'fp32' });
-    console.error(`Re-ranker model loaded in-process: ${MODEL_ID}`);
+    model = await AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: DTYPE });
+    console.error(`Re-ranker model loaded in-process: ${MODEL_ID} (${DTYPE})`);
   })();
   return initPromise;
 }
