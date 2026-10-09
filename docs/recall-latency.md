@@ -266,10 +266,11 @@ the fourth and fifth identical accuracy reproduction of those figures.
 
 That lineage ends here. Defaulting the Rocchio pass off on 2026-10-09 (finding 3)
 moved the baseline to 93.0% / 92.2%, so the `fp32 (shipped)` rows below are the
-*old* default and the q8 comparison is relative to it. **The q8 question has not
-been re-measured against the new baseline** — it needs to be before the dtype
-decision is taken, because the −0.9pp topic cost that makes it a tradeoff was
-measured against a pipeline that no longer ships.
+*old* default and their q8 comparison is relative to it. **It has since been
+re-measured on the shipped pipeline — see the next section, which supersedes
+these two tables for the dtype question.** They are kept because the
+`AWM_RERANK_POOL=16` row has not been re-run and because they are the record of
+what was measured on 2026-10-08.
 
 **Identifier suite, n=300:**
 
@@ -305,6 +306,63 @@ ranker cheaper, which is why it dominates.
 `AWM_RERANK_TAGS=1` (+7.4pp s@1) and `AWM_RERANK_WINDOW=query` act through.
 Nothing here argues for removing it — the lever worth pulling makes the same
 judgement cheaper rather than making less of it.
+
+---
+
+## The dtype question, re-measured on the shipped pipeline
+
+**2026-10-09, after the Rocchio flip.** The tables above compared q8 against a
+pipeline that no longer ships, and the −0.9pp topic cost they report was the only
+reason the dtype choice was a tradeoff rather than an obvious win. Re-run as
+back-to-back pairs per suite, so the latency column is comparable within each
+pair and not across the whole table:
+
+| Suite | Arm | s@1 | s@5 | MRR | silence | total p50 | rerank mean |
+|---|---|---|---|---|---|---|---|
+| identifier n=300 | fp32 (shipped) | **93.0%** | 97.0% | 94.9% | 90.0% | 533ms | 448ms |
+| identifier n=300 | `q8` | **93.0%** | 97.0% | 94.9% | 90.0% | **395ms** (−26%) | 308ms |
+| identifier n=300 | `q4` | **93.0%** | 97.0% | 95.0% | 90.0% | 515ms (−3%) | 423ms |
+| topic n=450 | fp32 (shipped) | **92.2%** | 96.9% | 94.4% | 90.0% | 522ms | 474ms |
+| topic n=450 | `q8` | **92.0%** | 96.9% | 94.3% | 90.0% | **358ms** (−31%) | 296ms |
+| public n=200 | fp32 (shipped) | 56.0% | 61.5% | 58.7% | 100% | 292ms | 259ms |
+| public n=200 | `q8` | 55.0% | 62.0% | 58.2% | 100% | **196ms** (−33%) | 167ms |
+
+**The topic cost shrank from −0.9pp to −0.2pp**, and −0.2pp of 450 is one query.
+A per-query trace diff says exactly which: three golds move, one up and two down.
+Identifier is a net zero that is *not* a no-op — two golds move, one up and one
+down, cancelling — so read "identical" there as an aggregate statement, not as
+"q8 changes nothing". The public corpus's −1.0pp s@1 sits with a **+0.5pp s@5**
+inside that corpus's measured 4pp seed-noise floor, so its job here is to
+reproduce the **latency** claim on data a reviewer can rebuild, not to adjudicate
+accuracy.
+
+**q8 inference is deterministic.** Two runs of the identical q8 arm give the same
+score on every one of 450 queries to within 1e-6, so that one-query topic cost is
+a specific reproducible result and not a coin flip near a boundary.
+
+**q4 is dominated and should be dropped from consideration.** It matches fp32 on
+accuracy (MRR is 0.1pp better, i.e. noise) but buys only 3% of total latency
+against q8's 26%, and its cold start is **6,080ms against fp32's 1,591ms** — the
+first inference alone is 5,161ms, so whatever transformers.js does with a q4
+ms-marco graph, it is not a fast kernel. The curve has one useful point on it.
+
+**Packaging: the stated prerequisite was wrong, and it inverts.** The concern on
+record was that flipping to q8 would turn first recall on a fresh install into a
+network fetch unless `model_quantized.onnx` were bundled. Nothing is bundled
+today: `package.json`'s `files` list is `dist/ src/ plugin/ .claude-plugin/` with
+no `data/`, the MCPB bundle carries no ONNX, and there is no postinstall or
+prefetch step. Every model already downloads lazily on first use. So q8 does not
+add a fetch — it makes the existing one **smaller, 23 MB instead of 91 MB** — and
+cold start drops with it (1,522ms against 1,591ms, of which the first inference
+is 387ms against 580ms).
+
+Reproduce any row:
+
+```
+npm run profile:recall -- --n 300 --dtype q8
+npm run profile:recall -- --n 450 --fixture fixture-category.json --dtype q8
+npm run profile:recall -- --public --n 200 --dtype q8
+```
 
 ---
 

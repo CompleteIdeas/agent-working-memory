@@ -41,6 +41,10 @@ export const RECALL_FLAGS = [
   'AWM_RERANK_POOL',
   'AWM_RERANK_TAGS',
   'AWM_RERANK_TAGS_LEN',
+  // Cross-encoder precision — changes every reranker score, so it changes order.
+  // Omitted until 2026-10-09, during which both arms of a dtype sweep printed the
+  // SAME arm= label; the whole point of this list is that that cannot happen.
+  'AWM_RERANKER_DTYPE',
   // Derived retrieval text (embedding side)
   'AWM_RETRIEVAL_TEXT',
   // Project-dialect alias expansion
