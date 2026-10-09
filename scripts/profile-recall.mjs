@@ -65,7 +65,8 @@ const FLAGS = { AWM_RERANK2: '1', AWM_RERANK_WINDOW: 'query', AWM_RERANK_TAGS: '
 // in the banner rather than in someone's shell history.
 const LEVERS = {};
 for (const [flag, env] of [['pool', 'AWM_RERANK_POOL'], ['dtype', 'AWM_RERANKER_DTYPE'],
-  ['trunc', 'AWM_RERANK_TRUNC'], ['tagslen', 'AWM_RERANK_TAGS_LEN']]) {
+  ['trunc', 'AWM_RERANK_TRUNC'], ['tagslen', 'AWM_RERANK_TAGS_LEN'],
+  ['feedback', 'AWM_FEEDBACK_BM25'], ['skip-pool', 'AWM_RERANK_SKIP_POOL']]) {
   const v = arg(flag, null);
   if (v !== null) LEVERS[env] = v;
 }
@@ -95,8 +96,11 @@ if (!has('jsonl')) {
     REALSTORE_K: K,
     AWM_PROFILE_RECALL_OUT: OUT,
     // The trace is this script's own byproduct; keep it out of the repo so a
-    // profiling run never dirties the tree the release gate checks.
-    REALSTORE_TRACE: join(tmpdir(), `awm-recall-profile-trace-${process.pid}.jsonl`),
+    // profiling run never dirties the tree the release gate checks. An
+    // explicitly set REALSTORE_TRACE wins, because comparing two arms
+    // per-query needs each arm's trace at a known path.
+    REALSTORE_TRACE: process.env.REALSTORE_TRACE
+      ?? join(tmpdir(), `awm-recall-profile-trace-${process.pid}.jsonl`),
   };
 
   const target = LIVE
@@ -195,6 +199,13 @@ console.log(`  passage chars (pool sum) ${noteStat('passageChars')}`);
 console.log(`  longest passage          ${noteStat('passageMaxChars')}`);
 const skipped = warm.filter((r) => r.rerankSkipped === true).length;
 console.log(`  rerank skip fired        ${skipped}/${warm.length} (${(100 * skipped / warm.length).toFixed(1)}%)`);
+// The ceiling: cleanWinner holds on exactly the queries an unbounded gate would
+// skip, so this is what the pool bound is withholding. Mean saving is this rate
+// times the rerank stage — at a few percent, p50 cannot move and only the mean
+// and the conditional cost mean anything.
+const clean = warm.filter((r) => r.cleanWinner === true).length;
+console.log(`  clean winner (skip ceiling) ${clean}/${warm.length} (${(100 * clean / warm.length).toFixed(1)}%)` +
+  `  -> <= ${((clean / warm.length) * mean(warm.map((r) => r.stages?.rerank ?? 0))).toFixed(1)}ms mean`);
 const abstained = warm.filter((r) => r.abstained).length;
 console.log(`  abstained                ${abstained}/${warm.length}`);
 

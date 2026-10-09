@@ -50,6 +50,9 @@ export const RECALL_FLAGS = [
   'AWM_EMBED_MODEL',
   'AWM_EMBED_DIMS',
   'AWM_DISABLE_RERANK_SKIP',
+  'AWM_RERANK_SKIP_POOL',
+  // Rocchio pseudo-relevance feedback (phase 3.5)
+  'AWM_FEEDBACK_BM25',
   // Spreading activation (D11 — parked)
   'AWM_SPREAD',
   'AWM_SPREAD_INJECT',

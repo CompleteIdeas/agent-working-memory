@@ -648,9 +648,23 @@ export class ActivationEngine {
     prof.end('scoring');
 
     // Phase 3.5: Rocchio pseudo-relevance feedback — expand query with top result terms
-    // then re-search BM25 to find candidates that keyword search missed
+    // then re-search BM25 to find candidates that keyword search missed.
+    //
+    // Costs 7.3% of warm recall latency (41ms mean, measured 2026-10-08) on
+    // 100% of queries, plus a getAssociationsFor per newly discovered
+    // candidate. AWM_FEEDBACK_BM25=0 disables it so that cost can be weighed
+    // against what it buys; the default is unchanged.
+    //
+    // Scope any verdict to THIS implementation: the expansion terms are the
+    // first five novel tokens in document order (a Set populated by iterating
+    // the top-3 contents), not the top five by weight, and they come mostly
+    // from the top-1 result. "Rocchio buys nothing here" would not be a
+    // statement about pseudo-relevance feedback in general.
     const preSorted = scored.sort((a, b) => b.score - a.score);
-    const topForFeedback = preSorted.slice(0, 3).filter(r => r.phaseScores.textMatch > 0.1);
+    const feedbackEnabled = process.env.AWM_FEEDBACK_BM25 !== '0';
+    const topForFeedback = feedbackEnabled
+      ? preSorted.slice(0, 3).filter(r => r.phaseScores.textMatch > 0.1)
+      : [];
     if (topForFeedback.length > 0) {
       const feedbackTerms = new Set<string>();
       for (const item of topForFeedback) {
@@ -929,11 +943,18 @@ export class ActivationEngine {
     // Conservative gate (only skip when very confident):
     //   - top-1 textMatch >= 0.8 (high BM25 + jaccard agreement)
     //   - top-1 score is at least 1.5× top-2 score (clear separation)
-    //   - rerankPool size <= limit*2 (small pool — reranker has less to do)
+    //   - rerankPool size <= max(limit*2, 20) (small pool — less for the reranker
+    //     to do). The literal was in step with the pool when written: 0.7.13 had
+    //     cut the pool to max(limit*2, 15), and its changelog notes the skip would
+    //     fire MORE often as a result. 0.9.0 widened the pool to max(limit*4, 40)
+    //     for recall and left the bound behind. Override with AWM_RERANK_SKIP_POOL
+    //     (a number sets the bound, `off` removes it) to measure the gate instead
+    //     of reasoning about it.
     //
     // Ambiguous queries (close BM25 scores, weak top-1, large pool) still go through
     // the reranker. Disable this heuristic via AWM_DISABLE_RERANK_SKIP=1.
     let rerankSkipped = false;
+    let cleanWinnerSeen = false;
     // (D11 guard 4/4: never skip the reranker when entity-index candidates were injected —
     // the audition IS the rerank; skipping would return them unjudged or drop them.)
     if (useReranker && rerankPool.length >= 2 && injectedIds.size === 0 && process.env.AWM_DISABLE_RERANK_SKIP !== '1') {
@@ -943,12 +964,23 @@ export class ActivationEngine {
       const t1Score = top1.score;
       const t2Score = top2.score;
       const cleanWinner = t1Text >= 0.8 && t1Score >= 1.5 * Math.max(t2Score, 0.01);
-      const smallPool = rerankPool.length <= Math.max(limit * 2, 20);
+      cleanWinnerSeen = cleanWinner;
+      const skipPoolEnv = process.env.AWM_RERANK_SKIP_POOL;
+      const skipPoolBound = skipPoolEnv === 'off'
+        ? Number.POSITIVE_INFINITY
+        : skipPoolEnv !== undefined && Number.isFinite(Number(skipPoolEnv))
+          ? Number(skipPoolEnv)
+          : Math.max(limit * 2, 20);
+      const smallPool = rerankPool.length <= skipPoolBound;
       if (cleanWinner && smallPool) {
         rerankSkipped = true;
       }
     }
 
+    // The skip's CEILING, measurable without changing behavior: cleanWinner is
+    // true on exactly the queries a bound-off arm would skip, so one baseline
+    // run says what the bound is costing before anything is changed.
+    prof.note('cleanWinner', cleanWinnerSeen);
     prof.note('rerankPool', rerankPool.length);
     prof.note('rerankSkipped', rerankSkipped);
     if (useReranker && !rerankSkipped && rerankPool.length > 0) {
