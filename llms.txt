@@ -316,8 +316,13 @@ facts.
    keeps the code it loaded at spawn. Restart the session, or reconnect, then
    confirm with `memory_whoami`. Do not infer the running version from
    `package.json`.
-6. **Cold start is a few seconds** — ONNX models load on first use. Warm recall
-   is roughly half a second. Never put a cold recall on a latency-critical path.
+6. **Cold start is ~1.5s; warm recall is ~550ms** (measured, k=3, 11k-engram
+   store, `npm run profile:recall`). The cross-encoder is **78%** of the warm
+   figure, and its first inference is 450-670ms of the cold one — so cold start
+   is model load, not a slow store, and it is paid once per process. Never put a
+   cold recall on a latency-critical path. `AWM_RERANKER_DTYPE=q8` cuts total
+   latency ~30% for 0.0pp success@1 on identifier queries and -0.9pp on topic
+   queries; fp32 is the shipped default. See docs/recall-latency.md.
 7. **The embedding model is fixed per store.** Changing `AWM_EMBED_MODEL` or
    `AWM_EMBED_DIMS` against an existing corpus leaves half the store scoring 0
    on the vector channel. AWM warns once per process; re-embed the whole store
