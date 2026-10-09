@@ -74,7 +74,6 @@ Then two things that matter less than they sound:
   text.
 - **The reranker reads a 400-character window.** Anything past it is not seen
   by the stage that decides final order. This is not a rounding error — on the
-  by the stage that decides final order. This is not a rounding error — on the
   public benchmark corpus (`npm run bench:public`, 400 probes), `s@1` is
   **97.3%** when the answer-bearing identifier sits inside the window and
   **46.8%** when it sits beyond it. Put the decisive identifier **early**.

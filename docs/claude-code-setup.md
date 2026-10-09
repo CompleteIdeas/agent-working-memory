@@ -47,7 +47,7 @@ Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboa
 | `~/.claude/CLAUDE.md` | Memory workflow instructions (when to write, recall, checkpoint) |
 | `~/.claude/settings.json` | Wires the hooks below on Stop, PreCompact, SessionEnd, UserPromptSubmit and PostToolUse. Since 0.14.6 these reference **shipped script files**, not inline `curl` — see [reference.md → Hook Configuration](reference.md#hook-configuration) |
 | `~/.claude/hooks/awm-find-sidecar.cjs` | Resolves which sidecar to talk to: reads the MCP config governing the session's cwd, probes the port range, and picks the one whose `/health` reports that agent |
-| `~/.claude/hooks/awm-checkpoint.cjs` | Checkpoint on Stop / PreCompact / SessionEnd; forwards the whole hook payload |
+| `~/.claude/hooks/awm-checkpoint.cjs` | Checkpoint on PreCompact / SessionEnd; forwards the whole hook payload. **Not Stop** — that hook is a local reminder `echo` with no network call, despite what this row said before 2026-10-09 |
 | `~/.claude/hooks/awm-prime.cjs` | `UserPromptSubmit` — primes relevant memory into context. `--no-prime` skips it; an empty `~/.claude/hooks/awm-prime.disabled` turns it off without uninstalling |
 | `~/.claude/hooks/awm-hooks.json` | Records what setup installed, so the hooks can find the server even with no project config |
 

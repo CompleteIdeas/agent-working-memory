@@ -498,7 +498,10 @@ by the MCP process — so its output will not tell you anything about this.
 
 ## Configuration Defaults
 
-All values from `DEFAULT_AGENT_CONFIG` in `src/types/agent.ts`:
+All values from `DEFAULT_AGENT_CONFIG` in `src/types/agent.ts`. Two consolidation
+keys live there too and are not repeated in the sections below:
+`consolidationIntervalMs` (`300_000` — how often to look for merge candidates) and
+`consolidationSimilarity` (`0.85` — the threshold above which similar engrams merge).
 
 ### Salience
 

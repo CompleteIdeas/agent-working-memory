@@ -456,6 +456,10 @@ Every \`memory_write\` should pass these structured fields. AWM stores each as a
 prefix-tag like \`proj=\`, \`topic=\`, \`intent=\`, etc. and uses them for BM25
 and entity-bridge boosts at recall time.
 
+(“Required” below means *required for good recall* — the MCP schema accepts every
+one of these as optional, so a write without them succeeds and simply retrieves
+worse.)
+
 | Field | Required? | Format | Example |
 |---|---|---|---|
 | \`project\` | **YES** | one short word matching the current project | \`"EquiHub"\`, \`"AWM"\`, \`"USEA-Agent"\` |

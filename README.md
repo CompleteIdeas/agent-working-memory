@@ -279,7 +279,7 @@ The README points outward; it does not duplicate. Everything below is the author
 
 | | |
 |---|---|
-| **All 19 MCP tools**, every HTTP endpoint with schemas, every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
+| **All 19 MCP tools**, most HTTP endpoints with schemas (21 of 28 — the batch-write, checkpoint, export, agent-register and system routes are not yet written up), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
 | Architecture, pipelines, schema, backends (SQLite · PGlite · Postgres) | [`docs/architecture.md`](docs/architecture.md) · [`docs/pglite-feature-parity.md`](docs/pglite-feature-parity.md) |
 | Current benchmark numbers, generated and stamped | [`docs/benchmarks-current.md`](docs/benchmarks-current.md) |
 | What each eval suite measures, and the measurement caveats | [`docs/benchmarks.md`](docs/benchmarks.md) |

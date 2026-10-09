@@ -91,12 +91,13 @@ the top of that file is the other copy of this list.
 > with the gate at 8. Every phase number also disagreed with the code's, so
 > grepping for "phase 4.5" found nothing. Phase 0, 3a, 8c and 9b were missing.
 
-## Consolidation Pipeline (7 phases)
+## Consolidation Pipeline (8 phases)
 
 The sleep cycle in `src/engine/consolidation.ts`:
 
 | Phase | Name | What it does |
 |-------|------|-------------|
+| 0 | Connection drain | Discover associations for engrams enqueued since the last cycle. Runs first, before any replay — this row was missing until 2026-10-09, which is why the heading said seven phases. |
 | 1 | Replay | Identify memory clusters for strengthening |
 | 2 | Strengthen | Boost edges between co-accessed memories |
 | 2.5 | Synthesis | Tag-grouped session summaries + pattern syntheses |
