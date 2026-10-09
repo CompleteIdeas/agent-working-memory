@@ -132,7 +132,9 @@ recall feel slow" answer: it is one-off model load, not a slow store.
    bought nothing.** `bm25` runs two (keyword-stripped for precision, expanded
    for recall). Rocchio pseudo-relevance feedback ran a third on **100%** of
    queries for 6.7–7.0% of every warm recall, and that cost had never been
-   weighed against a benefit. Measured with `--feedback 0`, arrow reads ON → OFF:
+   weighed against a benefit. Arrow reads ON → OFF. At HEAD the pass is off, so
+   the ON arm is `npm run profile:recall -- --feedback 1`; as originally measured
+   at `d7417c4`, when it was still the default, the OFF arm was `--feedback 0`:
 
    | Suite | s@1 | s@5 | MRR | correct silence | stage cost removed |
    |---|---|---|---|---|---|
@@ -142,17 +144,34 @@ recall feel slow" answer: it is one-off model load, not a slow store.
 
    Read that accuracy column as **unmoved, not improved**. It is one query on
    each private suite, and on the topic suite a per-query diff shows one gold
-   moving up and one moving down. The decisive row is the public corpus — the
-   only suite here with real recall headroom, at s@5 61.5% — where a
-   candidate-*adding* pass changes nothing whatsoever. Across all three suites it
-   moves 3 gold ranks in 950 queries, two of them the wrong way, which is the
-   shape to expect from a pass that can only add candidates and whose additions
-   can only displace.
+   moving up and one moving down. Across all three suites it moves 3 gold ranks
+   in 950 queries, two of them the wrong way, which is the shape to expect from a
+   pass that can only add candidates and whose additions can only displace.
+
+   The decisive row is the public corpus — the only suite here with real recall
+   headroom, at s@5 61.5%. There the pass is **inert per query, not merely equal
+   in aggregate**: 0 of 200 queries differ in gold rank, in top-1 identity or in
+   top-1 score, so there is not even an offsetting pair of swaps hiding behind
+   three identical percentages. Two controls make that readable — an ON-vs-ON
+   diff of two separate runs is also 0, which is what says the harness is
+   deterministic and the comparison means something, and an
+   `AWM_FEEDBACK_BM25=0`-vs-new-default diff is 0, which is what says the flipped
+   default is the same thing as the flag.
 
    Take the saving from the **stage table**, not from the totals. This machine's
    run-to-run drift is larger than the effect — three back-to-back runs of one
    arm gave 528, 548 and 500ms — and on the public corpus BM25 is cheap, so most
    of the 10% total drop there is noise around a 3ms stage.
+
+   A fourth suite agrees, and more strongly than any of the three above. The
+   temporal fixture (101 probes, k=10, same probes both runs) is in
+   `docs/benchmarks-current.md`, and its no-cue baseline went **90.1% → 94.1%**
+   s@1 with the pass off. Four of its five cue phrasings improved and none
+   regressed — relativeDay 85.1 → 88.1, absoluteMonth 82.2 → 84.2, absoluteDate
+   79.2 → 80.2, relativeWeek unchanged — while the oracle ceiling stayed at
+   96.0%. Treat the magnitude cautiously, since +4.0pp of 101 probes is four
+   queries; the informative part is that five independent phrasings of the same
+   probes all moved one way or not at all.
 
    **Default off since 2026-10-09**; `AWM_FEEDBACK_BM25=1` restores it. Scope the
    result to this implementation before concluding anything about the technique:

@@ -11,7 +11,8 @@
  *   2. Parallel retrieval (dual FTS5/BM25 + native vector top-K)
  *   3. Per-candidate scoring (BM25, Jaccard, cosine floor, ACT-R decay,
  *      Hebbian boost, confidence gate — computed together in phase 3b)
- *   3.5 Rocchio pseudo-relevance feedback (conditional on BM25 signal)
+ *   3.5 Rocchio pseudo-relevance feedback (DEFAULT OFF since 2026-10-09;
+ *       AWM_FEEDBACK_BM25=1 — measured at 7% of a recall for nothing, see phase 3.5)
  *   3.7 Entity-bridge boost (default ON; AWM_DISABLE_ENTITY_BRIDGE=1)
  *   3.5  Entity-index candidate injection (DEFAULT OFF; AWM_ENTITY_INDEX_FETCH=1 —
  *        D11 2026-07-30: D9 inverted-index lookup of query-named entities; injected
@@ -667,7 +668,9 @@ export class ActivationEngine {
     // wrong direction for the pass — which is the shape you would expect, since
     // it can only ADD candidates and an added candidate can only displace. The
     // public corpus is the decisive row: it is the only suite with real recall
-    // headroom (s@5 61.5%) and the pass changes nothing there at all.
+    // headroom (s@5 61.5%), and there the pass is INERT per query, not merely
+    // equal in aggregate — 0 of 200 queries differ in gold rank, top-1 identity
+    // or top-1 score, against an ON-vs-ON determinism check that is also 0.
     //
     // Scope that to THIS implementation before concluding anything about the
     // technique: the expansion terms are the first five novel tokens in DOCUMENT

@@ -28,9 +28,7 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Stamped at:** v0.15.9, commit `eb0620f`, 2026-10-09 — `bench-runs/0.15.9-2026-10-09/`
   (identifier.log, category.log; gitignored and maintainer-only, like the snapshot
   itself). Measured twice by different drivers, `npm run bench` and
-  `npm run profile:recall`, which agree to the decimal. Note that
-  `docs/benchmarks-current.md` still shows the 2026-10-08 figures: its generator needs
-  more free memory than this machine had, and it carries a banner saying so.
+  `npm run profile:recall`, which agree to the decimal.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
   - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers staged, retracted or superseded rows. `benchmarks-current.md` says this; make sure every other page does too.

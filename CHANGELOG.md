@@ -38,11 +38,25 @@ and 950 queries, arrow reading ON → OFF:
 | public n=200 | 56.0 → 56.0 | 61.5 → 61.5 | 58.7 → 58.7 | 100 → 100 |
 
 Read as **unmoved**: one query on each private suite, and on the topic suite one
-gold moves up while another moves down. The decisive row is the public corpus —
-the only suite with real recall headroom at s@5 61.5% — where a candidate-adding
-pass changes nothing at all. Three gold ranks move in 950 queries, two of them
-the wrong way, which is what a pass that can only *add* candidates does when its
-additions displace rather than deliver.
+gold moves up while another moves down. Three gold ranks move in 950 queries,
+two of them the wrong way, which is what a pass that can only *add* candidates
+does when its additions displace rather than deliver.
+
+The decisive row is the public corpus, the only suite with real recall headroom
+at s@5 61.5%. There the pass is **inert per query, not merely equal in
+aggregate**: 0 of 200 queries differ in gold rank, top-1 identity or top-1
+score. An ON-vs-ON diff of two separate runs is also 0 (so the harness is
+deterministic and the comparison means something), and a flag-off-vs-new-default
+diff is 0 (so the flipped default is the same thing as the flag).
+
+A fourth suite agrees more strongly than any of the three, and it only showed up
+once `npm run bench` was regenerated: the temporal fixture (101 probes, k=10,
+identical probes across both runs) takes its no-cue baseline from **90.1% to
+94.1%** s@1 with the pass off. Four of five cue phrasings improve and none
+regress, while the oracle ceiling holds at 96.0%, so the headroom a working date
+filter would buy narrows from 5.9pp to 2.0pp. +4.0pp of 101 probes is four
+queries, so read the magnitude cautiously; what is informative is that five
+independent phrasings of the same probes all moved one way or not at all.
 
 **This moves published figures**, unlike the skip removal above:
 `docs/benchmarks-current.md`, `docs/claims.md`, `docs/for-decision-makers.md`,

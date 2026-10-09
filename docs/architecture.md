@@ -71,7 +71,7 @@ The activation pipeline in `src/engine/activation.ts` runs these phases in order
 | 1 | BM25 text search | FTS5 full-text search on concept + content |
 | 2 | Semantic search | Cosine similarity on 384d embeddings |
 | 3 | Score fusion | Weighted merge of BM25 + semantic candidates |
-| 3.5 | Rocchio expansion | Pseudo-relevance feedback: expand query with top-3 terms, re-search |
+| 3.5 | Rocchio expansion | Pseudo-relevance feedback: expand query with top-3 terms, re-search. **DEFAULT OFF since 2026-10-09** (`AWM_FEEDBACK_BM25=1`) — it cost 6.7–7.0% of every recall and moved 3 gold ranks in 950 queries, two of them the wrong way |
 | 3.7 | Entity-Bridge boost | Boost candidates sharing entity tags with top text matches |
 | 4 | Cross-encoder rerank | ms-marco-MiniLM scores passage relevance on a **wide candidate pool** (default `max(limit*4,40)`, `AWM_RERANK_POOL`); adaptive blend. The composite is a cheap pre-filter; the reranker does the discrimination. |
 | 4.5 | Abstention gate | Multi-channel OOD agreement, judged on the **post-rerank top-5** (`AWM_ABSTAIN_GATE_K`) so pool width (recall) is decoupled from precision; returns nothing if channels disagree |

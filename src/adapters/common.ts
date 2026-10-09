@@ -756,8 +756,9 @@ Recall pipeline:
   (phase 3.5), a third BM25 pass over the query plus five terms harvested from
   the top 3 results. Default OFF since 2026-10-09: measured at 6.7–7.0% of every
   warm recall for no measurable accuracy — 3 gold ranks moved in 950 queries
-  across three suites, two of them the wrong way, and zero change on the public
-  corpus.
+  across three suites, two of them the wrong way. On the public corpus — the only
+  suite with recall headroom left — it is inert per query, not just in aggregate:
+  0 of 200 queries differ in rank, top-1 or score.
 - \`AWM_DISABLE_EXPANSION_CACHE=1\` — disables the query expansion skip
   heuristic + LRU cache. Forces every recall through flan-t5-small.
 
