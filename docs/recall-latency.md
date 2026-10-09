@@ -140,13 +140,25 @@ from the top ten.
 | cost **when it fires** | **245ms mean, 280ms median** |
 | total recall when it fires | **926ms** against 572ms when it does not |
 
-So about one real prompt in fifty pays a 62% slowdown to obtain five tag words,
+So about one real prompt in fifty paid a 62% slowdown to obtain five tag words,
 and the benchmark corpus is ten times less likely to trip it than real traffic
-is. **n = 5 in the live run**, so treat the magnitude as indicative and the
-mechanism as certain: a full scan of active engrams is in the code path either
-way. The fix is a bounded `ORDER BY access_count DESC LIMIT 10` instead of
-loading the table — not applied here, because this pass was asked to find the
-cost, not to change the hot path.
+is — which is why it survived this long.
+
+**Fixed.** `EngramStore.getTopAccessedTags(agentIds, 10, 'active')` does it in
+SQL. Same five tags, byte-identical, **287ms → 0.45ms** measured end to end,
+still firing on the same 2.0% of real prompts. Identifier and topic accuracy
+unmoved (92.7% / 92.0%); 802 tests pass.
+
+One thing worth knowing if you touch it again: the obvious single query is a
+trap. `agent_id IN (...)` makes SQLite abandon the ordered index walk and sort
+the whole partition in a temp B-tree — **86ms**, against **0.03ms** for the
+equality form that can walk `idx_engrams_access` and stop at `LIMIT`. The first
+version of this fix was still 85ms for exactly that reason, which is only
+visible in `EXPLAIN QUERY PLAN`. So the implementation queries per agent and
+merges in JS; the global top N is always inside the union of the per-agent top
+Ns, so that merge is exact rather than an approximation. Agent-scoped recall
+passes one agent and was always on the fast path — it was **workspace-scoped**
+recall that paid.
 
 ---
 

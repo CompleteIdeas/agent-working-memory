@@ -236,10 +236,12 @@ export class ActivationEngine {
     if (pronounPattern.test(queryContext)) {
       prof.begin('pronounEntities');
       try {
-        const recentEntities = (await this.store.getEngramsByAgents(agentIds, 'active'))
-          .sort((a, b) => b.accessCount - a.accessCount)
-          .slice(0, 10)
-          .flatMap(e => e.tags.filter(t => t.length >= 3 && !/^(session-|low-|D\d)/.test(t)))
+        // Bounded in SQL. This used to load EVERY active engram to pick five
+        // tag words — 280ms median on 2.1% of real prompts. See
+        // EngramStore.getTopAccessedTags and docs/recall-latency.md.
+        const recentEntities = (await this.store.getTopAccessedTags(agentIds, 10, 'active'))
+          .flat()
+          .filter(t => t.length >= 3 && !/^(session-|low-|D\d)/.test(t))
           .filter((v, i, a) => a.indexOf(v) === i)
           .slice(0, 5);
         if (recentEntities.length > 0) {

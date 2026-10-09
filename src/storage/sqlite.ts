@@ -215,6 +215,10 @@ export class EngramStore {
       CREATE INDEX IF NOT EXISTS idx_engrams_stage ON engrams(agent_id, stage);
       CREATE INDEX IF NOT EXISTS idx_engrams_concept ON engrams(concept);
       CREATE INDEX IF NOT EXISTS idx_engrams_retracted ON engrams(agent_id, retracted);
+      -- Serves getTopAccessedTags: the recall path's pronoun branch needs the ten
+      -- most-accessed engrams, and without this it filters then sorts the whole
+      -- agent partition on every query containing "it", "this" or "that".
+      CREATE INDEX IF NOT EXISTS idx_engrams_access ON engrams(agent_id, stage, access_count DESC);
 
       CREATE TABLE IF NOT EXISTS associations (
         id TEXT PRIMARY KEY,
@@ -624,6 +628,53 @@ export class EngramStore {
     }
 
     return (this.db.prepare(query).all(...params) as any[]).map(r => this.rowToEngram(r));
+  }
+
+  /**
+   * Tags of the most-accessed engrams, bounded IN SQL.
+   *
+   * Exists because the recall path's pronoun branch used to call
+   * `getEngramsByAgents(agentIds, 'active')` — hydrating EVERY active engram
+   * into JS, embeddings and all — then sort by accessCount in memory, keep the
+   * top ten, and extract five tag words. Measured 2026-10-08 on an
+   * 11k-retrievable store: 245ms mean / 280ms median whenever it ran, which was
+   * 2.1% of real prompts (the words that trigger it include "it", "this",
+   * "that" and "there") against 0.2% of benchmark probes — so it cost real
+   * users ~62% of a recall and the benchmark never saw it. See
+   * docs/recall-latency.md.
+   *
+   * ONE QUERY PER AGENT, deliberately. `agent_id IN (...)` makes SQLite abandon
+   * the ordered index walk and sort the whole partition in a temp B-tree:
+   * measured on the 11k-retrievable store, the IN form costs 86ms against
+   * **0.03ms** for the equality form, because only the latter can walk
+   * `idx_engrams_access` and stop at LIMIT. Agent-scoped recall passes a single
+   * agent and hits the fast path either way; workspace-scoped recall would have
+   * paid the 86ms on every pronoun query. The global top N is always contained
+   * in the union of the per-agent top Ns, so merging in JS is exact, not an
+   * approximation.
+   *
+   * Ordering is `access_count DESC, id`. The `id` tiebreak is deliberate: the
+   * old JS sort broke ties on SQLite's scan order, which is arbitrary, so this
+   * is both cheaper and more deterministic.
+   */
+  getTopAccessedTags(agentIds: string[], topN: number, stage: EngramStage = 'active'): string[][] {
+    if (agentIds.length === 0 || topN <= 0) return [];
+    const stmt = this.db.prepare(`
+      SELECT tags, access_count AS accessCount, id FROM engrams
+      WHERE agent_id = ? AND stage = ? AND retracted = 0
+      ORDER BY access_count DESC, id
+      LIMIT ?
+    `);
+    const rows: { tags: string; accessCount: number; id: string }[] = [];
+    for (const agentId of agentIds) {
+      rows.push(...(stmt.all(agentId, stage, topN) as { tags: string; accessCount: number; id: string }[]));
+    }
+    if (agentIds.length > 1) {
+      rows.sort((a, b) => (b.accessCount - a.accessCount) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    }
+    return rows.slice(0, topN).map(r => {
+      try { return JSON.parse(r.tags) as string[]; } catch { return []; }
+    });
   }
 
   /**
