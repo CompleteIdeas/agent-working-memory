@@ -61,9 +61,9 @@ no external calls. The rest of this page is the plain-language tour of those pie
 | Database | SQLite via better-sqlite3 + FTS5 | Persistence, BM25 full-text search |
 | HTTP Server | Fastify 5 | REST API for agents |
 | MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (19 tools via stdio: 17 memory + 2 onboarding) |
-| Embeddings | Xenova/bge-small-en-v1.5 (134 MB fp32 ONNX, BAAI retrieval-optimized) | 384-dim semantic vectors |
-| Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (92 MB fp32 ONNX; 23 MB at `AWM_RERANKER_DTYPE=q8`) | Cross-encoder passage relevance |
-| Query Expander | Xenova/flan-t5-small (377 MB fp32 ONNX) | Synonym/related term expansion |
+| Embeddings | Xenova/bge-small-en-v1.5 (134 MB download at fp32, BAAI retrieval-optimized) | 384-dim semantic vectors |
+| Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (92 MB download at fp32; ~24 MB at `AWM_RERANKER_DTYPE=q8`) | Cross-encoder passage relevance |
+| Query Expander | Xenova/flan-t5-small (377 MB download at fp32) | Synonym/related term expansion |
 | ML Runtime | @huggingface/transformers | Local ONNX inference (no API calls) |
 | Test Framework | Vitest 4 | Unit and integration tests |
 | Runtime | Node.js >= 20, tsx for dev | TypeScript execution |

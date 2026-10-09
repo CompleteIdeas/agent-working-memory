@@ -68,7 +68,7 @@ Optional but useful:
 you set this on an earlier version, upgrade — it was silently ignored before then and models were re-downloaded
 on every cold start regardless.
 
-See [reference.md](reference.md#environment-variables) for the full env-var
+See [reference.md](reference.md#recall-tuning-env-overrides) for the full env-var
 list including the four diagnostic `AWM_DISABLE_*` flags (don't set these
 in prod unless A/B testing a regression).
 
@@ -319,8 +319,10 @@ single knob, deliberately.
 | Setting | *nothing — this is the default* | `AWM_RERANKER_DTYPE=q8` |
 | Cross-encoder weights | fp32 | int8-quantized |
 | Warm recall p50 | 292–533 ms | 196–395 ms (**−26% to −33%**) |
+| *(that range spans)* | *identifier 533, topic 522, public 292* | *identifier 395, topic 358, public 196* |
 | ONNX file the dtype selects | 91 MB | 23 MB |
-| `success@5` and correct abstention | baseline | unchanged on all three suites |
+| Correct abstention | baseline | unchanged on all three suites |
+| `success@5` | baseline | unchanged on both private suites; **+0.5pp** on the public corpus, inside its 4pp seed-noise floor |
 | `success@1` | baseline | −0.2pp on one suite of three; unchanged on another |
 | Published numbers | all measured here | not measured here |
 
@@ -374,7 +376,8 @@ it loaded at spawn time. Set the variable where the process is launched. For an 
 `env` block of the AWM entry in your MCP config, which is also the one place it
 survives re-running setup: `awm setup` layers your existing env *over* its
 recommended defaults and force-sets only the keys it owns (`OWNED_ENV_KEYS` in
-`src/adapters/common.ts` — db path, agent id, hook port, hook secret, client), so
+`src/adapters/common.ts` — db path, agent id, hook port, hook port range, hook secret,
+client), so
 a hand-set `AWM_RERANKER_DTYPE` is preserved. There is a test for precisely that
 ("re-run keeps the user's agent id, db path, port and every foreign env value",
 `tests/adapters/claude-code-setup.test.ts`).
@@ -400,7 +403,8 @@ corpus rather than adopting the number.
 **Why the mode is one knob rather than a bundle.** The other latency levers were
 measured and rejected, so do not stack them on top of `q8` expecting more:
 cutting the rerank pool (`AWM_RERANK_POOL=16`) buys a similar saving for
-**−4.0pp** `success@1` and **−3.4pp** `success@5`, and `q4` is dominated outright
+**−4.0pp** `success@1` and **−3.4pp** `success@5` (measured 2026-10-08 on the pre-Rocchio-flip
+pipeline and not re-run since, so treat the magnitude as indicative), and `q4` is dominated outright
 — equal accuracy to fp32, only −3% latency, and a 6,080 ms cold start against
 fp32's 1,591 ms. Full tables in [recall-latency.md](recall-latency.md).
 

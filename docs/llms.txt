@@ -327,8 +327,9 @@ facts.
    it is paid once per process. Never put a cold recall on a latency-critical
    path. `AWM_RERANKER_DTYPE=q8` cuts total latency **26-33%** on three suites
    for **one query in 450** of accuracy (re-measured 2026-10-09 on the shipped
-   pipeline: identifier success@1 unchanged at 93.0%, topic 92.2% -> 92.0%,
-   success@5 and correct silence unmoved everywhere) and it shrinks the reranker
+   pipeline: identifier success@1 unchanged at 93.0%, topic 92.2% -> 92.0%;
+   correct silence unmoved on all three suites, success@5 unmoved on both
+   private suites and +0.5pp on the public corpus, inside its 4pp noise floor) and it shrinks the reranker
    ONNX file it loads from 91 MB to 23 MB. fp32 is still the shipped default:
    q8 is a documented **latency-first operating mode**, not a hidden tuning
    flag, and it CHANGES RANKING OUTCOMES rather than being a free speedup. It is

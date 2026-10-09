@@ -72,7 +72,7 @@ independent phrasings of the same probes all moved one way or not at all.
   Hugging Face hub file listing. Nothing is bundled in the package, so every
   install pays this once. Anyone sizing a disk, a container image or a CI cache
   needs the real number. `AWM_RERANKER_DTYPE=q8` reduces the reranker's share of
-  it from 91 MB to 23 MB.
+  it to ~24 MB, by loading a 23 MB ONNX file in place of the 91 MB one.
 - `llms.txt` had also told agents the embedding model was "bundled and run
   locally". It is downloaded on first use.
 - The release gate's benchmark-spread check no longer hardcodes the headline
@@ -90,7 +90,7 @@ dtype comparison sitting on a superseded baseline**, so it was re-run the same
 day (`c1145b0`): the topic cost fell from −0.9pp to **−0.2pp, one query in 450**,
 q8 proved deterministic, `q4` proved dominated, and the "the quantized model
 would have to be bundled first" prerequisite proved false — nothing is bundled,
-so q8 *shrinks* the existing lazy download from 91 MB to 23 MB. `AWM_RERANKER_DTYPE`
+so q8 *shrinks* the existing lazy fetch — a 23 MB ONNX file instead of the 91 MB one. `AWM_RERANKER_DTYPE`
 also joined `RECALL_FLAGS`, without which both arms of that sweep printed the
 same `arm=` label. The default stays `fp32`; flipping it is a product decision.
 

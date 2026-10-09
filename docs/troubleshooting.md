@@ -15,7 +15,7 @@ AWM_PORT=8500 npx tsx src/index.ts
 Run `npm install` to ensure all dependencies are installed.
 
 ### Models fail to download
-The three ML models (~124MB total) download from Hugging Face on first run. If behind a proxy or firewall:
+The three ML models (**~600 MB** total: 134 MB embedder + 92 MB reranker + 377 MB expander) download from Hugging Face on first run. If behind a proxy or firewall:
 1. Check internet connectivity
 2. Models cache in `~/.cache/huggingface/` — if corrupt, delete and restart
 3. The server starts even if models fail (embedding, reranker, expansion degrade gracefully)

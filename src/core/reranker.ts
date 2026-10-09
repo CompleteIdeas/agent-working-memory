@@ -34,8 +34,9 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
  * single latency lever in the system — and an unmeasurable one while it was a
  * literal. RE-MEASURED 2026-10-09 on the pipeline that ships: 'q8' cuts total
  * recall latency 26-33% across three suites, for ONE QUERY in 450 — identifier
- * success@1 unchanged at 93.0%, topic 92.2% -> 92.0% — with success@5 and
- * correct abstention unmoved on all three. It is deterministic (two runs agree
+ * success@1 unchanged at 93.0%, topic 92.2% -> 92.0%. Correct abstention is
+ * unmoved on all three suites; success@5 is unmoved on both private suites and
+ * moves +0.5pp on the public corpus, inside its 4pp seed-noise floor. It is deterministic (two runs agree
  * on all 450 queries to 1e-6), and because no model is bundled it SHRINKS the
  * first-run fetch: the ONNX file it loads is 23MB against fp32's 91MB. 'q4' is dominated: equal
  * accuracy, only -3% latency, 6.1s cold start against fp32's 1.6s. The default

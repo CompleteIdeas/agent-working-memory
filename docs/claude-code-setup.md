@@ -191,7 +191,7 @@ Use separate memory pools to prevent cross-project contamination:
 ~/work/project-b/.mcp.json  →  AWM_AGENT_ID: "project-b"
 ```
 
-Each project gets its own memory namespace. Same database file — isolation by agent ID. See [Separate Memory Pools](../README.md#separate-memory-pools).
+Each project gets its own memory namespace. Same database file — isolation by agent ID. The namespace comes from `AWM_AGENT_ID` — see [reference.md](reference.md).
 
 ### Long research/exploration sessions
 

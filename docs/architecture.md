@@ -196,9 +196,14 @@ All models run locally via ONNX Runtime (no API calls):
 
 | Model | Size | Purpose |
 |-------|------|---------|
-| `Xenova/all-MiniLM-L6-v2` | ~23MB | Sentence embeddings (384d) |
-| `Xenova/ms-marco-MiniLM-L-6-v2` | ~23MB | Cross-encoder reranking |
-| `Xenova/flan-t5-small` | ~78MB | Query expansion |
+| `Xenova/bge-small-en-v1.5` | 134 MB | Sentence embeddings (384d) |
+| `Xenova/ms-marco-MiniLM-L-6-v2` | 92 MB | Cross-encoder reranking (23 MB at `AWM_RERANKER_DTYPE=q8`) |
+| `Xenova/flan-t5-small` | 377 MB | Query expansion (a 141 MB encoder + a 233 MB merged decoder + a 2.4 MB tokenizer) |
+
+Sizes are the per-model **download** at the fp32 precision AWM loads, measured against the
+Hugging Face hub file listing — **~600 MB in total**. This table named `all-MiniLM-L6-v2` and
+quantized-file sizes until 2026-10-09; the embedder is `bge-small-en-v1.5` and the loaded
+weights are full precision.
 
 Models are downloaded on first use and cached in `<package-root>/data/models/` by default. Override with
 `AWM_CACHE_DIR` (AWM-specific) or `HF_HOME` (also respected — the standard Hugging Face convention, useful for

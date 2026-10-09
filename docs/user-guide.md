@@ -9,7 +9,7 @@
 
 - **Node.js** >= 22.0.0 (Node 20 reached EOL on 2026-04-30; v0.8.6+ requires Node 22 LTS)
 - **npm** (bundled with Node)
-- ~150MB disk space for ML models (downloaded automatically on first run)
+- **~600 MB** disk space for ML models (downloaded automatically on first run — see the table below for the per-model split)
 
 ## Quick Start
 
@@ -31,9 +31,11 @@ The server starts on port 8400 (configurable via `AWM_PORT` env var). On first r
 |-------|------|---------|
 | bge-small-en-v1.5 | 134 MB | Vector embeddings (384 dimensions) — BAAI, retrieval-optimized |
 | ms-marco-MiniLM-L-6-v2 | 92 MB | Cross-encoder reranking (`AWM_RERANKER_DTYPE=q8` loads a 23 MB file instead) |
-| flan-t5-small | 377 MB | Query expansion (141 MB encoder + 233 MB merged decoder) |
+| flan-t5-small | 377 MB | Query expansion (a 141 MB encoder + a 233 MB merged decoder + a 2.4 MB tokenizer) |
 
-> These are the **fp32** files, which is what AWM actually loads (verified against
+> These are per-model **downloads** at the **fp32** precision AWM actually loads — the ONNX
+> weight files alone are 133 / 91 / 374 MB, the rest being each model's tokenizer and config
+> (verified against
 > the Hugging Face hub's file listing, not just a local cache; there are no
 > `.onnx_data` sidecars). Until 2026-10-09 this table quoted ~33/~22/~80 MB, which
 > tracks each model's *parameter count* — equivalently its int8 file, since int8 is

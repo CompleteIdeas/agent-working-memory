@@ -199,7 +199,7 @@ led to the error may have contaminated its neighbours.
 ## Where the memory lives, and who can see it
 
 Everything above happens inside one SQLite file on the user's machine — about 250 MB for
-a mature store — plus three small ML models (~200 MB, downloaded once) that run locally.
+a mature store — plus three ML models (**~600 MB**, downloaded once) that run locally.
 Nothing is sent anywhere.
 
 Memories are owned by an **agent**, and recall is scoped to the caller's agent. On one

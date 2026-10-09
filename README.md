@@ -106,8 +106,9 @@ trade-offs are in [`docs/plugin.md`](docs/plugin.md). Install the npm package ei
 
 Requires **Node.js 22+**. Restart Claude Code.
 
-**What to expect.** The first conversation is ~30 s slower while three small ONNX models download
-(~200 MB, once). After that the agent has 19 memory tools, and the hooks save state on compaction
+**What to expect.** The first conversation takes minutes rather than seconds while three ONNX
+models download — **~600 MB** once, into a local cache (134 MB embedder + 92 MB reranker + 377 MB
+query expander; nothing is bundled in the package). After that the agent has 19 memory tools, and the hooks save state on compaction
 and session end without you doing anything. For the first day or two recall will be thin — it only
 knows what has been written. That is the normal shape of it, not a fault.
 

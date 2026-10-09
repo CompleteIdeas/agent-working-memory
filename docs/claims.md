@@ -65,7 +65,7 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
   So a scoped recall costs roughly **1.5k tokens**, not ~630, and the published figure understates the cost of the product's central operation by about 2.4x — an error in AWM's own favor, which is the direction that most deserves scrutiny.
 
-  **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,510 x 0.30 is about 450, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
+  **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,518 x 0.30 is about 455, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
 
   Note also that **net** economics and **cost** are different quantities, and were conflated here previously: the runner reports +518 net per recall on the identifier suite (what a successful recall saves against the ~2,106-token cost of the agent reading the codebase instead), which is not a cost figure and does not reproduce ~630.
 - **`~1.3M tokens`: now derived, and it holds.** `npm run bench` computes it from the snapshot and stamps it in the provenance table, using the same token estimator the runner applies to what a recall delivers, so both sides of the comparison are measured alike. Over the 11,262 retrievable engrams: **1,234,429** tokens of `concept + content`, **1,545,526** including tags, mean **110** per engram. The published "~1.3M" sits between those two and was correct all along — it simply had no arithmetic behind it. Separately, `docs/awm-for-agents.html` compares the same ~630 against a **29M-token project**: that is a *different* denominator (a codebase, not the store), and the figures are not in conflict, but neither page says which it is using.
@@ -163,7 +163,7 @@ inference from a subset, not a re-run of the 400.
 
 Listed deliberately, in the order we would attack it ourselves:
 
-1. **`~630 tokens` is not derived, and the harness measures ~1,510 instead** —
+1. **`~630 tokens` is not derived, and the harness measures ~1,518 instead** —
    the published figure understates the cost of a scoped recall by about 2.4x,
    in the product's favor (§3).
    `~1.3M` now is — `npm run bench` computes 1,234,429 from the snapshot and

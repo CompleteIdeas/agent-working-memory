@@ -149,7 +149,7 @@ These appeared in earlier versions and were still being quoted. Each is now fals
 |---|---|
 | "No cross-agent memory" | `workspace` recall exists (`AWM_WORKSPACE`; `getWorkspaceAgentIds`). |
 | "Tested with up to ~300 memories" | Live store 31,470 engrams; eval snapshot 29,809; benchmarks run against the latter. |
-| "First query 3–10 s, then 200–300 ms" | Cold ~3.3 s spawn-to-first-recall; warm p50 ~530 ms (rerank flags on). |
+| "First query 3–10 s, then 200–300 ms" | Cold ~3.3 s spawn-to-first-recall; warm p50 467–479 ms (rerank flags on, 2026-10-09 bench). |
 | "Multi-hop 15.4% on LOCOMO" | LoCoMo retired in 0.13.x; see gauntlet `multihop` above. |
 | "No export/import API" | `awm export` / `awm import` CLI, with `--dedupe`. |
 | "No authentication" | Sidecar bearer auth; HTTP API refuses non-loopback bind without `AWM_API_KEY`. |

@@ -3,9 +3,10 @@
 /**
  * Query Expander - rewrites queries with synonyms and related terms.
  *
- * Uses Xenova/flan-t5-small (377MB ONNX — a 141MB encoder plus a 233MB merged
- * decoder; it is by far the largest of the three models AWM downloads) to expand
- * search queries with related terms that improve BM25 recall.
+ * Uses Xenova/flan-t5-small — a 141MB encoder plus a 233MB merged decoder, so
+ * 374MB of ONNX and a 377MB download with its tokenizer. By far the largest of
+ * the three models AWM fetches. Expands search queries with related terms that
+ * improve BM25 recall.
  *
  * AWM 0.8.x: inference dispatches through ml-worker.ts (currently in-process
  * — worker_threads reverted because onnxruntime-node bindings cross isolate
