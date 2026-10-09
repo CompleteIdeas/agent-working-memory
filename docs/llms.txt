@@ -331,9 +331,13 @@ facts.
    success@5 and correct silence unmoved everywhere) and it shrinks the reranker
    ONNX file it loads from 91 MB to 23 MB. fp32 is still the shipped default:
    q8 is a documented **latency-first operating mode**, not a hidden tuning
-   flag, and it CHANGES RANKING OUTCOMES rather than being a free speedup — see
-   docs/deployment.md "Operating modes" for when to choose it and validate on
-   your own corpus with `npm run profile:recall -- --dtype q8`. `q4` is
+   flag, and it CHANGES RANKING OUTCOMES rather than being a free speedup. It is
+   read once at module import and the model is then cached, so it needs a
+   PROCESS RESTART — setting it against a running AWM does nothing, and an MCP
+   session must be restarted or reconnected. To check latency on your own store
+   from any install, set `AWM_PROFILE_RECALL=1`; checking ACCURACY needs derived
+   ground truth and therefore a repo checkout, because scripts/ and tests/ are
+   not in the npm tarball. See docs/deployment.md "Operating modes". `q4` is
    dominated — same accuracy, only -3% latency, 6.1s cold start. See
    docs/recall-latency.md.
 7. **The embedding model is fixed per store.** Changing `AWM_EMBED_MODEL` or

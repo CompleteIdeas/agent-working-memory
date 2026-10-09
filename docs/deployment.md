@@ -318,7 +318,7 @@ single knob, deliberately.
 |---|---|---|
 | Setting | *nothing — this is the default* | `AWM_RERANKER_DTYPE=q8` |
 | Cross-encoder weights | fp32 | int8-quantized |
-| Warm recall p50 | 467–533 ms | 196–395 ms (**−26% to −33%**) |
+| Warm recall p50 | 292–533 ms | 196–395 ms (**−26% to −33%**) |
 | ONNX file the dtype selects | 91 MB | 23 MB |
 | `success@5` and correct abstention | baseline | unchanged on all three suites |
 | `success@1` | baseline | −0.2pp on one suite of three; unchanged on another |
@@ -341,8 +341,27 @@ topic suite; on the identifier suite two golds move and cancel, so "no change"
 there is an aggregate statement and not a per-query one. The quantization is
 deterministic — two runs of the same arm agree on all 450 queries to within 1e-6
 — so whatever it does to your corpus, it will do consistently rather than
-intermittently. **Validate on your own corpus before trusting it**, which is
-what `npm run profile:recall -- --dtype q8` is for.
+intermittently. **Validate before trusting it** — and the available path depends
+on what you installed, because the harness is not in the published package:
+
+- **Latency, on your own store, from any install.** Set `AWM_PROFILE_RECALL=1` for
+  one stderr line per recall with the per-stage breakdown
+  (`src/core/recall-telemetry.ts`, which does ship). Compare a run started at
+  fp32 against one started at q8. This needs no fixture and is the check most
+  people actually want.
+- **Accuracy needs ground truth, so it needs a repo checkout.** Neither
+  `scripts/` nor `tests/` is in the npm tarball. From a clone, the reproducible
+  A/B is `npm run bench:public:build` followed by
+  `npm run profile:recall -- --public` against
+  `npm run profile:recall -- --public --dtype q8`. Note that corpus has a measured
+  **4pp seed-noise floor** on accuracy, so read it for the latency result and the
+  shape, not for a precise accuracy delta.
+- **Accuracy on *your* data is real work, not a one-liner.** Copy your database
+  into `tests/realstore-eval/snapshot/`, derive unique-identifier hold-out ground
+  truth with
+  `REALSTORE_SNAPSHOT=<file> REALSTORE_AGENTS=<your agent id> node tests/realstore-eval/build-fixture.mjs`,
+  then point `profile:recall` at it with `--snapshot` and `--fixture`. That is the
+  same derivation AWM's own published fixtures use.
 
 
 **Applying the mode — it needs a process restart, and here is how to confirm it
@@ -351,8 +370,16 @@ took.** `AWM_RERANKER_DTYPE` is read once when the reranker module is imported
 process, so setting the variable against a *running* AWM does nothing at all. For
 an MCP install this means restarting the Claude Code session or reconnecting with
 `/mcp` — a connection that is already running keeps both the code and the model
-it loaded at spawn time. Set the variable where the process is launched, then
-check stderr for the load line, which names the precision in use:
+it loaded at spawn time. Set the variable where the process is launched. For an MCP install that is the
+`env` block of the AWM entry in your MCP config, which is also the one place it
+survives re-running setup: `awm setup` layers your existing env *over* its
+recommended defaults and force-sets only the keys it owns (`OWNED_ENV_KEYS` in
+`src/adapters/common.ts` — db path, agent id, hook port, hook secret, client), so
+a hand-set `AWM_RERANKER_DTYPE` is preserved. There is a test for precisely that
+("re-run keeps the user's agent id, db path, port and every foreign env value",
+`tests/adapters/claude-code-setup.test.ts`).
+
+Then check stderr for the load line, which names the precision in use:
 
 ```
 Re-ranker model loaded in-process: Xenova/ms-marco-MiniLM-L-6-v2 (q8)
