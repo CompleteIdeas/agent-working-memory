@@ -66,8 +66,9 @@ independent phrasings of the same probes all moved one way or not at all.
   the one file written to be read whole by a model was the one file it could not
   reach.
 - **The documented first-run model download was wrong everywhere: it is ~600 MB,
-  not ~135 MB.** Every published size tracked the model's parameter count
-  (equivalently its int8 file) rather than the fp32 weights AWM actually loads:
+  not ~135 MB.** Every published size tracked the model's parameter count — which
+  for two of the three also matches their int8 file, since int8 runs about a byte
+  per parameter — rather than the fp32 weights AWM actually loads:
   bge-small is 134 MB, ms-marco 92 MB, flan-t5-small 377 MB. Verified against the
   Hugging Face hub file listing. Nothing is bundled in the package, so every
   install pays this once. Anyone sizing a disk, a container image or a CI cache
@@ -75,11 +76,32 @@ independent phrasings of the same probes all moved one way or not at all.
   it to ~24 MB, by loading a 23 MB ONNX file in place of the 91 MB one.
 - `llms.txt` had also told agents the embedding model was "bundled and run
   locally". It is downloaded on first use.
+- **`AWM_RERANKER_DTYPE=q8` is now a documented operating mode rather than a
+  tuning footnote.** `docs/deployment.md` carries the two modes side by side —
+  quality-first (the unchanged `fp32` default) and latency-first — with the
+  triggers for choosing the second, the warning that it **changes ranking
+  outcomes** rather than being a free speedup, the fact that it needs a process
+  restart because the dtype is read once at module import and the model is then
+  cached, where to set it so `awm setup` preserves it, and how to confirm from
+  stderr that it took effect. `docs/reference.md` had carried no row for the
+  variable at all. The default is unchanged — what changed is that the choice is
+  documented and its cost is stated where someone will hit it.
 - The release gate's benchmark-spread check no longer hardcodes the headline
-  figures — it derives them from `docs/benchmarks-current.md`. Hardcoded, it
-  would have gone silent and passed for the wrong reason the moment the docs
-  moved, which is the failure `docs/RELEASE.md` records as "a version number
-  inside a test".
+  figures. Hardcoded, it would have gone silent and passed for the wrong reason
+  the moment the docs moved — the failure `docs/RELEASE.md` records as "a version
+  number inside a test". It now derives them from `docs/benchmarks-current.md` on
+  **both sides of the release**: the working tree for the new values,
+  `git show HEAD:` for the old. For a figure that moved it names the docs still
+  carrying the OLD one, which is the propagation list you actually need.
+
+  Deriving only the *current* figures — the first attempt — inverts the check,
+  because it runs **after** `npm run bench` has rewritten that page, so the stale
+  docs are precisely the ones that no longer match. Measured: with figures nudged
+  and the docs untouched, the current-only version named two files and both were
+  coincidences, while seven genuinely stale docs went unnamed. Columns are now
+  located by name rather than position (a reordered column previously filed MRR
+  as the abstention rate), and the check warns instead of going quiet when it can
+  read only part of the table.
 
 **This moves published figures**, unlike the skip removal above:
 `docs/benchmarks-current.md`, `docs/claims.md`, `docs/for-decision-makers.md`,

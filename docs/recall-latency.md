@@ -295,9 +295,12 @@ It cuts total p50 latency **29–34%** and the rerank stage **36–40%**, for
 and correct silence are unchanged on both suites, so what moves is rank-1
 ordering on topic queries, not whether the right memory is retrieved at all.
 
-> **That −0.9pp is superseded.** Re-measured on the pipeline that now ships it
-> is **−0.2pp — one query in 450**. See "The dtype question, re-measured on the
-> shipped pipeline" below; that is the row to quote, not this one.
+> **This whole paragraph is superseded.** Re-measured on the pipeline that now
+> ships, the accuracy cost is **−0.2pp — one query in 450** rather than −0.9pp,
+> and the latency saving is **26–33%** rather than 29–34%. The `s@5` claim needs
+> a qualifier too: unmoved on both private suites, **+0.5pp** on the public
+> corpus. See "The dtype question, re-measured on the shipped pipeline" below —
+> that is the row to quote, not this one.
 
 **Cutting the rerank pool is strictly worse.** `AWM_RERANK_POOL=16` buys a
 similar saving for **−4.0pp** of s@1 and **−3.4pp** of s@5. The composite is a

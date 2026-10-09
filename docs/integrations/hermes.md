@@ -42,7 +42,7 @@ placed the package (see below).
 - A working Hermes install (CLI/Docker). Node 22 is bundled in the official
   Hermes Docker image, so AWM's stdio server runs inside it with no extra work.
 - A model provider configured in Hermes (Anthropic, Azure, OpenRouter, local —
-  AWM is model-agnostic; see [Model provider](#model-provider) for two worked
+  AWM is model-agnostic; see [Model provider](#step-3--model-provider) for two worked
   examples).
 
 ---
