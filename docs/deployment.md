@@ -69,8 +69,11 @@ you set this on an earlier version, upgrade — it was silently ignored before t
 on every cold start regardless.
 
 See [reference.md](reference.md#recall-tuning-env-overrides) for the full env-var
-list including the four diagnostic `AWM_DISABLE_*` flags (don't set these
-in prod unless A/B testing a regression).
+list. The diagnostic `AWM_DISABLE_*` family is `POOL_FILTER`, `SLIM_CACHE`,
+`EXPANSION_CACHE`, `ENTITY_BRIDGE` and `SCHEDULER` — five, not the four this line
+claimed before 2026-10-09, when `AWM_DISABLE_RERANK_SKIP` left the list because
+the branch it disabled was removed. Don't set any of them in production unless
+you are A/B testing a suspected regression.
 
 ---
 

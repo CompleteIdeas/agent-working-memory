@@ -89,7 +89,7 @@ regression elsewhere — entirely via follow-up single-hop recalls, AWM unchange
 
 | Env | Effect |
 |---|---|
-| `AWM_RECALL_EXPAND=1` | restore query-expansion-by-default (default is rerank-only) |
+| `AWM_DEFAULT_EXPANSION=1` | make phase-0 query expansion the **engine** default. MCP `memory_recall` already defaults `use_expansion` true, so this only changes the HTTP and hook paths. *(This row said `AWM_RECALL_EXPAND` until 2026-10-09 — a variable nothing reads.)* |
 | `AWM_SIM_CANDIDATE_FLOOR_*` | vector candidate floor (lower = more recall, more noise/cost) |
 | `AWM_REINFORCE_MERGE_CONTENT=0` | disable content merge on reinforce |
 | `AWM_ENTITY_INDEX_FETCH=1` | D11 (2026-07-30): entity-index candidate injection — query-named entities resolve via the inverted index (incl. aliases) and get a guaranteed rerank audition; pair with `AWM_AUTOTAG=1` so free-text writes populate the index |

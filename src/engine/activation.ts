@@ -6,27 +6,42 @@
  * Cognitive retrieval pipeline — phases as shipped (D4 honesty pass 2026-07-30;
  * default-OFF phases are marked, since operators tune from this header):
  *   -1. Coreference expansion (conditional: query contains pronouns)
- *   0. Query expansion (flan-t5-small; caller-gated — the ENGINE default is OFF,
- *      AWM_DEFAULT_EXPANSION=1 flips it; some MCP paths opt in per call)
+ *   0. Query expansion (flan-t5-small; caller-gated. The ENGINE default is OFF and
+ *      AWM_DEFAULT_EXPANSION=1 flips it — but MCP memory_recall defaults
+ *      use_expansion to TRUE, so it DOES run on the path most callers use.
+ *      HTTP /memory/activate and the prime hook pass nothing, so they get OFF.)
  *   1. Vector embedding (bge-small 384d)
  *   2. Parallel retrieval (dual FTS5/BM25 + native vector top-K)
- *   3. Per-candidate scoring (BM25, Jaccard, cosine floor, ACT-R decay,
- *      Hebbian boost, confidence gate — computed together in phase 3b)
+ *   3a. Candidate fetch — and entity-index candidate injection splices in HERE,
+ *       before any scoring (DEFAULT OFF; AWM_ENTITY_INDEX_FETCH=1 — D11
+ *       2026-07-30: D9 inverted-index lookup of query-named entities; injected
+ *       candidates get no boost but a guaranteed rerank audition)
+ *   3b. Per-candidate scoring (BM25, Jaccard, cosine floor, ACT-R decay,
+ *       Hebbian boost, confidence gate — all computed TOGETHER here, not as
+ *       separate later passes)
  *   3.5 Rocchio pseudo-relevance feedback (DEFAULT OFF since 2026-10-09;
  *       AWM_FEEDBACK_BM25=1 — measured at 7% of a recall for nothing, see phase 3.5)
- *   3.7 Entity-bridge boost (default ON; AWM_DISABLE_ENTITY_BRIDGE=1)
- *   3.5  Entity-index candidate injection (DEFAULT OFF; AWM_ENTITY_INDEX_FETCH=1 —
- *        D11 2026-07-30: D9 inverted-index lookup of query-named entities; injected
- *        candidates get no boost but a guaranteed rerank audition)
+ *   3.7 Entity-bridge boost (default ON. AWM_DISABLE_ENTITY_BRIDGE disables it —
+ *       the check is for PRESENCE, not value, so =0 disables it too; unset to
+ *       re-enable.)
  *   3.75 Query-conditioned entity bridge (DEFAULT OFF; AWM_QUERY_BRIDGE=1)
- *   4/5 Spreading-activation graph walk (DEFAULT OFF; AWM_SPREAD=1 — parked
- *       after displacing-gold regressions; see design-proposals D11)
+ *   4/5 Graph walk. A plain beam walk over Hebbian + temporal edges is the
+ *       DEFAULT; the iterative SPREADING-activation variant is the opt-in
+ *       (AWM_SPREAD=1 — parked after displacing-gold regressions, see D11)
  *   6. Filter + sort into rerank pool (wide pool since 0.9.0)
  *   7. Cross-encoder rerank (ms-marco; every pooled candidate — the
  *      0.7.10 clear-winner skip was removed 2026-10-09, see phase 7a)
- *   8. Multi-channel OOD detection + agreement gate; supersession penalty;
+ *   8. Multi-channel OOD detection + agreement gate; supersession penalty (8c);
  *      abstention enforced only when caller passes require_confidence
  *   9. Final sort, granularity, confidence attach
+ *   9b. rerank2 second-pass reorder (feedback / edge-strength / class bonuses).
+ *       Engine default OFF (AWM_RERANK2=1), but awm setup, the plugin and the
+ *       Desktop bundle all switch it on, so a normal install HAS it.
+ *
+ *   Phase numbers are the ones used in the code below, so they can be grepped.
+ *   Corrected 2026-10-09: the entity-index injection was listed as a second
+ *   "3.5" (colliding with Rocchio) and placed after 3.7 though it runs inside
+ *   3a; 9b was missing entirely.
  *
  * Logs activation events for eval metrics.
  */

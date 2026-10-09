@@ -2,7 +2,7 @@
 
 ## System Overview
 
-AWM is a single-process system: one Node.js process runs the MCP server (stdio), an HTTP API (Fastify), and a hook sidecar — all backed by one SQLite database.
+AWM has **two entry points over one SQLite database**, and they are not designed to run at the same time (see "Process model" below). `src/mcp.ts` is the MCP server (stdio) and it starts the hook sidecar; `src/index.ts` is the HTTP API (Fastify) and it does not. The cognitive engine is identical behind both.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -10,7 +10,7 @@ AWM is a single-process system: one Node.js process runs the MCP server (stdio),
 │                                                         │
 │  ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
 │  │  MCP (stdio) │   │  HTTP API    │   │  Hooks     │  │
-│  │  19 tools    │   │  18 routes   │   │  (curl)    │  │
+│  │  19 tools    │   │  28 routes   │   │  (scripts) │  │
 │  └──────┬───────┘   └──────┬───────┘   └─────┬──────┘  │
 │         │                  │                  │         │
 │         └──────────┬───────┘                  │         │
@@ -37,7 +37,7 @@ AWM is a single-process system: one Node.js process runs the MCP server (stdio),
 ```
 src/
   core/             # Cognitive primitives (stateless)
-    embeddings.ts     Local vector embeddings (MiniLM-L6-v2, 384d ONNX)
+    embeddings.ts     Local vector embeddings (bge-small-en-v1.5, 384d ONNX)
     reranker.ts       Cross-encoder passage scoring (ms-marco-MiniLM)
     query-expander.ts Synonym expansion (flan-t5-small)
     salience.ts       Write-time importance scoring (novelty + salience)
@@ -54,7 +54,7 @@ src/
   hooks/
     sidecar.ts        Hook HTTP server (auto-checkpoint, stats, 15-min timer)
   storage/
-    sqlite.ts         SQLite + FTS5 persistence (~650 lines)
+    sqlite.ts         SQLite + FTS5 persistence (~2,020 lines)
   api/
     routes.ts         HTTP endpoints (memory + task + system)
   mcp.ts            MCP server (19 tools: 17 memory + 2 onboarding, incognito support)
@@ -62,23 +62,34 @@ src/
   index.ts          HTTP server entry point
 ```
 
-## Retrieval Pipeline (10 phases)
+## Retrieval Pipeline
 
-The activation pipeline in `src/engine/activation.ts` runs these phases in order:
+The activation pipeline in `src/engine/activation.ts` runs these phases in order.
+**The numbers are the code's own**, so they can be grepped — the header comment at
+the top of that file is the other copy of this list.
 
 | Phase | Name | What it does |
 |-------|------|-------------|
-| 1 | BM25 text search | FTS5 full-text search on concept + content |
-| 2 | Semantic search | Cosine similarity on 384d embeddings |
-| 3 | Score fusion | Weighted merge of BM25 + semantic candidates |
-| 3.5 | Rocchio expansion | Pseudo-relevance feedback: expand query with top-3 terms, re-search. **DEFAULT OFF since 2026-10-09** (`AWM_FEEDBACK_BM25=1`) — it cost 6.7–7.0% of every recall and moved 3 gold ranks in 950 queries, two of them the wrong way |
-| 3.7 | Entity-Bridge boost | Boost candidates sharing entity tags with top text matches |
-| 4 | Cross-encoder rerank | ms-marco-MiniLM scores passage relevance on a **wide candidate pool** (default `max(limit*4,40)`, `AWM_RERANK_POOL`); adaptive blend. The composite is a cheap pre-filter; the reranker does the discrimination. |
-| 4.5 | Abstention gate | Multi-channel OOD agreement, judged on the **post-rerank top-5** (`AWM_ABSTAIN_GATE_K`) so pool width (recall) is decoupled from precision; returns nothing if channels disagree |
-| 5 | Temporal decay | ACT-R power-law decay based on time since last access |
-| 6 | Graph walk | Beam search over Hebbian + temporal edges |
-| 7 | Confidence gating | Filter by confidence threshold, apply feedback bonus |
-| 8 | Vector scoring | Raw-cosine floor (`AWM_SIM_FLOOR_*`, default 0.50/0.35), model-tuned for BGE-small (replaced z-score normalization in 0.8.x) |
+| −1 | Coreference expansion | Conditional: only when the query contains pronouns. |
+| 0 | Query expansion | flan-t5-small adds related terms. The **engine** default is off (`AWM_DEFAULT_EXPANSION=1` flips it), but MCP `memory_recall` defaults `use_expansion` to **true**, so it runs on the path most callers use. |
+| 1 | Vector embedding | Embed the query, bge-small 384d. |
+| 2 | Parallel retrieval | Dual FTS5/BM25 + native vector top-K, concurrently. |
+| 3a | Candidate fetch | Hydrate candidates. Entity-index injection splices in here when `AWM_ENTITY_INDEX_FETCH=1` (default off) — *before* scoring, not after it. |
+| 3b | Per-candidate scoring | BM25, Jaccard, raw-cosine floor (`AWM_SIM_FLOOR_*`, 0.50/0.35), ACT-R decay, Hebbian boost and the confidence gate are all computed **together here** — not as separate later passes. |
+| 3.5 | Rocchio expansion | Pseudo-relevance feedback: take the top 3, harvest novel terms, re-search BM25. **Default OFF since 2026-10-09** (`AWM_FEEDBACK_BM25=1`) — it cost 6.7–7.0% of every recall and moved 3 gold ranks in 950 queries, two of them the wrong way. |
+| 3.7 | Entity-bridge boost | Boost candidates sharing entity tags with the top text matches. **Default ON.** |
+| 4–5 | Graph walk | Beam search over Hebbian + temporal edges. |
+| 6 | Rerank pool | Select the wide candidate pool, default `max(limit*4, 40)` (`AWM_RERANK_POOL`), capped by `limit × AWM_TOPN_MULT`. The composite is a deliberately cheap pre-filter; the cross-encoder does the discrimination. |
+| 7 | Cross-encoder rerank | ms-marco-MiniLM scores every pooled candidate and decides final order. ~83% of warm recall latency. |
+| 8 | Abstention gate | Multi-channel OOD agreement judged on the **post-rerank top-K** (`AWM_ABSTAIN_GATE_K`, default 5), so pool width (recall) is decoupled from precision. Returns nothing if the channels disagree. Phase 8c applies supersession. |
+| 9b | rerank2 | Second-pass reorder using feedback/edge-strength/class bonuses. Engine default off (`AWM_RERANK2=1`), but `awm setup`, the plugin and the Desktop bundle all switch it on. |
+
+> **Corrected 2026-10-09.** This table previously listed temporal decay, graph
+> walk, confidence gating and vector scoring as phases 5–8, *after* rerank and
+> the abstention gate. They are not: decay, Hebbian boost, the confidence gate
+> and the cosine floor are computed together in phase 3b, and rerank is phase 7
+> with the gate at 8. Every phase number also disagreed with the code's, so
+> grepping for "phase 4.5" found nothing. Phase 0, 3a, 8c and 9b were missing.
 
 ## Consolidation Pipeline (7 phases)
 
@@ -147,8 +158,9 @@ reads it only behind `AWM_ENTITY_INDEX_FETCH` (D11 guarded injection).
 
 ## Storage Backends
 
-AWM ships two functionally-equivalent backends behind one `IEngramStore`
-interface. The cognitive engines (write, recall, consolidation, retraction,
+AWM ships three backends behind one `IEngramStore` interface — embedded SQLite,
+embedded PGlite, and networked Postgres (`AWM_DATABASE_URL`), the last being the
+only one that is genuinely shared across processes and machines. The cognitive engines (write, recall, consolidation, retraction,
 eviction) are identical on both — the difference is operational.
 
 | | SQLite (**default**) | PGlite |

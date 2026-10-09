@@ -58,13 +58,15 @@ Then restart Claude Code. That's it — Claude now has persistent memory.
 
 ## Verify hooks are installed
 
-The `awm setup --global` command automatically installs three hooks in `~/.claude/settings.json`:
+The `awm setup --global` command automatically installs five hooks in `~/.claude/settings.json`:
 
 - **Stop** — reminds Claude to save important learnings after each response
 - **PreCompact** — auto-saves state before context window compression
 - **SessionEnd** — auto-saves state and runs consolidation when you close the session
+- **UserPromptSubmit** — *primes* relevant memories into context before Claude sees each prompt. This is the one that makes memory feel automatic; if an agent seems not to be using its memory, check this first. (`awm setup --no-prime` omits it.)
+- **PostToolUse** — after `Bash`/`PowerShell` calls, reminds you that a production data change isn't done until it's written to memory
 
-Open `~/.claude/settings.json` and confirm you see a `hooks` section with `Stop`, `PreCompact`, and `SessionEnd` entries. If it's missing, run `awm setup --global` again — it's safe to re-run.
+Open `~/.claude/settings.json` and confirm you see a `hooks` section with all five: `Stop`, `PreCompact`, `SessionEnd`, `UserPromptSubmit` and `PostToolUse`. If it's missing, run `awm setup --global` again — it's safe to re-run.
 
 > **No manual editing needed.** The setup command handles everything. See [team-setup-guide.md](team-setup-guide.md) if you need to add hooks manually.
 

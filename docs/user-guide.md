@@ -186,7 +186,7 @@ Claude Code will automatically use these tools when appropriate. You can also tr
 |----------|---------|---------|
 | `AWM_PORT` | `8400` | HTTP server port |
 | `AWM_DB_PATH` | `memory.db` | SQLite database file path |
-| `AWM_AGENT_ID` | `claude-code` | Default agent ID for MCP server |
+| `AWM_AGENT_ID` | derived — `work` or `personal` | The agent id **is** the memory pool. Unset, the MCP server falls back to `WORKER_NAME` and then derives from the project directory, which yields only `work` or `personal` (`src/core/agent-id.ts`) — never `claude-code`, which this row claimed until 2026-10-09. Pin it explicitly if you want a specific pool. |
 | `AWM_EMBED_MODEL` | `Xenova/bge-small-en-v1.5` | Embedding model (BAAI retrieval-optimized, default since 0.7) |
 | `AWM_EMBED_DIMS` | `384` | Embedding dimensions |
 | `AWM_RERANKER_MODEL` | `Xenova/ms-marco-MiniLM-L-6-v2` | Cross-encoder reranker model |

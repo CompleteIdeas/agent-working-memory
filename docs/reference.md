@@ -402,58 +402,44 @@ Returns the single highest-priority non-blocked task. Prefers in_progress tasks 
 
 ## Hook Configuration
 
-The `awm setup --global` command installs three Claude Code hooks into
-`~/.claude/settings.json`. The block below is the exact shape they take —
-use it if `awm setup` failed and you need to add them manually, or to
-audit what was installed.
+`awm setup --global` installs **five** hook groups into `~/.claude/settings.json`,
+and since 0.14.6 they are **shipped script files**, not inline `curl`. The block
+below is the shape the installer writes — use it to audit what was installed.
+`<hooks>` stands for `~/.claude/hooks/` (or the plugin's own hooks directory).
 
 ```jsonc
 {
   "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -fsS -X POST -H \"Authorization: Bearer ${AWM_HOOK_SECRET}\" http://127.0.0.1:8401/hook/stop"
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -fsS -X POST -H \"Authorization: Bearer ${AWM_HOOK_SECRET}\" http://127.0.0.1:8401/hook/pre-compact"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -fsS -X POST -H \"Authorization: Bearer ${AWM_HOOK_SECRET}\" http://127.0.0.1:8401/hook/session-end"
-          }
-        ]
-      }
-    ]
+    "Stop":             [{ "matcher": "",                "hooks": [{ "type": "command", "command": "echo \"MEMORY: (1) Did you learn anything new? …\"", "timeout": 5, "async": true }] }],
+    "PreCompact":       [{ "matcher": "",                "hooks": [{ "type": "command", "command": "node \"<hooks>/awm-checkpoint.cjs\"",            "timeout": 10 }] }],
+    "SessionEnd":       [{ "matcher": "",                "hooks": [{ "type": "command", "command": "node \"<hooks>/awm-checkpoint.cjs\"",            "timeout": 8  }] }],
+    "UserPromptSubmit": [{ "matcher": "",                "hooks": [{ "type": "command", "command": "node \"<hooks>/awm-prime.cjs\"",                 "timeout": 6  }] }],
+    "PostToolUse":      [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"<hooks>/awm-db-mutation-reminder.cjs\"",  "timeout": 10 }] }]
   }
 }
 ```
 
 **What each hook does:**
 
-| Hook | When it fires | What the sidecar does |
+| Hook | When it fires | What happens |
 |---|---|---|
-| `Stop` | After every Claude response | Bumps the daily counter; nudges the agent to write/recall via system reminder. |
-| `PreCompact` | Before context compaction | Auto-saves the current execution state to AWM so context survives the compress. |
-| `SessionEnd` | When the conversation closes | Final auto-checkpoint + triggers a consolidation pass. |
+| `Stop` | After every Claude response | A local `echo` reminder to write / recall / switch tasks. **No network call** — it never reaches the sidecar. |
+| `PreCompact` | Before context compaction | `awm-checkpoint.cjs` POSTs to the sidecar's `/hooks/checkpoint`, saving execution state so it survives the compress. |
+| `SessionEnd` | When the conversation closes | The same checkpoint script; the sidecar also triggers a consolidation pass. |
+| `UserPromptSubmit` | Every prompt you send | `awm-prime.cjs` POSTs to `/hooks/prime` and injects relevant memories *before* Claude sees the prompt. Omit it with `awm setup --no-prime`. |
+| `PostToolUse` | After `Bash`/`PowerShell` calls | A reminder that a production data change is not complete until it is `memory_write`n. |
+
+> **Corrected 2026-10-09 — the sidecar has no `/hook/*` routes and never did.**
+> It serves exactly five: `GET /health`, `GET /stats`, `POST /memory/activate`,
+> `POST /hooks/prime` and `POST /hooks/checkpoint` (`src/hooks/sidecar.ts`).
+> Until this revision, this page offered hand-written `curl` to `/hook/stop`,
+> `/hook/pre-compact` and `/hook/session-end` "if `awm setup` failed and you
+> need to add them manually" — three paths that do not exist. Because Claude Code
+> hooks fail open and `curl -fsS` is silent, anyone who copied that block got
+> three hooks POSTing to 404s with no error. It also described `Stop` as doing
+> sidecar work, and hardcoded port 8401 when the port is discovered across
+> `[AWM_HOOK_PORT, +AWM_HOOK_PORT_RANGE)`. Prefer `awm setup`; verify with
+> `awm doctor claude-code`.
 
 **The hook sidecar:**
 
@@ -503,8 +489,10 @@ curl -fsS -H "Authorization: Bearer $AWM_HOOK_SECRET" \
 ```
 
 If `curl` returns `401`, the secret is wrong. If `connection refused`,
-the sidecar isn't running — restart Claude Code or check `awm serve`
-output.
+the sidecar isn't running. Restart Claude Code, or run `awm doctor claude-code`,
+which probes the port range and reports which sidecars are live. Note that
+`awm serve` starts the **HTTP API only** and no sidecar — the sidecar is started
+by the MCP process — so its output will not tell you anything about this.
 
 ---
 
@@ -571,7 +559,9 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 | `AWM_SIM_FLOOR_EXPLORATORY` | `0.35` | Same, for exploratory-mode queries. |
 | `AWM_SIM_CANDIDATE_FLOOR_TARGETED` | `0.40` | Min cosine for a vector hit to *enter* the candidate pool (targeted). |
 | `AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY` | `0.30` | Same, exploratory. |
-| `AWM_RECALL_EXPAND` | `0` | `1` restores query-expansion-by-default (default is rerank-only). |
+| `AWM_DEFAULT_EXPANSION` | `0` | `1` makes phase-0 query expansion the **engine** default. Note the per-path difference: MCP `memory_recall` sets `use_expansion` to `true` by default (`src/mcp.ts`), so expansion already runs on the path most callers use; the HTTP `/memory/activate` route and the prime hook pass nothing, so they get the engine default. *(This row named `AWM_RECALL_EXPAND` until 2026-10-09 — a variable nothing in `src/` has ever read.)* |
+| `AWM_DATABASE_URL` | — | Connection string for the networked **Postgres** backend. The only way to point AWM at a Postgres server (`src/storage/factory.ts`); undocumented until 2026-10-09. |
+| `AWM_DISABLE_ENTITY_BRIDGE` | unset | Skips the default-ON phase-3.7 entity-bridge boost. **Footgun:** the code tests presence, not value, so `=0` *also* disables it. Unset the variable to re-enable. |
 
 #### Opt-in / experimental retrieval flags (default-off)
 

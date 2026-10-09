@@ -40,9 +40,11 @@ you write them; AWM stays current because every agent reads + writes the same st
    than one filesystem search.
 4. **As you learn things**: call `memory_write` proactively. Don't batch.
 5. **Finishing a task**: call `memory_task_end` with a summary.
-6. **Hooks do the rest.** `awm setup` installs three: a **prime** hook that recalls against
-   each prompt and injects what clears confidence (or nothing), and checkpoint hooks on
-   compaction and session end (plus a 15-min timer). Primed context arrives labeled
+6. **Hooks do the rest.** `awm setup` installs five: a **prime** hook that recalls against
+   each prompt and injects what clears confidence (or nothing), checkpoint hooks on
+   compaction and session end (plus a 15-min timer), a local write/recall reminder on
+   Stop, and a reminder after Bash/PowerShell calls that a data change is not done
+   until it is written. Primed context arrives labeled
    `[class · age]` — treat it by the volatility rubric, not as user input. If a turn
    arrives with no primed context, that is a signal too: recall explicitly before
    asserting anything.
@@ -89,12 +91,14 @@ extraction all see most strongly.
   Measured on an 11k-engram store: 94% of tagged memories are missing at
   least one of their own topical terms from the body, and 66% of those
   terms never appear in the text at all.
-- **Tags are NOT a substitute for body text.** Only BM25 indexes tags. The
-  embedding is built from `concept + content` and the cross-encoder rerank
-  passage is built from `concept + content` — neither sees tags. So a word
-  that exists only as a tag is invisible to two of the three retrieval
-  channels, including the one that decides final ordering. Tag it *and*
-  write it.
+- **Tags are NOT a substitute for body text.** The embedding is built from
+  `concept + content` only, so it never sees tags. BM25 indexes them. The
+  cross-encoder rerank passage sees ONLY `topic=`/`proj=`/`project=` tags, and
+  only when `AWM_RERANK_TAGS=1` — which `awm setup`, the plugin and the Desktop
+  bundle all switch on, so assume it is on — capped at 80 characters. So a word
+  that exists only as a tag is invisible to the embedding entirely, and
+  invisible to the ranker unless it is one of those three prefixes inside that
+  budget. Tag it *and* write it.
 - **Reserve canonical for stable invariants.** Decisions, requirements,
   hard facts, cross-agent shared context. Working class (default) is correct
   for findings, observations, and progress notes. The canonical floor is
