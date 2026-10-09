@@ -41,6 +41,7 @@ Check the `phaseScores` breakdown:
 - Normal on AWM 0.7.14+: floor ~300ms, typical 400-700ms on 10K-engram corpora
 - First recall after process start is slower (~2-3s) — that's the cold cost of loading 3 ML models (embedder, reranker, expander) and populating the slim cache. AWM warms the cache eagerly at startup; the first user-visible recall is fast in production.
 - Disable model phases for speed: `"useReranker": false, "useExpansion": false` (~5-20ms recall, but degraded ranking)
+- **If warm recall is already healthy and you simply need it faster**: there is a supported latency mode rather than a flag to disable. `AWM_RERANKER_DTYPE=q8` cuts total recall p50 26–33%. It is *not* a free speedup — it changes ranking outcomes — so read [deployment.md → Operating modes](deployment.md#operating-modes-quality-first-and-latency-first) before setting it.
 - **If recall feels >1s warm on 0.7.14+**: one of the optimization paths may be silently disabled. Check the AWM coordinator process env for any of `AWM_DISABLE_POOL_FILTER`, `AWM_DISABLE_SLIM_CACHE`, `AWM_DISABLE_EXPANSION_CACHE` — none should be set to `1` in production. (`AWM_DISABLE_RERANK_SKIP` was also on this list until 2026-10-09; the branch it disabled has been removed, so the variable is now accepted and ignored.)
 
 ### Recall returning slightly different top-K than expected

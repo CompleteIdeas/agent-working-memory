@@ -93,6 +93,7 @@ regression elsewhere — entirely via follow-up single-hop recalls, AWM unchange
 | `AWM_SIM_CANDIDATE_FLOOR_*` | vector candidate floor (lower = more recall, more noise/cost) |
 | `AWM_REINFORCE_MERGE_CONTENT=0` | disable content merge on reinforce |
 | `AWM_ENTITY_INDEX_FETCH=1` | D11 (2026-07-30): entity-index candidate injection — query-named entities resolve via the inverted index (incl. aliases) and get a guaranteed rerank audition; pair with `AWM_AUTOTAG=1` so free-text writes populate the index |
+| `AWM_RERANKER_DTYPE=q8` | latency-first mode: −26–33% recall p50, and a 23 MB reranker file instead of 91 MB. **Changes ranking outcomes** (one query in 450 on the topic suite); every published number is at `fp32`. Read `docs/deployment.md` → Operating modes first |
 | `AWM_SLOW_WRITE_MS` | slow-write telemetry threshold (default 250 ms; `0` disables) |
 | `AWM_BIND` / `AWM_ALLOW_INSECURE` | HTTP bind (default loopback; non-loopback without an API key fails closed) |
 | diagnostics | leave unset in production; flip only to A/B a suspected regression |

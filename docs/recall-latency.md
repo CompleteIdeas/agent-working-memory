@@ -386,6 +386,11 @@ further trade. The decision now rests on **one query in 450, on one of three
 suites**, against 26–33% of recall latency on all three, a 68 MB smaller
 first-run download and a faster cold start.
 
+Pending that call, `q8` is documented as a supported **latency-first operating
+mode** rather than left as a tuning footnote — see
+[deployment.md → Operating modes](deployment.md#operating-modes-quality-first-and-latency-first) for when to choose it, the
+ranking-change warning, and why the default stays quality-first.
+
 The rerank-skip bound that this page originally listed as a defect to fix turned
 out to be the wrong read: collecting its saving costs more accuracy than the
 saving is worth, so the branch was removed instead. See finding 2.

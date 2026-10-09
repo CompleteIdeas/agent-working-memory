@@ -36,8 +36,8 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
  * recall latency 26-33% across three suites, for ONE QUERY in 450 — identifier
  * success@1 unchanged at 93.0%, topic 92.2% -> 92.0% — with success@5 and
  * correct abstention unmoved on all three. It is deterministic (two runs agree
- * on all 450 queries to 1e-6), and it SHRINKS the first-run download to 23MB
- * from fp32's 91MB, because no model is bundled. 'q4' is dominated: equal
+ * on all 450 queries to 1e-6), and because no model is bundled it SHRINKS the
+ * first-run fetch: the ONNX file it loads is 23MB against fp32's 91MB. 'q4' is dominated: equal
  * accuracy, only -3% latency, 6.1s cold start against fp32's 1.6s. The default
  * is untouched because it is a product decision, not because the cost is
  * unknown; see docs/recall-latency.md.

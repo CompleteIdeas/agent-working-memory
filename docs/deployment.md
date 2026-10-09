@@ -308,6 +308,85 @@ isolated stores, federated by your application layer. The
 multi-agent task hand-off within a single store, not for sharding across
 stores.
 
+
+### Operating modes: quality-first and latency-first
+
+AWM ships the default plus **one** supported latency mode, and that mode is a
+single knob, deliberately.
+
+| | Quality-first (default) | Latency-first |
+|---|---|---|
+| Setting | *nothing — this is the default* | `AWM_RERANKER_DTYPE=q8` |
+| Cross-encoder weights | fp32 | int8-quantized |
+| Warm recall p50 | 467–533 ms | 196–395 ms (**−26% to −33%**) |
+| ONNX file the dtype selects | 91 MB | 23 MB |
+| `success@5` and correct abstention | baseline | unchanged on all three suites |
+| `success@1` | baseline | −0.2pp on one suite of three; unchanged on another |
+| Published numbers | all measured here | not measured here |
+
+**Choose latency-first when one of these is true.** If none of them is, stay on
+the default — otherwise you are spending ranking accuracy on latency nothing is
+waiting for:
+
+- recall is called more than once per agent turn (planner + executor + verifier
+  patterns multiply the saving);
+- you have an interactive budget under a second, end to end;
+- you are CPU-constrained in a container at concurrency > 1;
+- recall sits on a serialized critical path where p95/p99 is what you are judged
+  on.
+
+**The warning, plainly: `q8` changes ranking outcomes. It is not a transparent
+speedup.** On the private snapshot the measured cost is one query in 450 on the
+topic suite; on the identifier suite two golds move and cancel, so "no change"
+there is an aggregate statement and not a per-query one. The quantization is
+deterministic — two runs of the same arm agree on all 450 queries to within 1e-6
+— so whatever it does to your corpus, it will do consistently rather than
+intermittently. **Validate on your own corpus before trusting it**, which is
+what `npm run profile:recall -- --dtype q8` is for.
+
+
+**Applying the mode — it needs a process restart, and here is how to confirm it
+took.** `AWM_RERANKER_DTYPE` is read once when the reranker module is imported
+(`src/core/reranker.ts`) and the loaded model is then cached for the life of the
+process, so setting the variable against a *running* AWM does nothing at all. For
+an MCP install this means restarting the Claude Code session or reconnecting with
+`/mcp` — a connection that is already running keeps both the code and the model
+it loaded at spawn time. Set the variable where the process is launched, then
+check stderr for the load line, which names the precision in use:
+
+```
+Re-ranker model loaded in-process: Xenova/ms-marco-MiniLM-L-6-v2 (q8)
+```
+
+If that line says `(fp32)`, the mode is not active and the variable did not reach
+the process. `AWM_RERANKER_DTYPE` is also part of the configuration fingerprint
+that `npm run profile:recall` prints as its `arm=` label, so a profiling run
+reports which mode it measured rather than leaving two different arms to print the
+same thing.
+
+**One caveat on the latency figure.** The −26% to −33% above follows from the
+cross-encoder being ~83% of warm recall on an 11,262-engram store. On a much
+smaller store the other phases are a larger share of a smaller total, so the
+proportional saving will be lower. This is the other reason to measure on your own
+corpus rather than adopting the number.
+
+**Why the mode is one knob rather than a bundle.** The other latency levers were
+measured and rejected, so do not stack them on top of `q8` expecting more:
+cutting the rerank pool (`AWM_RERANK_POOL=16`) buys a similar saving for
+**−4.0pp** `success@1` and **−3.4pp** `success@5`, and `q4` is dominated outright
+— equal accuracy to fp32, only −3% latency, and a 6,080 ms cold start against
+fp32's 1,591 ms. Full tables in [recall-latency.md](recall-latency.md).
+
+**Why quality-first is the default**, since the accuracy cost above is small
+enough that the question is fair: every accuracy figure AWM publishes is measured
+at fp32, and the corpus behind those figures is private. A reviewer can
+independently reproduce the **latency** win — the public corpus rebuilds from a
+seeded generator — but cannot reproduce the **accuracy** cost. Shipping the faster
+mode by default would mean publishing headline numbers that nobody outside can
+check, to buy a saving that is not binding on the median install. That is a
+measurement-honesty choice (see [claims.md](claims.md)), not a doubt about the
+quantization itself.
+
 ---
 
 ## 7. Observability checklist

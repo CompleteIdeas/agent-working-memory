@@ -329,7 +329,11 @@ facts.
    for **one query in 450** of accuracy (re-measured 2026-10-09 on the shipped
    pipeline: identifier success@1 unchanged at 93.0%, topic 92.2% -> 92.0%,
    success@5 and correct silence unmoved everywhere) and it shrinks the reranker
-   download from 91 MB to 23 MB. fp32 is still the shipped default. `q4` is
+   ONNX file it loads from 91 MB to 23 MB. fp32 is still the shipped default:
+   q8 is a documented **latency-first operating mode**, not a hidden tuning
+   flag, and it CHANGES RANKING OUTCOMES rather than being a free speedup — see
+   docs/deployment.md "Operating modes" for when to choose it and validate on
+   your own corpus with `npm run profile:recall -- --dtype q8`. `q4` is
    dominated — same accuracy, only -3% latency, 6.1s cold start. See
    docs/recall-latency.md.
 7. **The embedding model is fixed per store.** Changing `AWM_EMBED_MODEL` or
