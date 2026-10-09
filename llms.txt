@@ -92,7 +92,7 @@ didn't find it."
 
 ```
 AWM_RERANK2=1              # second-stage rerank by the cross-encoder's own score
-AWM_RERANK_WINDOW=query    # 400-char window centred on the densest query terms,
+AWM_RERANK_WINDOW=query    # 400-char window centered on the densest query terms,
                            #   instead of truncating from the start of the body
 AWM_RERANK_TAGS=1          # tags joined into the rerank passage  (+7.4pp s@1)
 ```
@@ -401,7 +401,7 @@ A 2pp move is not a result; confirm on a second seed.
 
 **Do not quote public-benchmark numbers as the published ones.** The synthetic
 corpus scores *lower*, because generated prose is more self-similar than real
-prose and same-domain neighbours are harder to separate. Use it for the method
+prose and same-domain neighbors are harder to separate. Use it for the method
 and for deltas, not for absolutes.
 
 Ground truth is derived by **unique-identifier hold-out**: an identifier that

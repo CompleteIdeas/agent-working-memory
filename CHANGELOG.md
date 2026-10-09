@@ -58,6 +58,29 @@ filter would buy narrows from 5.9pp to 2.0pp. +4.0pp of 101 probes is four
 queries, so read the magnitude cautiously; what is informative is that five
 independent phrasings of the same probes all moved one way or not at all.
 
+**Packaging and documentation, same release.**
+
+- `llms.txt` and `AGENTS.md` now ship in the npm package. They were
+  GitHub-and-docs-site only, so an agent inspecting
+  `node_modules/agent-working-memory/` found `README.md` and nothing else —
+  the one file written to be read whole by a model was the one file it could not
+  reach.
+- **The documented first-run model download was wrong everywhere: it is ~600 MB,
+  not ~135 MB.** Every published size tracked the model's parameter count
+  (equivalently its int8 file) rather than the fp32 weights AWM actually loads:
+  bge-small is 134 MB, ms-marco 92 MB, flan-t5-small 377 MB. Verified against the
+  Hugging Face hub file listing. Nothing is bundled in the package, so every
+  install pays this once. Anyone sizing a disk, a container image or a CI cache
+  needs the real number. `AWM_RERANKER_DTYPE=q8` reduces the reranker's share of
+  it from 91 MB to 23 MB.
+- `llms.txt` had also told agents the embedding model was "bundled and run
+  locally". It is downloaded on first use.
+- The release gate's benchmark-spread check no longer hardcodes the headline
+  figures — it derives them from `docs/benchmarks-current.md`. Hardcoded, it
+  would have gone silent and passed for the wrong reason the moment the docs
+  moved, which is the failure `docs/RELEASE.md` records as "a version number
+  inside a test".
+
 **This moves published figures**, unlike the skip removal above:
 `docs/benchmarks-current.md`, `docs/claims.md`, `docs/for-decision-makers.md`,
 `docs/recall-latency.md` and `README.md` are re-baselined to 93.0% / 92.2% /

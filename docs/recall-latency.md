@@ -309,7 +309,7 @@ ranker cheaper, which is why it dominates.
 (82–84% of the pipeline that now ships) and it is also what
 `AWM_RERANK_TAGS=1` (+7.4pp s@1) and `AWM_RERANK_WINDOW=query` act through.
 Nothing here argues for removing it — the lever worth pulling makes the same
-judgement cheaper rather than making less of it.
+judgment cheaper rather than making less of it.
 
 ---
 

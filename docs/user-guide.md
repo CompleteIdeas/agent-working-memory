@@ -33,9 +33,12 @@ The server starts on port 8400 (configurable via `AWM_PORT` env var). On first r
 | ms-marco-MiniLM-L-6-v2 | 92 MB | Cross-encoder reranking (`AWM_RERANKER_DTYPE=q8` loads a 23 MB file instead) |
 | flan-t5-small | 377 MB | Query expansion (141 MB encoder + 233 MB merged decoder) |
 
-> These are the **fp32** files, which is what AWM actually loads. Until 2026-10-09
-> this table quoted the *quantized* sizes (~33/~22/~80 MB) for models the code
-> requests at full precision, understating the download by about 4.5x.
+> These are the **fp32** files, which is what AWM actually loads (verified against
+> the Hugging Face hub's file listing, not just a local cache; there are no
+> `.onnx_data` sidecars). Until 2026-10-09 this table quoted ~33/~22/~80 MB, which
+> tracks each model's *parameter count* — equivalently its int8 file, since int8 is
+> about one byte per parameter — and not the full-precision weights the code
+> requests. That understated the download by about 4.5x.
 
 Verify the server is running:
 

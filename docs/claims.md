@@ -56,10 +56,14 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
   | Suite | spend | recalls | mean per recall |
   |---|---|---|---|
-  | Identifier | 452,979 | 300 | **1,510** |
-  | Topic | 714,610 | 450 | **1,588** |
+  | Identifier | 455,486 | 300 | **1,518** |
+  | Topic | 713,745 | 450 | **1,586** |
 
-  So a scoped recall costs roughly **1.5k tokens**, not ~630, and the published figure understates the cost of the product's central operation by about 2.4x — an error in AWM's own favour, which is the direction that most deserves scrutiny.
+  (From the stamped run, `bench-runs/0.15.9-2026-10-09/{identifier,category}.log`.
+  The previous figures here — 1,510 and 1,588 — were from the 2026-10-08 run, before
+  the Rocchio pass was defaulted off.)
+
+  So a scoped recall costs roughly **1.5k tokens**, not ~630, and the published figure understates the cost of the product's central operation by about 2.4x — an error in AWM's own favor, which is the direction that most deserves scrutiny.
 
   **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,510 x 0.30 is about 450, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
 
@@ -111,6 +115,14 @@ still ON, so the numbers to expect are the *old* baseline — identifier s@1
 in §1. The whole difference is the Rocchio flip (`eb0620f`), which ships in the
 next release.
 
+**Where that 92.7% comes from, stated precisely, because it is an inference and
+not a measurement of the released artifact.** No benchmark has ever been run at
+`30b937e` itself. 92.7% / 92.0% / 96.7% is the last measurement of the
+*configuration* the released package has — Rocchio on — taken at `93ef2bb`,
+which is also past the tag. It is quoted here because that restamp found zero
+accuracy drift from 0.14.6 and nothing between it and the tag touched ranking;
+that is a well-supported inference about the released code, not a reading of it.
+
 This is the exact inverse of what this section said until 2026-10-09, when the
 published numbers were three patch releases *behind* what shipped. Both
 directions are the same underlying hazard: `benchmarks-current.md` records a
@@ -129,6 +141,13 @@ correct silence, **100%** sufficiency, **+245** tokens per recall. Split by
 identifier position: **97.3%** where the reranker can see the identifier,
 **46.8%** where it cannot.
 
+**Measured 2026-10-08 (seed 20261008), with the Rocchio pass still ON**, so this
+baseline sits on the pre-flip pipeline like §1's did. It has not been re-run at
+the new default. A 200-probe arm of the same corpus was diffed per query across
+the flip and **0 of 200 queries changed** in gold rank, top-1 identity or top-1
+score, so these figures are expected to carry forward unchanged — but that is an
+inference from a subset, not a re-run of the 400.
+
 - It **does** verify the method, the abstention accounting, the sufficiency
   check and the truncation cliff, on data you can rebuild byte-for-byte.
 - It **does not** reproduce the published numbers, and is not comparable to
@@ -146,7 +165,7 @@ Listed deliberately, in the order we would attack it ourselves:
 
 1. **`~630 tokens` is not derived, and the harness measures ~1,510 instead** —
    the published figure understates the cost of a scoped recall by about 2.4x,
-   in the product's favour (§3).
+   in the product's favor (§3).
    `~1.3M` now is — `npm run bench` computes 1,234,429 from the snapshot and
    stamps it — and it confirmed the published figure rather than contradicting
    it. Two pages still fail to say which denominator they use, so ~1.3M (the
