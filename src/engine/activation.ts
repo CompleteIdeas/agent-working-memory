@@ -914,8 +914,15 @@ export class ActivationEngine {
 
     // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
     // strong absolute score AND a meaningful gap to the runner-up, the cross-encoder
-    // is unlikely to change the top result. Skipping saves ~300ms of wall-clock per
-    // recall on simple queries (40% of post-0.7.9 floor was reranker).
+    // is unlikely to change the top result.
+    //
+    // MEASURED 2026-10-08: on the private snapshot at the shipped k=3 this fires on
+    // 0 of 870 queries. `smallPool` needs the pool at or under max(limit*2, 20) = 20,
+    // but the pool is min(limit*8, 40) = 24 there — one notch above the bound, so the
+    // branch cannot be taken. It still fires on stores small or sparse enough that
+    // fewer than ~20 candidates clear minScore, and at AWM_RERANK_POOL=16 it fires on
+    // 3.3%. The saving it was written for is real (rerank is 78% of a recall); the
+    // bound is what stops it being collected. See docs/recall-latency.md.
     //
     // Conservative gate (only skip when very confident):
     //   - top-1 textMatch >= 0.8 (high BM25 + jaccard agreement)
@@ -947,7 +954,8 @@ export class ActivationEngine {
         // Passage selection for the cross-encoder. Truncation exists for a real
         // reason: cross-encoders pad to the longest passage in the batch, so one
         // 5,000-char memory in a 40-item pool drags everything to ~512 tokens and
-        // costs 3-4x — and the reranker is already ~90% of warm recall latency.
+        // costs 3-4x — and the reranker is 78% of warm recall latency (measured,
+        // `npm run profile:recall`; this comment claimed ~90% until it was).
         //
         // But a PREFIX is the wrong budget to spend. On the live store, canonical
         // memories are median 1,965 chars and 98.7% exceed 400, so the reranker
@@ -1148,7 +1156,7 @@ export class ActivationEngine {
       // AWM_SNIPPET_WEIGHT=rarity weights a hit by 1/(occurrences of that token
       // in THIS document), so one occurrence of a rare term outweighs many of a
       // common one. Doc-local: no corpus statistics, no extra queries, no
-      // latency. Default OFF preserves the shipped behaviour exactly.
+      // latency. Default OFF preserves the shipped behavior exactly.
       const rarityMode = process.env.AWM_SNIPPET_WEIGHT === 'rarity' || process.env.AWM_SNIPPET_WEIGHT === 'anchor';
       const hits: number[] = [];
       const hitW: number[] = [];

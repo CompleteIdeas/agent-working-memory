@@ -198,4 +198,27 @@ console.log(`  rerank skip fired        ${skipped}/${warm.length} (${(100 * skip
 const abstained = warm.filter((r) => r.abstained).length;
 console.log(`  abstained                ${abstained}/${warm.length}`);
 
+// Drift: stages backed by a buffer that grows across a session cannot be caught
+// by an average. `getCoActivatedPairs(10_000)` is read on every non-internal
+// recall, so compare the start of the run against the end.
+if (warm.length >= 100) {
+  const head = warm.slice(0, 50);
+  const tail = warm.slice(-50);
+  const drifters = ['hebbian', 'touch', 'logEvent', 'assocStats'];
+  const shown = drifters
+    .map((label) => ({
+      label,
+      a: mean(head.map((r) => r.stages?.[label] ?? 0)),
+      b: mean(tail.map((r) => r.stages?.[label] ?? 0)),
+    }))
+    .filter((d) => d.a > 0.05 || d.b > 0.05);
+  if (shown.length) {
+    console.log('\ndrift across the run (mean ms, first 50 vs last 50):');
+    for (const d of shown) {
+      const delta = d.a > 0 ? `${((100 * (d.b - d.a)) / d.a).toFixed(0)}%` : 'n/a';
+      console.log(`  ${d.label.padEnd(22)} ${d.a.toFixed(2)} -> ${d.b.toFixed(2)}  (${delta})`);
+    }
+  }
+}
+
 console.log(`\nrecords: ${OUT}`);

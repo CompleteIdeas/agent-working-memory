@@ -9,7 +9,8 @@
  * 400 chars). That truncation exists for a real reason: cross-encoders pad to
  * the longest passage in the batch, so one 5,000-char memory in a 40-item pool
  * drags every passage to ~512 tokens and costs 3-4x. The reranker is already
- * ~90% of warm recall latency, so "just send everything" is not available.
+ * 78% of warm recall latency (measured, `npm run profile:recall`), so "just send
+ * everything" is not available.
  *
  * But a PREFIX is the wrong 400 chars. Measured on the live 29.8k store:
  *   - canonical memories median 1,965 chars, 98.7% exceed 400

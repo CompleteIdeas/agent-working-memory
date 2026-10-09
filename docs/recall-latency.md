@@ -8,7 +8,9 @@ Reproduce:
 ```
 npm run profile:recall                 # 120 probes, identifier suite
 npm run profile:recall -- --n 450 --fixture fixture-category.json
+npm run profile:recall -- --live       # the path daily use takes (side effects ON)
 npm run profile:recall -- --public     # reproducible corpus, no private data
+npm run profile:recall -- --dtype q8   # or --pool N, --trunc N, --tagslen N
 ```
 
 **Why this page exists.** The write path has had phase telemetry since D1. The
@@ -61,20 +63,90 @@ recall feel slow" answer: it is one-off model load, not a slow store.
    simplicity argument, not a performance one — and this is exactly the claim
    that reading the code would have gotten wrong.
 
-2. **The rerank-skip heuristic is dead at the shipped default — 0 of 870
-   queries.** `activation.ts` documents it as saving "~300ms of wall-clock per
-   recall on simple queries". Its gate requires
+2. **The rerank-skip heuristic never fires on this store at the shipped k —
+   0 of 870 queries.** `activation.ts` documents it as saving "~300ms of
+   wall-clock per recall on simple queries". Its gate requires
    `rerankPool.length <= max(limit*2, 20)` = **20**, but the pool is
-   `min(limit*8, 40)` = **24** at the shipped k=3. The pool is permanently one
-   notch above the bound, so the branch cannot be taken. Confirmed by
-   observation: at `AWM_RERANK_POOL=16` the skip starts firing (3.3% of
-   queries) purely because the pool drops under the bound.
+   `min(limit*8, 40)` = **24** at the shipped k=3 — one notch above the bound.
+   Confirmed by observation: at `AWM_RERANK_POOL=16` the skip starts firing
+   (3.3% of queries) purely because the pool drops under the bound.
+
+   **Scope this claim carefully.** It is 0/870 *on an 11k-engram store at k=3*.
+   The branch is still reachable wherever fewer than ~20 candidates clear
+   `minScore` — a small or new store, or a narrow query — so a reviewer testing
+   on a fresh store will see it fire and should not read that as a
+   contradiction. What is wrong is the bound, not the idea: the saving it was
+   written to collect is real, and at the shipped configuration it is never
+   collected.
 
 3. **Keyword search is 13.2% across three passes, not one.** `bm25` runs two
    (keyword-stripped for precision, expanded for recall) and Rocchio
    pseudo-relevance feedback runs a third on **100%** of queries. What that
    third pass buys has never been measured; it is a candidate for the next
    ablation, not a finding.
+
+---
+
+## The path daily use actually takes
+
+Everything above is the *benchmark* path. `runner.ts` passes `internal: true`,
+which skips `touchEngram`, the Hebbian co-activation buffer and the
+activation-event insert. `internal` appears nowhere in `src/hooks/`,
+`src/mcp.ts` or the adapters — so every real `memory_recall` and every
+UserPromptSubmit prime runs those three stages, and no published latency number
+has ever included them.
+
+Measured with `npm run profile:recall -- --live`: 240 recalls, side effects on,
+queries taken from `activation_events` (the store's own log of real past
+recalls, so the real query distribution rather than identifier-shaped probes).
+
+| | benchmark path | live path |
+|---|---|---|
+| total p50 | 538–547ms | **573ms** |
+| `rerank` share | 78.0% | 76.9% |
+| `touch` | *(skipped)* | 3.1ms · 0.5% |
+| `hebbian` | *(skipped)* | 1.1ms · 0.2% |
+| `logEvent` | *(skipped)* | 0.2ms · 0.0% |
+
+**The side effects cost ~4.4ms, 0.7% of a recall.** `internal: true` understates
+real recall latency by under one percent, so the published figures are honest
+about the path users are on. That is a result worth having rather than assuming
+in either direction.
+
+**No buffer drift.** `getCoActivatedPairs(10_000)` reads a buffer that grows
+across a session, so the Hebbian stage was the obvious candidate for
+degradation over a long run. First 50 calls against the last 50: `hebbian`
+0.91 → 1.10ms (+20% of a fifth of a millisecond), while `touch` and
+`assocStats` got *faster* as SQLite warmed (−49%, −40%). Nothing runs away at
+this length.
+
+**Cold start is paid once per session, not per prompt.** The prime hook is a
+thin script that POSTs to a long-lived per-session sidecar (`:8401` upward),
+so the 1.3–1.5s model load lands on that sidecar's first recall and every
+later prompt hits warm models. A per-prompt spawn would have made cold start
+the dominant cost in daily use; it isn't.
+
+### One real outlier: the pronoun branch
+
+A query containing `she|he|they|her|his|him|their|it|that|this|there` triggers
+a branch that calls `getEngramsByAgents(agentIds, 'active')` — **every active
+engram, loaded into JS** — sorts them by access count and keeps five tag words
+from the top ten.
+
+| | |
+|---|---|
+| share of real prompts that trip it | **2.1%** (86 of 4,000 logged recalls; 5 of 240 in the live run) |
+| share of fixture probes that trip it | 0.2% — so the benchmark never exercised it |
+| cost **when it fires** | **245ms mean, 280ms median** |
+| total recall when it fires | **926ms** against 572ms when it does not |
+
+So about one real prompt in fifty pays a 62% slowdown to obtain five tag words,
+and the benchmark corpus is ten times less likely to trip it than real traffic
+is. **n = 5 in the live run**, so treat the magnitude as indicative and the
+mechanism as certain: a full scan of active engrams is in the code path either
+way. The fix is a bounded `ORDER BY access_count DESC LIMIT 10` instead of
+loading the table — not applied here, because this pass was asked to find the
+cost, not to change the hot path.
 
 ---
 
@@ -139,4 +211,4 @@ Two measurements would settle it:
 
 And one defect is worth fixing on its own merits, independent of dtype: the
 rerank-skip bound is off by four at the shipped k, so a documented 300ms
-optimisation has never once run.
+optimization has never been collected at the shipped k.

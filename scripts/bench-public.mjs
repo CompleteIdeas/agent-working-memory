@@ -108,7 +108,7 @@ console.log(`PUBLIC retrieval benchmark — seed ${SEED}, snapshot ${SNAP_NAME},
 console.log('Synthetic corpus, reproducible from this repository.');
 console.log('These numbers are NOT docs/benchmarks-current.md and are not comparable to it.');
 console.log('It scores LOWER, not higher — generated prose is more self-similar, so same-domain');
-console.log('neighbours are harder to separate. Use the DELTA, not the absolute.');
+console.log('neighbors are harder to separate. Use the DELTA, not the absolute.');
 
 run('deriving ground truth (same hold-out as the private snapshot)',
   'node', ['tests/realstore-eval/build-fixture.mjs'], PUBLIC);

@@ -31,9 +31,11 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
  * It is exposed because the cross-encoder is 77% of warm recall latency
  * (measured, `npm run profile:recall`), which makes precision the largest
  * single latency lever in the system — and an unmeasurable one while it was a
- * literal. 'q8' typically runs 2-4x faster on CPU; whether it keeps this
- * store's ranking is an empirical question, so changing it is opt-in and the
- * default is untouched.
+ * literal. MEASURED on the private snapshot: 'q8' cuts the rerank stage ~1.6x
+ * (425ms -> 255ms p50) and total recall latency 29-34%, for 0.0pp of success@1
+ * on identifier queries and -0.9pp on topic queries, with success@5 and correct
+ * abstention unchanged. The default is untouched because that 0.9pp is a product
+ * decision; see docs/recall-latency.md.
  */
 const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'fp32') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
 

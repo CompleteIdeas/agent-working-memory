@@ -23,7 +23,7 @@
  * one: it has no genuine supersession history, no months of real co-recall
  * edges, no human inconsistency in how the same thing got written down three
  * times. It scores LOWER, not higher — generated prose is more self-similar
- * than real prose, so same-domain neighbours are harder to tell apart than
+ * than real prose, so same-domain neighbors are harder to tell apart than
  * they would be in a real store. What it reproduces is the METHOD — the same hold-out, the same
  * scoring, the same abstention accounting — plus a stable public baseline that
  * a change can be measured against. Treat a delta here as signal and an
@@ -37,7 +37,7 @@
  *   - identifier-dense, in the shapes AWM's writing guidance asks for
  *   - the answer-bearing identifier planted at a CONTROLLED offset, straddling
  *     the 400-char reranker window so the truncation cliff is measurable
- *   - same-domain neighbours sharing vocabulary, so ranking is discrimination
+ *   - same-domain neighbors sharing vocabulary, so ranking is discrimination
  *     rather than lookup
  *   - two agent scopes, because agent isolation is a product feature that a
  *     benchmark must not score as a ranking defect
@@ -93,7 +93,7 @@ const FILLER = [
  * here, on the theory that distinctive tails help the reranker discriminate.
  * It did the opposite — measured, s@1 fell from 48.3% to 37.7% — because every
  * memory in a domain then repeated that domain's six words many times over,
- * making same-domain neighbours harder to tell apart, not easier. What
+ * making same-domain neighbors harder to tell apart, not easier. What
  * separates two memories is the unique identifier and the specific concept, so
  * the filler must vary WITHOUT adding topical signal.
  */
@@ -281,7 +281,7 @@ export function buildPublicCorpus(n = 400, seed = 20261008) {
     const ident = identifierFor(i);
     const targetOffset = pickOffset(r);
 
-    // Opening lines share the domain's vocabulary so same-domain neighbours are
+    // Opening lines share the domain's vocabulary so same-domain neighbors are
     // genuinely confusable, then filler pads until the planted identifier can
     // sit at its target offset.
     // Build the filler pool first, then choose how many go BEFORE the planted

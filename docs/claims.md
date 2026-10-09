@@ -114,7 +114,7 @@ identifier position: **97.3%** where the reranker can see the identifier,
   check and the truncation cliff, on data you can rebuild byte-for-byte.
 - It **does not** reproduce the published numbers, and is not comparable to
   them. A synthetic corpus scores **lower**: generated prose is more
-  self-similar, so same-domain neighbours are harder to separate.
+  self-similar, so same-domain neighbors are harder to separate.
 - **Noise floor:** two builds differing only in seed gave `s@1` 56.3% and
   52.0%. The corpus *shape* reproduces to 0.2pp and every qualitative result
   holds, but a 2pp move in the absolute is noise. Confirm on two seeds.

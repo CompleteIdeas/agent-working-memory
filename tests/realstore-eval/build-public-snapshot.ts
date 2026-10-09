@@ -16,8 +16,8 @@
  * WHY THE WRITES ARE NOT REINFORCED
  * ---------------------------------
  * `performWrite` merges a near-duplicate into an existing engram instead of
- * creating a new one — correct product behaviour, wrong for a fixture builder.
- * This corpus is deliberately dense with same-domain neighbours that share
+ * creating a new one — correct product behavior, wrong for a fixture builder.
+ * This corpus is deliberately dense with same-domain neighbors that share
  * filler vocabulary, so reinforcement would quietly collapse several hundred
  * memories into a few dozen and the corpus size would stop matching what the
  * generator asked for. Reinforcement is therefore disabled HERE ONLY. The
