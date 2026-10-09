@@ -41,7 +41,7 @@ Check the `phaseScores` breakdown:
 - Normal on AWM 0.7.14+: floor ~300ms, typical 400-700ms on 10K-engram corpora
 - First recall after process start is slower (~2-3s) — that's the cold cost of loading 3 ML models (embedder, reranker, expander) and populating the slim cache. AWM warms the cache eagerly at startup; the first user-visible recall is fast in production.
 - Disable model phases for speed: `"useReranker": false, "useExpansion": false` (~5-20ms recall, but degraded ranking)
-- **If recall feels >1s warm on 0.7.14+**: one of the optimization paths may be silently disabled. Check the AWM coordinator process env for any of `AWM_DISABLE_POOL_FILTER`, `AWM_DISABLE_SLIM_CACHE`, `AWM_DISABLE_RERANK_SKIP`, `AWM_DISABLE_EXPANSION_CACHE` — none should be set to `1` in production.
+- **If recall feels >1s warm on 0.7.14+**: one of the optimization paths may be silently disabled. Check the AWM coordinator process env for any of `AWM_DISABLE_POOL_FILTER`, `AWM_DISABLE_SLIM_CACHE`, `AWM_DISABLE_EXPANSION_CACHE` — none should be set to `1` in production. (`AWM_DISABLE_RERANK_SKIP` was also on this list until 2026-10-09; the branch it disabled has been removed, so the variable is now accepted and ignored.)
 
 ### Recall returning slightly different top-K than expected
 AWM 0.7.7+ uses a candidate pool filter, and 0.7.14+ truncates passages to 400 chars before reranking. Recall quality A/B verified 8/8 top-1 matches and 90-95% top-5 overlap on diverse queries — but you may see reorderings near the bottom of top-K. If you suspect a regression for a specific query class, A/B by setting one or more of the disable flags above and compare. File an issue with the query and the diff if you find a real recall miss.

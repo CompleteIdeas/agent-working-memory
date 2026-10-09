@@ -91,7 +91,6 @@ regression elsewhere — entirely via follow-up single-hop recalls, AWM unchange
 |---|---|
 | `AWM_RECALL_EXPAND=1` | restore query-expansion-by-default (default is rerank-only) |
 | `AWM_SIM_CANDIDATE_FLOOR_*` | vector candidate floor (lower = more recall, more noise/cost) |
-| `AWM_DISABLE_RERANK_SKIP=1` | force the cross-encoder rerank even on clear-winner queries |
 | `AWM_REINFORCE_MERGE_CONTENT=0` | disable content merge on reinforce |
 | `AWM_ENTITY_INDEX_FETCH=1` | D11 (2026-07-30): entity-index candidate injection — query-named entities resolve via the inverted index (incl. aliases) and get a guaranteed rerank audition; pair with `AWM_AUTOTAG=1` so free-text writes populate the index |
 | `AWM_SLOW_WRITE_MS` | slow-write telemetry threshold (default 250 ms; `0` disables) |

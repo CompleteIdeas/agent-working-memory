@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### The clear-winner rerank skip is gone
+
+Decided by measurement rather than by reading the code, and reproducible:
+`npm run profile:recall -- --n 300 --skip-pool off` at commit `d7417c4`.
+It moves **no published number**, because the branch never fired on any store
+this repository benchmarks.
+
+**Removed: the reranker skip on clear-winner queries (0.7.10–0.15.9).**
+Its gate needed `rerankPool.length <= max(limit*2, 20)` = 20 against a pool of
+24 at the shipped k=3, so it fired on 0 of 870 queries in the first profile,
+0 of 300 on the identifier suite and 0 of 200 on the public corpus. The bound
+was in step when written — 0.7.13 had cut the pool to `max(limit*2, 15)` — and
+0.9.0 widened the pool for recall without revisiting it. Forced on, it cost
+success@1 92.7% → 91.7%, success@5 96.7% → 96.3% and MRR 94.6% → 93.9% to save
+at most 13.6ms of a 528ms recall, and a per-query diff moved exactly the 10
+queries it fired on: 3 lost rank-1 and 1 lost the gold out of the top 5. Where
+it did fire — a new install, with fewer than ~20 candidates clearing
+`minScore` — it also left every pool item at `rerankerScore = 0`, which the
+phase-8 agreement gate, the thin-margin penalty and the `abstentionThreshold`
+path all read as if the stage had run. The cross-encoder is now unconditional.
+`AWM_DISABLE_RERANK_SKIP` is accepted and ignored; no config breaks.
+
+
 ## 0.15.9 (2026-09-22) — an archived duplicate could never be reinforced again
 
 Phase 6.5 (redundancy-prune) archives a "loser" near-duplicate during consolidation to keep

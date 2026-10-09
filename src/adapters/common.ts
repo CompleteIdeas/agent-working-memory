@@ -752,8 +752,6 @@ Recall pipeline:
   no effect on the real-store benchmark, 0.14.5).
 - \`AWM_DISABLE_SLIM_CACHE=1\` — disables the in-memory slim cache.
   Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
-- \`AWM_DISABLE_RERANK_SKIP=1\` — disables the cross-encoder skip on
-  clear-winner queries. Forces every recall through the reranker.
 - \`AWM_DISABLE_EXPANSION_CACHE=1\` — disables the query expansion skip
   heuristic + LRU cache. Forces every recall through flan-t5-small.
 

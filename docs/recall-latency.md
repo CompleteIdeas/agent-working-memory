@@ -63,21 +63,51 @@ recall feel slow" answer: it is one-off model load, not a slow store.
    simplicity argument, not a performance one — and this is exactly the claim
    that reading the code would have gotten wrong.
 
-2. **The rerank-skip heuristic never fires on this store at the shipped k —
-   0 of 870 queries.** `activation.ts` documents it as saving "~300ms of
-   wall-clock per recall on simple queries". Its gate requires
-   `rerankPool.length <= max(limit*2, 20)` = **20**, but the pool is
+2. **The rerank-skip heuristic never fired at the shipped k, and forcing it on
+   cost accuracy. It is now removed.** `activation.ts` documented it as saving
+   "~300ms of wall-clock per recall on simple queries". Its gate required
+   `rerankPool.length <= max(limit*2, 20)` = **20** against a pool of
    `min(limit*8, 40)` = **24** at the shipped k=3 — one notch above the bound.
-   Confirmed by observation: at `AWM_RERANK_POOL=16` the skip starts firing
-   (3.3% of queries) purely because the pool drops under the bound.
+   It fired on 0 of 870 queries in the first profile, 0 of 300 on the identifier
+   suite and 0 of 200 on the public corpus.
 
-   **Scope this claim carefully.** It is 0/870 *on an 11k-engram store at k=3*.
-   The branch is still reachable wherever fewer than ~20 candidates clear
-   `minScore` — a small or new store, or a narrow query — so a reviewer testing
-   on a fresh store will see it fire and should not read that as a
-   contradiction. What is wrong is the bound, not the idea: the saving it was
-   written to collect is real, and at the shipped configuration it is never
-   collected.
+   The bound was in step when it was written. 0.7.13 had cut the pool to
+   `max(limit*2, 15)`, and its changelog notes the skip would fire *more* often
+   as a result. 0.9.0 widened the pool to `max(limit*4, 40)` for recall and left
+   the bound behind.
+
+   So the question was whether to collect the saving, and the answer is no.
+   Measured with `--skip-pool off`, the lever added for exactly this:
+
+   | identifier n=300 | s@1 | s@5 | MRR | silence | skip fired |
+   |---|---|---|---|---|---|
+   | bound as shipped | **92.7%** | **96.7%** | **94.6%** | 90.0% | 0/300 |
+   | bound off | 91.7% | 96.3% | 93.9% | 90.0% | 10/300 |
+
+   A per-query diff of the two traces moves **exactly the 10 queries it fired on
+   and nothing else**: 3 of those 10 lost rank-1, and one lost the gold out of
+   the top 5 altogether. The heuristic's premise — that the cross-encoder rarely
+   changes the top result when the composite already has a clean winner — does
+   not hold on the queries it selected for itself. Against that, the saving is at
+   most **13.6ms of a 528ms recall** (3.3% of queries × a 407ms rerank stage),
+   which is smaller than this machine's run-to-run drift: three back-to-back runs
+   of the *same* arm gave 528, 548 and 500ms.
+
+   It was also unsafe where it *did* fire — a store with fewer than ~20
+   candidates clearing `minScore`, which is to say a new install. Every pool item
+   keeps `rerankerScore = 0`, and phase 8 reads that in three places with no idea
+   the stage was skipped: the reranker agreement channel dies; `margin` is 0, so
+   the thin-margin branch *always* fires (×0.4 on every score, which drops
+   `floor` in `computeRecallConfidence` and therefore depresses confidence on
+   exactly the clearest queries); and a caller passing `abstentionThreshold`
+   needs 3 of 3 channels and abstains.
+
+   **Deleting it is number-neutral on every store measured here**, because it
+   never fired on any of them. Reproduce the rejection at commit `d7417c4`:
+   `npm run profile:recall -- --n 300 --skip-pool off`. The same hazard outlives
+   the skip on the two paths where the reranker still does not run —
+   `useReranker: false` (exposed as the MCP `use_reranker` parameter) and the
+   reranker's own catch — which is a separate defect with its own measurement.
 
 3. **Keyword search is 13.2% across three passes, not one.** `bm25` runs two
    (keyword-stripped for precision, expanded for recall) and Rocchio
@@ -221,6 +251,6 @@ Two measurements would settle it:
   one);
 - `q4`, which may trade more accuracy for less again.
 
-And one defect is worth fixing on its own merits, independent of dtype: the
-rerank-skip bound is off by four at the shipped k, so a documented 300ms
-optimization has never been collected at the shipped k.
+The rerank-skip bound that this page originally listed as a defect to fix turned
+out to be the wrong read: collecting its saving costs more accuracy than the
+saving is worth, so the branch was removed instead. See finding 2.

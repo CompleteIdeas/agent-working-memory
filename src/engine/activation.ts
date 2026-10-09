@@ -20,8 +20,8 @@
  *   4/5 Spreading-activation graph walk (DEFAULT OFF; AWM_SPREAD=1 — parked
  *       after displacing-gold regressions; see design-proposals D11)
  *   6. Filter + sort into rerank pool (wide pool since 0.9.0)
- *   7. Cross-encoder rerank (ms-marco; clear-winner skip unless
- *      AWM_DISABLE_RERANK_SKIP=1)
+ *   7. Cross-encoder rerank (ms-marco; every pooled candidate — the
+ *      0.7.10 clear-winner skip was removed 2026-10-09, see phase 7a)
  *   8. Multi-channel OOD detection + agreement gate; supersession penalty;
  *      abstention enforced only when caller passes require_confidence
  *   9. Final sort, granularity, confidence attach
@@ -454,8 +454,10 @@ export class ActivationEngine {
     // The D9 inverted index resolves query-NAMED entities ("Avery", "ticket 10002") to every
     // engram indexed under them — deterministic exact lookup, immune to embedding/BM25 vocabulary
     // mismatch. Injected candidates get NO score boost; instead they are GUARANTEED a rerank
-    // audition (exempt from the topN cut, the minScore pool filter, the rerank-pool slice, and
-    // the rerank-skip heuristic) and the cross-encoder alone decides whether they surface.
+    // audition (exempt from the topN cut, the minScore pool filter and the rerank-pool slice)
+    // and the cross-encoder alone decides whether they surface. The fourth exemption, from the
+    // clear-winner rerank skip, went away with that branch on 2026-10-09 — the reranker is now
+    // unconditional, so an injected candidate is always auditioned.
     // This is the guarded successor to AWM_ENTITY_FETCH above, whose failure mode was measured:
     // injected gold entered the pool but was cut before the reranker ever scored it. Bounded
     // (AWM_ENTITY_INDEX_CAP, default 12) so the audition costs at most one extra rerank batch.
@@ -928,62 +930,45 @@ export class ActivationEngine {
       }
     }
 
-    // Reranker skip heuristic (0.7.10+): if BM25 already has a clear winner with
-    // strong absolute score AND a meaningful gap to the runner-up, the cross-encoder
-    // is unlikely to change the top result.
+    // Phase 7a: every candidate in the pool is judged by the cross-encoder.
     //
-    // MEASURED 2026-10-08: on the private snapshot at the shipped k=3 this fires on
-    // 0 of 870 queries. `smallPool` needs the pool at or under max(limit*2, 20) = 20,
-    // but the pool is min(limit*8, 40) = 24 there — one notch above the bound, so the
-    // branch cannot be taken. It still fires on stores small or sparse enough that
-    // fewer than ~20 candidates clear minScore, and at AWM_RERANK_POOL=16 it fires on
-    // 3.3%. The saving it was written for is real (rerank is 78% of a recall); the
-    // bound is what stops it being collected. See docs/recall-latency.md.
+    // There used to be a skip here (0.7.10): when the composite already had a
+    // "clean winner" — top-1 textMatch >= 0.8 AND top-1 >= 1.5x top-2 — and the
+    // pool was small, the cross-encoder was skipped to save its ~400ms.
     //
-    // Conservative gate (only skip when very confident):
-    //   - top-1 textMatch >= 0.8 (high BM25 + jaccard agreement)
-    //   - top-1 score is at least 1.5× top-2 score (clear separation)
-    //   - rerankPool size <= max(limit*2, 20) (small pool — less for the reranker
-    //     to do). The literal was in step with the pool when written: 0.7.13 had
-    //     cut the pool to max(limit*2, 15), and its changelog notes the skip would
-    //     fire MORE often as a result. 0.9.0 widened the pool to max(limit*4, 40)
-    //     for recall and left the bound behind. Override with AWM_RERANK_SKIP_POOL
-    //     (a number sets the bound, `off` removes it) to measure the gate instead
-    //     of reasoning about it.
+    // It is gone, measured 2026-10-09 (`npm run profile:recall` at d7417c4,
+    // which carries `--skip-pool off` for exactly this):
     //
-    // Ambiguous queries (close BM25 scores, weak top-1, large pool) still go through
-    // the reranker. Disable this heuristic via AWM_DISABLE_RERANK_SKIP=1.
-    let rerankSkipped = false;
-    let cleanWinnerSeen = false;
-    // (D11 guard 4/4: never skip the reranker when entity-index candidates were injected —
-    // the audition IS the rerank; skipping would return them unjudged or drop them.)
-    if (useReranker && rerankPool.length >= 2 && injectedIds.size === 0 && process.env.AWM_DISABLE_RERANK_SKIP !== '1') {
-      const top1 = rerankPool[0];
-      const top2 = rerankPool[1];
-      const t1Text = top1.phaseScores.textMatch;
-      const t1Score = top1.score;
-      const t2Score = top2.score;
-      const cleanWinner = t1Text >= 0.8 && t1Score >= 1.5 * Math.max(t2Score, 0.01);
-      cleanWinnerSeen = cleanWinner;
-      const skipPoolEnv = process.env.AWM_RERANK_SKIP_POOL;
-      const skipPoolBound = skipPoolEnv === 'off'
-        ? Number.POSITIVE_INFINITY
-        : skipPoolEnv !== undefined && Number.isFinite(Number(skipPoolEnv))
-          ? Number(skipPoolEnv)
-          : Math.max(limit * 2, 20);
-      const smallPool = rerankPool.length <= skipPoolBound;
-      if (cleanWinner && smallPool) {
-        rerankSkipped = true;
-      }
-    }
-
-    // The skip's CEILING, measurable without changing behavior: cleanWinner is
-    // true on exactly the queries a bound-off arm would skip, so one baseline
-    // run says what the bound is costing before anything is changed.
-    prof.note('cleanWinner', cleanWinnerSeen);
+    //   - It never fired at any store size this repository benchmarks: 0/300
+    //     identifier, 0/200 public, 0/870 in the earlier profile. Its bound was
+    //     max(limit*2, 20) = 20 against a pool of 24 at the shipped k=3. The
+    //     bound was in step when written — 0.7.13 had cut the pool to
+    //     max(limit*2, 15) — and 0.9.0 widened the pool to max(limit*4, 40) for
+    //     recall without revisiting it.
+    //
+    //   - Forced on, it cost success@1 92.7% -> 91.7%, success@5 96.7% -> 96.3%,
+    //     MRR 94.6% -> 93.9% on the identifier suite, to save at most 13.6ms of a
+    //     528ms recall — under this machine's run-to-run drift. A per-query diff
+    //     moved exactly the 10 queries it fired on: 3 of those 10 lost rank-1 and
+    //     one lost the gold out of the top 5 altogether. Its premise, that the
+    //     cross-encoder rarely changes the top result on a clean winner, does not
+    //     hold on the queries it selected for itself.
+    //
+    //   - Where it DID fire — a store with under ~20 candidates clearing
+    //     minScore, which is to say a new install — it left every pool item at
+    //     rerankerScore = 0, and phase 8 reads that in three places with no idea
+    //     the stage was skipped: the reranker agreement channel dies; `margin` is
+    //     0 so the thin-margin branch ALWAYS fires (x0.4 on every score, which
+    //     drops `floor` in computeRecallConfidence and so depresses confidence on
+    //     exactly the clearest queries); and a caller passing abstentionThreshold
+    //     needs 3 of 3 channels, so it abstains.
+    //
+    // That last hazard outlives the skip on the two paths where the reranker
+    // still does not run: `useReranker: false` (exposed as the MCP
+    // `use_reranker` parameter) and the catch below. Separate defect, needs its
+    // own measurement — AWM task 2026-10-09.
     prof.note('rerankPool', rerankPool.length);
-    prof.note('rerankSkipped', rerankSkipped);
-    if (useReranker && !rerankSkipped && rerankPool.length > 0) {
+    if (useReranker && rerankPool.length > 0) {
       try {
         // Passage selection for the cross-encoder. Truncation exists for a real
         // reason: cross-encoders pad to the longest passage in the batch, so one
