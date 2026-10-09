@@ -246,7 +246,7 @@ export function evaluateSalience(
     case 'observation': break;
   }
   // Signal-weakness gate. The novelty score alone (~0.45 for fresh content)
-  // would clear the active threshold (0.4), so any labelled event with no
+  // would clear the active threshold (0.4), so any labeled event with no
   // backing numerical signals lands as 'active' regardless of the label's
   // semantics. That's wrong for friction/causal: those types describe events
   // that *happened to the agent* and benefit from explicit intensity signals.

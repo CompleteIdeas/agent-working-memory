@@ -25,7 +25,12 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Produced by:** `tests/realstore-eval/runner.ts` over `fixture.json` (300 probes) and `fixture-category.json` (450 probes).
 - **Corpus:** `snapshot/store.db` — a frozen copy of a real work store, 29,853 engrams total, **11,262 retrievable**. Gitignored and will stay that way.
 - **Ground truth:** unique-identifier hold-out. An identifier appearing in exactly one active engram, uniqueness confirmed through FTS — the real retrieval path, not a regex. Derived by `tests/realstore-eval/build-fixture.mjs`.
-- **Stamped at:** v0.14.6, commit `50362f2`, 2026-09-12 (`docs/benchmarks-current.md`).
+- **Stamped at:** v0.15.9, commit `eb0620f`, 2026-10-09 — `bench-runs/0.15.9-2026-10-09/`
+  (identifier.log, category.log; gitignored and maintainer-only, like the snapshot
+  itself). Measured twice by different drivers, `npm run bench` and
+  `npm run profile:recall`, which agree to the decimal. Note that
+  `docs/benchmarks-current.md` still shows the 2026-10-08 figures: its generator needs
+  more free memory than this machine had, and it carries a banner saying so.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
   - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers staged, retracted or superseded rows. `benchmarks-current.md` says this; make sure every other page does too.

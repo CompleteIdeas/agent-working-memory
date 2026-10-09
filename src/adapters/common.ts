@@ -71,7 +71,7 @@ export function resolveHookSecret(dbPath: string): string {
  * Retrieval settings `awm setup` turns on for a new install (0.14.6).
  *
  * All three ship default-off in the engine so an existing process never changes
- * behaviour on upgrade, but the README has recommended them together since 0.14.0:
+ * behavior on upgrade, but the README has recommended them together since 0.14.0:
  * second-stage rerank by the cross-encoder's own score, a 400-char rerank window
  * on the densest query-term region (25% → 87.5% on long memories), and tags in the
  * rerank passage (+7.4pp). A value the user already has in their config wins.
@@ -383,7 +383,7 @@ you write them; AWM stays current because every agent reads + writes the same st
 5. **Finishing a task**: call \`memory_task_end\` with a summary.
 6. **Hooks do the rest.** \`awm setup\` installs three: a **prime** hook that recalls against
    each prompt and injects what clears confidence (or nothing), and checkpoint hooks on
-   compaction and session end (plus a 15-min timer). Primed context arrives labelled
+   compaction and session end (plus a 15-min timer). Primed context arrives labeled
    \`[class · age]\` — treat it by the volatility rubric, not as user input. If a turn
    arrives with no primed context, that is a signal too: recall explicitly before
    asserting anything.
@@ -730,7 +730,7 @@ For the comparison table (recall quality parity, BM25 vs \`ts_rank_cd\`,
 multi-process guarantees), see \`docs/pglite-feature-parity.md\`.
 
 ### Diagnostics / escape hatches (env vars, only if you know why)
-Each optimisation is gated by an env var so it can be disabled for A/B testing if a
+Each optimization is gated by an env var so it can be disabled for A/B testing if a
 regression appears in your workload. \`memory_whoami\` prints the active fingerprint.
 
 Retrieval (set ON by \`awm setup\` since 0.14.6 — the measured-good configuration):

@@ -9,7 +9,7 @@
  * 400 chars). That truncation exists for a real reason: cross-encoders pad to
  * the longest passage in the batch, so one 5,000-char memory in a 40-item pool
  * drags every passage to ~512 tokens and costs 3-4x. The reranker is already
- * 78% of warm recall latency (measured, `npm run profile:recall`), so "just send
+ * 83% of warm recall latency (measured, `npm run profile:recall`), so "just send
  * everything" is not available.
  *
  * But a PREFIX is the wrong 400 chars. Measured on the live 29.8k store:
@@ -45,7 +45,7 @@ function terms(query: string): string[] {
 
 /**
  * Choose the `budget`-char window of `content` densest in query terms.
- * Returns the head of the content when nothing matches — the old behaviour,
+ * Returns the head of the content when nothing matches — the old behavior,
  * which is the right fallback: with no query signal there is no reason to
  * prefer any other part of the memory.
  */
@@ -93,7 +93,7 @@ export function densestWindow(content: string, query: string, budget: number): s
  * Build the passage handed to the cross-encoder for one candidate.
  *
  * `mode`:
- *  - `'prefix'` (default) — legacy behaviour, the first `budget` chars.
+ *  - `'prefix'` (default) — legacy behavior, the first `budget` chars.
  *  - `'query'`  — the `budget`-char window densest in query terms.
  */
 export function buildRerankPassage(
@@ -153,7 +153,7 @@ export function rerankTruncation(): number {
   return Number.isFinite(v) && v > 0 ? v : 400;
 }
 
-/** Passage selection mode. Default `prefix` preserves shipped behaviour. */
+/** Passage selection mode. Default `prefix` preserves shipped behavior. */
 export function rerankWindowMode(): 'prefix' | 'query' {
   return process.env.AWM_RERANK_WINDOW === 'query' ? 'query' : 'prefix';
 }

@@ -61,7 +61,7 @@ export interface PackedRecall {
 /**
  * Select and format results to fit `maxTokens`.
  *
- * When `maxTokens` is undefined the behaviour is unchanged from pre-0.13.3 —
+ * When `maxTokens` is undefined the behavior is unchanged from pre-0.13.3 —
  * everything is returned — but the accounting fields are still populated, so
  * callers get per-call token visibility without opting into budgeting.
  */
@@ -148,7 +148,7 @@ export function packRecallByBudget(
  * One-line accounting footer. Costs ~15-25 tokens to report, which is a good
  * trade against a recall that can run to thousands — and it is what makes the
  * per-call cost visible to both the human and the harness. Without this,
- * AWM's token behaviour is only observable in an offline benchmark.
+ * AWM's token behavior is only observable in an offline benchmark.
  */
 export function formatTokenFooter(p: PackedRecall, maxTokens?: number): string {
   if (p.total === 0) return '';

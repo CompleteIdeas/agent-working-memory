@@ -126,7 +126,7 @@ async function main() {
   const byClass: Record<string, boolean[]> = {};
   let s1 = 0, s5 = 0, rr = 0, usefulTok = 0, missTok = 0, n = 0;
   // Read-time cost is a campaign guard: warm recall is ~540ms p50 on a quiet
-  // machine and 78% cross-encoder (measured, `npm run profile:recall` — this
+  // machine and 83% cross-encoder (measured, `npm run profile:recall` — this
   // comment said ~900ms and ~90% before either was instrumented), so an arm that
   // buys accuracy with latency has moved the cost.
   const lat: number[] = [];

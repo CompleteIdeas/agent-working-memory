@@ -11,13 +11,17 @@ npm run profile:recall -- --n 450 --fixture fixture-category.json
 npm run profile:recall -- --live       # the path daily use takes (side effects ON)
 npm run profile:recall -- --public     # reproducible corpus, no private data
 npm run profile:recall -- --dtype q8   # or --pool N, --trunc N, --tagslen N
+npm run profile:recall -- --feedback 1 # put the Rocchio pass back (finding 3)
 ```
 
 **Why this page exists.** The write path has had phase telemetry since D1. The
 read path had exactly one number — the total — so every statement about *which
 stage owns it* was a reading of the code rather than a measurement. Two
 comments in this repository asserted the cross-encoder was "~90% of warm recall
-latency", each citing only the other. It is **75–78%**. The hypothesis was
+latency", each citing only the other. It was **75–78%** of the pipeline
+measured here, and is **82–84%** of the one that now ships, because defaulting
+the Rocchio pass off removed 7% of the denominator without touching the
+numerator. The hypothesis was
 right about the culprit and wrong about the size, which is the normal outcome
 of guessing at a profile and the reason `src/core/recall-telemetry.ts` now
 exists.
@@ -277,7 +281,8 @@ deliberately cheap wide pre-filter and the cross-encoder is the ranker; starve
 the pool and the ranker never sees the gold. q8 keeps the pool and makes the
 ranker cheaper, which is why it dominates.
 
-**The reranker earns its cost.** It is 78% of the latency and it is also what
+**The reranker earns its cost.** It is 78% of the latency as measured here
+(82–84% of the pipeline that now ships) and it is also what
 `AWM_RERANK_TAGS=1` (+7.4pp s@1) and `AWM_RERANK_WINDOW=query` act through.
 Nothing here argues for removing it — the lever worth pulling makes the same
 judgement cheaper rather than making less of it.

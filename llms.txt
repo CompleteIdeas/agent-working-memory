@@ -316,8 +316,8 @@ facts.
    keeps the code it loaded at spawn. Restart the session, or reconnect, then
    confirm with `memory_whoami`. Do not infer the running version from
    `package.json`.
-6. **Cold start is ~1.5s; warm recall is ~550ms** (measured, k=3, 11k-engram
-   store, `npm run profile:recall`). The cross-encoder is **78%** of the warm
+6. **Cold start is ~1.5s; warm recall is ~480ms** (measured, k=3, 11k-engram
+   store, `npm run profile:recall`). The cross-encoder is **83%** of the warm
    figure, and its first inference is 450-670ms of the cold one — so cold start
    is model load, not a slow store, and it is paid once per process. Never put a
    cold recall on a latency-critical path. `AWM_RERANKER_DTYPE=q8` cuts total

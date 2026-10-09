@@ -985,7 +985,7 @@ export class ActivationEngine {
         // Passage selection for the cross-encoder. Truncation exists for a real
         // reason: cross-encoders pad to the longest passage in the batch, so one
         // 5,000-char memory in a 40-item pool drags everything to ~512 tokens and
-        // costs 3-4x — and the reranker is 78% of warm recall latency (measured,
+        // costs 3-4x — and the reranker is 83% of warm recall latency (measured,
         // `npm run profile:recall`; this comment claimed ~90% until it was).
         //
         // But a PREFIX is the wrong budget to spend. On the live store, canonical

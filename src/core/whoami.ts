@@ -35,7 +35,7 @@ export interface WhoamiInfo {
   /**
    * Effective recall configuration. `whoami` is the "what am I actually
    * running" tool, and the version alone does not answer that: a build can be
-   * current while the recall flags that change its behaviour are unset, or set
+   * current while the recall flags that change its behavior are unset, or set
    * to something unintended. GET /health already reports this, but HTTP is off
    * by default, so an MCP-only session had no way to see it.
    */
