@@ -45,8 +45,8 @@ dated files under [`archive/`](archive/README.md).
 
 | test | what it asks | result |
 |---|---|---|
-| Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **92.7%** correct on the first result, 96.7% in the top 5 |
-| Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **92.0%** first-result, 96.7% top-5 |
+| Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **93.0%** correct on the first result, 97.0% in the top 5 |
+| Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **92.2%** first-result, 96.9% top-5 |
 | Adversarial, 10 queries | Ask about something that was never stored | **90%** correctly return nothing |
 
 The two fixtures are built differently and agree within a point. Both run against a frozen

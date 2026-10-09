@@ -20,7 +20,7 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 1. Retrieval accuracy
 
-> **92.7%** of identifier queries · **92.0%** of topic queries · **96.7%** in the top five
+> **93.0%** of identifier queries · **92.2%** of topic queries · **97.0%** in the top five
 
 - **Produced by:** `tests/realstore-eval/runner.ts` over `fixture.json` (300 probes) and `fixture-category.json` (450 probes).
 - **Corpus:** `snapshot/store.db` — a frozen copy of a real work store, 29,853 engrams total, **11,262 retrievable**. Gitignored and will stay that way.

@@ -24,6 +24,39 @@ phase-8 agreement gate, the thin-margin penalty and the `abstentionThreshold`
 path all read as if the stage had run. The cross-encoder is now unconditional.
 `AWM_DISABLE_RERANK_SKIP` is accepted and ignored; no config breaks.
 
+### Rocchio pseudo-relevance feedback is now opt-in (`AWM_FEEDBACK_BM25=1`)
+
+Phase 3.5 ran a third BM25 pass on **100%** of queries, costing 6.7–7.0% of every
+warm recall (35–41ms, plus a `getAssociationsFor` per newly discovered candidate
+on 71–79% of them). Nothing had ever measured what it bought. Across three suites
+and 950 queries, arrow reading ON → OFF:
+
+| Suite | s@1 | s@5 | MRR | correct silence |
+|---|---|---|---|---|
+| identifier n=300 | 92.7 → **93.0** | 96.7 → **97.0** | 94.6 → **94.9** | 90.0 → 90.0 |
+| topic n=450 | 92.0 → **92.2** | 96.7 → **96.9** | 94.2 → **94.4** | 90.0 → 90.0 |
+| public n=200 | 56.0 → 56.0 | 61.5 → 61.5 | 58.7 → 58.7 | 100 → 100 |
+
+Read as **unmoved**: one query on each private suite, and on the topic suite one
+gold moves up while another moves down. The decisive row is the public corpus —
+the only suite with real recall headroom at s@5 61.5% — where a candidate-adding
+pass changes nothing at all. Three gold ranks move in 950 queries, two of them
+the wrong way, which is what a pass that can only *add* candidates does when its
+additions displace rather than deliver.
+
+**This moves published figures**, unlike the skip removal above:
+`docs/benchmarks-current.md`, `docs/claims.md`, `docs/for-decision-makers.md`,
+`docs/recall-latency.md` and `README.md` are re-baselined to 93.0% / 92.2% /
+97.0% in the same release. The 2026-10-08 lever tables in `docs/recall-latency.md`
+are kept as measured and labeled as the old default — which also means **the q8
+dtype comparison now sits on a superseded baseline** and must be re-run before
+that decision is taken.
+
+Scope the result to this implementation, not to pseudo-relevance feedback as a
+technique: the five expansion terms are the first novel tokens in *document
+order*, not the top five by weight, and come mostly from the top-1 result. A
+weighted term selection is a different experiment and might well pay.
+
 
 ## 0.15.9 (2026-09-22) — an archived duplicate could never be reinforced again
 

@@ -652,18 +652,30 @@ export class ActivationEngine {
     // Phase 3.5: Rocchio pseudo-relevance feedback — expand query with top result terms
     // then re-search BM25 to find candidates that keyword search missed.
     //
-    // Costs 7.3% of warm recall latency (41ms mean, measured 2026-10-08) on
-    // 100% of queries, plus a getAssociationsFor per newly discovered
-    // candidate. AWM_FEEDBACK_BM25=0 disables it so that cost can be weighed
-    // against what it buys; the default is unchanged.
+    // DEFAULT OFF since 2026-10-09. `AWM_FEEDBACK_BM25=1` restores it.
     //
-    // Scope any verdict to THIS implementation: the expansion terms are the
-    // first five novel tokens in document order (a Set populated by iterating
-    // the top-3 contents), not the top five by weight, and they come mostly
-    // from the top-1 result. "Rocchio buys nothing here" would not be a
-    // statement about pseudo-relevance feedback in general.
+    // It ran on 100% of queries and cost 6.7-7.0% of every warm recall (35-41ms
+    // mean, plus a getAssociationsFor per newly discovered candidate on 71-79%
+    // of them). What it bought had never been measured. Across three suites and
+    // 950 queries it is (arrow reads ON -> OFF):
+    //
+    //   identifier n=300   s@1 92.7 -> 93.0   s@5 96.7 -> 97.0   silence 90.0 -> 90.0
+    //   topic      n=450   s@1 92.0 -> 92.2   s@5 96.7 -> 96.9   silence 90.0 -> 90.0
+    //   public     n=200   s@1 56.0 -> 56.0   s@5 61.5 -> 61.5   silence  100 ->  100
+    //
+    // Three gold ranks move in 950 queries, and two of the three move in the
+    // wrong direction for the pass — which is the shape you would expect, since
+    // it can only ADD candidates and an added candidate can only displace. The
+    // public corpus is the decisive row: it is the only suite with real recall
+    // headroom (s@5 61.5%) and the pass changes nothing there at all.
+    //
+    // Scope that to THIS implementation before concluding anything about the
+    // technique: the expansion terms are the first five novel tokens in DOCUMENT
+    // ORDER (a Set populated by iterating the top-3 contents), not the top five
+    // by weight, and they come mostly from the top-1 result. A weighted term
+    // selection is a different experiment and might well pay.
     const preSorted = scored.sort((a, b) => b.score - a.score);
-    const feedbackEnabled = process.env.AWM_FEEDBACK_BM25 !== '0';
+    const feedbackEnabled = process.env.AWM_FEEDBACK_BM25 === '1';
     const topForFeedback = feedbackEnabled
       ? preSorted.slice(0, 3).filter(r => r.phaseScores.textMatch > 0.1)
       : [];

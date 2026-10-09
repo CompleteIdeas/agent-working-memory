@@ -22,6 +22,17 @@ right about the culprit and wrong about the size, which is the normal outcome
 of guessing at a profile and the reason `src/core/recall-telemetry.ts` now
 exists.
 
+> **What this page changed, and what that does to its own numbers (2026-10-09).**
+> Two findings below were acted on the day after the measurement, so every table
+> on this page is the *pre-change* state and stays as measured:
+>
+> - **Finding 2, the clear-winner rerank skip: deleted.** Number-neutral — it
+>   never fired on any store measured here, and forcing it on cost accuracy.
+> - **Finding 3, the Rocchio feedback pass: now default off.** This one *does*
+>   move the published figures. Identifier s@1 92.7% → **93.0%**, topic 92.0% →
+>   **92.2%**, and every accuracy table below carries the old baseline. Current
+>   figures live in `docs/benchmarks-current.md`.
+
 ---
 
 ## The profile
@@ -84,6 +95,10 @@ recall feel slow" answer: it is one-off model load, not a slow store.
    | bound as shipped | **92.7%** | **96.7%** | **94.6%** | 90.0% | 0/300 |
    | bound off | 91.7% | 96.3% | 93.9% | 90.0% | 10/300 |
 
+   (Both rows carry the Rocchio pass, which was still on when this was measured.
+   The comparison is unaffected — it is one change against one baseline — but the
+   absolute figures are the 2026-10-08 ones.)
+
    A per-query diff of the two traces moves **exactly the 10 queries it fired on
    and nothing else**: 3 of those 10 lost rank-1, and one lost the gold out of
    the top 5 altogether. The heuristic's premise — that the cross-encoder rarely
@@ -109,11 +124,37 @@ recall feel slow" answer: it is one-off model load, not a slow store.
    `useReranker: false` (exposed as the MCP `use_reranker` parameter) and the
    reranker's own catch — which is a separate defect with its own measurement.
 
-3. **Keyword search is 13.2% across three passes, not one.** `bm25` runs two
-   (keyword-stripped for precision, expanded for recall) and Rocchio
-   pseudo-relevance feedback runs a third on **100%** of queries. What that
-   third pass buys has never been measured; it is a candidate for the next
-   ablation, not a finding.
+3. **Keyword search was 13.2% across three passes, not one — and the third pass
+   bought nothing.** `bm25` runs two (keyword-stripped for precision, expanded
+   for recall). Rocchio pseudo-relevance feedback ran a third on **100%** of
+   queries for 6.7–7.0% of every warm recall, and that cost had never been
+   weighed against a benefit. Measured with `--feedback 0`, arrow reads ON → OFF:
+
+   | Suite | s@1 | s@5 | MRR | correct silence | stage cost removed |
+   |---|---|---|---|---|---|
+   | identifier n=300 | 92.7 → **93.0** | 96.7 → **97.0** | 94.6 → **94.9** | 90.0 → 90.0 | 37ms (7.0%) |
+   | topic n=450 | 92.0 → **92.2** | 96.7 → **96.9** | 94.2 → **94.4** | 90.0 → 90.0 | 35ms (6.9%) |
+   | public n=200 | 56.0 → 56.0 | 61.5 → 61.5 | 58.7 → 58.7 | 100 → 100 | 3ms (1.2%) |
+
+   Read that accuracy column as **unmoved, not improved**. It is one query on
+   each private suite, and on the topic suite a per-query diff shows one gold
+   moving up and one moving down. The decisive row is the public corpus — the
+   only suite here with real recall headroom, at s@5 61.5% — where a
+   candidate-*adding* pass changes nothing whatsoever. Across all three suites it
+   moves 3 gold ranks in 950 queries, two of them the wrong way, which is the
+   shape to expect from a pass that can only add candidates and whose additions
+   can only displace.
+
+   Take the saving from the **stage table**, not from the totals. This machine's
+   run-to-run drift is larger than the effect — three back-to-back runs of one
+   arm gave 528, 548 and 500ms — and on the public corpus BM25 is cheap, so most
+   of the 10% total drop there is noise around a 3ms stage.
+
+   **Default off since 2026-10-09**; `AWM_FEEDBACK_BM25=1` restores it. Scope the
+   result to this implementation before concluding anything about the technique:
+   the five expansion terms are the first novel tokens in *document order*, not
+   the top five by weight, and come mostly from the top-1 result. A weighted term
+   selection is a different experiment.
 
 ---
 
@@ -177,7 +218,8 @@ is — which is why it survived this long.
 **Fixed.** `EngramStore.getTopAccessedTags(agentIds, 10, 'active')` does it in
 SQL. Same five tags, byte-identical, **287ms → 0.45ms** measured end to end,
 still firing on the same 2.0% of real prompts. Identifier and topic accuracy
-unmoved (92.7% / 92.0%); 802 tests pass.
+unmoved (92.7% / 92.0% — the shipped defaults on 2026-10-08, before the Rocchio
+pass was turned off); 802 tests pass.
 
 One thing worth knowing if you touch it again: the obvious single query is a
 trap. `agent_id IN (...)` makes SQLite abandon the ordered index walk and sort
@@ -196,8 +238,15 @@ recall that paid.
 
 All measured same-session on one quiet machine (13.8 GB free), so the latency
 column is comparable across rows. Both baselines reproduce
-`docs/benchmarks-current.md` exactly, which is the fourth and fifth identical
-accuracy reproduction of those figures.
+`docs/benchmarks-current.md` **as it stood on 2026-10-08** exactly, which was
+the fourth and fifth identical accuracy reproduction of those figures.
+
+That lineage ends here. Defaulting the Rocchio pass off on 2026-10-09 (finding 3)
+moved the baseline to 93.0% / 92.2%, so the `fp32 (shipped)` rows below are the
+*old* default and the q8 comparison is relative to it. **The q8 question has not
+been re-measured against the new baseline** — it needs to be before the dtype
+decision is taken, because the −0.9pp topic cost that makes it a tradeoff was
+measured against a pipeline that no longer ships.
 
 **Identifier suite, n=300:**
 

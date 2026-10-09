@@ -411,6 +411,12 @@ Recall pipeline:
   no effect on the real-store benchmark, 0.14.5).
 - `AWM_DISABLE_SLIM_CACHE=1` — disables the in-memory slim cache.
   Reverts to per-recall SQL fetch + Buffer→Float32Array conversion.
+- `AWM_FEEDBACK_BM25=1` — re-enables Rocchio pseudo-relevance feedback
+  (phase 3.5), a third BM25 pass over the query plus five terms harvested from
+  the top 3 results. Default OFF since 2026-10-09: measured at 6.7–7.0% of every
+  warm recall for no measurable accuracy — 3 gold ranks moved in 950 queries
+  across three suites, two of them the wrong way, and zero change on the public
+  corpus.
 - `AWM_DISABLE_EXPANSION_CACHE=1` — disables the query expansion skip
   heuristic + LRU cache. Forces every recall through flan-t5-small.
 

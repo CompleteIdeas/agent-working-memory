@@ -42,7 +42,7 @@ including the ones we think are weakest.
 
 | | |
 |---|---|
-| **Returns the right memory first** | **92.7%** of identifier queries · **92.0%** of topic queries · **96.7%** in the top five |
+| **Returns the right memory first** | **93.0%** of identifier queries · **92.2%** of topic queries · **97.0%** in the top five |
 | **Stays silent when it should** | **90.0%** correct abstention on questions about facts never stored |
 | **Costs the same at any scale** | Scoped recall answers in **~630 tokens flat**. Carrying the store instead: ~1.3M tokens |
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
