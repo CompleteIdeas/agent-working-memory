@@ -200,38 +200,91 @@ const VERSION = pkg.version;
   walk('docs');
   DOCS.push('README.md');
 
-  // Derived, never written down. A literal here goes stale the first release the
-  // benchmark moves, and then this check quietly passes for the wrong reason —
-  // the same failure RELEASE.md records as "a version number inside a test".
-  // docs/benchmarks-current.md is generated, so it is the one honest source.
-  const HEADLINE = (() => {
-    const t = read('docs/benchmarks-current.md') || '';
-    const pick = (label) => {
-      const row = t.split(/\r?\n/).find(l => l.startsWith(`| ${label}`));
-      if (!row) return null;
-      const f = row.split('|').map(s => s.trim().replace(/\*/g, '').replace('%', ''));
-      return { s1: f[3], s5: f[4], abstention: f[6] };   // name | probes | s@1 | s@5 | MRR | abstention | p50 | p90
-    };
-    const id = pick('Identifier queries'), topic = pick('Topic queries');
-    if (!id || !topic) return [];
-    return [...new Set([id.s1, topic.s1, id.abstention, id.s5])].filter(v => /^\d+\.\d+$/.test(v));
-  })();
-  if (!HEADLINE.length) {
-    note('benchmark-spread', 'Could not derive the headline figures from docs/benchmarks-current.md — the retrieval table changed shape, so this check is inert until the parser is fixed.');
-  }
-  const hits = new Map();
-  for (const f of DOCS) {
-    const t = read(f); if (!t) continue;
-    for (const n of HEADLINE) if (new RegExp(`\\b${n.replace('.', '\\.')}\\b`).test(t)) {
-      if (!hits.has(n)) hits.set(n, []);
-      hits.get(n).push(f);
+  // Which figures to chase, derived from the generated page on BOTH sides of this
+  // release — never written down as literals here.
+  //
+  // Deriving only the CURRENT figures inverts this check at the one moment it
+  // exists for. RELEASE.md's order is: run `npm run bench`, which rewrites
+  // docs/benchmarks-current.md, THEN run this to find every doc still carrying the
+  // old numbers. Grep for the NEW figures at that moment and you find only the page
+  // bench just wrote — the stale docs are precisely the ones that do NOT match, so
+  // the check reports a short list of coincidences and reads like a clean sync.
+  // (Measured 2026-10-09: with figures nudged and docs untouched, a current-only
+  // derivation named 2 files, both coincidental matches on unrelated ablation cells,
+  // while the seven genuinely-stale docs went unnamed.)
+  //
+  // So: HEAD's generated page is the "before", the working tree's is the "after",
+  // and the figure worth hunting for a metric that moved is the OLD one.
+  const SUITE_METRICS = ['s@1', 's@5', 'mrr', 'abstention'];
+  const metricsFrom = (text) => {
+    if (!text) return null;
+    const lines = text.split(/\r?\n/);
+    const header = lines.find(l => /^\|\s*Suite\s*\|/i.test(l));
+    if (!header) return null;
+    // Locate columns by NAME. With fixed indices, inserting or reordering a column
+    // in the generator silently files one metric's value under another's label —
+    // e.g. MRR reported as the abstention rate.
+    const cols = header.split('|').map(s => s.trim().toLowerCase());
+    const idx = {};
+    for (const m of SUITE_METRICS) { const i = cols.indexOf(m); if (i > 0) idx[m] = i; }
+    if (Object.keys(idx).length !== SUITE_METRICS.length) return null;
+    const out = new Map();
+    for (const line of lines) {
+      if (line === header || !/^\|/.test(line) || /^\|\s*-/.test(line)) continue;
+      const f = line.split('|').map(s => s.trim().replace(/\*/g, '').replace('%', ''));
+      const suite = f[1];
+      if (!suite || !/quer/i.test(suite)) continue;       // skip provenance/other tables
+      for (const m of SUITE_METRICS) {
+        const v = f[idx[m]];
+        if (/^\d+\.\d+$/.test(v)) out.set(`${suite} · ${m}`, v);
+      }
     }
-  }
-  for (const [n, files] of hits) {
-    if (files.length > 1) note('benchmark-spread', `${n}% appears in ${files.length} docs: ${files.join(', ')}`);
-  }
-  if (hits.size) {
-    note('benchmark-spread', 'If any of these changed this release, every listed file must change together.');
+    return out.size ? out : null;
+  };
+
+  const nowM = metricsFrom(read('docs/benchmarks-current.md'));
+  const prevM = metricsFrom(git('show HEAD:docs/benchmarks-current.md'));
+
+  if (!nowM) {
+    // A silent self-disabled gate is worse than a loud one: warn, don't note.
+    warn('benchmark-spread',
+      'Could not read the retrieval table in docs/benchmarks-current.md — this check is INERT.',
+      'The parser locates the "| Suite |" header and its s@1/s@5/MRR/abstention columns by name. If bench-current.mjs renamed or dropped one, fix scripts/check-release.mjs section 5 to match.');
+  } else {
+    const expected = SUITE_METRICS.length * 2;            // identifier + topic
+    if (nowM.size < expected) {
+      warn('benchmark-spread',
+        `Only ${nowM.size} of ${expected} headline figures could be read from docs/benchmarks-current.md — a suite row may have failed or be missing a metric, so this check covers less than it appears to.`,
+        'Check the retrieval table for a "_run failed_" row or an em-dash cell, and re-run the affected suite.');
+    }
+
+    // The generated page is the SOURCE of these figures, so counting it inflates
+    // every total by one and makes "appears in 2 docs" mean "one real doc".
+    const HAND = DOCS.filter(f => f !== 'docs/benchmarks-current.md');
+    const carriers = (value) => {
+      const re = new RegExp(`\\b${value.replace('.', '\\.')}\\b`);
+      return HAND.filter(f => { const t = read(f); return t && re.test(t); });
+    };
+
+    let reported = 0;
+    for (const [label, nowV] of nowM) {
+      const prevV = prevM?.get(label);
+      if (prevV && prevV !== nowV) {
+        // This metric moved. The actionable list is whoever still says the OLD value.
+        const stale = carriers(prevV);
+        reported++;
+        note('benchmark-spread', stale.length
+          ? `${label} moved ${prevV}% -> ${nowV}% — ${stale.length} doc(s) still carry ${prevV}%: ${stale.join(', ')}`
+          : `${label} moved ${prevV}% -> ${nowV}% — no doc still carries ${prevV}%, propagation looks complete`);
+      } else {
+        // Unmoved: fall back to plain blast radius, which is what this check did
+        // before and is still the right informational answer between benchmarks.
+        const files = carriers(nowV);
+        if (files.length > 1) { reported++; note('benchmark-spread', `${label} ${nowV}% appears in ${files.length} docs: ${files.join(', ')}`); }
+      }
+    }
+    if (!prevM) note('benchmark-spread', 'No previous docs/benchmarks-current.md at HEAD to diff against — reporting blast radius only, not what moved.');
+    if (reported) note('benchmark-spread', 'If any of these changed this release, every listed file must change together.');
   }
 }
 
