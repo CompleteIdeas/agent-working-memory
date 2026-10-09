@@ -6,7 +6,8 @@
  * Cognitive retrieval pipeline — phases as shipped (D4 honesty pass 2026-07-30;
  * default-OFF phases are marked, since operators tune from this header):
  *   -1. Coreference expansion (conditional: query contains pronouns)
- *   0. Query expansion (flan-t5-small; caller-gated, MCP default ON)
+ *   0. Query expansion (flan-t5-small; caller-gated — the ENGINE default is OFF,
+ *      AWM_DEFAULT_EXPANSION=1 flips it; some MCP paths opt in per call)
  *   1. Vector embedding (bge-small 384d)
  *   2. Parallel retrieval (dual FTS5/BM25 + native vector top-K)
  *   3. Per-candidate scoring (BM25, Jaccard, cosine floor, ACT-R decay,

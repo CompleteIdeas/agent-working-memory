@@ -200,7 +200,25 @@ const VERSION = pkg.version;
   walk('docs');
   DOCS.push('README.md');
 
-  const HEADLINE = ['92.7', '92.0', '90.0', '96.7'];
+  // Derived, never written down. A literal here goes stale the first release the
+  // benchmark moves, and then this check quietly passes for the wrong reason —
+  // the same failure RELEASE.md records as "a version number inside a test".
+  // docs/benchmarks-current.md is generated, so it is the one honest source.
+  const HEADLINE = (() => {
+    const t = read('docs/benchmarks-current.md') || '';
+    const pick = (label) => {
+      const row = t.split(/\r?\n/).find(l => l.startsWith(`| ${label}`));
+      if (!row) return null;
+      const f = row.split('|').map(s => s.trim().replace(/\*/g, '').replace('%', ''));
+      return { s1: f[3], s5: f[4], abstention: f[6] };   // name | probes | s@1 | s@5 | MRR | abstention | p50 | p90
+    };
+    const id = pick('Identifier queries'), topic = pick('Topic queries');
+    if (!id || !topic) return [];
+    return [...new Set([id.s1, topic.s1, id.abstention, id.s5])].filter(v => /^\d+\.\d+$/.test(v));
+  })();
+  if (!HEADLINE.length) {
+    note('benchmark-spread', 'Could not derive the headline figures from docs/benchmarks-current.md — the retrieval table changed shape, so this check is inert until the parser is fixed.');
+  }
   const hits = new Map();
   for (const f of DOCS) {
     const t = read(f); if (!t) continue;

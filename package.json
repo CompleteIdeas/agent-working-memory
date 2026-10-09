@@ -72,6 +72,8 @@
     ".claude-plugin/",
     "package.json",
     "README.md",
+    "AGENTS.md",
+    "llms.txt",
     "LICENSE"
   ],
   "dependencies": {

@@ -3,7 +3,7 @@
 /**
  * Embedding Engine - vector embeddings via the ML worker pool.
  *
- * Default model: bge-small-en-v1.5 (384 dimensions, ~90MB, MTEB retrieval-optimized).
+ * Default model: bge-small-en-v1.5 (384 dimensions, 133MB ONNX, MTEB retrieval-optimized).
  * Configurable via AWM_EMBED_MODEL env var.
  *
  * AWM 0.8.x: inference dispatches through ml-worker.ts. The worker_threads

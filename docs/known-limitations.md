@@ -40,10 +40,14 @@ is unreachable by that identifier.
   the body, not only in tags.
 
 ### The remaining misses on the real-store benchmark are genuine
-At 92.7% first-result accuracy on the identifier fixture, the 10 remaining misses (of 300)
-are real ranking failures, not fixture noise: 5 never enter the candidate pool, 2 reach it
-with the identifier outside the 400-character window the reranker reads. Maximum headroom
-from here is about 7 points.
+At 93.0% first-result accuracy and 97.0% in the top five, the 9 memories (of 300) that
+never surface at all are real ranking failures, not fixture noise. The per-stage split was
+probed on 2026-09-11, when there were 10 such misses against a 96.7% top-five baseline: 5
+never entered the candidate pool, and 2 reached it with the identifier outside the
+400-character window the reranker reads. That split has **not** been re-probed since
+defaulting the Rocchio pass off recovered one of the ten, so read the stage attribution as
+describing that run rather than a fresh count of the current 9. Maximum headroom from here
+is about 7 points.
 - **Evidence:** `tests/realstore-eval/miss-stage-probe.ts`, 2026-09-11.
 
 ## Learning
@@ -84,11 +88,15 @@ The AWM process a Claude Code session spawns keeps whatever code it loaded at st
 Upgrading the package on disk changes nothing in a live session; only a new session (or a
 process restart) picks up the new version. `memory_whoami` reports the *running* version.
 
-### Cold start is a few seconds
+### Cold start is a few seconds — and the first ever run downloads ~600 MB
 The first recall in a fresh process pays for loading the embedding and reranker models
 (~1.2 s) and warming an in-memory index over the store (~0.5 s at 30k memories). After
 that, warm recall is ~0.5 s median. Concurrent sessions each pay their own cold start.
-- **Evidence:** `AWM-ColdLoad-Measurements-2026-08-21.md`; benchmark p50 528–543 ms.
+
+On a genuinely fresh install the *first* run also has to fetch the models, because **no
+ONNX is bundled** in the npm tarball or the MCPB bundle — that is ~600 MB and minutes, not
+seconds. It is paid once per cache, not once per process.
+- **Evidence:** `AWM-ColdLoad-Measurements-2026-08-21.md`; benchmark p50 467–479 ms.
 
 ### One writer at a time on SQLite, but that is handled
 SQLite allows one writer; AWM uses WAL mode so multiple Claude Code sessions can read and

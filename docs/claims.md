@@ -32,7 +32,9 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
   - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers staged, retracted or superseded rows. `benchmarks-current.md` says this; make sure every other page does too.
-  - These numbers predate the shipped version. See §7.
+  - These numbers are from a commit **past the `v0.15.9` tag**, so they are ahead
+    of the published package rather than behind it. The released 0.15.9 scores
+    92.7% / 92.0% / 96.7%. See §7.
   - Decay runs on the wall clock, so the snapshot must be clock-pinned or the same corpus scores differently on different days — measured, 70.0% vs 67.0% twenty hours apart before the clock was pinned.
 
 ## 2. Correct silence
@@ -61,9 +63,9 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
   **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,510 x 0.30 is about 450, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
 
-  Note also that **net** economics and **cost** are different quantities, and were conflated here previously: the runner reports +519 net per recall on the identifier suite (what a successful recall saves against the ~2,106-token cost of the agent reading the codebase instead), which is not a cost figure and does not reproduce ~630.
+  Note also that **net** economics and **cost** are different quantities, and were conflated here previously: the runner reports +518 net per recall on the identifier suite (what a successful recall saves against the ~2,106-token cost of the agent reading the codebase instead), which is not a cost figure and does not reproduce ~630.
 - **`~1.3M tokens`: now derived, and it holds.** `npm run bench` computes it from the snapshot and stamps it in the provenance table, using the same token estimator the runner applies to what a recall delivers, so both sides of the comparison are measured alike. Over the 11,262 retrievable engrams: **1,234,429** tokens of `concept + content`, **1,545,526** including tags, mean **110** per engram. The published "~1.3M" sits between those two and was correct all along — it simply had no arithmetic behind it. Separately, `docs/awm-for-agents.html` compares the same ~630 against a **29M-token project**: that is a *different* denominator (a codebase, not the store), and the figures are not in conflict, but neither page says which it is using.
-- **What *is* reproducible:** net token economics, by the accounting actually implemented — a recall is credited only when the delivered text contains the answer-bearing identifier, so a recall that returns an unusable pointer scores as a miss rather than a save. Public corpus: **+245** net per recall (seed 20261008), **+181** (seed 99). Private snapshot at the stamped commit: **+519**.
+- **What *is* reproducible:** net token economics, by the accounting actually implemented — a recall is credited only when the delivered text contains the answer-bearing identifier, so a recall that returns an unusable pointer scores as a miss rather than a save. Public corpus: **+245** net per recall (seed 20261008), **+181** (seed 99). Private snapshot at the stamped commit: **+518**.
 - **Reproducibility:** **Maintainer only** for `~1.3M` — the derivation is published and runs on any store, but reproducing *this* figure needs the private snapshot. **Not reproducible** for `~630` as written, because nothing derives it. **Method public** for net economics.
 - **Action remaining:** `~1.3M` is done. `~630` needs resolving before outreach: re-measure the identifier suite with `REALSTORE_GRANULARITY=compact` to test whether that is the figure's origin, then either qualify the claim with the mode or replace it with the measured ~1.5k. Both pages should also say which denominator they are using, so ~1.3M (the store) and 29M (a codebase) stop reading as a contradiction.
 
@@ -95,15 +97,29 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Strength:** the 41% figure is the most interesting claim AWM makes, because it is the one that says memory changed what the agent did rather than merely being retrievable. It deserves a repeatable harness.
   - **Action:** a script over `activation_events` would make this **Method public** and let anyone run it against their own store.
 
-## 7. Known staleness
+## 7. Version currency — the headline is now AHEAD of what ships
 
-`docs/benchmarks-current.md` is stamped **v0.14.6 / `50362f2` / 2026-09-12**. The
-shipped package is **0.15.9**. The file states plainly that nothing is carried
-forward between versions, which is the right policy — and it means the
-published headline numbers are from three patch releases ago.
+`docs/benchmarks-current.md` is stamped **v0.15.9 / `eb0620f` / 2026-10-09**, and
+that is a published version number against an **unpublished commit**. The
+`v0.15.9` tag is `30b937e` (2026-09-22) and npm's `latest` is 0.15.9, but
+`eb0620f` sits 21 commits past that tag. The headline figures on this page
+therefore describe **the code in this repository, not the code on npm**.
 
-- **Action:** re-run `npm run bench` on the shipped version before inviting
-  scrutiny, or label the headline table with the version it came from.
+Concretely: install `agent-working-memory` today and the Rocchio feedback pass is
+still ON, so the numbers to expect are the *old* baseline — identifier s@1
+**92.7%**, topic **92.0%**, s@5 **96.7%** — not the 93.0% / 92.2% / 97.0% quoted
+in §1. The whole difference is the Rocchio flip (`eb0620f`), which ships in the
+next release.
+
+This is the exact inverse of what this section said until 2026-10-09, when the
+published numbers were three patch releases *behind* what shipped. Both
+directions are the same underlying hazard: `benchmarks-current.md` records a
+version and a commit but never says whether that commit is released, so the
+reader cannot tell which side of the tag they are reading.
+
+- **Action:** cut the release that makes `eb0620f` the shipped code, or have
+  `scripts/bench-current.mjs` stamp the commit's position relative to the newest
+  tag so the page states this itself instead of relying on this page to do it.
 
 ## 8. What the public benchmark does and does not tell you
 
@@ -135,7 +151,8 @@ Listed deliberately, in the order we would attack it ourselves:
    stamps it — and it confirmed the published figure rather than contradicting
    it. Two pages still fail to say which denominator they use, so ~1.3M (the
    store) and 29M (a codebase) read as a conflict when they are not.
-2. **The headline numbers are a version behind what ships** (§7).
+2. **The headline numbers are a commit *ahead* of what ships** — 93.0% / 92.2%
+   describes this repository; npm's 0.15.9 still scores 92.7% / 92.0% (§7).
 3. **The two most rhetorically effective claims — 14/15 and 49-vs-100 — are
    `n = 15` and `n = 4`, and neither is reproducible** (§4, §5).
 4. **The 41% "entered only through a recall" figure has no harness** (§6),

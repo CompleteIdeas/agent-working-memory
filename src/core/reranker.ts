@@ -3,7 +3,8 @@
 /**
  * Cross-Encoder Re-Ranker - scores (query, passage) pairs for relevance.
  *
- * Uses Xenova/ms-marco-MiniLM-L-6-v2 (~22MB ONNX) trained on MS-MARCO
+ * Uses Xenova/ms-marco-MiniLM-L-6-v2 (91MB ONNX at the fp32 default; the 23MB
+ * quantized file is what AWM_RERANKER_DTYPE=q8 loads) trained on MS-MARCO
  * passage ranking. Unlike bi-encoders, cross-encoders see both query and
  * passage together via full attention - much better at judging if a
  * passage actually answers a question.
@@ -28,14 +29,18 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
  * Weight precision for the cross-encoder. fp32 is the shipped default and the
  * only value any published number was measured at.
  *
- * It is exposed because the cross-encoder is 77% of warm recall latency
+ * It is exposed because the cross-encoder is 83% of warm recall latency
  * (measured, `npm run profile:recall`), which makes precision the largest
  * single latency lever in the system — and an unmeasurable one while it was a
- * literal. MEASURED on the private snapshot: 'q8' cuts the rerank stage ~1.6x
- * (425ms -> 255ms p50) and total recall latency 29-34%, for 0.0pp of success@1
- * on identifier queries and -0.9pp on topic queries, with success@5 and correct
- * abstention unchanged. The default is untouched because that 0.9pp is a product
- * decision; see docs/recall-latency.md.
+ * literal. RE-MEASURED 2026-10-09 on the pipeline that ships: 'q8' cuts total
+ * recall latency 26-33% across three suites, for ONE QUERY in 450 — identifier
+ * success@1 unchanged at 93.0%, topic 92.2% -> 92.0% — with success@5 and
+ * correct abstention unmoved on all three. It is deterministic (two runs agree
+ * on all 450 queries to 1e-6), and it SHRINKS the first-run download to 23MB
+ * from fp32's 91MB, because no model is bundled. 'q4' is dominated: equal
+ * accuracy, only -3% latency, 6.1s cold start against fp32's 1.6s. The default
+ * is untouched because it is a product decision, not because the cost is
+ * unknown; see docs/recall-latency.md.
  */
 const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'fp32') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
 

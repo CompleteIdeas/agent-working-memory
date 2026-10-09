@@ -1,7 +1,7 @@
 /**
  * Can the small LLM already in AWM do write-time categorisation?
  *
- * AWM already loads Xenova/flan-t5-small (~80MB ONNX) for query expansion, so
+ * AWM already loads Xenova/flan-t5-small (377MB fp32 ONNX) for query expansion, so
  * using it for categorisation costs no new dependency, no network, no money —
  * the deployment cost is already paid. The open question is CAPABILITY: 80M
  * params is small, and the failure mode that matters is confident nonsense.

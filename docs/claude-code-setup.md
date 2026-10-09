@@ -31,7 +31,7 @@ awm setup --global
 
 Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboarding: `onboard_scan`, `onboard_questions`).
 
-> First install takes ~30s while ML models download (~135MB total: bge-small embedder + ms-marco reranker + flan-t5-small expander). Cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
+> First install downloads the ML models — **~600 MB total**, so minutes rather than seconds on a normal connection: 134 MB bge-small embedder + 92 MB ms-marco reranker (fp32) + 377 MB flan-t5-small expander. Nothing is bundled in the package; this is a one-time fetch into `AWM_CACHE_DIR` > `HF_HOME` > `<packageRoot>/data/models`, and it is cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
 
 > **There is a plugin now.** `/plugin marketplace add CompleteIdeas/agent-working-memory`
 > then `/plugin install awm@agent-working-memory` wires the same MCP server, hooks and
@@ -328,7 +328,7 @@ Zero memory tools are registered — Claude can't see or call any of them, not e
 | Problem | Fix |
 |---------|-----|
 | No memory tools in Claude | Restart Claude Code after `awm setup --global` |
-| First conversation slow (~30s) | Normal — ML model download (one-time) |
+| First conversation slow (minutes, once) | Normal — the one-time ~600 MB ML model download. Subsequent sessions load from cache in ~1.5 s |
 | Claude not saving memories | Check Stop hook in `~/.claude/settings.json` |
 | Hook errors in log | Run `awm doctor claude-code` — it probes the port range and reports which sidecars are live and whether one serves this directory's agent. The hooks read the secret from the MCP config at run time, so there is no separate secret file to compare |
 | `awm` command not found | Re-run `npm install -g agent-working-memory` |

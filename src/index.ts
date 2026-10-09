@@ -204,7 +204,7 @@ async function main() {
     }
   }, 10 * 60_000) : null;
 
-  // Pre-load ML models (downloads on first run: embeddings ~22MB, reranker ~22MB, expander ~80MB)
+  // Pre-load ML models (first run downloads ~600MB: embeddings 134MB, reranker 92MB fp32, expander 377MB)
   getEmbedder().catch(err => console.warn('Embedding model unavailable:', err.message));
   getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
   getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));

@@ -81,7 +81,9 @@ So this bundle is **4.6 KB**: a manifest and a launcher. The launcher finds an i
 of the package, checking an explicit `AWM_PACKAGE_ROOT`, then an AWM checkout, then a local
 `node_modules`, then the global npm root, and finally falling back to `npx`.
 
-The trade is one prerequisite instead of a 350 MB download, and it is stated in the
+The trade is one prerequisite instead of a 350 MB per-platform bundle — and the ML models
+download lazily on first use either way, so bundling the code would never have avoided that
+~600 MB fetch. It is stated in the
 description Desktop shows at install time rather than discovered afterwards.
 
 **If you want the fat bundle**, nothing here prevents it — it is a release-infrastructure job

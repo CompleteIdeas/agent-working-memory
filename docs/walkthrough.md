@@ -221,7 +221,7 @@ a shared **workspace** so specialised agents read from a common pool.
 | keep it local and per-agent | no data leaves the box; work and personal never mix |
 
 Measured, on a frozen copy of a real 30,000-memory store: the right memory is the **first**
-result **92.7%** of the time on identifier queries and **92.0%** on topic queries, in the
+result **93.0%** of the time on identifier queries and **92.2%** on topic queries, in the
 top five about 97% of the time, and the system correctly stays silent on 90% of questions
 it has no answer to. Warm recall takes about half a second.
 

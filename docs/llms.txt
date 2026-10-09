@@ -47,8 +47,9 @@ failure mode is writing memories that no channel can see.
 
 A recall runs **three scoring channels**, then a reranker decides the order:
 
-1. **Embedding** — `Xenova/bge-small-en-v1.5`, 384 dimensions, ONNX, bundled
-   and run locally. The vector is built from **`concept` + `content`**.
+1. **Embedding** — `Xenova/bge-small-en-v1.5`, 384 dimensions, ONNX, downloaded
+   on first use and then run locally. The vector is built from
+   **`concept` + `content`**.
 2. **BM25** — SQLite FTS5 over `concept`, `content` and `tags`. This is the
    only channel that sees tags.
 3. **Cross-encoder reranker** — `Xenova/ms-marco-MiniLM-L-6-v2`. It makes the
@@ -317,14 +318,19 @@ facts.
    confirm with `memory_whoami`. Do not infer the running version from
    `package.json`.
 6. **Cold start is ~1.5s; warm recall is ~480ms** (measured, k=3, 11k-engram
-   store, `npm run profile:recall`). The cross-encoder is **83%** of the warm
-   figure, and its first inference is 450-670ms of the cold one — so cold start
-   is model load, not a slow store, and it is paid once per process. Never put a
-   cold recall on a latency-critical path. `AWM_RERANKER_DTYPE=q8` cuts total
-   latency ~30% for 0.0pp success@1 on identifier queries and -0.9pp on topic
-   queries; fp32 is the shipped default. Those two q8 figures were measured
-   2026-10-08, BEFORE the Rocchio pass was defaulted off, so they sit on a
-   pipeline that no longer ships and have not been re-measured. See
+   store, `npm run profile:recall`) — and on a genuinely fresh install, after a
+   one-time **~600 MB** model download, because **nothing is bundled**: no ONNX
+   ships in the npm tarball or the MCPB bundle, and all three models fetch lazily
+   into `AWM_CACHE_DIR` > `HF_HOME` > `<packageRoot>/data/models`. The
+   cross-encoder is **83%** of the warm figure, and its first inference is
+   450-670ms of the cold one — so cold start is model load, not a slow store, and
+   it is paid once per process. Never put a cold recall on a latency-critical
+   path. `AWM_RERANKER_DTYPE=q8` cuts total latency **26-33%** on three suites
+   for **one query in 450** of accuracy (re-measured 2026-10-09 on the shipped
+   pipeline: identifier success@1 unchanged at 93.0%, topic 92.2% -> 92.0%,
+   success@5 and correct silence unmoved everywhere) and it shrinks the reranker
+   download from 91 MB to 23 MB. fp32 is still the shipped default. `q4` is
+   dominated — same accuracy, only -3% latency, 6.1s cold start. See
    docs/recall-latency.md.
 7. **The embedding model is fixed per store.** Changing `AWM_EMBED_MODEL` or
    `AWM_EMBED_DIMS` against an existing corpus leaves half the store scoring 0

@@ -25,13 +25,17 @@ npm install
 npx tsx src/index.ts
 ```
 
-The server starts on port 8400 (configurable via `AWM_PORT` env var). On first run, three ML models download automatically:
+The server starts on port 8400 (configurable via `AWM_PORT` env var). On first run, three ML models download automatically — **~600 MB in total**, so allow minutes rather than seconds, once per cache:
 
 | Model | Size | Purpose |
 |-------|------|---------|
-| bge-small-en-v1.5 | ~33MB | Vector embeddings (384 dimensions) — BAAI, retrieval-optimized |
-| ms-marco-MiniLM-L-6-v2 | ~22MB | Cross-encoder reranking |
-| flan-t5-small | ~80MB | Query expansion |
+| bge-small-en-v1.5 | 134 MB | Vector embeddings (384 dimensions) — BAAI, retrieval-optimized |
+| ms-marco-MiniLM-L-6-v2 | 92 MB | Cross-encoder reranking (`AWM_RERANKER_DTYPE=q8` loads a 23 MB file instead) |
+| flan-t5-small | 377 MB | Query expansion (141 MB encoder + 233 MB merged decoder) |
+
+> These are the **fp32** files, which is what AWM actually loads. Until 2026-10-09
+> this table quoted the *quantized* sizes (~33/~22/~80 MB) for models the code
+> requests at full precision, understating the download by about 4.5x.
 
 Verify the server is running:
 

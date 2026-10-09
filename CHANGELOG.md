@@ -62,9 +62,14 @@ independent phrasings of the same probes all moved one way or not at all.
 `docs/benchmarks-current.md`, `docs/claims.md`, `docs/for-decision-makers.md`,
 `docs/recall-latency.md` and `README.md` are re-baselined to 93.0% / 92.2% /
 97.0% in the same release. The 2026-10-08 lever tables in `docs/recall-latency.md`
-are kept as measured and labeled as the old default — which also means **the q8
-dtype comparison now sits on a superseded baseline** and must be re-run before
-that decision is taken.
+are kept as measured and labeled as the old default. That also left **the q8
+dtype comparison sitting on a superseded baseline**, so it was re-run the same
+day (`c1145b0`): the topic cost fell from −0.9pp to **−0.2pp, one query in 450**,
+q8 proved deterministic, `q4` proved dominated, and the "the quantized model
+would have to be bundled first" prerequisite proved false — nothing is bundled,
+so q8 *shrinks* the existing lazy download from 91 MB to 23 MB. `AWM_RERANKER_DTYPE`
+also joined `RECALL_FLAGS`, without which both arms of that sweep printed the
+same `arm=` label. The default stays `fp32`; flipping it is a product decision.
 
 Scope the result to this implementation, not to pseudo-relevance feedback as a
 technique: the five expansion terms are the first novel tokens in *document

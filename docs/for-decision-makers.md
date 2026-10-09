@@ -30,8 +30,9 @@ A small local program that runs alongside the AI assistant. It has two jobs:
    relevant exists — AWM is built to say "I don't know" rather than return the best of a
    bad set.
 
-Everything runs on the user's machine. One SQLite database file, three small ML models
-(about 200 MB total, downloaded once). No cloud service, no API key, nothing leaves the box.
+Everything runs on the user's machine. One SQLite database file and three ML models
+(about 600 MB total, downloaded once on first use — none of it is bundled in the package).
+No cloud service, no API key, nothing leaves the box.
 It plugs into Claude Code through the standard MCP protocol, and can also be used by any
 agent over a local HTTP interface.
 
@@ -95,8 +96,8 @@ remembered, it is silently re-decided.
 
 | | |
 |---|---|
-| **Install** | `npm install -g agent-working-memory && awm setup --global`, then restart Claude Code. About two minutes plus a one-time model download. |
-| **Footprint** | One database file (a mature store is ~250 MB), three cached models (~200 MB), one lightweight background process per assistant session. |
+| **Install** | `npm install -g agent-working-memory && awm setup --global`, then restart Claude Code. About two minutes, plus a one-time ~600 MB model download that dominates it. |
+| **Footprint** | One database file (a mature store is ~250 MB), three cached models (~600 MB), one lightweight background process per assistant session. |
 | **Latency** | A recall takes roughly half a second to a second. Noticeable; not disruptive. |
 | **Data** | Stays local. Separate memory pools per project or per person are supported. |
 | **Lock-in** | The store is a plain SQLite file with a documented schema and an export command. |

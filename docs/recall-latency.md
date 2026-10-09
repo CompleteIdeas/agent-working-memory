@@ -295,6 +295,10 @@ It cuts total p50 latency **29–34%** and the rerank stage **36–40%**, for
 and correct silence are unchanged on both suites, so what moves is rank-1
 ordering on topic queries, not whether the right memory is retrieved at all.
 
+> **That −0.9pp is superseded.** Re-measured on the pipeline that now ships it
+> is **−0.2pp — one query in 450**. See "The dtype question, re-measured on the
+> shipped pipeline" below; that is the row to quote, not this one.
+
 **Cutting the rerank pool is strictly worse.** `AWM_RERANK_POOL=16` buys a
 similar saving for **−4.0pp** of s@1 and **−3.4pp** of s@5. The composite is a
 deliberately cheap wide pre-filter and the cross-encoder is the ranker; starve
@@ -371,16 +375,16 @@ npm run profile:recall -- --public --n 200 --dtype q8
 `dtype` is now readable from `AWM_RERANKER_DTYPE` instead of being a literal,
 because a value that cannot be varied cannot be measured. **The default is
 still `fp32`** and every published number stands at fp32. Flipping the shipped
-default is a product decision about a −0.9pp topic-suite cost, and it is
-Robert's to make, not something a profiling pass should land quietly.
+default is a product decision, and it is Robert's to make, not something a
+profiling pass should land quietly.
 
-Two measurements would settle it:
-
-- the same sweep on the **public corpus**, so the result is reproducible by a
-  reviewer rather than maintainer-only (mind the 4pp seed-noise floor there —
-  a 0.9pp move is below it, so this tests the latency claim, not the accuracy
-  one);
-- `q4`, which may trade more accuracy for less again.
+Both measurements that were outstanding here have since been taken, and the
+section above carries them: the sweep was re-run on the **public corpus** (−33%
+latency, so the latency claim is now reproducible by a reviewer rather than
+maintainer-only) and on **`q4`**, which turned out to be dominated rather than a
+further trade. The decision now rests on **one query in 450, on one of three
+suites**, against 26–33% of recall latency on all three, a 68 MB smaller
+first-run download and a faster cold start.
 
 The rerank-skip bound that this page originally listed as a defect to fix turned
 out to be the wrong read: collecting its saving costs more accuracy than the
