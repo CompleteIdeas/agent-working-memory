@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 (2026-10-09) — two recall defaults were never measured; both were costing something
+
+> **Upgrade note — `npm update` alone does not deliver the guidance fixes.** The
+> engine changes below apply as soon as a new session starts, because a running
+> MCP connection keeps the code it loaded at spawn time. The corrected *agent
+> guidance* does not: the `SKILL.md` and `CLAUDE.md` text lives on your machine
+> and is written by `awm setup`. Until you re-run it, your agents keep reading a
+> copy that tells them the reranker never sees tags, that `awm setup` installs
+> three hooks, and that the prime hook abstains at 0.25 — all three false. Re-run
+> `awm setup` (or `awm setup --global`), then start a new session. A plugin
+> marketplace installed from a local directory never refreshes on its own.
 
 ### The clear-winner rerank skip is gone
 

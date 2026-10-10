@@ -32,9 +32,11 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
   - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers staged, retracted or superseded rows. `benchmarks-current.md` says this; make sure every other page does too.
-  - These numbers are from a commit **past the `v0.15.9` tag**, so they are ahead
-    of the published package rather than behind it. The released 0.15.9 scores
-    92.7% / 92.0% / 96.7%. See §7.
+  - These numbers describe **what is published**. They were measured at `eb0620f`,
+    which sits behind the `v0.16.0` release commit, but no retrieval code changed
+    in between and §7 carries the diff that establishes it. Until 0.16.0 shipped
+    they described an unpublished commit, and an install got the old 92.7% /
+    92.0% / 96.7% with the Rocchio pass still on.
   - Decay runs on the wall clock, so the snapshot must be clock-pinned or the same corpus scores differently on different days — measured, 70.0% vs 67.0% twenty hours apart before the clock was pinned.
 
 ## 2. Correct silence
@@ -101,37 +103,49 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Strength:** the 41% figure is the most interesting claim AWM makes, because it is the one that says memory changed what the agent did rather than merely being retrievable. It deserves a repeatable harness.
   - **Action:** a script over `activation_events` would make this **Method public** and let anyone run it against their own store.
 
-## 7. Version currency — the headline is now AHEAD of what ships
+## 7. Version currency — the headline now describes what ships
 
 `docs/benchmarks-current.md` is stamped **v0.15.9 / `eb0620f` / 2026-10-09**, and
-that is a published version number against an **unpublished commit**. The
-`v0.15.9` tag is `30b937e` (2026-09-22) and npm's `latest` is 0.15.9, but
-`eb0620f` sits 21 commits past that tag. The headline figures on this page
-therefore describe **the code in this repository, not the code on npm**.
+0.16.0 is the release that makes that commit's behavior the published behavior.
+The figures in §1 therefore describe **the code on npm** — which is what this
+section could not say before 2026-10-09.
 
-Concretely: install `agent-working-memory` today and the Rocchio feedback pass is
-still ON, so the numbers to expect are the *old* baseline — identifier s@1
-**92.7%**, topic **92.0%**, s@5 **96.7%** — not the 93.0% / 92.2% / 97.0% quoted
-in §1. The whole difference is the Rocchio flip (`eb0620f`), which ships in the
-next release.
+The stamp still names the *previous* version, so the problem has not vanished; it
+has shrunk from a wrong number to a stale label. `eb0620f` sits behind the
+`v0.16.0` release commit, and what separates them is documentation plus exactly
+three non-comment source changes, none of which can move a score:
 
-**Where that 92.7% comes from, stated precisely, because it is an inference and
-not a measurement of the released artifact.** No benchmark has ever been run at
-`30b937e` itself. 92.7% / 92.0% / 96.7% is the last measurement of the
-*configuration* the released package has — Rocchio on — taken at `93ef2bb`,
-which is also past the tag. It is quoted here because that restamp found zero
-accuracy drift from 0.14.6 and nothing between it and the tag touched ranking;
-that is a well-supported inference about the released code, not a reading of it.
+| Change | Why it cannot move a ranking |
+|---|---|
+| `src/core/recall-config.ts` | Adds `AWM_RERANKER_DTYPE` to `RECALL_FLAGS`, the provenance label list. It changes the `arm=` string a benchmark *prints*, not the pipeline it prints about |
+| `src/mcp.ts` | Two tool-description strings — the reranker's share of warm latency 78% → 83%, and the prime hook's abstention threshold 0.25 → 0.10. Prompts, not scoring |
+| `src/adapters/common.ts` | The generated agent guidance (`SKILL.md`) |
 
-This is the exact inverse of what this section said until 2026-10-09, when the
-published numbers were three patch releases *behind* what shipped. Both
-directions are the same underlying hazard: `benchmarks-current.md` records a
-version and a commit but never says whether that commit is released, so the
-reader cannot tell which side of the tag they are reading.
+Do not take that on trust; it is one command:
 
-- **Action:** cut the release that makes `eb0620f` the shipped code, or have
-  `scripts/bench-current.mjs` stamp the commit's position relative to the newest
-  tag so the page states this itself instead of relying on this page to do it.
+```bash
+git diff --stat eb0620f..v0.16.0 -- src/
+```
+
+Every other change in that range is a comment or a document. **Re-running
+`npm run bench` at the release commit would restamp the page and retire this
+section**, and that is the right fix — it has not been run because the engine is
+provably unchanged, not because the result is in doubt.
+
+**Both previous states of this section, kept because the pattern is the claim.**
+Until 2026-10-09 it warned that the published numbers were three patch releases
+*behind* what shipped. It was then rewritten to warn of the inverse: figures 21
+commits *ahead* of the released tag, describing a repository rather than a
+package, where an install still ran the Rocchio pass and scored the old 92.7% /
+92.0% / 96.7%. Now it records a lag of zero commits with a label one version
+stale. Three different states in one day, all from one missing field:
+`benchmarks-current.md` records a version and a commit but never says whether
+that commit is **released**, so a reader cannot tell which side of the tag they
+are on without doing the tag arithmetic by hand.
+
+- **Action:** have `scripts/bench-current.mjs` stamp the commit's position
+  relative to the newest tag — "released" or "N commits past v0.16.0" — so the
+  page answers this itself instead of delegating it to this section.
 
 ## 8. What the public benchmark does and does not tell you
 
@@ -170,8 +184,10 @@ Listed deliberately, in the order we would attack it ourselves:
    stamps it — and it confirmed the published figure rather than contradicting
    it. Two pages still fail to say which denominator they use, so ~1.3M (the
    store) and 29M (a codebase) read as a conflict when they are not.
-2. **The headline numbers are a commit *ahead* of what ships** — 93.0% / 92.2%
-   describes this repository; npm's 0.15.9 still scores 92.7% / 92.0% (§7).
+2. **The benchmark page is stamped with the previous version number** — the
+   figures do describe what 0.16.0 ships, but the page says v0.15.9 / `eb0620f`
+   and nothing on it states whether that commit is released, so the reader has to
+   do the tag arithmetic to find out (§7).
 3. **The two most rhetorically effective claims — 14/15 and 49-vs-100 — are
    `n = 15` and `n = 4`, and neither is reproducible** (§4, §5).
 4. **The 41% "entered only through a recall" figure has no harness** (§6),
