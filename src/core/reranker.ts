@@ -79,7 +79,13 @@ async function inProcessRerank(args: { query: string; passages: string[] }): Pro
       text_pair: passages,
       padding: true,
       truncation: true,
-      return_tensors: 'pt',
+      // NOT 'return_tensors'. That key never existed in transformers.js -- it is the
+      // PyTorch Python spelling -- so from 0.7.13 until 2026-10-09 it was silently
+      // ignored and the library default (return_tensor=true, i.e. Tensors) applied.
+      // Stating it explicitly preserves exactly the behaviour that was already
+      // running, and survives a future change of default. transformers 4.x turned
+      // the typo into a type error, which is the only reason it was ever noticed.
+      return_tensor: true,
     });
     const output = await model!(inputs);
     const logits = output.logits ?? output.last_hidden_state;
@@ -100,7 +106,8 @@ async function inProcessRerank(args: { query: string; passages: string[] }): Pro
           text_pair: passages[i],
           padding: true,
           truncation: true,
-          return_tensors: 'pt',
+          // Same ignored-key story as the batch path above.
+          return_tensor: true,
         });
         const output = await model!(inputs);
         const logits = output.logits ?? output.last_hidden_state;
