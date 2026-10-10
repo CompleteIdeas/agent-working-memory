@@ -53,6 +53,7 @@ covers everything else.
 
 | Doc | What it covers |
 |---|---|
+| **[decision-gap-closure-2026-10-10.md](decision-gap-closure-2026-10-10.md)** | **What to build next, and what was already decided against** — the gaps found by comparing AWM to `opencode-mem` at source level, which two were closed by prior measurement rather than rebuilt, and the one reopened as a measurement |
 | [awm-architecture-history.md](awm-architecture-history.md) | How the architecture got here |
 | [memory-quality-hardening-rfc.md](memory-quality-hardening-rfc.md) | The write-quality RFC |
 | [pglite-feature-parity.md](pglite-feature-parity.md) | SQLite vs PGlite backend parity |
