@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.16.1 (2026-10-10) — the reranker was passing a tokenizer option that never existed
+
+> **Nothing to re-download, and no `awm setup` re-run.** transformers 4.x keeps the same
+> model cache layout, so an existing install reuses the weights it already has — verified:
+> this release's benchmark ran on transformers 4.3.1 against cache files still carrying
+> their original 2026-08-23 mtimes. Nothing under `src/adapters/` changed either, so a
+> fresh `awm setup --global` installs the same hooks, env and guidance as 0.16.0. The
+> engine change below applies when a new session starts, as always.
+>
+> **Coming from 0.15.x, you do still need to re-run `awm setup`** — for 0.16.0's corrected
+> guidance, not for anything here. 0.16.0 is fourteen hours old, so that is most upgraders.
+
+### `return_tensors: 'pt'` was never a transformers.js option
+
+`src/core/reranker.ts` passed `return_tensors: 'pt'` to the cross-encoder tokenizer, in both
+the batch path and the per-passage fallback. That is the PyTorch *Python* spelling.
+transformers.js reads `return_tensor` — singular, boolean — so the key was silently ignored
+and the library default applied, which is `return_tensor: true`: exactly what the code
+intended. **No ranking behavior changes.** It is now spelled correctly and stated
+explicitly, so a future change of library default cannot move it silently.
+
+It had been dead since **0.5.2** (commit `1ccbf95`, 2026-03-21), and 0.7.14 copied it into a
+second call site. Nothing caught it in six months because an unknown tokenizer option is not
+an error — transformers 4.x turning it into a type error is the only reason it surfaced. Same
+shape as the clear-winner rerank skip removed in 0.16.0: a branch that had never fired, found
+by measuring rather than by reading.
+
+### Dependencies: the published tree now carries no advisories
+
+| | 0.16.0 | 0.16.1 |
+|---|---|---|
+| `@huggingface/transformers` | `^3.8.1` | **`^4.3.1`** |
+| `@modelcontextprotocol/sdk` | `^1.27.1` | **`^1.32.1`** |
+| `fastify` | `^5.8.2` | **`^5.12.5`** |
+| `npm audit --omit=dev`, installed from npm | **7 (4 moderate, 3 high)** | **0** |
+
+Measured the way a user receives it, not from this repository's lockfile — which is never
+published, so an `npm audit` run *here* says nothing about what an install resolves. Installing
+`agent-working-memory@0.16.0` into an empty directory reported 7 advisories, all reached through
+`onnxruntime-node` → `global-agent` → `roarr`; the same procedure against this release's packed
+tarball reports none. transformers 4.3.1 brings `onnxruntime-node` 1.30.0.
+
+The open task behind this recorded "22 vulnerabilities (3 critical, 10 high)". That was the
+**dev** tree, which no installer receives. The number that reached users was 7, max severity
+high, and no critical — worth stating because the overstatement was in the alarming direction.
+
+**`@electric-sql/pglite` is now pinned to `0.5.6` exactly**, because
+`@electric-sql/pglite-pgvector@0.0.7` carries an *exact* peer dependency on it. Under `^0.5.6`
+the lockfile resolved 0.5.8 while a clean user install resolved 0.5.6 — so this repository had
+been developing and testing against a PGlite that nobody receives, and `npm ci` refused the
+tree outright (`lock file's @electric-sql/pglite@0.5.8 does not satisfy
+@electric-sql/pglite@0.5.6`). That is why the Linux suite could not run on the first attempt:
+it starts with `npm ci` in the container. Found by running a release gate that had been
+reported as unavailable rather than as failing. The matched forward bump
+(pglite 0.5.8 + pgvector 0.0.9) is a separate change with its own PGlite testing to do.
+
+It costs install size: `onnxruntime-node` 208 → 288 MB and `onnxruntime-web` 91 → 141 MB,
+against `@huggingface/transformers` itself shrinking 47 → 13 MB. `docs/desktop.md` carries the
+re-measured table, and the conclusion it supports — that an `.mcpb` vendoring all of this would
+have to be three per-platform bundles — only gets firmer.
+
+### The numbers did not move; the benchmark page now sits inside the release it describes
+
+Re-measured on 4.3.1 at `2375582`: identifier **93.0%** success@1 / **97.0%** success@5 / 94.9%
+MRR / 90.0% abstention, topic **92.2%** / **96.9%** / 94.4% / 90.0%. Every accuracy figure is
+identical to the 0.15.9 run on transformers 3.8.1, and the delivered-token spend reproduced to
+the token (455,486 and 713,745). Two transformers majors, same answers — which is the best
+evidence yet that these figures are a property of the code and not of one run.
+
+Latency is a fresh draw each run rather than a property of the code, and it moved: identifier
+p50 467 → 500 ms, p90 589 → 665 ms; topic p50 479 → 474 ms, p90 583 → 570 ms.
+`docs/known-limitations.md` and `docs/pipeline-walkthrough.html` carry the new figures.
+
+`docs/claims.md` §7 has tracked the gap between the published numbers and the published code
+through three states in two days — behind, ahead, and now level. This release makes it level:
+`git diff 2375582..v0.16.1 -- src/` returns one file, `src/core/reranker.ts`, and every line of
+it is a comment — the provenance correction described above. No non-comment source change
+separates the measurement from the tag. What remains is structural and still open: the page
+records a version and a commit but cannot say whether that commit is *released*, which is the
+one absent field behind all three rewrites.
+
 ## 0.16.0 (2026-10-09) — two recall defaults were never measured; both were costing something
 
 > **Upgrade note — `npm update` alone does not deliver the guidance fixes.** The

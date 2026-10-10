@@ -1,6 +1,6 @@
 {
   "name": "agent-working-memory",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "mcpName": "io.github.CompleteIdeas/agent-working-memory",
   "description": "Persistent, local-first memory for AI agents. Selective by design: filters what's worth keeping, links what's related, and says nothing when it doesn't know. SQLite + ONNX, no cloud, no API keys.",
   "keywords": [
@@ -77,7 +77,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.6",
+    "@electric-sql/pglite": "0.5.6",
     "@electric-sql/pglite-pgvector": "^0.0.7",
     "@huggingface/transformers": "^4.3.1",
     "@modelcontextprotocol/sdk": "^1.32.1",

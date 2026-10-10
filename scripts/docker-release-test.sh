@@ -137,7 +137,14 @@ run_linux() {
     SHA=$(git -C "$HOST" rev-parse --short HEAD 2>/dev/null || echo unknown)
     # The run tests the WORKING TREE, not the commit. Record whether they differed, so a
     # stamp taken over uncommitted changes is not mistaken for one taken at that commit.
-    [ -n "$(git -C "$HOST" status --porcelain 2>/dev/null)" ] && SHA="$SHA-dirty"
+    #
+    # --untracked-files=no, because the stage list is derived from git: an untracked file is
+    # never copied into the container, so it cannot have affected the run. Counting it meant
+    # one stray untracked file in the checkout marked EVERY stamp '-dirty' for good, and the
+    # advice that produced ("re-run against the committed tree") could never be satisfied by
+    # re-running. check-release.mjs already filters '??' out of its own git check; this is the
+    # same rule applied to the same question. A gate nobody can satisfy is a gate nobody reads.
+    [ -n "$(git -C "$HOST" status --porcelain --untracked-files=no 2>/dev/null)" ] && SHA="$SHA-dirty"
     mkdir -p "$ROOT/.release-checks"
     node -e '
       const [out, version, commit, ...rest] = process.argv.slice(1);

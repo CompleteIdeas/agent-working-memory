@@ -80,8 +80,9 @@ async function inProcessRerank(args: { query: string; passages: string[] }): Pro
       padding: true,
       truncation: true,
       // NOT 'return_tensors'. That key never existed in transformers.js -- it is the
-      // PyTorch Python spelling -- so from 0.7.13 until 2026-10-09 it was silently
-      // ignored and the library default (return_tensor=true, i.e. Tensors) applied.
+      // PyTorch Python spelling -- so from 0.5.2 (commit 1ccbf95, 2026-03-21) until
+      // 2026-10-09 it was silently ignored and the library default
+      // (return_tensor=true, i.e. Tensors) applied.
       // Stating it explicitly preserves exactly the behaviour that was already
       // running, and survives a future change of default. transformers 4.x turned
       // the typo into a type error, which is the only reason it was ever noticed.

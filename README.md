@@ -181,10 +181,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.16.0
+## What's new — v0.16.1
 
 | | |
 |---|---|
+| **0.16.1** | A tokenizer option the reranker had been passing since 0.5.2 turned out never to have existed in transformers.js — silently ignored for six months, and the library default was what the code wanted anyway, so no ranking behavior changes. Found by a dependency sweep that also clears every advisory in the published tree: an install of 0.16.0 audits at 7 (3 high), this one at **0**. Accuracy reproduced identically across two transformers majors, token spend to the token |
 | **0.16.0** | Two recall defaults changed, each after being measured for the first time. A pseudo-relevance feedback pass that ran on **every** query is now opt-in — it cost 7% of every recall and bought nothing measurable across 950 probes. A reranker shortcut that had never once fired on any store benchmarked here is deleted; forced on, it cost success@1 93.0% → 91.7%. Identifier recall is now **93.0%** success@1 / **97.0%** success@5. Re-run `awm setup` for the corrected agent guidance |
 | **0.15.9** | A memory that consolidation archived as a near-duplicate — even at high confidence — could never be reinforced again, so the same recurring fact kept spawning new copies instead of strengthening one. An archived match is now revived on reinforcement |
 | **0.15.6–8** | **Data-loss fix.** The default store used to sit inside the installed npm package, where `npm install -g` deletes it on upgrade. It is now `~/.awm/memory.db`; re-running `awm setup` copies an affected store to safety and `awm doctor` fails on it. 0.15.7 corrects the docs that still taught the old location |
@@ -307,7 +308,7 @@ npm run test:linux      # build + full suite on Linux (802/802)
 
 ## Status
 
-Active development, v0.16.0. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.16.1. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

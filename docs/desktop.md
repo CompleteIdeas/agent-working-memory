@@ -67,21 +67,29 @@ not, and the reason is size:
 
 | | |
 |---|---|
-| `onnxruntime-node` | **208 MB** — it carries darwin, linux *and* win32 binaries |
-| `onnxruntime-web` | 91 MB |
-| `@huggingface/transformers` | 47 MB |
-| `better-sqlite3` | 12 MB, and it **compiles per platform** |
-| Full `node_modules` | **~497 MB** |
+| `onnxruntime-node` | **288 MB** — it carries darwin (86), linux (69) *and* win32 (134) binaries |
+| `onnxruntime-web` | 141 MB |
+| `@huggingface/transformers` | 13 MB |
+| `better-sqlite3` | 11 MB *unbuilt*, and it **compiles per platform** |
+| Production `node_modules` | **555 MB** |
 
-A self-contained bundle would be roughly 350 MB, and because `better-sqlite3` is built rather
-than shipped, it would have to be three separate bundles — one per platform — with a release
-pipeline to produce them.
+Re-measured at 0.16.1 by installing the packed tarball into an empty directory with
+`--ignore-scripts` — production dependencies only, which is what a bundle would have to vendor.
+Skipping scripts means `better-sqlite3` is counted unbuilt, so the real figure is somewhat
+higher than 555 MB, which only strengthens the point. A single-platform bundle would
+be **335–400 MB** depending on the platform: 555 MB less the two `onnxruntime-node` binary sets
+it does not need. And because `better-sqlite3` is built rather than shipped, it would have to be
+three separate bundles — one per platform — with a release pipeline to produce them.
+
+The 0.16.1 dependency sweep moved these the wrong way: `onnxruntime-node` grew 208 → 288 MB and
+`onnxruntime-web` 91 → 141 MB, against `@huggingface/transformers` itself shrinking 47 → 13 MB.
+The conclusion only gets firmer.
 
 So this bundle is **4.6 KB**: a manifest and a launcher. The launcher finds an installed copy
 of the package, checking an explicit `AWM_PACKAGE_ROOT`, then an AWM checkout, then a local
 `node_modules`, then the global npm root, and finally falling back to `npx`.
 
-The trade is one prerequisite instead of a 350 MB per-platform bundle — and the ML models
+The trade is one prerequisite instead of a 335–400 MB per-platform bundle — and the ML models
 download lazily on first use either way, so bundling the code would never have avoided that
 ~600 MB fetch. It is stated in the
 description Desktop shows at install time rather than discovered afterwards.

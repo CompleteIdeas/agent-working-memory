@@ -25,18 +25,21 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Produced by:** `tests/realstore-eval/runner.ts` over `fixture.json` (300 probes) and `fixture-category.json` (450 probes).
 - **Corpus:** `snapshot/store.db` — a frozen copy of a real work store, 29,853 engrams total, **11,262 retrievable**. Gitignored and will stay that way.
 - **Ground truth:** unique-identifier hold-out. An identifier appearing in exactly one active engram, uniqueness confirmed through FTS — the real retrieval path, not a regex. Derived by `tests/realstore-eval/build-fixture.mjs`.
-- **Stamped at:** v0.15.9, commit `eb0620f`, 2026-10-09 — `bench-runs/0.15.9-2026-10-09/`
+- **Stamped at:** v0.16.0, commit `2375582`, 2026-10-10 — `bench-runs/0.16.0-2026-10-10/`
   (identifier.log, category.log; gitignored and maintainer-only, like the snapshot
-  itself). Measured twice by different drivers, `npm run bench` and
-  `npm run profile:recall`, which agree to the decimal.
+  itself). `npm run bench` measured this run once. The same figures were measured
+  twice by different drivers at `eb0620f` — `npm run bench` and
+  `npm run profile:recall`, which agreed to the decimal — and reproduced here
+  unchanged on a different transformers major.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
   - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers staged, retracted or superseded rows. `benchmarks-current.md` says this; make sure every other page does too.
-  - These numbers describe **what is published**. They were measured at `eb0620f`,
-    which sits behind the `v0.16.0` release commit, but no retrieval code changed
-    in between and §7 carries the diff that establishes it. Until 0.16.0 shipped
-    they described an unpublished commit, and an install got the old 92.7% /
-    92.0% / 96.7% with the Rocchio pass still on.
+  - These numbers describe **what is published**. They were measured at `2375582`,
+    a commit *inside* the 0.16.1 release; the only source change after it is a
+    comment — §7 carries the diff. They also reproduced *identically* across two
+    transformers majors (3.8.1 and 4.3.1), down to the delivered-token spend, which
+    is the strongest evidence on this page that the figures are a property of the
+    code rather than of one run.
   - Decay runs on the wall clock, so the snapshot must be clock-pinned or the same corpus scores differently on different days — measured, 70.0% vs 67.0% twenty hours apart before the clock was pinned.
 
 ## 2. Correct silence
@@ -61,9 +64,10 @@ is weak, this page says so rather than waiting for a reviewer to find it.
   | Identifier | 455,486 | 300 | **1,518** |
   | Topic | 713,745 | 450 | **1,586** |
 
-  (From the stamped run, `bench-runs/0.15.9-2026-10-09/{identifier,category}.log`.
-  The previous figures here — 1,510 and 1,588 — were from the 2026-10-08 run, before
-  the Rocchio pass was defaulted off.)
+  (From the stamped run, `bench-runs/0.16.0-2026-10-10/{identifier,category}.log`.
+  Both totals reproduced to the token on the 2026-10-09 run at `eb0620f`, on a
+  different transformers major. The figures before those — 1,510 and 1,588 — were
+  from the 2026-10-08 run, before the Rocchio pass was defaulted off.)
 
   So a scoped recall costs roughly **1.5k tokens**, not ~630, and the published figure understates the cost of the product's central operation by about 2.4x — an error in AWM's own favor, which is the direction that most deserves scrutiny.
 
@@ -103,49 +107,52 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Strength:** the 41% figure is the most interesting claim AWM makes, because it is the one that says memory changed what the agent did rather than merely being retrievable. It deserves a repeatable harness.
   - **Action:** a script over `activation_events` would make this **Method public** and let anyone run it against their own store.
 
-## 7. Version currency — the headline now describes what ships
+## 7. Version currency — the page is measured inside the release it describes
 
-`docs/benchmarks-current.md` is stamped **v0.15.9 / `eb0620f` / 2026-10-09**, and
-0.16.0 is the release that makes that commit's behavior the published behavior.
-The figures in §1 therefore describe **the code on npm** — which is what this
-section could not say before 2026-10-09.
-
-The stamp still names the *previous* version, so the problem has not vanished; it
-has shrunk from a wrong number to a stale label. `eb0620f` sits behind the
-`v0.16.0` release commit, and what separates them is documentation plus exactly
-three non-comment source changes, none of which can move a score:
-
-| Change | Why it cannot move a ranking |
-|---|---|
-| `src/core/recall-config.ts` | Adds `AWM_RERANKER_DTYPE` to `RECALL_FLAGS`, the provenance label list. It changes the `arm=` string a benchmark *prints*, not the pipeline it prints about |
-| `src/mcp.ts` | Two tool-description strings — the reranker's share of warm latency 78% → 83%, and the prime hook's abstention threshold 0.25 → 0.10. Prompts, not scoring |
-| `src/adapters/common.ts` | The generated agent guidance (`SKILL.md`) |
-
-Do not take that on trust; it is one command:
+`docs/benchmarks-current.md` is stamped **v0.16.0 / `2375582` / 2026-10-10**. That commit is
+*inside* 0.16.1 — it is the dependency sweep this release ships — and nothing between it and
+the tag touches `src/`:
 
 ```bash
-git diff --stat eb0620f..v0.16.0 -- src/
+git diff 2375582..v0.16.1 -- src/
 ```
 
-Every other change in that range is a comment or a document. **Re-running
-`npm run bench` at the release commit would restamp the page and retire this
-section**, and that is the right fix — it has not been run because the engine is
-provably unchanged, not because the result is in doubt.
+It returns one file, `src/core/reranker.ts`, and every changed line is a comment: the
+correction that re-dates the dead `return_tensors` key from 0.7.13 to 0.5.2. So §1 describes
+the code on npm, and the lag is zero lines of executable source. Quoting "empty" here would
+have been easier and wrong — the first draft of this section did, and the one-command proof
+is exactly what a reviewer runs.
 
-**Both previous states of this section, kept because the pattern is the claim.**
-Until 2026-10-09 it warned that the published numbers were three patch releases
-*behind* what shipped. It was then rewritten to warn of the inverse: figures 21
-commits *ahead* of the released tag, describing a repository rather than a
-package, where an install still ran the Rocchio pass and scored the old 92.7% /
-92.0% / 96.7%. Now it records a lag of zero commits with a label one version
-stale. Three different states in one day, all from one missing field:
-`benchmarks-current.md` records a version and a commit but never says whether
-that commit is **released**, so a reader cannot tell which side of the tag they
-are on without doing the tag arithmetic by hand.
+The version *label* on the page reads 0.16.0 because that is what `package.json` said when the
+suites ran; the page is a record of a run, not a statement about a release. Re-measuring after
+the version bump would change the label and nothing else, and the figures had already
+reproduced identically across two transformers majors (§1). It was not re-run because the
+preflight would not let it start. `npm run bench -- --dry-run` at release time printed:
 
-- **Action:** have `scripts/bench-current.mjs` stamp the commit's position
-  relative to the newest tag — "released" or "N commits past v0.16.0" — so the
-  page answers this itself instead of delegating it to this section.
+```
+x memory headroom: 4.8 GB free (need 8) — lower of commit 72.1 GB, physical 4.8 GB
+  Five eval runs have been OOM-killed on this machine, one mid-write. Refusing to start.
+```
+
+That refusal is deliberate and was left in force rather than overridden with
+`BENCH_MIN_HEADROOM_GB`.
+
+**What is still missing is structural, and it has now produced three rewrites of this section
+in two days.** The page records a version and a commit but never says whether that commit is
+*released*, so a reader cannot tell which side of the tag they are on without doing the
+arithmetic by hand. Numbers behind the package, numbers ahead of it, and now numbers level with
+it — all three states trace to that one absent field.
+
+- **Action:** have `scripts/bench-current.mjs` stamp the commit's position relative to the
+  newest tag — "released" or "N commits past vX.Y.Z" — so the page answers this itself instead
+  of delegating it to this section. Open, and deliberately not fixed inside a release that
+  would have had to change a release gate to do it.
+
+**The previous states of this section, kept because the pattern is the claim.** Until
+2026-10-09 it warned that the published numbers were three patch releases *behind* what
+shipped. It was then rewritten to warn of the inverse: figures 21 commits *ahead* of the
+released tag, describing a repository rather than a package, where an install still ran the
+Rocchio pass and scored the old 92.7% / 92.0% / 96.7%.
 
 ## 8. What the public benchmark does and does not tell you
 
@@ -184,10 +191,11 @@ Listed deliberately, in the order we would attack it ourselves:
    stamps it — and it confirmed the published figure rather than contradicting
    it. Two pages still fail to say which denominator they use, so ~1.3M (the
    store) and 29M (a codebase) read as a conflict when they are not.
-2. **The benchmark page is stamped with the previous version number** — the
-   figures do describe what 0.16.0 ships, but the page says v0.15.9 / `eb0620f`
-   and nothing on it states whether that commit is released, so the reader has to
-   do the tag arithmetic to find out (§7).
+2. **The benchmark page cannot say whether the commit it names is released** — the
+   figures do describe what 0.16.1 ships, and §7 carries a one-command proof, but the
+   page itself records only a version and a commit, so a reader has to do the tag
+   arithmetic by hand. Three rewrites of §7 in two days all trace to that one absent
+   field (§7).
 3. **The two most rhetorically effective claims — 14/15 and 49-vs-100 — are
    `n = 15` and `n = 4`, and neither is reproducible** (§4, §5).
 4. **The 41% "entered only through a recall" figure has no harness** (§6),
