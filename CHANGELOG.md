@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### `supersedes` is no longer discarded when reinforce-on-duplicate fires
+
+`memory_write`'s `supersedes` argument was read in exactly one place — the fallthrough
+`createNewEngram` call in `src/core/write-pipeline.ts`. A correction restates the fact it
+corrects, so it matches on concept and routed to a reinforcement branch instead: R1
+reinforced the healthy match, R2 reinforced the superseder, R1b revived an archived match,
+and R3 superseded `matched.id` rather than the id the caller named. The write reported
+`action: 'reinforce'` and succeeded; the engram the caller asked to retire stayed live and
+recallable, with the correction merged into it.
+
+Reinforcement is now gated off an explicit `supersedes`, which routes the write to the only
+path that honors the argument.
+
+Second half of the fix, and it is load-bearing: a correction of a near-duplicate has low
+novelty **by construction**, so on its own salience it lands at `discard` — confidence
+0.25, tagged `low-salience`, below `HEALTHY_CONFIDENCE_FLOOR` — or at `staging`, while the
+supersession side-effect fires regardless of disposition. Routing alone would have retired
+the old engram into a replacement too weak to be reinforced again, dropping the fact out of
+recall completely: worse than discarding the argument. An explicit `supersedes` therefore
+forces `active`, as R3 already did for `eventType: surprise|friction`. Both halves are
+proven to fail independently in `tests/core/supersedes-dropped-on-reinforce.test.ts`.
+
 ## 0.16.1 (2026-10-10) — the reranker was passing a tokenizer option that never existed
 
 > **Nothing to re-download, and no `awm setup` re-run.** transformers 4.x keeps the same

@@ -169,8 +169,16 @@ export async function performWrite(
   input: WriteInput,
 ): Promise<WriteResult> {
   const { store, connectionEngine } = engines;
+  // An explicit `supersedes` argument outranks every novelty signal: the caller has
+  // NAMED the engram this write replaces. Gating reinforcement off it routes the write
+  // to createNewEngram, which is the only path that honors meta.supersedesId (see the
+  // supersession side-effects below). Without this gate the argument was silently
+  // discarded by every branch in the block below — R1 (healthy match reinforced),
+  // R2 (the superseder reinforced instead), R1b (an archived match revived), and R3,
+  // which supersedes `matched.id` rather than the id the caller actually asked for.
   const enableReinforcement = input.enableReinforcement !== false
-    && process.env.AWM_WRITE_PIPELINE !== 'off';
+    && process.env.AWM_WRITE_PIPELINE !== 'off'
+    && !input.supersedes;
 
   // Profiling: AWM_PROFILE_WRITE=1 logs ms-per-phase to stderr (v0.8.2).
   // Off by default; zero cost when unset.
@@ -314,7 +322,22 @@ export async function performWrite(
 
   // -- Default: create new engram (if no reinforce/supersede branch fired) --
   if (!result) {
-    result = await createNewEngram(engines, input, salience, noveltyResult, {
+    // A correction of a near-duplicate has low novelty BY CONSTRUCTION: the replacement
+    // says almost what the engram it replaces said. Left on its own salience it lands at
+    // `discard` (confidence 0.25, tagged `low-salience`, below HEALTHY_CONFIDENCE_FLOOR)
+    // or at `staging` — while the supersession side-effect fires regardless. The old
+    // engram would be retired and its replacement too weak to stand in for it, so the
+    // fact leaves recall altogether: strictly worse than dropping the argument. R3 above
+    // already forces `active` for precisely this reason; an explicit `supersedes` is the
+    // same correction intent, stated by the caller instead of inferred from eventType.
+    const supersedeSalience: SalienceResult = input.supersedes
+      ? {
+          ...salience,
+          disposition: 'active' as const,
+          reasonCodes: [...salience.reasonCodes, 'supersede:override-active'],
+        }
+      : salience;
+    result = await createNewEngram(engines, input, supersedeSalience, noveltyResult, {
       effectiveEventType,
       effectiveMemoryClass,
       supersedesId: input.supersedes,
