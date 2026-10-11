@@ -1,10 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away
+
+> **Re-run `awm setup`.** The installed agent guidance changed: it previously told every
+> agent that naming specific people auto-promotes a memory to `canonical`, which is no
+> longer true by default. The engine change applies when a new session starts, as always,
+> but the guidance on disk only changes when you run setup.
+>
+> **If you relied on the built-in feedback-name list, this release turns it off.** The
+> migration is one env var — see the first section below.
 
 ### `AWM_FEEDBACK_NAMES` now ships empty — BREAKING for anyone who relied on the built-in list
 
-`src/core/salience.ts` defaulted `AWM_FEEDBACK_NAMES` to **21 real first names**: one
+`src/core/salience.ts` defaulted `AWM_FEEDBACK_NAMES` to **22 real first names**: one
 deployment's staff list, published in every npm tarball since the feature landed, because
 `src/` is in `package.json` `files`. That is other people's data in a general-purpose
 library, so the default is now `''`.

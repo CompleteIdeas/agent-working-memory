@@ -616,7 +616,7 @@ mode, backend, store path, code provenance, ports, and sibling agent spaces in t
 configured name plus a feedback verb is promoted to `canonical`.
 
 **`AWM_FEEDBACK_NAMES` ships EMPTY, which turns the detector off (2026-10-11).** It
-previously defaulted to a list of 21 real first names — one deployment's staff list,
+previously defaulted to a list of 22 real first names — one deployment's staff list,
 published in the npm tarball because `src/` is in `package.json` `files`. An operator who
 wants the promotion must now set the variable; with no names configured,
 `detectUserFeedback()` returns `false` for everything and an explicit

@@ -181,10 +181,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.16.1
+## What's new — v0.17.0
 
 | | |
 |---|---|
+| **0.17.0** | `AWM_FEEDBACK_NAMES` shipped a **list of 22 real first names** as its built-in default — one deployment's staff list, published in every npm tarball because `src/` is in `files`. It now ships empty, which turns user-feedback auto-promotion off until an operator configures it; **breaking if you relied on the built-in list**, and the migration is one env var. Separately, `memory_write`'s `supersedes` argument was silently discarded whenever reinforce-on-duplicate fired — which is every correction, since a correction restates what it corrects and therefore matches on concept. The engram you asked to retire stayed live, with your correction merged into it. Re-run `awm setup` for the corrected guidance |
 | **0.16.1** | A tokenizer option the reranker had been passing since 0.5.2 turned out never to have existed in transformers.js — silently ignored for six months, and the library default was what the code wanted anyway, so no ranking behavior changes. Found by a dependency sweep that also clears every advisory in the published tree: an install of 0.16.0 audits at 7 (3 high), this one at **0**. Accuracy reproduced identically across two transformers majors, token spend to the token |
 | **0.16.0** | Two recall defaults changed, each after being measured for the first time. A pseudo-relevance feedback pass that ran on **every** query is now opt-in — it cost 7% of every recall and bought nothing measurable across 950 probes. A reranker shortcut that had never once fired on any store benchmarked here is deleted; forced on, it cost success@1 93.0% → 91.7%. Identifier recall is now **93.0%** success@1 / **97.0%** success@5. Re-run `awm setup` for the corrected agent guidance |
 | **0.15.9** | A memory that consolidation archived as a near-duplicate — even at high confidence — could never be reinforced again, so the same recurring fact kept spawning new copies instead of strengthening one. An archived match is now revived on reinforcement |
@@ -297,18 +298,18 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 802 tests
+npx vitest run          # 810 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
-npm run test:linux      # build + full suite on Linux (802/802)
+npm run test:linux      # build + full suite on Linux (810/810)
 ```
 
 ---
 
 ## Status
 
-Active development, v0.16.1. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.17.0. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

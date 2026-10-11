@@ -38,7 +38,7 @@ export type SalienceEventType = 'decision' | 'friction' | 'surprise' | 'causal' 
 // organization's staff list. AWM_FEEDBACK_NAMES / AWM_FEEDBACK_VERBS take comma lists.
 //
 // 2026-10-11: the default is now EMPTY, which disables the detector until an operator
-// configures it. It previously shipped 21 real first names — a deployment's own staff
+// configures it. It previously shipped 22 real first names — a deployment's own staff
 // list, published in the npm tarball (`src/` is in package.json `files`) and readable by
 // anyone who installed the package. That is other people's data, and a general-purpose
 // library has no business carrying it. The flip was the decision of record from the start
