@@ -541,13 +541,25 @@ export class ConsolidationEngine {
     //
     // Fade applies only to accessed engrams (the never-accessed ones go straight
     // to archive via Phase 6). Heavily-used (accessCount >= FADE_PROTECTED_ACCESS_COUNT),
-    // canonical, structural, and short-content engrams are excluded.
+    // canonical, structural, short-content, and UNFINISHED TASK engrams are excluded.
     let fadeCount = 0;
     for (const engram of engrams) {
       if (fadeCount >= FADE_MAX_PER_CYCLE) break;
       if (engram.accessCount === 0) continue;
       if (engram.accessCount >= FADE_PROTECTED_ACCESS_COUNT) continue;
       if (FADE_PROTECTED_CLASSES.has(engram.memoryClass)) continue;
+      // An unfinished task is a COMMITMENT, not a stale observation, and its body is
+      // where the acceptance criteria, source meeting, file paths and blocking reason
+      // live — the concept is 3-10 words by schema, so fading a task leaves a title
+      // nobody can action. Measured 2026-10-10 on the live store before this guard
+      // existed: 19 task bodies had already been cut to 150 chars, and `blocked` tasks
+      // were hit at 29% (5/17) against 1.2% (3/243) for `open` — ~24x — precisely
+      // BECAUSE a blocked task accrues idle days by definition while it waits on
+      // someone else, which is also when its body matters most. Only 1 of the 19 was
+      // recoverable from any backup. `done` tasks still fade: the work is finished and
+      // the gist suffices. memory_task_add sets salience 0.9 but never memoryClass, so
+      // FADE_PROTECTED_CLASSES above never covers a task.
+      if (engram.taskStatus && engram.taskStatus !== 'done') continue;
       if (engram.retracted) continue;
       if (engram.content.length < FADE_MIN_CONTENT_LEN) continue;
       if (engram.content.endsWith(FADE_MARKER)) continue; // Already faded

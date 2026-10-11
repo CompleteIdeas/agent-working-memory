@@ -144,6 +144,63 @@ describe('ConsolidationEngine — content fade phase', () => {
     expect((await store.getEngram(structural.id))?.stage).not.toBe('fading');
   });
 
+  /**
+   * Regression, 2026-10-10. Fade had no task guard, and memory_task_add sets
+   * salience 0.9 but never memoryClass, so every task was class 'working' and
+   * nothing above protected it. On the live store that had already truncated 19
+   * task bodies to 150 chars, hitting `blocked` tasks at 29% (5/17) against 1.2%
+   * (3/243) for `open` — because a blocked task accrues idle days by definition.
+   * The body is where a task's acceptance criteria live; the concept is 3-10 words.
+   */
+  it('does not fade unfinished tasks, whatever their status or idle time', async () => {
+    const statuses = ['open', 'in_progress', 'blocked'] as const;
+    const tasks = [];
+    for (const [i, status] of statuses.entries()) {
+      const t = await store.createEngram({
+        agentId: AGENT,
+        concept: `task ${status}`,
+        content: LONG_CONTENT,
+        tags: ['task'],
+        salience: 0.9, // what memory_task_add actually writes
+        confidence: 0.8,
+        taskStatus: status,
+        taskPriority: 'high',
+        embedding: Array(384).fill(0).map((_, i2) => Math.sin(i2 * (0.08 + i * 0.01))),
+      });
+      ageEngram(store, t.id, 90, 3); // twice FADE_DAYS_SINCE_ACCESS, still accessed
+      tasks.push(t);
+    }
+
+    const result = await consolidation.consolidate(AGENT);
+
+    expect(result.memoriesFaded).toBe(0);
+    for (const t of tasks) {
+      const after = await store.getEngram(t.id);
+      expect(after?.stage).not.toBe('fading');
+      expect(after?.content).toBe(LONG_CONTENT); // body intact, not a 150-char stub
+    }
+  });
+
+  it('still fades a DONE task — the work is finished, the gist suffices', async () => {
+    const t = await store.createEngram({
+      agentId: AGENT,
+      concept: 'task done',
+      content: LONG_CONTENT,
+      tags: ['task'],
+      salience: 0.9,
+      confidence: 0.8,
+      taskStatus: 'done',
+      taskPriority: 'medium',
+      embedding: Array(384).fill(0).map((_, i) => Math.sin(i * 0.12)),
+    });
+    ageEngram(store, t.id, 90, 3);
+
+    const result = await consolidation.consolidate(AGENT);
+
+    expect(result.memoriesFaded).toBe(1);
+    expect((await store.getEngram(t.id))?.content.endsWith('… [faded]')).toBe(true);
+  });
+
   it('does not fade engrams with short content', async () => {
     const e = await store.createEngram({
       agentId: AGENT,
