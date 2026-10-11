@@ -54,6 +54,8 @@ covers everything else.
 | Doc | What it covers |
 |---|---|
 | **[decision-gap-closure-2026-10-10.md](decision-gap-closure-2026-10-10.md)** | **What to build next, and what was already decided against** — the gaps found by comparing AWM to `opencode-mem` at source level, which two were closed by prior measurement rather than rebuilt, and the one reopened as a measurement |
+| **[landscape-2026-10-10.md](landscape-2026-10-10.md)** | **Who else is doing this, and what is worth taking** — the three layers agent memory split into, the one project that converged on AWM's design independently, the 2026 results saying this machinery does not win on accuracy, and the one measurement AWM alone can run |
+| **[eval-gap-2026-10-11.md](eval-gap-2026-10-11.md)** | **Whether those results transfer, and what AWM would have to measure to answer them** — the three non-overlaps, the finding that no benchmark gold is faded or archived, content fade measured at 7.1% identifier retention, where archived engrams actually drop out, the five-arm set that does not exist yet, and six numeric targets each naming its baseline and store |
 | [awm-architecture-history.md](awm-architecture-history.md) | How the architecture got here |
 | [memory-quality-hardening-rfc.md](memory-quality-hardening-rfc.md) | The write-quality RFC |
 | [pglite-feature-parity.md](pglite-feature-parity.md) | SQLite vs PGlite backend parity |
