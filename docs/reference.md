@@ -612,7 +612,19 @@ mode, backend, store path, code provenance, ports, and sibling agent spaces in t
 `GET /health` now also reports `consolidation.schedulerDisabled` / `cycleRunning` / active-cycle age (D15).
 
 **Configurable salience feedback detection (D4):** `AWM_FEEDBACK_NAMES` / `AWM_FEEDBACK_VERBS`
-(comma lists) replace the hardcoded staff-name regex used for user-feedback auto-promotion.
+(comma lists) drive the user-feedback auto-promotion regex — content starting with a
+configured name plus a feedback verb is promoted to `canonical`.
+
+**`AWM_FEEDBACK_NAMES` ships EMPTY, which turns the detector off (2026-10-11).** It
+previously defaulted to a list of 21 real first names — one deployment's staff list,
+published in the npm tarball because `src/` is in `package.json` `files`. An operator who
+wants the promotion must now set the variable; with no names configured,
+`detectUserFeedback()` returns `false` for everything and an explicit
+`memory_class: 'canonical'` is the way to pin a stakeholder decision.
+
+Set it in the **MCP server's `env` block**, not a `.env` file: the `.env` loaders in
+`cli.ts` and `mcp.ts` resolve against `process.cwd()`, which an MCP server launched by a
+host does not control.
 
 **Memory spine (D5/D8, log-only):** writes accept `origin_class`
 (`user-stated | tool-output | inference | recipe`), `writer_session`, `recipe_id`,

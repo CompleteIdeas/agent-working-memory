@@ -16,42 +16,69 @@ import type { IEngramStore as EngramStore } from '../storage/store.js';
 export type SalienceEventType = 'decision' | 'friction' | 'surprise' | 'causal' | 'observation' | 'user_feedback';
 
 /**
- * Auto-detect user-feedback memories: content that begins with a known user's
- * name + a feedback verb. These memories represent direct human decisions and
- * must never be discarded. Examples:
- *   "Robert verbatim: 'LMS programs-first like CRM'"
- *   "Katherine said the CEC cycle resets on promotion"
- *   "Nancy directed Tier 1 has no grace period"
+ * Auto-detect user-feedback memories: content that begins with a configured
+ * stakeholder's name + a feedback verb. These memories represent direct human
+ * decisions and must never be discarded. With AWM_FEEDBACK_NAMES="Ada,Grace":
+ *   "Ada verbatim: 'programs-first, like the CRM'"
+ *   "Grace said the certification cycle resets on promotion"
+ *   "Ada directed that tier 1 has no grace period"
  *
  * Why this exists: the BM25 novelty check collapses near-duplicates regardless
  * of whether the content is a NEW decision or a repeat observation. User
- * feedback often shares terminology with prior memories ("LMS", "ECP",
- * "officials") and gets discarded at salience 0.14 (verified in activity log
- * 2026-05-06T19:08:47). Detecting "Robert said X" → canonical class bypasses
- * the salience filter entirely.
+ * feedback often shares terminology with prior memories (the same handful of
+ * domain nouns recur in every one) and gets discarded at salience 0.14 (verified
+ * in activity log 2026-05-06T19:08:47). Detecting "<name> said X" → canonical
+ * class bypasses the salience filter entirely.
  *
- * Tune via AWM_FEEDBACK_NAMES (comma list). Pattern requires word boundary at
- * start so "Roberta" or "Hannahs" don't match.
+ * Set via AWM_FEEDBACK_NAMES (comma list). A name must be followed by whitespace
+ * and then a verb, so a longer name sharing a configured prefix ("Adaline" for a
+ * configured "Ada") does not match.
  */
-// D4 (2026-07-30): names/verbs are configurable so the library is not coupled
-// to one organization's staff list. AWM_FEEDBACK_NAMES / AWM_FEEDBACK_VERBS
-// take comma-separated lists. The built-in default preserves existing installs;
-// a future 1.0 flips the default to empty with the installer seeding values.
-const DEFAULT_FEEDBACK_NAMES = 'Robert,Katherine,Catherine,Nancy,Brandy,Brandi,Hannah,Marilyn,Kaylee,Pete,Abby,Tom,Wendy,Sita,Nick,Rob,Joan,Jennifer,Cindy,Jason,Alex,Molly';
+// D4 (2026-07-30): names/verbs are configurable so the library is not coupled to one
+// organization's staff list. AWM_FEEDBACK_NAMES / AWM_FEEDBACK_VERBS take comma lists.
+//
+// 2026-10-11: the default is now EMPTY, which disables the detector until an operator
+// configures it. It previously shipped 21 real first names — a deployment's own staff
+// list, published in the npm tarball (`src/` is in package.json `files`) and readable by
+// anyone who installed the package. That is other people's data, and a general-purpose
+// library has no business carrying it. The flip was the decision of record from the start
+// (docs/archive/eval-decisions-2026-07-30.md:37, "installer seeds Robert's current values
+// so behavior is unchanged for him"); D4 shipped only the configurability half and
+// deferred the flip to 1.0. It is brought forward here because the exposure is live.
+//
+// Operators who relied on the built-in list must now set AWM_FEEDBACK_NAMES explicitly —
+// in the MCP server's `env` block, since that is the only place guaranteed to be read
+// (the .env loader in cli.ts/mcp.ts resolves against process.cwd(), which an MCP server
+// does not control). Without it, "<name> said X" no longer auto-promotes to canonical;
+// an explicit memory_class: 'canonical' on the write still does.
+const DEFAULT_FEEDBACK_NAMES = '';
 const DEFAULT_FEEDBACK_VERBS = 'said,verbatim,feedback,asked,wants,prefers,requested,directed,decided,confirmed,clarified,chose,specified,explained';
 function csvToAlternation(env: string | undefined, fallback: string): string {
   return (env ?? fallback).split(',').map(x => x.trim()).filter(Boolean)
     .map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
 }
+const FEEDBACK_NAMES_ALTERNATION = csvToAlternation(process.env.AWM_FEEDBACK_NAMES, DEFAULT_FEEDBACK_NAMES);
 const USER_FEEDBACK_PATTERN = new RegExp(
-  '^(' + csvToAlternation(process.env.AWM_FEEDBACK_NAMES, DEFAULT_FEEDBACK_NAMES) + ')\\s+(' +
+  '^(' + FEEDBACK_NAMES_ALTERNATION + ')\\s+(' +
   csvToAlternation(process.env.AWM_FEEDBACK_VERBS, DEFAULT_FEEDBACK_VERBS) + ')\\b',
   'i',
 );
 
+/** True when at least one feedback name is configured; otherwise the detector is off. */
+export function userFeedbackDetectionEnabled(): boolean {
+  return FEEDBACK_NAMES_ALTERNATION.length > 0;
+}
+
 /** Returns true if the content looks like direct user feedback that should auto-promote to canonical. */
 export function detectUserFeedback(content: string): boolean {
+  // No configured names means the detector is OFF, as a decision rather than as an
+  // accident of the regex. An empty name list compiles to `^()\s+(said|asked|...)`, whose
+  // empty first group matches the empty string — so the pattern degrades to "starts with
+  // whitespace then a feedback verb". That is unreachable today only because the content
+  // is trimmed one line below, which makes correctness depend on the order of two
+  // unrelated statements. Check the configuration instead.
+  if (!userFeedbackDetectionEnabled()) return false;
   if (typeof content !== 'string' || content.length === 0) return false;
   return USER_FEEDBACK_PATTERN.test(content.trim());
 }

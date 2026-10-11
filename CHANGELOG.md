@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### `AWM_FEEDBACK_NAMES` now ships empty — BREAKING for anyone who relied on the built-in list
+
+`src/core/salience.ts` defaulted `AWM_FEEDBACK_NAMES` to **21 real first names**: one
+deployment's staff list, published in every npm tarball since the feature landed, because
+`src/` is in `package.json` `files`. That is other people's data in a general-purpose
+library, so the default is now `''`.
+
+0.12's D4 entry below promised this flip "at 1.0, with installer seeding." It is brought
+forward because the exposure is live, and it was the decision of record from the beginning
+(`docs/archive/eval-decisions-2026-07-30.md:37`) — D4 shipped only the configurability half.
+
+**What changes for you:** with no names configured, `detectUserFeedback()` returns `false`
+for everything, so content like "<name> said X" no longer auto-promotes to `canonical`. An
+explicit `memory_class: 'canonical'` on the write is unaffected and always was the reliable
+way to pin a stakeholder decision. To keep the old behavior, set `AWM_FEEDBACK_NAMES` in
+your **MCP server's `env` block** — not a `.env` file, since the `.env` loaders in `cli.ts`
+and `mcp.ts` resolve against `process.cwd()`, which an MCP server does not control.
+
+The disabled state is now a checked condition rather than a side effect: an empty name list
+compiles to `^()\s+(said|…)`, whose empty group matches the empty string, so the pattern
+would otherwise degrade to "starts with a feedback verb" and depend on the `.trim()` one
+line below it for correctness. `userFeedbackDetectionEnabled()` is exported and tested.
+
 ### `supersedes` is no longer discarded when reinforce-on-duplicate fires
 
 `memory_write`'s `supersedes` argument was read in exactly one place — the fallthrough

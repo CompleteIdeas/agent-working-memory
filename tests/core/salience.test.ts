@@ -263,15 +263,41 @@ describe('D4: AWM_FEEDBACK_NAMES override', () => {
       const m = await import('../../src/core/salience.js');
       expect(m.detectUserFeedback('Zork said use the blue theme')).toBe(true);
       expect(m.detectUserFeedback('Ada decided to ship it')).toBe(true);
-      expect(m.detectUserFeedback('Robert said use the blue theme')).toBe(false);
+      expect(m.detectUserFeedback('Grace said use the blue theme')).toBe(false);
+      expect(m.userFeedbackDetectionEnabled()).toBe(true);
     } finally {
       delete process.env.AWM_FEEDBACK_NAMES;
       vi.resetModules();
     }
   });
 
-  it('default list still detects the built-in names', async () => {
+  // 2026-10-11: the built-in list used to carry 21 real first names and shipped them in
+  // the npm tarball. The default is now empty, which turns the detector OFF rather than
+  // leaving it to match on an empty alternation. This test previously asserted the
+  // opposite ("default list still detects the built-in names") and is the behavioral
+  // record of the flip — see src/core/salience.ts.
+  it('ships with NO configured names, so the detector is off by default', async () => {
     const m = await import('../../src/core/salience.js');
-    expect(m.detectUserFeedback('Robert said keep it local')).toBe(true);
+    expect(m.userFeedbackDetectionEnabled()).toBe(false);
+    expect(m.detectUserFeedback('Ada said keep it local')).toBe(false);
+    expect(m.detectUserFeedback('Grace directed tier 1 has no grace period')).toBe(false);
+  });
+
+  // The guard has to be explicit: an empty name list compiles to `^()\s+(said|...)`, and
+  // the empty group matches the empty string. Without the configuration check, any
+  // content whose first token is a feedback verb would auto-promote the moment a leading
+  // space survived trimming.
+  it('an empty name list does not degrade into "starts with a feedback verb"', async () => {
+    process.env.AWM_FEEDBACK_NAMES = '';
+    vi.resetModules();
+    try {
+      const m = await import('../../src/core/salience.js');
+      expect(m.detectUserFeedback('said the thing')).toBe(false);
+      expect(m.detectUserFeedback(' said the thing')).toBe(false);
+      expect(m.detectUserFeedback('\n\tdecided to ship it')).toBe(false);
+    } finally {
+      delete process.env.AWM_FEEDBACK_NAMES;
+      vi.resetModules();
+    }
   });
 });

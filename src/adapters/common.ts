@@ -515,9 +515,11 @@ don't need them.
 ### Salience auto-promotion (defense in depth)
 The salience filter automatically promotes certain content patterns even if you forget
 to set \`memory_class\` explicitly:
-- **User feedback** — content starting with "Robert said…", "Katherine directed…",
-  "Nancy decided…" etc. auto-promotes to canonical. So quoting the user verbatim
-  always preserves the decision.
+- **User feedback** — content starting with a configured stakeholder name plus a feedback
+  verb ("<name> said…", "<name> directed…", "<name> decided…") auto-promotes to canonical,
+  so quoting the user verbatim preserves the decision. **This is OFF unless an operator
+  sets \`AWM_FEEDBACK_NAMES\`** (it ships empty); when in doubt, pass
+  \`memory_class: 'canonical'\` explicitly rather than relying on it.
 - **Verified operational records** — content with an action verb (Submitted, Finalized,
   Completed, Reconciled, Triaged, Posted, Resolved, Stamped, Pushed, Deployed, Migrated,
   Imported, Exported, Backfilled) plus 2+ concrete identifiers (ISO date \`YYYY-MM-DD\`,

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -213,13 +213,34 @@ describe('Unified write pipeline (R1/R2/R3)', () => {
     }
   });
 
-  it('user_feedback auto-promotes to canonical class', async () => {
+  // 2026-10-11: this used to rely on the built-in AWM_FEEDBACK_NAMES list, which shipped
+  // 21 real first names and now defaults to empty. The behavior under test is the
+  // auto-promotion path itself, so the name is configured here instead. USER_FEEDBACK_PATTERN
+  // is built once at module load, hence the resetModules + dynamic import.
+  it('user_feedback auto-promotes to canonical class when a feedback name is configured', async () => {
+    process.env.AWM_FEEDBACK_NAMES = 'Ada';
+    vi.resetModules();
+    try {
+      const { performWrite: pw } = await import('../../src/core/write-pipeline.js');
+      const result = await pw({ store, connectionEngine }, {
+        agentId: AGENT,
+        concept: 'Auth approach decision',
+        content: 'Ada decided that magic link + social login is the long-term path; passwords are dev-only.',
+      });
+      expect(result.engram.memoryClass).toBe('canonical');
+      expect(result.salience?.disposition).toBe('active');
+    } finally {
+      delete process.env.AWM_FEEDBACK_NAMES;
+      vi.resetModules();
+    }
+  });
+
+  it('does NOT auto-promote when no feedback name is configured (the shipped default)', async () => {
     const result = await performWrite({ store, connectionEngine }, {
       agentId: AGENT,
-      concept: 'Auth approach decision',
-      content: 'Robert decided that magic link + social login is the long-term path; passwords are dev-only.',
+      concept: 'Auth approach decision, unconfigured',
+      content: 'Ada decided that magic link + social login is the long-term path; passwords are dev-only.',
     });
-    expect(result.engram.memoryClass).toBe('canonical');
-    expect(result.salience?.disposition).toBe('active');
+    expect(result.engram.memoryClass).toBe('working');
   });
 });
