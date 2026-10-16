@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased — model memory stays bounded, and long prompts can be ranked again
+
+### The MCP process no longer grows to 2–4 GB
+
+Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each
+0.8–3.5 GB, with the JS heap flat at ~85 MB. The growth is onnxruntime-node's CPU memory
+arena: it keeps the largest tensor a model has ever run, for the life of the process.
+Attention is `batch x heads x seq x seq`, so the high-water mark was set by the biggest
+padded batch. The prime hook recalls with the whole prompt, pastes included. Rerank then
+pairs it with 24–40 passages, all padded to 512 tokens, which makes one attention tensor
+of ~500 MB. A `/memory/write-batch` or a consolidation backfill embedded 32+ long texts
+in one pass.
+
+- **`AWM_RERANK_BATCH` (default 8):** the cross-encoder scores passages in chunks.
+- **`AWM_EMBED_BATCH` (default 8):** the embedder runs in chunks, for every
+  `embedBatch` caller.
+- **`AWM_RERANK_QUERY_TOKENS` (default 128):** a longer query reaches the cross-encoder
+  as its first and last 64 tokens.
+
+`0` disables any of them. Measured on a backup of the live store (120 recalls shaped like
+the prime hook's, `limit` 8, two thirds of them carrying a ~600-token paste, then one
+40-memory batch embed):
+
+| | after the recalls | after the batch embed, then idle |
+|---|---|---|
+| before (all three `0`) | 2,840 MB | 3,964 MB |
+| after (defaults) | 873 MB | 1,173 MB |
+
+Chunking changes no result. Pair scores and vectors match an unchunked pass to 1e-5
+(`tests/core/onnx-shape-caps.test.ts`). On 100 real-store fixture queries, the shipped
+recall gives the same rank and the same top result on all 100.
+
+### Long queries were unrankable — the query cap fixes the cross-encoder half of that
+
+transformers.js truncates a too-long `(query, passage)` pair by cutting tokens off the
+**end**, which is the passage. A query of ~510 tokens left every passage zero tokens, so
+every memory got the same score: the cross-encoder was scoring the query alone. Measured
+on the same 100 fixture queries wrapped in ~600 tokens of log, notes or code:
+
+| question placement | success@1 before | with the 128-token cap | queries better / worse |
+|---|---|---|---|
+| question before the paste | 3% | 49% | 46 / 1 |
+| question after the paste | 7% | 26% | 21 / 0 |
+| short query (unchanged) | 93% | 93% | 0 / 0 |
+
+A 256-token cap was measured and rejected: equal before the paste (46%) and 0% after it.
+
+**Still open:** a long prompt is still far below the short-query 93%, and a long recall
+takes ~5–8 s. The other stages (BM25, embedding) also see the whole paste. The fix
+belongs where the query is formed, in the prime hook, not in the models.
+
 ## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away
 
 > **Re-run `awm setup`.** The installed agent guidance changed: it previously told every

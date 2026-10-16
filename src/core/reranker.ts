@@ -67,11 +67,60 @@ function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x));
 }
 
-async function inProcessRerank(args: { query: string; passages: string[] }): Promise<Array<{ index: number; score: number }>> {
-  const { query, passages } = args;
-  if (passages.length === 0) return [];
-  await ensureLoaded();
+/**
+ * Input-shape caps for the cross-encoder. They exist for MEMORY, and one of them also
+ * fixes RANKING.
+ *
+ * onnxruntime-node keeps a CPU memory arena per model that grows to the largest tensor
+ * it has ever run and never shrinks. A cross-encoder's attention tensor is
+ * batch x heads x seq x seq floats, so its size is quadratic in the padded pair length.
+ * Measured 2026-10-16 on AWM 0.17.0: six Claude Code sessions held 13.2 GB, JS heap flat
+ * at ~85 MB, and one process reranking 24 long pairs kept ~1.75 GB after going idle.
+ * The shapes come from the prime hook, which recalls with the WHOLE user prompt (pastes
+ * included), and from recall's 24-40 passage pool: 40 pairs at 512 tokens make one
+ * attention tensor of 40 x 12 x 512 x 512 x 4 B = ~500 MB.
+ *
+ * - AWM_RERANK_BATCH (default 8): passages are scored in chunks. A pair's score depends
+ *   only on that pair (padding is masked), so this changes memory, not order.
+ * - AWM_RERANK_QUERY_TOKENS (default 128): a longer query keeps its first and last
+ *   halves. transformers.js truncates a too-long pair by cutting tokens off the END,
+ *   which is the passage: before this cap, a ~510-token query left the passage no tokens
+ *   at all, and every memory was scored against the query alone. Passages are already
+ *   capped at ~400 chars (rerank-window.ts), so a 128-token query typically keeps a
+ *   pair under ~260 tokens (more for CJK text or a raised AWM_RERANK_TRUNC).
+ *
+ * An explicit 0 disables a cap. Anything else that is not a non-negative integer (empty,
+ * 'off', -1) falls back to the default, as AWM_RERANK_TRUNC does: a typo must not quietly
+ * bring back the unbounded shape.
+ */
+function shapeCap(name: string, fallback: number): number {
+  const v = Number(process.env[name]?.trim() || NaN);
+  return Number.isInteger(v) && v >= 0 ? v : fallback;
+}
+const RERANK_BATCH = shapeCap('AWM_RERANK_BATCH', 8);
+const RERANK_QUERY_TOKENS = shapeCap('AWM_RERANK_QUERY_TOKENS', 128);
 
+/**
+ * The query the cross-encoder sees: unchanged when it fits the cap, else its first and
+ * last halves. Both ends, because a pasted prompt puts the question either before the
+ * paste or after it. Special tokens typed into a long query ([SEP], [UNK]) are dropped by
+ * the decode; a query under the cap passes through untouched.
+ */
+export function capRerankQuery(tok: PreTrainedTokenizer, query: string, maxTokens = RERANK_QUERY_TOKENS): string {
+  if (maxTokens <= 0) return query;
+  const ids = tok.encode(query, { add_special_tokens: false });
+  if (ids.length <= maxTokens) return query;
+  const head = Math.ceil(maxTokens / 2);
+  const tail = maxTokens - head;
+  const decode = (part: number[]) => tok.decode(part, { skip_special_tokens: true, clean_up_tokenization_spaces: true });
+  // A tail that starts mid-word decodes with a leading '##' continuation marker, which
+  // would re-encode as two stray '#' tokens.
+  return tail > 0
+    ? `${decode(ids.slice(0, head))} ${decode(ids.slice(ids.length - tail)).replace(/^##/, '')}`
+    : decode(ids.slice(0, head));
+}
+
+async function scoreChunk(query: string, passages: string[], offset: number): Promise<Array<{ index: number; score: number }>> {
   // Batch path
   try {
     const queries = passages.map(() => query);
@@ -94,9 +143,8 @@ async function inProcessRerank(args: { query: string; passages: string[] }): Pro
     const results: Array<{ index: number; score: number }> = [];
     for (let i = 0; i < passages.length; i++) {
       const rawLogit = Number(data[i] ?? 0);
-      results.push({ index: i, score: sigmoid(rawLogit) });
+      results.push({ index: offset + i, score: sigmoid(rawLogit) });
     }
-    results.sort((a, b) => b.score - a.score);
     return results;
   } catch {
     // Per-passage fallback (the original 0.7.13 path)
@@ -113,18 +161,36 @@ async function inProcessRerank(args: { query: string; passages: string[] }): Pro
         const output = await model!(inputs);
         const logits = output.logits ?? output.last_hidden_state;
         const rawLogit = logits.data[0] as number;
-        results.push({ index: i, score: sigmoid(rawLogit) });
+        results.push({ index: offset + i, score: sigmoid(rawLogit) });
       } catch {
-        results.push({ index: i, score: 0 });
+        results.push({ index: offset + i, score: 0 });
       }
     }
-    results.sort((a, b) => b.score - a.score);
     return results;
   }
 }
 
+/** Exported with its caps as parameters so tests can compare settings in one process. */
+export async function inProcessRerank(
+  args: { query: string; passages: string[] },
+  caps: { batch?: number; queryTokens?: number } = {},
+): Promise<Array<{ index: number; score: number }>> {
+  const { passages } = args;
+  if (passages.length === 0) return [];
+  await ensureLoaded();
+  const query = capRerankQuery(tokenizer!, args.query, caps.queryTokens ?? RERANK_QUERY_TOKENS);
+  const batch = caps.batch ?? RERANK_BATCH;
+  const size = batch > 0 ? batch : passages.length;
+  const results: Array<{ index: number; score: number }> = [];
+  for (let b = 0; b < passages.length; b += size) {
+    results.push(...await scoreChunk(query, passages.slice(b, b + size), b));
+  }
+  results.sort((a, b) => b.score - a.score);
+  return results;
+}
+
 // Register the in-process handler with the pool
-registerInProcessHandlers({ rerank: inProcessRerank });
+registerInProcessHandlers({ rerank: (args) => inProcessRerank(args) });
 
 // --- Public API ---
 
