@@ -19,7 +19,7 @@ import {
   type PreTrainedTokenizer,
   type PreTrainedModel,
 } from '@huggingface/transformers';
-import { dispatchRerank, registerInProcessHandlers } from './ml-worker.js';
+import { dispatchRerank, registerInferenceConfig, registerInProcessHandlers } from './ml-worker.js';
 import { ensureModelCacheDir } from './model-cache.js';
 
 const DEFAULT_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
@@ -191,6 +191,7 @@ export async function inProcessRerank(
 
 // Register the in-process handler with the pool
 registerInProcessHandlers({ rerank: (args) => inProcessRerank(args) });
+registerInferenceConfig({ rerankModel: MODEL_ID, rerankDtype: DTYPE, rerankBatch: RERANK_BATCH, rerankQueryTokens: RERANK_QUERY_TOKENS });
 
 // --- Public API ---
 

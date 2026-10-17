@@ -95,6 +95,60 @@ Short prompts are untouched, byte for byte.
 and progress lines read as prose. Set `AWM_PRIME_QUERY_CHARS=0` to recall with the whole
 prompt again.
 
+### One shared model process for every session (opt-in: `AWM_MODEL_DAEMON=1`)
+
+The shape caps bound each process at about 1.2 GB, but every AWM process still loads its
+own copy of the three models. Six Claude Code sessions are six copies. With
+`AWM_MODEL_DAEMON=1`, the first AWM process that needs a model starts one per-user model
+daemon, and every AWM process sends embed, rerank and expand to it over a named pipe
+(Windows) or a unix socket in `~/.awm/run`. Store, engine and recall stay in each process.
+
+Measured on a backup of the live store: four processes, each running 60 prime-shaped
+recalls (two thirds with a ~600-token paste) and one 40-memory batch embed, all at once.
+
+| | each AWM process | model daemon | total | recall p50 | wall time |
+|---|---|---|---|---|---|
+| in-process (today) | ~1,205 MB | — | 4,825 MB | 14.8 s | 12.3 min |
+| `AWM_MODEL_DAEMON=1` | ~160 MB | 1,091 MB | 1,730 MB | 13.9 s | 11.6 min |
+
+The two modes ran back to back with nothing else on the machine. The daemon runs one
+inference at a time, and that costs no speed: four processes running their own models
+compete for the same cores anyway. The p50 is high in both rows because all four recall
+continuously: this is a stress test, not a typical session.
+
+- **Never mixes vectors.** The daemon is keyed by a fingerprint of the config the model
+  modules actually captured, plus the AWM version, the package root, the size and mtime
+  of the inference modules and the transformers and onnxruntime versions. A rebuild or an
+  `npm update` is a new daemon; a session started before it keeps running in-process
+  until it restarts, instead of reaching a daemon running other code. Two versions or two
+  configs get two daemons, and the handshake checks the fingerprint again. A spawned
+  daemon is given the client's captured config, so a `.env` applied after import cannot
+  make it run a different model.
+- **Results are identical** to in-process: vectors, rerank scores and expansions,
+  including the chunked and query-capped paths.
+- **Authentication is mutual,** by HMAC over two nonces with a token in the run dir, and
+  the token never crosses the pipe. A process that takes the pipe name first is refused
+  and is sent nothing.
+- **Sessions take turns.** Interactive requests run ahead of the consolidation backfill.
+  An embed runs one chunk at a time, so one session's 100-memory write-batch does not
+  hold up another session's recall.
+- **A busy daemon is not a failure.** A request can wait in the queue for up to 10 min,
+  including between the chunks of an embed. Each step that has started must finish
+  within 2 min. A daemon wedged on a step that never settles exits at that same limit,
+  and the next AWM process starts a fresh one.
+- **An outage costs memory, never recall.** If the daemon cannot be reached, cannot
+  start, or stops making progress, inference runs in-process, bounded by the same caps,
+  and the daemon is probed again in the background (60 s, doubling to 15 min).
+  `memory_whoami` and `GET /health` show the mode, the daemon pid and each fallback
+  with its reason.
+- **Starts once and stops by itself.** Six processes starting at once start one daemon,
+  through a lockfile election. It exits 5 min after its last client leaves
+  (`AWM_MODEL_DAEMON_IDLE_MS`).
+
+It is off by default until it has run on real sessions for a while. Claude Code may
+launch processes differently from the Node launcher it was tested under, so check
+`memory_whoami` there.
+
 ## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away
 
 > **Re-run `awm setup`.** The installed agent guidance changed: it previously told every

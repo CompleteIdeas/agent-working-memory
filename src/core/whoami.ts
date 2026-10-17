@@ -20,6 +20,7 @@ import { VERSION } from '../version.js';
 import { getConfiguredBackend, getConfiguredPath } from '../storage/factory.js';
 import { activeRecallConfig, recallConfigFingerprint } from './recall-config.js';
 import { embeddingHealth } from './embeddings.js';
+import { modelDaemonStatus } from './ml-worker.js';
 
 export interface WhoamiInfo {
   agentId: string;
@@ -40,6 +41,8 @@ export interface WhoamiInfo {
    * by default, so an MCP-only session had no way to see it.
    */
   recall: { fingerprint: string; flags: Record<string, string> };
+  /** Where inference runs: this process, or the shared model daemon (AWM_MODEL_DAEMON=1). */
+  models: ReturnType<typeof modelDaemonStatus>;
   siblingAgents: string[];
 }
 
@@ -93,8 +96,20 @@ export async function buildWhoami(
         : (Number.isFinite(hookPort) && hookPort > 0 ? hookPort : null),
     },
     recall: { fingerprint: recallConfigFingerprint(), flags: activeRecallConfig() },
+    models: modelDaemonStatus(),
     siblingAgents: siblings,
   };
+}
+
+function formatModels(m: WhoamiInfo['models']): string {
+  if (!m.enabled) return 'in this process';
+  const fallback = m.fallbacks
+    ? ` · ${m.fallbacks} fallback(s) to in-process, last: ${m.lastFallbackReason} at ${m.lastFallbackAt}`
+    : '';
+  const where = m.mode === 'daemon' ? `shared daemon pid ${m.daemonPid}`
+    : m.mode === 'in-process-fallback' ? 'in this process (daemon unavailable)'
+    : 'shared daemon (not connected yet)';
+  return `${where} · fingerprint ${m.fingerprint} · ${m.requests} request(s)${fallback}`;
 }
 
 /** Human-readable rendering for the MCP tool response. */
@@ -107,6 +122,7 @@ export function formatWhoami(w: WhoamiInfo): string {
     `Code: ${w.codePath} (pid ${w.pid})`,
     `Ports: http=${w.ports.http ?? 'off'} hookSidecar=${w.ports.hookSidecar ?? 'off'}`,
     `Recall config: ${w.recall.fingerprint}`,
+    `Models: ${formatModels(w.models)}`,
     ...(embeddingHealth().dimensionMismatches > 0
       ? [`\u26a0 EMBEDDING INTEGRITY: ${embeddingHealth().dimensionMismatches} dimension mismatches ` +
          `(expected ${embeddingHealth().expectedDimensions}d). Affected memories score 0 on the ` +
