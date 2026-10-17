@@ -22,6 +22,7 @@ import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { log, getLogPath } from '../core/logger.js';
 import { buildPrimeInjection } from './prime.js';
+import { shapePrimeQuery } from './prime-query.js';
 
 export interface SidecarDeps {
   store: EngramStore;
@@ -291,8 +292,15 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
           json(res, 200, { inject: '', kept: 0, total: 0, tokens: 0, reason: 'no-prompt' });
           return;
         }
+        // Recall against the prompt's question, not its paste (prime-query.ts).
+        const query = shapePrimeQuery(context);
+        if (!query.trim()) {
+          // Nothing but envelope (ids, fences, trailers): no question to recall for.
+          json(res, 200, { inject: '', kept: 0, total: 0, tokens: 0, reason: 'no-prompt' });
+          return;
+        }
         const candidates = await deps.activate({
-          context,
+          context: query,
           limit: 8,
           granularity: 'compact',   // priming is a brief note, not a report
         });
@@ -302,7 +310,7 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
           minScore: body.minScore,
         });
         log(agentId, 'hook:prime',
-          `"${context.slice(0, 60)}" → ${primed.kept}/${primed.total} injected, ~${primed.tokens} tok${primed.reason ? ` (${primed.reason})` : ''}`);
+          `"${query.slice(0, 60)}"${query === context ? '' : ` (shaped ${context.length}→${query.length} chars)`} → ${primed.kept}/${primed.total} injected, ~${primed.tokens} tok${primed.reason ? ` (${primed.reason})` : ''}`);
         json(res, 200, { ...primed });
       } catch (err) {
         // Deliberately 200 with an empty injection — see the note above.

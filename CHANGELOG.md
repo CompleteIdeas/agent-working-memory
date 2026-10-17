@@ -1,5 +1,100 @@
 # Changelog
 
+## Unreleased — model memory stays bounded, and prompts with a paste recall again
+
+### The MCP process no longer grows to 2–4 GB
+
+Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each
+0.8–3.5 GB, with the JS heap flat at ~85 MB. The growth is onnxruntime-node's CPU memory
+arena: it keeps the largest tensor a model has ever run, for the life of the process.
+Attention is `batch x heads x seq x seq`, so the high-water mark was set by the biggest
+padded batch. The prime hook recalls with the whole prompt, pastes included. Rerank then
+pairs it with 24–40 passages, all padded to 512 tokens, which makes one attention tensor
+of ~500 MB. A `/memory/write-batch` or a consolidation backfill embedded 32+ long texts
+in one pass.
+
+- **`AWM_RERANK_BATCH` (default 8):** the cross-encoder scores passages in chunks.
+- **`AWM_EMBED_BATCH` (default 8):** the embedder runs in chunks, for every
+  `embedBatch` caller.
+- **`AWM_RERANK_QUERY_TOKENS` (default 128):** a longer query reaches the cross-encoder
+  as its first and last 64 tokens.
+
+`0` disables any of them. Measured on a backup of the live store (120 recalls shaped like
+the prime hook's, `limit` 8, two thirds of them carrying a ~600-token paste, then one
+40-memory batch embed):
+
+| | after the recalls | after the batch embed, then idle |
+|---|---|---|
+| before (all three `0`) | 2,840 MB | 3,964 MB |
+| after (defaults) | 873 MB | 1,173 MB |
+
+Chunking changes no result. Pair scores and vectors match an unchunked pass to 1e-5
+(`tests/core/onnx-shape-caps.test.ts`). On 100 real-store fixture queries, the shipped
+recall gives the same rank and the same top result on all 100.
+
+### Long queries were unrankable — the query cap fixes the cross-encoder half of that
+
+transformers.js truncates a too-long `(query, passage)` pair by cutting tokens off the
+**end**, which is the passage. A query of ~510 tokens left every passage zero tokens, so
+every memory got the same score: the cross-encoder was scoring the query alone. Measured
+on the same 100 fixture queries wrapped in ~600 tokens of log, notes or code:
+
+| question placement | success@1 before | with the 128-token cap | queries better / worse |
+|---|---|---|---|
+| question before the paste | 3% | 49% | 46 / 1 |
+| question after the paste | 7% | 26% | 21 / 0 |
+| short query (unchanged) | 93% | 93% | 0 / 0 |
+
+A 256-token cap was measured and rejected: equal before the paste (46%) and 0% after it.
+
+The cap fixes the cross-encoder half. The rest of the fix is where the query is formed,
+in the prime hook (next section).
+
+### The prime hook recalls with the prompt's question, not its paste
+
+`/hooks/prime` recalled against the whole prompt. A prompt that carries a log, code, a
+diff or a background-task report is mostly paste, so BM25, the embedding and the
+cross-encoder all read the paste. `shapePrimeQuery` (`src/hooks/prime-query.ts`) now
+forms the query, on the prime path only. A prompt of up to `AWM_PRIME_QUERY_CHARS`
+(default 400) is used as typed; a longer one:
+
+- **drops machine output:**
+  - fenced code, logs, stack frames, code, SQL, JSON, YAML, CSV, tables and diffs;
+  - compiler output, markup and column layouts;
+  - task-notification ids and boilerplate.
+- **keeps up to two error lines** in a reserved share of the budget.
+- **puts the likeliest question first.**
+- **cuts the rest** to its head and tail.
+
+Order matters because the cross-encoder judges relevance from the **start** of the query.
+The same question and memory scored 0.996 with the question in front of 300 characters of
+notes and 0.007 behind them, and every other memory scored ~0 as well. So the query leads
+with:
+
+1. a task's `<summary>`;
+2. then any line that asks something;
+3. then an end block of the prompt that reads as a typed request. It must be mostly
+   prose, not a heading, a line ending in `:`, a sign-off or a signature.
+
+Measured on 100 real-store fixture queries wrapped in ~600 tokens of paste, success@1.
+Each paste set was written after the previous one's fixes, so each row before the last
+had been tuned against by the time of the final run. The **blind** row is the honest
+number: written last, measured once, never tuned.
+
+| paste set | question before: whole prompt → shaped | question after: whole prompt → shaped |
+|---|---|---|
+| log, prose notes, code (with the 128-token cap) | 49% → 90% | 26% → 90% |
+| unseen: Java, Terraform, chat, README, Docker | 54% → 78% | 20% → 78% |
+| **blind: pytest, SQL migration, Slack, .NET, JSON lines** | **60% → 81%** | **16% → 68%** |
+| short query, no paste | 93% → 93% | — |
+
+Recall p50 on the blind set fell from 1.6–1.7 s to 0.86 s (p90 4.2–4.8 s → ~1.0 s).
+Short prompts are untouched, byte for byte.
+
+**Known gap:** pytest output with the question after it (5/20 on the blind set). Its banner
+and progress lines read as prose. Set `AWM_PRIME_QUERY_CHARS=0` to recall with the whole
+prompt again.
+
 ## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away
 
 > **Re-run `awm setup`.** The installed agent guidance changed: it previously told every

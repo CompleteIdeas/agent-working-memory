@@ -26,6 +26,20 @@ const MODEL_ID = process.env.AWM_EMBED_MODEL ?? 'Xenova/bge-small-en-v1.5';
 const DIMENSIONS = parseInt(process.env.AWM_EMBED_DIMS ?? '384', 10);
 const POOLING = (process.env.AWM_EMBED_POOLING ?? 'mean') as 'cls' | 'mean';
 
+/**
+ * Texts per forward pass (default 8; 0 = all at once). onnxruntime-node's CPU arena grows
+ * to the largest tensor it has run and never shrinks, and attention is quadratic in the
+ * padded length: a 100-memory /memory/write-batch or a 32-engram consolidation backfill
+ * at 512 tokens set a high-water mark the process then kept for life. Chunking bounds it.
+ * A text's vector does not depend on the others in its batch (padding is masked).
+ * See reranker.ts for the measurement.
+ */
+const EMBED_BATCH = (() => {
+  // An explicit 0 disables chunking; anything else invalid falls back to 8 (see reranker.ts).
+  const v = Number(process.env.AWM_EMBED_BATCH?.trim() || NaN);
+  return Number.isInteger(v) && v >= 0 ? v : 8;
+})();
+
 // --- In-process fallback (used by tests and crash recovery) ---
 
 let inProcessInstance: FeatureExtractionPipeline | null = null;
@@ -45,21 +59,26 @@ async function loadInProcess(): Promise<FeatureExtractionPipeline> {
   return inProcessInitPromise;
 }
 
-async function inProcessEmbed(args: { texts: string[]; pooling: 'cls' | 'mean'; dimensions: number }): Promise<number[][]> {
+/** Exported with its batch size as a parameter so tests can compare settings in one process. */
+export async function inProcessEmbed(args: { texts: string[]; pooling: 'cls' | 'mean'; dimensions: number }, batch = EMBED_BATCH): Promise<number[][]> {
   const { texts, pooling, dimensions } = args;
   if (texts.length === 0) return [];
   const embedder = await loadInProcess();
-  const result = await embedder(texts, { pooling, normalize: true });
-  const data = result.data as Float32Array;
   const vectors: number[][] = [];
-  for (let i = 0; i < texts.length; i++) {
-    vectors.push(Array.from(data.slice(i * dimensions, (i + 1) * dimensions)));
+  const size = batch > 0 ? batch : texts.length;
+  for (let b = 0; b < texts.length; b += size) {
+    const chunk = texts.slice(b, b + size);
+    const result = await embedder(chunk, { pooling, normalize: true });
+    const data = result.data as Float32Array;
+    for (let i = 0; i < chunk.length; i++) {
+      vectors.push(Array.from(data.slice(i * dimensions, (i + 1) * dimensions)));
+    }
   }
   return vectors;
 }
 
 // Register the in-process handler with the pool (used in test mode and as fallback)
-registerInProcessHandlers({ embed: inProcessEmbed });
+registerInProcessHandlers({ embed: (args) => inProcessEmbed(args) });
 
 // --- Public API ---
 

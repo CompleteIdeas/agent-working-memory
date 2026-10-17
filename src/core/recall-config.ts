@@ -45,6 +45,11 @@ export const RECALL_FLAGS = [
   // Omitted until 2026-10-09, during which both arms of a dtype sweep printed the
   // SAME arm= label; the whole point of this list is that that cannot happen.
   'AWM_RERANKER_DTYPE',
+  // ONNX input caps (2026-10-16). The query cap changes scores for queries over the
+  // cap; the batch sizes should not, but they are listed so an arm says them.
+  'AWM_RERANK_QUERY_TOKENS',
+  'AWM_RERANK_BATCH',
+  'AWM_EMBED_BATCH',
   // Derived retrieval text (embedding side)
   'AWM_RETRIEVAL_TEXT',
   // Project-dialect alias expansion
