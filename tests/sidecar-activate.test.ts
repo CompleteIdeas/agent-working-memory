@@ -95,6 +95,31 @@ describe('sidecar POST /memory/activate (0.12.2)', () => {
     expect((await res.json() as { results: unknown[] }).results).toEqual([]);
   });
 
+  it('/hooks/prime recalls against the shaped question, not the whole pasted prompt', async () => {
+    activateCalls.length = 0;
+    const question = 'why does the reconciliation job time out?';
+    const log = Array.from({ length: 40 }, (_, i) => `2026-10-16T13:${String(i).padStart(2, '0')}:07Z INFO heartbeat ok queue=${i}`).join('\n');
+    const res = await fetch(`${BASE}/hooks/prime`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({ prompt: `${question}\n\n${log}` }),
+    });
+    expect(res.status).toBe(200);
+    expect(activateCalls).toHaveLength(1);
+    expect(activateCalls[0]).toMatchObject({ context: question, limit: 8 });
+    expect((await res.json() as { inject: string }).inject).toContain('test concept');
+  });
+
+  it('/hooks/prime passes a short prompt through untouched', async () => {
+    activateCalls.length = 0;
+    await fetch(`${BASE}/hooks/prime`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({ prompt: 'commit and push the sweep evidence' }),
+    });
+    expect(activateCalls[0]).toMatchObject({ context: 'commit and push the sweep evidence' });
+  });
+
   it('501s when activate is not wired (older callers)', async () => {
     const bare = startSidecar({
       store: stubStore, agentId: 'bare', secret: SECRET, port: PORT + 1,

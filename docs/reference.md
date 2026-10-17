@@ -465,6 +465,7 @@ so a hook never talks to whichever server happened to grab 8401 first.
 | `AWM_HOOK_PORT` | `8401` | First port the sidecar tries |
 | `AWM_HOOK_PORT_RANGE` | `10` | How many ports to walk upward before giving up. `awm setup --hook-port-range N` writes it |
 | `AWM_HOOK_SECRET` | generated | Bearer token. Stored in the MCP config and read by the hooks at run time, never written into `settings.json` |
+| `AWM_PRIME_QUERY_CHARS` | `400` | The prime hook recalls with at most this many characters of the prompt (`0` = the whole prompt). A longer prompt loses its machine lines (logs, code, JSON, diffs, stack frames), task-notification envelopes and boilerplate, keeps up to two error lines, and is cut to the head and tail of its prose. Recall only: the agent still sees the whole prompt. A shorter prompt is used as typed. `src/hooks/prime-query.ts` |
 | `AWM_SETUP_HOME` | `$HOME` | Overrides the home directory for `awm setup` / `awm doctor`, so an upgrade can be rehearsed against a scratch tree |
 
 The shipped hook scripts carry a version stamp (`AWM_HOOKS_VERSION`, currently

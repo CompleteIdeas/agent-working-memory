@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — model memory stays bounded, and long prompts can be ranked again
+## Unreleased — model memory stays bounded, and prompts with a paste recall again
 
 ### The MCP process no longer grows to 2–4 GB
 
@@ -47,9 +47,53 @@ on the same 100 fixture queries wrapped in ~600 tokens of log, notes or code:
 
 A 256-token cap was measured and rejected: equal before the paste (46%) and 0% after it.
 
-**Still open:** a long prompt is still far below the short-query 93%, and a long recall
-takes ~5–8 s. The other stages (BM25, embedding) also see the whole paste. The fix
-belongs where the query is formed, in the prime hook, not in the models.
+The cap fixes the cross-encoder half. The rest of the fix is where the query is formed,
+in the prime hook (next section).
+
+### The prime hook recalls with the prompt's question, not its paste
+
+`/hooks/prime` recalled against the whole prompt. A prompt that carries a log, code, a
+diff or a background-task report is mostly paste, so BM25, the embedding and the
+cross-encoder all read the paste. `shapePrimeQuery` (`src/hooks/prime-query.ts`) now
+forms the query, on the prime path only. A prompt of up to `AWM_PRIME_QUERY_CHARS`
+(default 400) is used as typed; a longer one:
+
+- **drops machine output:**
+  - fenced code, logs, stack frames, code, SQL, JSON, YAML, CSV, tables and diffs;
+  - compiler output, markup and column layouts;
+  - task-notification ids and boilerplate.
+- **keeps up to two error lines** in a reserved share of the budget.
+- **puts the likeliest question first.**
+- **cuts the rest** to its head and tail.
+
+Order matters because the cross-encoder judges relevance from the **start** of the query.
+The same question and memory scored 0.996 with the question in front of 300 characters of
+notes and 0.007 behind them, and every other memory scored ~0 as well. So the query leads
+with:
+
+1. a task's `<summary>`;
+2. then any line that asks something;
+3. then an end block of the prompt that reads as a typed request. It must be mostly
+   prose, not a heading, a line ending in `:`, a sign-off or a signature.
+
+Measured on 100 real-store fixture queries wrapped in ~600 tokens of paste, success@1.
+Each paste set was written after the previous one's fixes, so each row before the last
+had been tuned against by the time of the final run. The **blind** row is the honest
+number: written last, measured once, never tuned.
+
+| paste set | question before: whole prompt → shaped | question after: whole prompt → shaped |
+|---|---|---|
+| log, prose notes, code (with the 128-token cap) | 49% → 90% | 26% → 90% |
+| unseen: Java, Terraform, chat, README, Docker | 54% → 78% | 20% → 78% |
+| **blind: pytest, SQL migration, Slack, .NET, JSON lines** | **60% → 81%** | **16% → 68%** |
+| short query, no paste | 93% → 93% | — |
+
+Recall p50 on the blind set fell from 1.6–1.7 s to 0.86 s (p90 4.2–4.8 s → ~1.0 s).
+Short prompts are untouched, byte for byte.
+
+**Known gap:** pytest output with the question after it (5/20 on the blind set). Its banner
+and progress lines read as prose. Set `AWM_PRIME_QUERY_CHARS=0` to recall with the whole
+prompt again.
 
 ## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away
 
