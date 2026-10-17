@@ -33,6 +33,7 @@
  */
 
 import { packRecallByBudget, estimateTokens, type PackedRecall } from '../core/token-budget.js';
+import { isFaded } from '../core/format-recall.js';
 
 /** Shape returned by the sidecar's `activate` dependency. */
 export interface PrimeCandidate {
@@ -93,7 +94,11 @@ function formatPrimeLine(c: PrimeCandidate, now: number = Date.now()): string {
   const cls = c.engram.memoryClass ?? 'working';
   const created = c.engram.createdAt ? new Date(c.engram.createdAt as any).getTime() : NaN;
   const age = Number.isFinite(created) ? ` · ${Math.max(0, Math.round((now - created) / 86_400_000))}d` : '';
-  return `- [${cls}${age}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
+  // Same reason as the MCP format: a trimmed body that still reads as an answer
+  // is the one failure mode the agent cannot detect for itself. Terser here
+  // because this is unrequested context.
+  const faded = isFaded(c.engram.content) ? ' · faded' : '';
+  return `- [${cls}${age}${faded}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
 }
 
 /**

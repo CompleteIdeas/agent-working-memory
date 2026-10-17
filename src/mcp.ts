@@ -337,6 +337,9 @@ The concept should be a short label (3-8 words). The content should be the full 
       eventType: params.event_type as SalienceEventType,
       surprise: params.surprise,
       decisionMade: params.decision_made,
+      // Passed through so the salience filter sees a declared decision, not just an
+      // `intent=` tag. The mapping lives in write-pipeline.ts; see the measurement there.
+      intent: params.intent,
       causalDepth: params.causal_depth,
       resolutionEffort: params.resolution_effort,
       memoryClass: params.memory_class,
@@ -367,9 +370,9 @@ The concept should be a short label (3-8 words). The content should be the full 
     const novelty = result.noveltyResult.novelty;
     const isLowSalience = salience.disposition === 'discard';
 
-    // Decision propagation: when decision_made=true and coordination is enabled,
+    // Decision propagation: when decision_made=true or intent='decision', and coordination is enabled,
     // broadcast to coord_decisions so other agents can discover it
-    if (params.decision_made && coordDb) {
+    if ((params.decision_made || params.intent === 'decision') && coordDb) {
       try {
         const agent = coordDb.prepare(
           `SELECT id, current_task FROM coord_agents WHERE name = ? AND status != 'dead' ORDER BY last_seen DESC LIMIT 1`

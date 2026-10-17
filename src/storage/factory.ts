@@ -38,6 +38,7 @@
 
 import { existsSync, statSync } from 'node:fs';
 import type { IEngramStore } from './store.js';
+import { assertNotLiveStoreUnderTest } from '../adapters/common.js';
 
 export type StoreBackend = 'sqlite' | 'pglite' | 'postgres';
 
@@ -147,6 +148,11 @@ export async function openStore(): Promise<{
 }> {
   const backend = getConfiguredBackend();
   const path = getConfiguredPath();
+
+  // A-3 (2026-10-12): a harness must not OPEN the live store. Placed here, at the one
+  // place production creates a store, rather than in resolveDbPath — computing a path
+  // string is harmless, opening the file is what writes.
+  assertNotLiveStoreUnderTest(path);
 
   // The on-disk mismatch warning only applies to file/dir backends.
   if (backend !== 'postgres') warnIfBackendDisagreesWithDisk(backend, path);

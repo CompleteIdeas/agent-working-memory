@@ -72,4 +72,38 @@ describe('formatRecallResultLine (0.12.1 — engram id in recall output)', () =>
     const match = /\[id: ([0-9a-f-]{36})\]/.exec(line);
     expect(match?.[1]).toBe(id);
   });
+  it('labels a faded body in the header, where a trimmed answer cannot pass for a complete one', () => {
+    const line = formatRecallResultLine(
+      result({ engram: engram({ content: 'The first 150 chars of the original body… [faded]' }) }),
+      0,
+    );
+    // Header position, next to [valid until ...] - not left to be discovered at
+    // the end of the body, which is where consolidation writes the marker.
+    expect(line).toContain('[faded');
+    expect(line.indexOf('[faded')).toBeLessThan(line.indexOf('The first 150 chars'));
+    // Fade overwrites the content, so no tool can bring the rest back: the label must
+    // not send the agent to one (retrieve_original only knows compress_output refs).
+    expect(line).not.toContain('retrieve_original');
+    expect(line).toContain('the rest is gone');
+  });
+
+  it('labels a faded body even when a compact summary hides the trailing marker', () => {
+    // granularity: 'compact'/'auto' replace the body with a query-aware 200-char
+    // window, which will rarely include the tail - the exact case where fade was
+    // previously undetectable from the output.
+    const line = formatRecallResultLine(
+      result({
+        summary: 'window from the middle of the body',
+        engram: engram({ content: 'head of body… [faded]' }),
+      }),
+      0,
+    );
+    expect(line).toContain('window from the middle of the body');
+    expect(line).not.toContain('head of body');
+    expect(line).toContain('[faded');
+  });
+
+  it('does not label an unfaded body', () => {
+    expect(formatRecallResultLine(result(), 0)).not.toContain('[faded');
+  });
 });

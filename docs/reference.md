@@ -600,6 +600,22 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 expansion-only 63%±14 · all-four 74%±10 · entity-index config 74%±5. No single-factor cell
 reproduced the combined wins; all CIs overlap at k=3 — no default flip without a k≥10 run.
 
+### Unreleased additions (lifecycle correctness, 2026-10-12)
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_PROTECTED_ARCHIVE_DAYS` | `365` | Archive floor for fade-protected classes (`canonical`, `structural`) in the disuse archive; superseded engrams get none, and a value that is not a non-negative number falls back to 365. The archive phase measures disuse as `accessCount === 0`, which is wrong for a source-of-truth class: a decision nobody has needed **yet** has zero recalls by construction. Measured before this existed: 4,360 canonical engrams archived against 2,058 active, 2,891 of them zero-access. A longer clock, not an exemption — the class is still archived past the floor, and the module's "never immortal" invariant holds. Fade-protected engrams are additionally never **deleted**, which is the one irreversible step in the cycle. |
+| `AWM_ALLOW_LIVE_STORE` | unset | `1` permits a test or benchmark process (`VITEST`, or `AWM_BENCH=1`) to open the live store, `~/.awm/memory.db` or `~/.awm/memory-pglite`. Otherwise store creation refuses, and `npm run bench` refuses a server whose `/health` reports `store.live`. Every launcher defaults `AWM_DB_PATH` to the live store, and 4,745 benchmark fixture engrams were purged from it on 2026-10-11 — nine real memories sat among them. |
+
+Also in this group, no env var: `GET /health` reports `store.live` (boolean, same purpose as
+`recall.fingerprint` — a writing benchmark can refuse the wrong store loudly); engrams carry
+`stage_changed_at` (nullable, no backfill — null means never transitioned, so readers fall back
+to `created_at`); recall output labels a trimmed body `[faded]` in the header rather than only
+via the marker at the end of the content; `deleteEngram` clears `retrieval_feedback`,
+`entity_mentions` and `staging_events` atomically (571 and 3 orphans respectively were
+found in the live store); and a declared `intent: 'decision'` on `memory_write` now reaches the
+salience filter instead of only becoming a tag.
+
 ### 0.11.x additions (Waves 1–3 + D11, 2026-07-30)
 
 **Write-path telemetry (D1)** — always-on slow-write attribution:

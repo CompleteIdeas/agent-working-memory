@@ -298,11 +298,11 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 810 tests
+npx vitest run          # 999 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
-npm run test:linux      # build + full suite on Linux (810/810)
+npm run test:linux      # build + full suite on Linux
 ```
 
 ---

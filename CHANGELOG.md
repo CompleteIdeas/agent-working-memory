@@ -155,6 +155,100 @@ continuously: this is a stress test, not a typical session.
 It is off by default until it has run on real day-to-day sessions for a while; check
 `memory_whoami` there.
 
+## Unreleased — the lifecycle was archiving the memories it was supposed to protect
+
+Seven correctness fixes from `docs/plan-gaps-and-procedural-memory-2026-10-12.md`, all measured
+against the live store rather than argued from the code.
+
+### Canonical was fade-protected and nothing else (A-9)
+
+`FADE_PROTECTED_CLASSES` was consulted by the fade phase and by **nothing in the archive phase**,
+which measured disuse as `accessCount === 0`. That reading is wrong for exactly the class it hurts:
+**a decision, rule or requirement nobody has needed yet has zero recalls by construction.** Measured
+on the live store (`work`+`personal`, retracted=0): **4,360 canonical engrams archived against 2,058
+active, 2,891 of the archived never recalled once** — two thirds taken by the two branches no
+strength factor reaches. Of 1,758 archived `procedural` engrams, 1,160 were zero-access.
+
+Fade-protected classes now get a one-year archive floor (`AWM_PROTECTED_ARCHIVE_DAYS`, default 365)
+on all three branches of the disuse archive (Phase 6), and are never deleted. A superseded engram
+gets no floor: its successor is the source of truth, so it leaves the active pool on the ordinary
+clock. Two other paths still archive any class, deliberately: redundancy pruning (Phase 6.5)
+archives the weaker of two near-duplicates, whose content survives in the other; and capacity
+eviction runs only when the store is over its configured size. A **floor, not an exemption**: a blanket skip would
+break the module's own "rehearsal never makes immortal" invariant and hold 3,928 more engrams in a
+5,314-engram active pool, a 74% increase in what every recall scores against. Restoring the
+already-archived ones is deliberately NOT in this change — it owes a latency measurement first, and
+432 of them are superseded.
+
+Found while writing the test: Phase 6 archives and then re-reads the archived set in the same pass,
+so a zero-access, edgeless engram past `FORGET_DELETE_DAYS` was created, archived and **permanently
+deleted without any cycle in between**. Defensible for a scratch note; it was not for a canonical
+decision, which is why the delete guard is an exemption rather than a clock.
+
+On 2026-10-12 no canonical engram in the live store met every delete condition: deletion also
+requires zero associations, and the 449 archived canonical engrams past the 90-day threshold were
+held by their edge count alone. That held for five days. **Re-measured on 2026-10-17** with one
+consolidation pass on two copies of the live store, the old code permanently deleted **7 archived
+canonical engrams** (never recalled, one edge or none: five verified fix records and two
+shipped-feature records), and this code kept all seven. Phase 4 prunes edges, and an engram that
+loses its last one becomes eligible.
+
+### A declared `intent: 'decision'` reaches the salience filter (A-6)
+
+`intent` became an `intent=` tag and was read by nothing, while the redundant `decision_made`
+boolean was the only wired path — so a caller following the documented tagging discipline got no
+salience credit for saying a write recorded a decision. Measured over all 496 discarded writes in
+the live store, against a 38.1% base rate of later being recalled:
+
+| feature | recalled later | n | lift |
+|---|---|---|---|
+| `intent=decision` | **77.3%** | 22 | **+41.0pp** |
+| `confidence_level=verified` | 40.2% | 306 | +5.5pp |
+| `person=` tag present | 40.8% | 120 | +3.6pp |
+| content ≥ 500 chars | 35.0% | 408 | −17.2pp |
+| concept ≥ 60 chars | 29.9% | 364 | −30.7pp |
+
+The mapping lives in `write-pipeline.ts` so both write surfaces inherit it. **The originally planned
+fix was tested and rejected:** widening the operational-verb list that gates the 0.45
+verified-finding floor would have rescued nothing reliably — of 177 discards failing only the verb
+gate while already carrying 2+ identifiers, every candidate token (`Verified` 33:97, `Run` 16:48,
+`Fixed` 11:27, `Sent` 10:13) scored at or below the base rate. Caller-declared intent discriminates;
+inferred content features did not.
+
+### The rest
+
+- **`stage_changed_at` on engrams (A-4).** The table recorded creation, last access and retraction,
+  and never when a lifecycle decision was taken — so fade regret and archive regret were not
+  computable after the fact for a store that is 60.7% archived. Written in `updateStage`, the single
+  chokepoint all six consolidation transitions pass through. Nullable, no backfill: null means never
+  transitioned, so readers fall back to `created_at`.
+- **`[faded]` in the recall header (A-5).** The marker was written into the content, so it was
+  invisible under `granularity: 'compact'`/`'auto'` (a 200-char query-aware window rarely includes
+  the tail) and easy to miss at the end of a full body. Fade retains 7.1% of answer-bearing
+  identifiers while leaving findability intact, which is the worst possible shape: the result ranks,
+  reads as an answer, and no longer contains one.
+- **`deleteEngram` clears dependent rows (A-8).** `associations` cascaded; `retrieval_feedback`,
+  `entity_mentions` and `staging_events` carry a bare `engram_id` with no FK and were stranded on
+  every delete — 571 and 3 orphans respectively in the live store, present in the pre-purge backup
+  too. Atomic on all three backends: a transaction on SQLite, one data-modifying statement on
+  PGlite and Postgres. `activation_events` is deliberately untouched: its
+  `engram_ids` records a recall that really happened.
+- **A harness cannot open the live store (A-3).** Store creation refuses when the process looks like
+  a test or bench run (`VITEST`, or `AWM_BENCH=1`, which a bench or eval script sets for itself) and the path is the live store,
+  `~/.awm/memory.db` or `~/.awm/memory-pglite`, however it is spelled (case and `\\?\` on Windows,
+  junctions and symlinks). Not `NODE_ENV=test`: a shell exporting it would stop the MCP server
+  Claude Code starts from it;
+  `GET /health` reports `store.live` and `npm run bench` refuses such a server. Escape hatch:
+  `AWM_ALLOW_LIVE_STORE=1`. Placed where a store is opened, not where a path is resolved —
+  computing a string is harmless, opening the file is what writes.
+- **Nine stranded memories (A-7).** Eight real EquiHub memories sat in UUID fallback agent spaces,
+  invisible to `work` recall; they are re-pointed at `work`. The ninth, concept `test probe`, was
+  left where it is — moving a test artifact into `work` is not a fix.
+
+Tests: the full suite passes, with a test for each fix. Benchmarks were NOT regenerated: these changes touch the write
+path, consolidation and delete, while the suites measure retrieval against a frozen snapshot and
+perform no writes and no consolidation.
+
 ## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away
 
 > **Re-run `awm setup`.** The installed agent guidance changed: it previously told every

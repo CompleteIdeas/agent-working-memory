@@ -107,11 +107,12 @@ export async function migrate(opts: MigrateOptions): Promise<MigrateStats> {
              salience_features, reason_codes, stage, ttl,
              retracted, retracted_by, retracted_at, tags, memory_type,
              memory_class, superseded_by, supersedes, episode_id,
-             task_status, task_priority, blocked_by, sequence, references_json
+             task_status, task_priority, blocked_by, sequence, references_json,
+             stage_changed_at
            ) VALUES (
              $1, $2, $3, $4, $5::vector, $6, $7, $8, $9, $10, $11,
              $12, $13, $14, $15, $16, $17, $18, $19, $20,
-             $21, $22, $23, $24, $25, $26, $27, $28, $29
+             $21, $22, $23, $24, $25, $26, $27, $28, $29, $30
            )`,
           [
             r.id, r.agent_id, r.concept, r.content, embedding, r.embedding_model,
@@ -122,6 +123,7 @@ export async function migrate(opts: MigrateOptions): Promise<MigrateStats> {
             r.tags ?? '[]', r.memory_type ?? 'unclassified',
             r.memory_class ?? 'working', r.superseded_by, r.supersedes, r.episode_id,
             r.task_status, r.task_priority, r.blocked_by, r.sequence, r.references_json,
+            r.stage_changed_at ?? null,
           ],
         );
         stats.engrams++;

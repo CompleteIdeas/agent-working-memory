@@ -58,6 +58,7 @@ export const PGLITE_SCHEMA_DDL = `
     recipe_id            TEXT,
     valid_from           TEXT,
     valid_to             TEXT,
+    stage_changed_at     TEXT,
     fts                  TSVECTOR
   );
 
@@ -68,6 +69,11 @@ export const PGLITE_SCHEMA_DDL = `
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS recipe_id      TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_from     TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_to       TEXT;
+
+  -- Stage-transition timestamp (A-4, 2026-10-12). Nullable with no backfill:
+  -- null means the engram has never changed stage, so readers fall back to
+  -- created_at. See Engram.stageChangedAt for why it exists.
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS stage_changed_at TEXT;
 
   CREATE INDEX IF NOT EXISTS idx_engrams_agent           ON engrams(agent_id);
   CREATE INDEX IF NOT EXISTS idx_engrams_stage           ON engrams(agent_id, stage);

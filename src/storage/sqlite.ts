@@ -373,6 +373,14 @@ export class EngramStore {
       `);
     }
 
+    // Migration: stage-transition timestamp (A-4, 2026-10-12). Additive, nullable,
+    // no backfill — null means "never transitioned", so readers fall back to created_at.
+    try {
+      this.db.prepare('SELECT stage_changed_at FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN stage_changed_at TEXT`);
+    }
+
     // Migration: add conscious_state table for checkpointing
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS conscious_state (
@@ -755,8 +763,14 @@ export class EngramStore {
     `).run(new Date().toISOString(), id);
   }
 
+  /**
+   * Move an engram to a new stage, recording WHEN. The timestamp is written here
+   * rather than at the six consolidation call sites so a future transition cannot
+   * forget it; see `Engram.stageChangedAt` for why the column exists.
+   */
   updateStage(id: string, stage: EngramStage): void {
-    this.db.prepare('UPDATE engrams SET stage = ? WHERE id = ?').run(stage, id);
+    this.db.prepare('UPDATE engrams SET stage = ?, stage_changed_at = ? WHERE id = ?')
+      .run(stage, new Date().toISOString(), id);
     this.cacheUpdateStage(id, stage);
   }
 
@@ -793,8 +807,30 @@ export class EngramStore {
     this.cacheRetract(id);
   }
 
+  /**
+   * Delete an engram and everything that points at it.
+   *
+   * `associations` cascades (its FKs declare ON DELETE CASCADE), but
+   * `retrieval_feedback`, `entity_mentions` and `staging_events` carry a bare
+   * `engram_id TEXT` with no foreign key, so deleting an engram used to strand their
+   * rows. Measured on the live store 2026-10-12: **571 orphaned retrieval_feedback
+   * rows and 3 orphaned entity_mentions**, present in the pre-purge backup too, so
+   * they accumulated over time rather than in one incident. Inert for recall, but
+   * they corrupt any join that assumes referential integrity — including the
+   * feedback-weighted scoring channel's own counts.
+   *
+   * One transaction, so a crash cannot leave the half-deleted state this is fixing.
+   * `activation_events` is deliberately NOT touched: its `engram_ids` is a JSON array
+   * describing a recall that really happened, and editing history to remove one id
+   * would falsify the event rather than tidy it.
+   */
   deleteEngram(id: string): void {
-    this.db.prepare('DELETE FROM engrams WHERE id = ?').run(id);
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM retrieval_feedback WHERE engram_id = ?').run(id);
+      this.db.prepare('DELETE FROM entity_mentions WHERE engram_id = ?').run(id);
+      this.db.prepare('DELETE FROM staging_events WHERE engram_id = ?').run(id);
+      this.db.prepare('DELETE FROM engrams WHERE id = ?').run(id);
+    })();
     this.cacheRemove(id);
   }
 
@@ -1487,6 +1523,7 @@ export class EngramStore {
       recipeId: row.recipe_id ?? null,
       validFrom: row.valid_from ?? null,
       validTo: row.valid_to ?? null,
+      stageChangedAt: row.stage_changed_at ?? null,
     };
   }
 

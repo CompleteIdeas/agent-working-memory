@@ -8,7 +8,7 @@
  * environment variables, MCP command building, and the AWM instruction snippet.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, realpathSync } from 'node:fs';
 import { resolve, join, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { homedir as osHomedir } from 'node:os';
@@ -52,6 +52,76 @@ export function resolveDbPath(packageRoot: string, explicit?: string | null): st
     mkdirSync(dbDir, { recursive: true });
   }
   return dbPath;
+}
+
+/** The default live store, i.e. what a path resolves to when nothing was specified. */
+export function isLiveStorePath(dbPath: string): boolean {
+  const target = canonicalPath(dbPath);
+  return [join(homedir(), '.awm', 'memory.db'), join(homedir(), '.awm', 'memory-pglite')]
+    .some(live => canonicalPath(live) === target);
+}
+
+/**
+ * A path in the form two spellings of the same file share: real path when it exists
+ * (junctions, symlinks, 8.3 short names), no `\\?\` prefix, and case-folded on
+ * Windows, whose file system ignores case (`c:\Users` and `C:\users` are one file).
+ */
+function canonicalPath(p: string): string {
+  let out = resolve(p.replace(/^\\\\\?\\/, ''));
+  try { out = realpathSync.native(out); } catch {
+    // Not there yet (a fresh machine): resolve the folder, which may itself be a junction.
+    try { out = join(realpathSync.native(dirname(out)), basename(out)); } catch { /* compare as given */ }
+  }
+  return process.platform === 'win32' ? out.toLowerCase() : out;
+}
+
+/**
+ * True when this process is a test or benchmark run.
+ *
+ * `VITEST` is set by the runner itself, so it needs no cooperation from the test.
+ * `AWM_BENCH=1` is for a bench or eval script to set; nothing sets it automatically.
+ * Both are absent in every production path: the MCP server, the HTTP server, the CLI
+ * and the hook sidecars.
+ *
+ * Not `NODE_ENV=test`: a developer shell that exports it would hand it to the MCP server
+ * Claude Code starts from there, and the server would refuse its own store and exit,
+ * which shows up only as "Connection closed".
+ */
+export function isTestOrBenchContext(): boolean {
+  return process.env.VITEST === 'true' || process.env.VITEST === '1'
+    || process.env.AWM_BENCH === '1';
+}
+
+/**
+ * Refuse to open the LIVE store from a test or benchmark process (A-3, 2026-10-12).
+ *
+ * Every launcher defaults `AWM_DB_PATH` to `~/.awm/memory.db` — correct for the product
+ * and wrong for a harness that forgot to override it, because the harness writes.
+ * 4,745 LoCoMo benchmark fixture engrams were found in the live store across 51 unpinned
+ * UUID agent spaces and purged on 2026-10-11; nine real memories sat among them and a
+ * naive filter would have destroyed those too.
+ *
+ * The current eval path is not the offender — `tests/realstore-eval/` reads
+ * `snapshot/store-backfilled.db` and the newest fixture found was dated 2026-06-17, four
+ * months earlier. So this is a guard against the DEFAULT, placed where the default is
+ * produced, not a fix for a live bug.
+ *
+ * Escape hatch: `AWM_ALLOW_LIVE_STORE=1`, for the deliberate case of measuring against
+ * the real store (which `docs/eval-gap-2026-10-11.md` does want, read-only). Loud and
+ * opt-in beats a silent default.
+ */
+export function assertNotLiveStoreUnderTest(dbPath: string): void {
+  if (process.env.AWM_ALLOW_LIVE_STORE === '1') return;
+  if (!isTestOrBenchContext()) return;
+  if (!isLiveStorePath(dbPath)) return;
+  throw new Error(
+    `AWM refused to open the live store from a test/bench process.\n`
+    + `  path:    ${dbPath}\n`
+    + `  because: this process looks like a harness (VITEST or AWM_BENCH=1) and\n`
+    + `           a harness that writes to the live store contaminates it — 4,745 fixture\n`
+    + `           engrams were purged from it on 2026-10-11 for exactly this reason.\n`
+    + `  fix:     set AWM_DB_PATH to a scratch file, or AWM_ALLOW_LIVE_STORE=1 if you mean it.`,
+  );
 }
 
 /** Read or generate the hook secret token. */

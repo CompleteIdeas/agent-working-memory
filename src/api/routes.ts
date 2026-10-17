@@ -54,6 +54,8 @@ import { embed, embedBatch, embeddingHealth } from '../core/embeddings.js';
 import { modelDaemonStatus } from '../core/ml-worker.js';
 import { VERSION } from '../version.js';
 import { activeRecallConfig, recallConfigFingerprint } from '../core/recall-config.js';
+import { isLiveStorePath } from '../adapters/common.js';
+import { getConfiguredPath } from '../storage/factory.js';
 
 export interface MemoryDeps {
   store: EngramStore;
@@ -169,6 +171,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       eventType: body.eventType,
       surprise: body.surprise,
       decisionMade: body.decisionMade,
+      // Parity with the MCP write path — the intent→salience mapping is in
+      // write-pipeline.ts so both surfaces cannot drift apart.
+      intent: body.intent,
       causalDepth: body.causalDepth,
       resolutionEffort: body.resolutionEffort,
       confidence: body.confidence,
@@ -982,6 +987,15 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       recall: {
         fingerprint: recallConfigFingerprint(),
         flags: activeRecallConfig(),
+      },
+      // Is this server pointed at the LIVE store? (A-3, 2026-10-12.) Same purpose
+      // as the recall fingerprint above: a benchmark that WRITES must be able to
+      // refuse a server whose store is the user's real one, loudly, instead of
+      // silently contaminating it. 4,745 fixture engrams were purged from the live
+      // store on 2026-10-11, and nine real memories sat among them. A boolean, not
+      // the path — the caller only needs to know whether to stop.
+      store: {
+        live: isLiveStorePath(getConfiguredPath()),
       },
       // Embedding-corpus integrity. A dimension mismatch scores 0 on the vector
       // channel for the affected memories — recall still answers, just much worse,

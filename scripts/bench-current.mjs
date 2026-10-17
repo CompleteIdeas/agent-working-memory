@@ -186,7 +186,23 @@ async function serverUp() {
     const t = setTimeout(() => c.abort(), 1500);
     const r = await fetch(`${SERVER_URL}/health`, { signal: c.signal });
     clearTimeout(t);
-    return r.ok;
+    if (!r.ok) return false;
+    // A-3 (2026-10-12): refuse to benchmark a server that is pointed at the LIVE
+    // store. The local suites WRITE, every launcher defaults AWM_DB_PATH to
+    // ~/.awm/memory.db, and 4,745 fixture engrams were purged from the real store
+    // on 2026-10-11 because of exactly this. Loud stop, not a warning: a warning
+    // scrolls past and the contamination is already written.
+    const h = await r.json().catch(() => ({}));
+    if (h?.store?.live && process.env.AWM_ALLOW_LIVE_STORE !== '1') {
+      console.error('');
+      console.error(`  ERROR: the server at ${SERVER_URL} is using the LIVE store (~/.awm/memory.db).`);
+      console.error('         The local suites write, so this would contaminate real memories.');
+      console.error('         Restart it with:  AWM_DB_PATH=<scratch>.db npm start');
+      console.error('         Or set AWM_ALLOW_LIVE_STORE=1 if you genuinely mean to.');
+      console.error('');
+      process.exit(2);
+    }
+    return true;
   } catch { return false; }
 }
 
