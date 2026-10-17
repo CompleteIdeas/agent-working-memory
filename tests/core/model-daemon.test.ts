@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connect, createServer } from 'node:net';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   FrameReader, encodeFrame, modelDaemonFingerprint, modelDaemonPaths, configEnv, PROTOCOL_VERSION, runDirProblem, codeStamp,
@@ -468,6 +468,50 @@ describe('daemon processes (real models)', () => {
         expect(pidAlive(daemonPid)).toBe(false);
       } finally {
         for (const p of procs) p.kill();
+      }
+    });
+  }, 120_000);
+
+  it('the daemon survives a tree kill of the process that started it', async () => {
+    // What Claude Code does to an MCP server that does not exit when its session closes.
+    const treeKill = (pid: number) => {
+      if (process.platform === 'win32') { execFileSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore' }); return; }
+      const rows = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }).trim().split('\n').map(l => l.trim().split(/\s+/).map(Number));
+      const tree = [pid];
+      for (let i = 0; i < tree.length; i++) for (const [p, pp] of rows) if (pp === tree[i]) tree.push(p);
+      for (const p of tree) { try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }
+    };
+    await withEnv({ AWM_RUN_DIR: tmp(), AWM_MODEL_DAEMON_IDLE_MS: '1500' }, async () => {
+      const fixture = fileURLToPath(new URL('./fixtures/daemon-client.mts', import.meta.url));
+      const p = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), fixture], { stdio: ['pipe', 'pipe', 'inherit'], env: process.env });
+      let daemonPid = 0;
+      try {
+        const out = await new Promise<{ pid: number; spawned: number }>((res, rej) => {
+          let buf = '';
+          p.stdout!.on('data', d => { buf += d; const m = buf.match(/\{.*\}/); if (m) res(JSON.parse(m[0])); });
+          p.on('exit', code => rej(new Error(`client exited ${code}`)));
+        });
+        expect(out.spawned).toBe(1);
+        daemonPid = out.pid;
+        treeKill(p.pid!);
+        await sleep(1000);
+        expect(pidAlive(daemonPid)).toBe(true);
+        // And it still serves: a new client reaches the same daemon without starting one.
+        const { registeredInferenceConfig } = await import('../../src/core/ml-worker.js');
+        await import('../../src/core/embeddings.js');
+        await import('../../src/core/reranker.js');
+        await import('../../src/core/query-expander.js');
+        const c = new ModelDaemonClient({ fingerprint: modelDaemonFingerprint(registeredInferenceConfig()), startTimeoutMs: 5_000 });
+        clients.push(c);
+        expect((await c.request<{ pid: number }>('stats')).pid).toBe(daemonPid);
+        expect(c.spawned).toBe(0);
+        c.close();
+        const deadline = Date.now() + 15_000;
+        while (pidAlive(daemonPid) && Date.now() < deadline) await sleep(200);
+        expect(pidAlive(daemonPid)).toBe(false);
+      } finally {
+        p.kill();
+        if (daemonPid && pidAlive(daemonPid)) process.kill(daemonPid);
       }
     });
   }, 120_000);

@@ -144,9 +144,15 @@ continuously: this is a stress test, not a typical session.
 - **Starts once and stops by itself.** Six processes starting at once start one daemon,
   through a lockfile election. It exits 5 min after its last client leaves
   (`AWM_MODEL_DAEMON_IDLE_MS`).
+- **Outlives the session that started it.** When a Claude Code session closes and its
+  MCP server does not exit on stdin close, Claude Code kills the server's whole process
+  tree, and a daemon spawned as the server's child died with it (Claude Code 2.1.302,
+  Windows). The daemon is now started through a launcher that exits once the daemon
+  listens, so the daemon is nobody's child. Soaked with real `claude -p` sessions: three
+  at once shared one daemon at about 200–240 MB each, it survived them closing, a second
+  wave reached the same daemon, and it exited on its idle lease afterwards.
 
-It is off by default until it has run on real sessions for a while. Claude Code may
-launch processes differently from the Node launcher it was tested under, so check
+It is off by default until it has run on real day-to-day sessions for a while; check
 `memory_whoami` there.
 
 ## 0.17.0 (2026-10-11) — the package was shipping 22 real first names, and `supersedes` was being thrown away

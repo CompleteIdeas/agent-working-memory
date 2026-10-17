@@ -4,7 +4,8 @@
  * Client side of the shared model daemon (see model-daemon.ts).
  *
  * Connecting: try the daemon's address. If nothing answers, take the lockfile (O_EXCL,
- * holding this pid) and spawn the daemon detached; every other process starting at the
+ * holding this pid) and spawn the daemon detached, through a launcher so that it is not
+ * this process's child (see LAUNCHER); every other process starting at the
  * same moment finds the lock taken and just keeps trying to connect. A lock whose pid is
  * dead, or that is older than the start timeout, is stale and is taken over, so a
  * spawner that crashed mid-start blocks nobody. A daemon this client spawned that exits
@@ -64,6 +65,22 @@ function pidAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (err) { return (err as NodeJS.ErrnoException).code === 'EPERM'; }
 }
+
+/**
+ * Starts the daemon and exits once it listens, passing on its exit code if it stops
+ * before that. The daemon's parent is then a process that no longer exists, so a tree
+ * kill of the AWM process that started it does not reach it: when Claude Code closes a
+ * session whose MCP server does not exit on stdin close, it kills the server's whole
+ * process tree, and a daemon spawned directly died with it (measured with Claude Code
+ * 2.1.302 on Windows). Inline, so it needs no loader in dev.
+ */
+const LAUNCHER = [
+  "const c = require('node:child_process').spawn(process.argv[1], process.argv.slice(2),",
+  "  { detached: true, windowsHide: true, stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });",
+  "c.on('message', () => process.exit(0));",
+  "c.on('exit', code => process.exit(code ?? 1));",
+  "c.on('error', () => process.exit(1));",
+].join('\n');
 
 export function defaultDaemonEntry(): DaemonEntry {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -332,7 +349,9 @@ export class ModelDaemonClient {
       fd = openSync(this.paths.log, 'a', 0o600);
     } catch { /* no log, still start */ }
     try {
-      const child = spawn(this.entry.command, this.entry.args, {
+      // The exit code is the launcher's: 0 once the daemon listens (or lost the race),
+      // otherwise the daemon's own.
+      const child = spawn(process.execPath, ['-e', LAUNCHER, '--', this.entry.command, ...this.entry.args], {
         // Not the session's project directory: on Windows a process's cwd cannot be
         // deleted or renamed, and the daemon outlives the session that started it.
         cwd: this.paths.runDir,

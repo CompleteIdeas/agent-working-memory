@@ -37,7 +37,11 @@ startModelDaemon({
     warm: async () => { await Promise.all([getEmbedder(), getReranker(), getExpander()]); },
     embedChunk: EMBED_BATCH_SIZE,
   },
-}).catch(err => {
+}).then(() => {
+  // Started by the client's launcher: tell it we listen, so it exits and stops being
+  // our parent (see LAUNCHER in model-daemon-client.ts).
+  process.send?.({ listening: true }, () => process.disconnect?.());
+}, err => {
   // EADDRINUSE: another daemon for this fingerprint won the race. Nothing to do.
   console.error(`[model-daemon] not started: ${(err as Error)?.message ?? err}`);
   process.exit((err as NodeJS.ErrnoException)?.code === 'EADDRINUSE' ? 0 : 1);
