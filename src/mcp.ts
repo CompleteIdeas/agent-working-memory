@@ -77,6 +77,8 @@ import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { embed, getEmbedder } from './core/embeddings.js';
 import { getReranker } from './core/reranker.js';
 import { getExpander } from './core/query-expander.js';
+import { warmModelDaemon } from './core/ml-worker.js';
+import { isModelDaemonEnabled } from './core/model-daemon.js';
 import { startSidecar } from './hooks/sidecar.js';
 import { initLogger, log, getLogPath } from './core/logger.js';
 import { VERSION } from './version.js';
@@ -1412,9 +1414,14 @@ async function main() {
   // All output is stderr-safe (stdout carries JSON-RPC frames).
   // Escape hatch: AWM_NO_EAGER_WARM=1 restores lazy loading.
   if (process.env.AWM_NO_EAGER_WARM !== '1') {
-    getEmbedder().catch(err => console.error('Embedding model unavailable:', err.message));
-    getReranker().catch(err => console.error('Reranker model unavailable:', err.message));
-    getExpander().catch(err => console.error('Query expander model unavailable:', err.message));
+    // With the shared model daemon on, the daemon loads them and this process loads none.
+    if (isModelDaemonEnabled()) {
+      void warmModelDaemon();
+    } else {
+      getEmbedder().catch(err => console.error('Embedding model unavailable:', err.message));
+      getReranker().catch(err => console.error('Reranker model unavailable:', err.message));
+      getExpander().catch(err => console.error('Query expander model unavailable:', err.message));
+    }
     if (BACKEND === 'sqlite') {
       setImmediate(() => {
         try {

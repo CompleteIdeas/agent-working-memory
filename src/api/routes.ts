@@ -51,6 +51,7 @@ import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 import { embed, embedBatch, embeddingHealth } from '../core/embeddings.js';
+import { modelDaemonStatus } from '../core/ml-worker.js';
 import { VERSION } from '../version.js';
 import { activeRecallConfig, recallConfigFingerprint } from '../core/recall-config.js';
 
@@ -989,6 +990,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       ...(embeddingHealth().dimensionMismatches > 0
         ? { embeddingIntegrity: { status: 'degraded' as const, ...embeddingHealth() } }
         : {}),
+      // Where inference runs (AWM_MODEL_DAEMON=1): the shared daemon, or this process
+      // after a fallback, with the count and reason. Absent when the daemon is off.
+      ...(modelDaemonStatus().enabled ? { models: modelDaemonStatus() } : {}),
       // D15 (2026-07-30): consolidation visibility — finishes the long-unwired
       // "DMN endpoint" (May P2). Answers "is a sleep cycle running right now
       // and is the scheduler even on" without reading logs.

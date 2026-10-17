@@ -27,6 +27,11 @@ import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
+import {
+  configEnv, envInt, isModelDaemonEnabled, modelDaemonFingerprint, REQUEST_TIMEOUT_MS as DAEMON_STEP_TIMEOUT_MS, WARM_TIMEOUT_MS,
+  type InferenceConfig, type Lane,
+} from './model-daemon.js';
+import { DaemonRemoteError, DaemonUnavailableError, ModelDaemonClient } from './model-daemon-client.js';
 
 type WorkerRole = 'embed' | 'rerank' | 'expand';
 
@@ -246,18 +251,190 @@ async function dispatchInProcess<T>(role: WorkerRole, args: any): Promise<T> {
   }
 }
 
+// --- Shared model daemon (AWM_MODEL_DAEMON=1, see model-daemon.ts) ---
+
+/**
+ * The config each model module captured at import, registered by the module itself.
+ * The daemon's fingerprint is built from these values, not from the env strings, and a
+ * spawned daemon is given them as env: a .env file applied after the modules loaded
+ * would otherwise make the daemon run a different model than the fallback here.
+ */
+const inferenceConfig: InferenceConfig = {};
+export function registerInferenceConfig(part: InferenceConfig): void {
+  Object.assign(inferenceConfig, part);
+}
+export function registeredInferenceConfig(): InferenceConfig {
+  return { ...inferenceConfig };
+}
+
+/**
+ * When the daemon fails, inference runs in-process and the daemon is probed again in
+ * the background, after 60 s, then 2, 4, 8 and at most 15 min. Requests never wait on a
+ * probe. In-process is the pre-daemon behaviour, bounded by the same shape caps, so a
+ * daemon outage costs memory, never recall. A BUSY daemon is not a failure: only an
+ * unreachable one, one that will not start, or one that stops making progress.
+ */
+const RETRY_FIRST_MS = 60_000;
+const RETRY_MAX_MS = 15 * 60_000;
+
+let daemon: Promise<ModelDaemonClient> | null = null;
+let fallbackActive = false;
+let retryMs = RETRY_FIRST_MS;
+let retryAt = 0;
+let probing = false;
+let connectedPid: number | null = null;
+let clientFingerprint: string | null = null;
+const daemonState = {
+  requests: 0,
+  queueTimeouts: 0,
+  fallbacks: 0,
+  lastFallbackReason: null as string | null,
+  lastFallbackAt: null as string | null,
+};
+
+function daemonClient(): Promise<ModelDaemonClient> {
+  return (daemon ??= (async () => {
+    // All three modules register their config on import. Load any not loaded yet, so
+    // the fingerprint is the daemon's (which loads all three).
+    await Promise.all([import('./embeddings.js'), import('./reranker.js'), import('./query-expander.js')]);
+    const config = registeredInferenceConfig();
+    clientFingerprint = modelDaemonFingerprint(config);
+    return new ModelDaemonClient({ fingerprint: clientFingerprint, spawnEnv: configEnv(config) });
+  })());
+}
+
+function reasonOf(err: unknown): string {
+  return err instanceof DaemonUnavailableError ? err.reason : 'error';
+}
+
+function noteFallback(reason: string, err: unknown): void {
+  daemonState.fallbacks++;
+  daemonState.lastFallbackReason = reason;
+  daemonState.lastFallbackAt = new Date().toISOString();
+  retryAt = Date.now() + retryMs;
+  console.error(`[awm] model daemon unavailable (${reason}): ${(err as Error)?.message ?? err} — running inference in this process; next try in ${Math.round(retryMs / 1000)}s`);
+  retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
+  fallbackActive = true;
+}
+
+function noteConnected(client: ModelDaemonClient): void {
+  connectedPid = client.daemonPid;
+  if (fallbackActive) console.error(`[awm] model daemon back (pid ${client.daemonPid}); inference leaves this process`);
+  fallbackActive = false;
+  retryMs = RETRY_FIRST_MS;
+}
+
+function probeInBackground(): void {
+  if (probing || Date.now() < retryAt) return;
+  probing = true;
+  void daemonClient()
+    .then(async c => {
+      const st = await c.request<{ current: { op: string; runningMs: number } | null }>('stats');
+      // Answering stats is not health: a daemon stuck on a step answers it too.
+      const limit = st.current?.op === 'warm' ? WARM_TIMEOUT_MS : envInt('AWM_MODEL_DAEMON_TIMEOUT_MS', DAEMON_STEP_TIMEOUT_MS);
+      if (st.current && st.current.runningMs > limit) {
+        throw new DaemonUnavailableError(`daemon has been running ${st.current.op} for ${st.current.runningMs} ms`, 'wedged');
+      }
+      noteConnected(c);
+    })
+    .catch(err => noteFallback(reasonOf(err), err))
+    .finally(() => { probing = false; });
+}
+
+async function dispatch<T>(role: WorkerRole, args: any, lane: Lane = 'interactive'): Promise<T> {
+  if (!isModelDaemonEnabled()) return dispatchToWorker<T>(role, args);
+  if (fallbackActive) {
+    probeInBackground();
+    return dispatchToWorker<T>(role, args);
+  }
+  // One retry on a dropped connection: the daemon may have exited on its idle lease
+  // just as this request went out, and the retry starts a new one.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const client = await daemonClient();
+      const result = await client.request<T>(role, args, lane);
+      daemonState.requests++;
+      connectedPid = client.daemonPid;
+      return result;
+    } catch (err) {
+      if (err instanceof DaemonRemoteError) throw err;
+      if (attempt === 0 && reasonOf(err) === 'disconnected') continue;
+      // Queued too long is busy, not down: this one request runs here, and the next one
+      // goes to the daemon again.
+      if (reasonOf(err) === 'queue-timeout') { daemonState.queueTimeouts++; return dispatchToWorker<T>(role, args); }
+      noteFallback(reasonOf(err), err);
+      return dispatchToWorker<T>(role, args);
+    }
+  }
+}
+
+/**
+ * Eager warm through the daemon: it loads its models; this process loads none. On
+ * failure this process enters the fallback window (so the first recall does not pay
+ * the start timeout again) but loads nothing now: the first real request does that, if
+ * the daemon is still down by then.
+ */
+export async function warmModelDaemon(): Promise<void> {
+  try {
+    const client = await daemonClient();
+    await client.request('warm');
+    noteConnected(client);
+  } catch (err) {
+    if (err instanceof DaemonRemoteError) {
+      console.error(`[awm] model daemon could not load its models: ${err.message}`);
+      return;
+    }
+    noteFallback(reasonOf(err), err);
+  }
+}
+
+export function modelDaemonStatus(): {
+  enabled: boolean;
+  mode: 'off' | 'daemon' | 'in-process-fallback' | 'not-connected';
+  fingerprint: string | null;
+  daemonPid: number | null;
+  requests: number;
+  queueTimeouts: number;
+  fallbacks: number;
+  lastFallbackReason: string | null;
+  lastFallbackAt: string | null;
+} {
+  const enabled = isModelDaemonEnabled();
+  const mode = !enabled ? 'off' : fallbackActive ? 'in-process-fallback' : connectedPid ? 'daemon' : 'not-connected';
+  return {
+    enabled, mode,
+    fingerprint: enabled ? clientFingerprint : null,
+    daemonPid: enabled ? connectedPid : null,
+    ...daemonState,
+  };
+}
+
+/** Test-only: forget the client, the fallback window and the counters. */
+export async function __resetModelDaemonClient(): Promise<void> {
+  const c = daemon;
+  daemon = null;
+  (await c?.catch(() => null))?.close();
+  fallbackActive = false;
+  retryMs = RETRY_FIRST_MS;
+  retryAt = 0;
+  probing = false;
+  connectedPid = null;
+  clientFingerprint = null;
+  Object.assign(daemonState, { requests: 0, queueTimeouts: 0, fallbacks: 0, lastFallbackReason: null, lastFallbackAt: null });
+}
+
 // --- Public API used by the consumer modules ---
 
-export async function dispatchEmbed(args: { texts: string[]; pooling: 'cls' | 'mean'; dimensions: number }): Promise<number[][]> {
-  return dispatchToWorker<number[][]>('embed', args);
+export async function dispatchEmbed(args: { texts: string[]; pooling: 'cls' | 'mean'; dimensions: number }, lane: Lane = 'interactive'): Promise<number[][]> {
+  return dispatch<number[][]>('embed', args, lane);
 }
 
 export async function dispatchRerank(args: { query: string; passages: string[] }): Promise<Array<{ index: number; score: number }>> {
-  return dispatchToWorker<Array<{ index: number; score: number }>>('rerank', args);
+  return dispatch<Array<{ index: number; score: number }>>('rerank', args);
 }
 
 export async function dispatchExpand(args: { prompt: string; maxNewTokens: number; noRepeatNgramSize: number }): Promise<string> {
-  return dispatchToWorker<string>('expand', args);
+  return dispatch<string>('expand', args);
 }
 
 /** Graceful shutdown. Waits up to 2s for queue drain, then terminates. */

@@ -235,7 +235,7 @@ export class ConsolidationEngine {
           const batch = needsEmbedding.slice(b, b + BATCH_SIZE);
           try {
             const texts = batch.map(e => `${e.concept} ${e.content}`);
-            const vecs = await embedBatch(texts);
+            const vecs = await embedBatch(texts, { lane: 'background' });
             for (let j = 0; j < batch.length; j++) {
               await this.store.updateEmbedding(batch[j].id, vecs[j], modelId);
               batch[j].embedding = vecs[j];

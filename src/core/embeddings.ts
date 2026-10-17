@@ -18,7 +18,8 @@
  */
 
 import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
-import { dispatchEmbed, registerInProcessHandlers } from './ml-worker.js';
+import { dispatchEmbed, registerInferenceConfig, registerInProcessHandlers } from './ml-worker.js';
+import type { Lane } from './model-daemon.js';
 import { noteModelLoad } from './write-telemetry.js';
 import { ensureModelCacheDir } from './model-cache.js';
 
@@ -39,6 +40,9 @@ const EMBED_BATCH = (() => {
   const v = Number(process.env.AWM_EMBED_BATCH?.trim() || NaN);
   return Number.isInteger(v) && v >= 0 ? v : 8;
 })();
+
+/** The texts-per-pass setting, for the model daemon's background chunking. */
+export const EMBED_BATCH_SIZE = EMBED_BATCH;
 
 // --- In-process fallback (used by tests and crash recovery) ---
 
@@ -79,6 +83,7 @@ export async function inProcessEmbed(args: { texts: string[]; pooling: 'cls' | '
 
 // Register the in-process handler with the pool (used in test mode and as fallback)
 registerInProcessHandlers({ embed: (args) => inProcessEmbed(args) });
+registerInferenceConfig({ embedModel: MODEL_ID, embedDims: DIMENSIONS, embedPooling: POOLING, embedBatch: EMBED_BATCH });
 
 // --- Public API ---
 
@@ -104,11 +109,12 @@ export async function embed(text: string): Promise<number[]> {
 /**
  * Generate embeddings for multiple texts in a batch.
  * More efficient than calling embed() in a loop — the worker batches the
- * tokenization + forward pass.
+ * tokenization + forward pass. `lane: 'background'` (consolidation backfill) lets the
+ * shared model daemon run interactive requests ahead of it.
  */
-export async function embedBatch(texts: string[]): Promise<number[][]> {
+export async function embedBatch(texts: string[], opts: { lane?: Lane } = {}): Promise<number[][]> {
   if (texts.length === 0) return [];
-  return dispatchEmbed({ texts, pooling: POOLING, dimensions: DIMENSIONS });
+  return dispatchEmbed({ texts, pooling: POOLING, dimensions: DIMENSIONS }, opts.lane);
 }
 
 /** Get the current embedding model ID (for version tracking in stored embeddings) */

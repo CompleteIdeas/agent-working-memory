@@ -18,7 +18,7 @@
  */
 
 import { pipeline, type Text2TextGenerationPipeline } from '@huggingface/transformers';
-import { dispatchExpand, registerInProcessHandlers } from './ml-worker.js';
+import { dispatchExpand, registerInferenceConfig, registerInProcessHandlers } from './ml-worker.js';
 import { ensureModelCacheDir } from './model-cache.js';
 
 const MODEL_ID = 'Xenova/flan-t5-small';
@@ -40,7 +40,7 @@ async function loadInProcess(): Promise<Text2TextGenerationPipeline> {
   return inProcessInitPromise;
 }
 
-async function inProcessExpand(args: { prompt: string; maxNewTokens: number; noRepeatNgramSize: number }): Promise<string> {
+export async function inProcessExpand(args: { prompt: string; maxNewTokens: number; noRepeatNgramSize: number }): Promise<string> {
   const expander = await loadInProcess();
   const result = await expander(args.prompt, {
     max_new_tokens: args.maxNewTokens,
@@ -51,6 +51,7 @@ async function inProcessExpand(args: { prompt: string; maxNewTokens: number; noR
 }
 
 registerInProcessHandlers({ expand: inProcessExpand });
+registerInferenceConfig({ expandModel: MODEL_ID });
 
 // --- Public API ---
 

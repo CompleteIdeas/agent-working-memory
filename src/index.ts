@@ -34,6 +34,8 @@ import { DEFAULT_AGENT_CONFIG } from './types/agent.js';
 import { getEmbedder } from './core/embeddings.js';
 import { getReranker } from './core/reranker.js';
 import { getExpander } from './core/query-expander.js';
+import { warmModelDaemon } from './core/ml-worker.js';
+import { isModelDaemonEnabled } from './core/model-daemon.js';
 import { initLogger } from './core/logger.js';
 import { openStore, getConfiguredBackend, type StoreBackend } from './storage/factory.js';
 import type { IEngramStore } from './storage/store.js';
@@ -205,9 +207,14 @@ async function main() {
   }, 10 * 60_000) : null;
 
   // Pre-load ML models (first run downloads ~600MB: embeddings 134MB, reranker 92MB fp32, expander 377MB)
-  getEmbedder().catch(err => console.warn('Embedding model unavailable:', err.message));
-  getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
-  getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));
+  // With the shared model daemon on, the daemon loads them and this process loads none.
+  if (isModelDaemonEnabled()) {
+    void warmModelDaemon();
+  } else {
+    getEmbedder().catch(err => console.warn('Embedding model unavailable:', err.message));
+    getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
+    getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));
+  }
 
   if (BACKEND === 'sqlite') {
     setImmediate(() => {
