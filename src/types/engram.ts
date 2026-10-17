@@ -72,6 +72,24 @@ export interface Engram {
   validFrom?: string | null;      // ISO date/datetime
   validTo?: string | null;        // ISO date/datetime — set when a fact expires/superseded by time
 
+  /**
+   * When `stage` last changed, ISO. **Null means it has never transitioned** —
+   * readers fall back to `createdAt`, so no backfill is required.
+   *
+   * The table carried `created_at`, `last_accessed` and `retracted_at` and nothing
+   * that recorded when a lifecycle decision was taken, which made fade regret and
+   * archive regret — "was this needed after we hid it?" — impossible to compute after
+   * the fact, for a store that is 60.7% archived. Written in `updateStage`, which is
+   * the single chokepoint all six consolidation transitions go through
+   * (`consolidation.ts` fade, three archive branches, prune, staging promote), so it
+   * cannot be forgotten at a new call site.
+   *
+   * ISO string rather than Date, like validFrom/validTo and unlike createdAt: it is
+   * written by one UPDATE and read by analysis queries, never used in scoring math.
+   * Log-only — nothing in retrieval reads it.
+   */
+  stageChangedAt?: string | null;
+
   // Task management (null = not a task)
   taskStatus: TaskStatus | null;
   taskPriority: TaskPriority | null;

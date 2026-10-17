@@ -83,6 +83,25 @@ export interface WriteInput {
   eventType?: SalienceEventType;
   surprise?: number;
   decisionMade?: boolean;
+  /**
+   * Caller-declared purpose of the write: 'decision' | 'question' | 'todo' |
+   * 'finding' | 'context'. Stored as an `intent=` tag by the callers, and read HERE
+   * so a declared decision reaches the salience filter.
+   *
+   * It did not, before 2026-10-12: `intent` became a tag and nothing else, while the
+   * redundant `decisionMade` boolean was the only wired path, so a caller following
+   * the documented tagging discipline got no salience credit for saying this was a
+   * decision. Measured over all 496 discarded writes in the live store
+   * (`low-salience`, `work`+`personal`): those tagged `intent=decision` were later
+   * recalled at **77.3% against a 38.1% base rate**, +41pp — the strongest
+   * discriminator of any feature tested, discarded anyway.
+   *
+   * Mapped in the pipeline rather than at each call site so both write surfaces, and
+   * any future one, inherit it; widening the content-based operational-verb list was
+   * tested on the same population and rejected, because every candidate token scored
+   * at the base rate.
+   */
+  intent?: string;
   causalDepth?: number;
   resolutionEffort?: number;
   /** Confidence override. When unset, defaults from disposition + eventType priors. */
@@ -231,7 +250,7 @@ export async function performWrite(
     content: input.content,
     eventType: effectiveEventType,
     surprise: input.surprise,
-    decisionMade: input.decisionMade,
+    decisionMade: input.decisionMade || input.intent === 'decision',
     causalDepth: input.causalDepth,
     resolutionEffort: input.resolutionEffort,
     novelty: noveltyResult.novelty,

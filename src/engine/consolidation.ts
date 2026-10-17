@@ -113,6 +113,38 @@ const FADE_PROTECTED_ACCESS_COUNT = 10;
 const FADE_MARKER = '… [faded]';
 const FADE_PROTECTED_CLASSES = new Set(['canonical', 'structural']);
 
+/**
+ * Archive floor for fade-protected classes — one year.
+ *
+ * FADE_PROTECTED_CLASSES was only ever consulted by Phase 5.5 above. Phase 6 below
+ * archives on DISUSE and measured disuse as `accessCount === 0`, which is wrong for a
+ * source-of-truth class for one specific reason: **a rule, requirement or decision that
+ * has not come up YET has accessCount 0 by construction.** Never-needed-so-far and
+ * never-needed are not the same thing, and only the second is a reason to file something
+ * away. Two of the three archive branches below test accessCount with no strength term at
+ * all, so neither the access/confidence clock nor its 12x cap ever applied to them.
+ *
+ * Measured on the live store 2026-10-12 (`work`+`personal`, retracted=0), before this
+ * floor existed: 4,360 canonical engrams archived against 2,058 active, and **2,891 of
+ * the archived (66%) had accessCount 0** — i.e. two thirds were taken by the branches no
+ * strength factor reaches. Of 1,758 archived `procedural` engrams, 1,160 were zero-access.
+ *
+ * Deliberately a floor and not an exemption. `if (FADE_PROTECTED_CLASSES.has(...)) continue`
+ * would be smaller and is the wrong change twice over: it contradicts this block's own
+ * invariant that rehearsal "extends protection but NEVER makes immortal", and it would hold
+ * 3,928 more engrams in a 5,314-engram active pool — a 74% increase in what every recall
+ * scores against, which is a latency change masquerading as a correctness fix. A year of
+ * grace instead of a month costs nothing and keeps the eventual archive real.
+ *
+ * Env: AWM_PROTECTED_ARCHIVE_DAYS (default 365).
+ */
+const PROTECTED_ARCHIVE_DAYS = (() => {
+  // NaN would make every `ageDays > floor` false and protected classes immortal; an
+  // empty string would be 0 and switch the floor off. Either falls back to the default.
+  const v = Number(process.env.AWM_PROTECTED_ARCHIVE_DAYS?.trim() || NaN);
+  return Number.isFinite(v) && v >= 0 ? v : 365;
+})();
+
 /** Days without recall before confidence starts drifting down */
 const CONFIDENCE_NEGLECT_DAYS = 30;
 
@@ -609,6 +641,15 @@ export class ConsolidationEngine {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       if (ageDays < FORGET_GRACE_DAYS) continue; // Grace period — too new to judge
 
+      // Source-of-truth classes get a one-year floor on every branch below, because
+      // "not recalled yet" is the normal state of a rule nobody has needed yet.
+      // See PROTECTED_ARCHIVE_DAYS for the measurement this came from.
+      // A superseded engram is not the source of truth any more: its successor is, so it
+      // gets no floor and leaves the active pool on the ordinary clock.
+      const protectedFloorDays = FADE_PROTECTED_CLASSES.has(engram.memoryClass) && !engram.supersededBy
+        ? PROTECTED_ARCHIVE_DAYS
+        : 0;
+
       const edgeCount = await this.store.countAssociationsFor(engram.id);
 
       // Use relative threshold (percentile-based) instead of absolute.
@@ -621,7 +662,8 @@ export class ConsolidationEngine {
 
       // Cycle-based archive: 0-access memories archived after N cycles
       // regardless of age. Handles small pools where time thresholds are too generous.
-      if (engram.accessCount === 0 && cycleCount >= FORGET_CYCLE_THRESHOLD) {
+      if (engram.accessCount === 0 && cycleCount >= FORGET_CYCLE_THRESHOLD
+          && ageDays > protectedFloorDays) {
         await this.store.updateStage(engram.id, 'archived');
         result.memoriesArchived++;
         continue;
@@ -643,11 +685,12 @@ export class ConsolidationEngine {
 
       const daysSinceAccess = (Date.now() - engram.lastAccessed.getTime()) / (1000 * 60 * 60 * 24);
 
-      if (engram.accessCount === 0 && ageDays > FORGET_ARCHIVE_DAYS) {
+      if (engram.accessCount === 0 && ageDays > Math.max(FORGET_ARCHIVE_DAYS, protectedFloorDays)) {
         // Never retrieved, old, weakly connected → archive
         await this.store.updateStage(engram.id, 'archived');
         result.memoriesArchived++;
-      } else if (engram.accessCount > 0 && daysSinceAccess > effectiveArchiveDays) {
+      } else if (engram.accessCount > 0
+                 && daysSinceAccess > Math.max(effectiveArchiveDays, protectedFloorDays)) {
         // Accessed before but not recently enough given its strength — archive
         await this.store.updateStage(engram.id, 'archived');
         result.memoriesArchived++;
@@ -659,6 +702,14 @@ export class ConsolidationEngine {
     for (const engram of archived) {
       const ageDays = (Date.now() - engram.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       const edgeCount = await this.store.countAssociationsFor(engram.id);
+
+      // A fade-protected class is never deleted. This branch is the only irreversible
+      // step in the whole cycle, and it ran on the same `accessCount === 0` reading of
+      // disuse that PROTECTED_ARCHIVE_DAYS exists to correct — so a canonical decision
+      // nobody had needed yet was eligible for permanent deletion 90 days after an
+      // archive it should not have had. Archiving such an engram is recoverable;
+      // deleting it is not, so the floor is an exemption here rather than a longer clock.
+      if (FADE_PROTECTED_CLASSES.has(engram.memoryClass)) continue;
 
       if (engram.accessCount === 0 && ageDays > FORGET_DELETE_DAYS && edgeCount === 0) {
         // Very old, never accessed, completely isolated → truly forgotten

@@ -132,6 +132,7 @@ function rowToEngram(row: any): Engram {
     recipeId: (row.recipe_id as string | null) ?? null,
     validFrom: (row.valid_from as string | null) ?? null,
     validTo: (row.valid_to as string | null) ?? null,
+    stageChangedAt: (row.stage_changed_at as string | null) ?? null,
   } as Engram;
 }
 
@@ -585,7 +586,7 @@ export class PostgresEngramStore {
 
   async updateStage(id: string, stage: EngramStage): Promise<void> {
     await this.readyPromise;
-    await this.q(`UPDATE engrams SET stage = $1 WHERE id = $2`, [stage, id]);
+    await this.q(`UPDATE engrams SET stage = $1, stage_changed_at = $2 WHERE id = $3`, [stage, new Date().toISOString(), id]);
   }
 
   /**
@@ -628,9 +629,23 @@ export class PostgresEngramStore {
     );
   }
 
+  /**
+   * Delete an engram and the rows that point at it. Parity with the SQLite backend —
+   * see src/storage/sqlite.ts deleteEngram for the orphan counts that prompted this.
+   * activation_events is left alone on purpose: it records a recall that happened.
+   */
   async deleteEngram(id: string): Promise<void> {
     await this.readyPromise;
-    await this.q(`DELETE FROM engrams WHERE id = $1`, [id]);
+    // One statement: a data-modifying CTE runs atomically, so a failure cannot leave the
+    // engram alive with its dependents gone. withTransaction is not re-entrant, and this
+    // can be called inside one (/memory/write-batch), so it does not open its own.
+    await this.q(
+      `WITH f AS (DELETE FROM retrieval_feedback WHERE engram_id = $1),
+            m AS (DELETE FROM entity_mentions WHERE engram_id = $1),
+            s AS (DELETE FROM staging_events WHERE engram_id = $1)
+       DELETE FROM engrams WHERE id = $1`,
+      [id],
+    );
   }
 
   /**
