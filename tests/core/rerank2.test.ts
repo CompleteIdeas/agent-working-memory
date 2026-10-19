@@ -32,6 +32,37 @@ describe('reorderByReranker', () => {
     expect(ids(out)).toBe('a,b');
   });
 
+  describe('stale penalty — a superseded or expired memory cannot win the window', () => {
+    // Phase 8c marks superseded / expired / not-yet-valid rows with
+    // stalePenalty 0.15. Before 2026-10-19 this stage ignored it and sorted by
+    // raw reranker score, so the MWA probe saw the superseded "flat list" at
+    // rank 1 above its successor "Team heading" (reranker 0.087 blended, but
+    // the cross-encoder liked its wording). This pins the fix.
+    const stale = (id: string, rerankerScore: number) =>
+      ({ id, phaseScores: { rerankerScore, stalePenalty: 0.15 } });
+
+    it('sorts a stale row below a current one the cross-encoder liked less', () => {
+      const out = reorderByReranker([stale('old', 0.95), r('new', 0.60), r('other', 0.40)], 10);
+      expect(ids(out)).toBe('new,other,old');
+    });
+
+    it('keeps reranker order among current rows', () => {
+      const out = reorderByReranker([r('a', 0.5), stale('old', 0.99), r('b', 0.9)], 10);
+      expect(ids(out)).toBe('b,a,old');
+    });
+
+    it('still orders stale rows among themselves by reranker score', () => {
+      const out = reorderByReranker([stale('x', 0.3), stale('y', 0.8)], 10);
+      expect(ids(out)).toBe('y,x');
+    });
+
+    it('a stale row with a huge reranker lead still loses: the factor is multiplicative, not a tie-break', () => {
+      // 0.99 × 0.15 = 0.1485 < 0.20
+      const out = reorderByReranker([stale('old', 0.99), r('new', 0.20)], 10);
+      expect(ids(out)).toBe('new,old');
+    });
+  });
+
   describe('soundness guards — must return the input UNCHANGED', () => {
     // The reranker is wrapped in try/catch and a 10s timeout upstream. When it
     // does not run, every rerankerScore stays 0 — sorting on that would destroy
@@ -87,9 +118,12 @@ describe('configuration', () => {
     if (saved.AWM_RERANK2_K === undefined) delete process.env.AWM_RERANK2_K;
   });
 
-  it('is OFF unless explicitly enabled', () => {
+  it('is ON unless explicitly disabled (default since 2026-10-19)', () => {
+    // It was opt-in from 2026-08-24; a config that forgot the string ran
+    // degraded for 47 days unnoticed. The code now does the measured-good
+    // thing when nothing is set, and `0` is the escape hatch.
     delete process.env.AWM_RERANK2;
-    expect(rerank2Enabled()).toBe(false);
+    expect(rerank2Enabled()).toBe(true);
     process.env.AWM_RERANK2 = '0';
     expect(rerank2Enabled()).toBe(false);
     process.env.AWM_RERANK2 = '1';

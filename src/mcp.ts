@@ -89,6 +89,8 @@ import { startLoopLagMonitor } from './core/write-telemetry.js';
 import { buildWhoami, formatWhoami } from './core/whoami.js';
 import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
 import { formatRecallResultLine } from './core/format-recall.js';
+import { newestConflicting } from './core/conflicts.js';
+import { missingValueNote } from './core/asked-value.js';
 import { packRecallByBudget, formatTokenFooter, estimateTokens } from './core/token-budget.js';
 
 // --- Incognito Mode ---
@@ -266,6 +268,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('Memory type: episodic (events/incidents), semantic (facts/decisions), procedural (how-to/steps). Auto-classified if omitted.'),
     supersedes: z.string().optional()
       .describe('ID of an older memory this one replaces. The old memory is down-ranked, not deleted.'),
+    correction: z.boolean().optional()
+      .describe('This write corrects a fact AWM already holds and you do not have its id. AWM supersedes the closest active memory about the same thing, stores the correction active at no less than that memory\'s confidence, and says what it replaced. Use it whenever a value changed (a time, a price, a status, a decision); written as a plain observation, a changed fact merges into or ranks below the stale version. If nothing close enough exists the write is stored as new and the reply says so. An explicit supersedes outranks this.'),
     // --- Agent-provided metadata (stored as searchable tags) ---
     project: z.string().optional()
       .describe('Project context (e.g., "EquiHub", "AWM"). Becomes a searchable tag.'),
@@ -345,6 +349,7 @@ The concept should be a short label (3-8 words). The content should be the full 
       memoryClass: params.memory_class,
       memoryType,
       supersedes: params.supersedes,
+      correction: params.correction,
       originClass: params.origin_class,
       writerSession: params.session_id,
       recipeId: params.recipe_id,
@@ -388,10 +393,23 @@ The concept should be a short label (3-8 words). The content should be the full 
     const logDisposition = isLowSalience ? 'low-salience' : salience.disposition;
     log(AGENT_ID, `write:${logDisposition}`, `"${params.concept}" salience=${salience.score.toFixed(2)} novelty=${novelty.toFixed(1)} id=${engram.id}`);
 
+    // 2026-10-19: say what a correction replaced, or that it replaced nothing.
+    const correctionNote = params.correction
+      ? (result.correctionOf
+          ? `\nCorrected "${result.correctionOf.concept}" (${result.correctionOf.id}) — it is now superseded by this memory.`
+          : `\nNOTE: no existing memory was close enough to correct, so this was stored as new. If you know which memory it replaces, write again with supersedes: '<id>'.`)
+      : '';
+
+    const trustNote = result.trustBlocked
+      ? `\nNOTE: stored as its own memory, not merged into ${result.trustBlocked.matchedId} — this write is less trusted than that memory (src/core/trust.ts), so it must not replace or be merged into it.`
+      : '';
+
     return {
       content: [{
         type: 'text' as const,
         text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
+          + correctionNote
+          + trustNote
           + (isLowSalience
             ? `\nNOTE: low salience — this memory is kept but demoted and may fade first. If it MUST survive and be recallable, retry with memory_class: 'canonical'. (Discards are audited: reason codes ${JSON.stringify(salience.reasonCodes.slice(0, 4))})`
             : ''),
@@ -507,8 +525,23 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     // WHOLE response and not just the result lines. FOOTER_ALLOWANCE is a
     // fixed upper bound on the accounting line (measured at ~15-25 tokens; the
     // unit test asserts it stays under 40).
+    // 2026-10-19: recall confidence on every reply (it was printed only on
+    // abstention, so a caller could not tell a clear winner from a toss-up),
+    // and one line when the returned set holds two versions of a fact — see
+    // src/core/conflicts.ts. Both are reserved from the budget like the footer.
+    const topConfidence = results[0]?.confidence;
+    const confidenceFooter = topConfidence !== undefined ? `\n[confidence: ${topConfidence.toFixed(3)}]` : '';
+    const marked = results.filter(r => (r.conflictsWith ?? []).length > 0);
+    const newest = newestConflicting(results, results.map(r => r.conflictsWith ?? []));
+    const conflictFooter = marked.length > 0
+      ? `\n⚠ ${marked.length} of these memories disagree with each other${newest ? ` — the newest is ${newest}` : ''}. Confirm against the source before stating a value; supersede the stale one when you know which it is.`
+      : '';
+    // The near-miss (2026-10-19): memories plainly about the subject, none holding
+    // the kind of value asked for. That is the context shape that invites a made-up
+    // number; say so. See src/core/asked-value.ts.
+    const missingFooter = missingValueNote(queryText ?? '', results);
     const FOOTER_ALLOWANCE = 40;
-    const reserved = estimateTokens(peerSuffix) + FOOTER_ALLOWANCE;
+    const reserved = estimateTokens(peerSuffix) + estimateTokens(confidenceFooter) + estimateTokens(conflictFooter) + estimateTokens(missingFooter) + FOOTER_ALLOWANCE;
     const packed = packRecallByBudget(
       results, formatRecallResultLine, params.max_tokens, reserved,
     );
@@ -537,7 +570,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     return {
       content: [{
         type: 'text' as const,
-        text: packed.lines.join('\n') + peerSuffix + formatTokenFooter(packed, params.max_tokens) + evFooter,
+        text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
       }],
     };
   }
@@ -1394,11 +1427,14 @@ async function main() {
             ? r.engram.createdAt.toISOString()
             : (r.engram.createdAt as unknown as string | undefined),
           memoryClass: r.engram.memoryClass,
+          validFrom: r.engram.validFrom,
           validTo: r.engram.validTo,
+          supersededBy: r.engram.supersededBy,
         },
         score: r.score,
         summary: r.summary,
         confidence: r.confidence,
+        conflictsWith: r.conflictsWith,
       }));
     },
     onConsolidate: async (agentId, reason) => {

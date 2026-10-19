@@ -1,4 +1,5 @@
 import type { ActivationResult } from '../types/engram.js';
+import { validityState } from './validity.js';
 
 /**
  * Formats one memory_recall result line for the MCP text response.
@@ -34,7 +35,7 @@ export function isFaded(content: string): boolean {
   return content.includes('[faded]');
 }
 
-export function formatRecallResultLine(r: ActivationResult, index: number): string {
+export function formatRecallResultLine(r: ActivationResult, index: number, now: number = Date.now()): string {
   const body = r.summary ?? r.engram.content;
   // Fade retains 7.1% of answer-bearing identifiers while leaving findability
   // intact (docs/eval-gap-2026-10-11.md §8.1) — 37 of 38 faded engrams still
@@ -49,8 +50,34 @@ export function formatRecallResultLine(r: ActivationResult, index: number): stri
   const chain = r.engram.supersededBy
     ? ` ⚠ SUPERSEDED by ${r.engram.supersededBy} — treat as historical; recall/fetch the successor before relying on this.`
     : '';
-  const validity = r.engram.validTo
-    ? ` [valid until ${r.engram.validTo}]`
-    : '';
-  return `${index + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}) [id: ${r.engram.id}]${validity}${faded}: ${body}${chain}`;
+  // Temporal validity (D8). Same decision as ranking (activation.ts Phase 8c,
+  // via core/validity.ts): a memory past its valid_to is down-ranked AND says
+  // so here — "[valid until 2026-01-15]" on a line read in March was the label
+  // that let 482 expired memories in the live store pass as current.
+  const vstate = validityState(r.engram, now);
+  const validity = vstate === 'expired'
+    ? ` ⚠ EXPIRED ${r.engram.validTo} — treat as historical; confirm the current state before relying on this.`
+    : vstate === 'not-yet-valid'
+      ? ` [not yet valid — from ${r.engram.validFrom}]`
+      : r.engram.validTo
+        ? ` [valid until ${r.engram.validTo}]`
+        : '';
+  // The written date on every line (2026-10-19). Two versions of a fact used
+  // to arrive with nothing to say which came first; the prime hook printed an
+  // age, this format printed nothing.
+  const written = writtenDate(r.engram.createdAt);
+  const dated = written ? ` [written ${written}]` : '';
+  // Conflict mark (src/core/conflicts.ts): phrased as a question, because the
+  // detector cannot tell a correction from two facts that share a template.
+  const conflicts = (r.conflictsWith ?? []).map(c =>
+    ` ⚠ POSSIBLE CONFLICT with ${c.id} on a ${c.slot} (this one is ${c.newer ? 'newer' : 'older'}; confirm against the source before stating a value)`,
+  ).join('');
+  return `${index + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}) [id: ${r.engram.id}]${dated}${validity}${faded}: ${body}${chain}${conflicts}`;
+}
+
+/** YYYY-MM-DD from a Date or ISO string; empty when absent or unparseable. */
+export function writtenDate(createdAt: Date | string | null | undefined): string {
+  if (!createdAt) return '';
+  const ms = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
+  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : '';
 }

@@ -82,6 +82,120 @@ describe('Supersession', () => {
     expect(newResult).toBeDefined();
   });
 
+  it('marks a superseded memory with the stale penalty rerank2 reads', async () => {
+    // The 2026-10-19 hole: Phase 8c cut the blended score but left
+    // phaseScores untouched, so rerank2's re-sort by reranker score put the
+    // superseded memory back on top. The penalty must now travel with the
+    // result. (The re-sort itself is pinned in rerank2.test.ts; this proves
+    // the engine hands it the mark.)
+    const old = store.createEngram({
+      agentId: AGENT_ID,
+      concept: 'Report layout',
+      content: 'The weekly report uses a flat list of items under one heading.',
+      salience: 0.7,
+      confidence: 0.6,
+    });
+    const replacement = store.createEngram({
+      agentId: AGENT_ID,
+      concept: 'Report layout updated',
+      content: 'The weekly report groups items under a Team heading, one per team.',
+      salience: 0.8,
+      confidence: 0.7,
+    });
+    store.supersedeEngram(old.id, replacement.id);
+
+    const results = await engine.activate({
+      agentId: AGENT_ID,
+      context: 'weekly report layout heading',
+      limit: 5,
+      useReranker: false,
+      useExpansion: false,
+      internal: true,
+    });
+    const oldResult = results.find(r => r.engram.id === old.id);
+    const newResult = results.find(r => r.engram.id === replacement.id);
+    expect(newResult).toBeDefined();
+    expect(newResult!.phaseScores.stalePenalty).toBeUndefined();
+    if (oldResult) {
+      expect(oldResult.phaseScores.stalePenalty).toBe(0.15);
+      expect(newResult!.score).toBeGreaterThan(oldResult.score);
+    }
+  });
+
+  it('down-ranks a memory past its valid_to the same way, with the decay clock pinned', async () => {
+    // Before 2026-10-19 valid_to was display-only: the live store served 482
+    // expired memories as current. Expiry now takes the supersession penalty.
+    const expired = store.createEngram({
+      agentId: AGENT_ID,
+      concept: 'Studio meeting place',
+      content: 'The studio is closed for repairs; the Tuesday class meets at the cafe instead.',
+      salience: 0.8,
+      confidence: 0.8,
+      validTo: '2026-01-15',
+    });
+    const current = store.createEngram({
+      agentId: AGENT_ID,
+      concept: 'Studio meeting place now',
+      content: 'The Tuesday class meets at the studio again; repairs are finished.',
+      salience: 0.7,
+      confidence: 0.6,
+    });
+
+    const asOf = Date.parse('2026-03-10T12:00:00Z');
+    const results = await engine.activate({
+      agentId: AGENT_ID,
+      context: 'where does the Tuesday class meet',
+      limit: 5,
+      useReranker: false,
+      useExpansion: false,
+      internal: true,
+      asOf,
+    });
+    const exp = results.find(r => r.engram.id === expired.id);
+    const cur = results.find(r => r.engram.id === current.id);
+    expect(cur).toBeDefined();
+    expect(cur!.phaseScores.stalePenalty).toBeUndefined();
+    if (exp) {
+      expect(exp.phaseScores.stalePenalty).toBe(0.15);
+      expect(cur!.score).toBeGreaterThan(exp.score);
+    }
+
+    // The same memory, asked for BEFORE it expired, is current.
+    const earlier = await engine.activate({
+      agentId: AGENT_ID,
+      context: 'where does the Tuesday class meet',
+      limit: 5,
+      useReranker: false,
+      useExpansion: false,
+      internal: true,
+      asOf: Date.parse('2026-01-10T12:00:00Z'),
+    });
+    const expEarlier = earlier.find(r => r.engram.id === expired.id);
+    if (expEarlier) expect(expEarlier.phaseScores.stalePenalty).toBeUndefined();
+  });
+
+  it('down-ranks a memory before its valid_from', async () => {
+    const future = store.createEngram({
+      agentId: AGENT_ID,
+      concept: 'Registration opening',
+      content: 'Registration for the winter season is open to all families.',
+      salience: 0.8,
+      confidence: 0.8,
+      validFrom: '2026-11-03',
+    });
+    const results = await engine.activate({
+      agentId: AGENT_ID,
+      context: 'is winter registration open',
+      limit: 5,
+      useReranker: false,
+      useExpansion: false,
+      internal: true,
+      asOf: Date.parse('2026-10-19T12:00:00Z'),
+    });
+    const f = results.find(r => r.engram.id === future.id);
+    if (f) expect(f.phaseScores.stalePenalty).toBe(0.15);
+  });
+
   it('supersedeEngram sets bidirectional links', () => {
     const old = store.createEngram({
       agentId: AGENT_ID,

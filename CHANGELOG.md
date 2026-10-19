@@ -2,6 +2,118 @@
 
 ## Unreleased — model memory stays bounded, and prompts with a paste recall again
 
+### A superseded memory can no longer outrank its successor under `AWM_RERANK2`, and `valid_to` now expires
+
+Found 2026-10-19 by a probe in the MWA evaluation of an architecture brief: with
+`AWM_RERANK2=1` — which `awm setup`, the plugin and the Desktop bundle all turn on — a
+superseded memory came back at rank 1 above its replacement. Phase 8c cut the blended
+score to 0.15, but Phase 9b (rerank2) re-sorted the window by the raw cross-encoder
+score, which never carried that penalty. `tests/core/supersession.test.ts` ran with the
+reranker off, so CI could not see it. The live store had 177 superseded memories still
+active. Phase 8c now records the factor on `phaseScores.stalePenalty`, and rerank2's
+sort key is `rerankerScore × stalePenalty`, so stale rows lose the window exactly as
+they lose the blend. The soundness guards are unchanged, and the window's membership
+and scores are unchanged, so abstention is unaffected (`src/core/rerank2.ts`).
+
+`valid_to` / `valid_from` were display-only: nothing but the two formatters read them,
+and both printed `[valid until …]` on a memory whose date had passed. The live store
+was serving 482 expired memories as current (97 active, 385 archived). A new
+`src/core/validity.ts` is the one place that decides a memory's temporal state; Phase
+8c gives expired and not-yet-valid memories the same 0.15 penalty as superseded ones
+(honouring `asOf`, so a frozen-clock benchmark stays frozen), the MCP recall line says
+`⚠ EXPIRED <date>` or `[not yet valid — from <date>]`, and the prime hook does the same
+tersely. A date-only `valid_to` holds through that whole day. The prime hook also now
+marks a superseded memory (`· superseded by <id>`); it had dropped the marker the MCP
+format carries, so pushed context could present history as current with no sign. The
+agent guidance written by `awm setup` says what expiry now does; `docs/claims.md`
+no longer says the ranker never considers staged or superseded rows (it down-ranks
+superseded ones and the BM25 channel has no stage filter).
+
+### Every recall line carries its written date; two versions of one fact are marked; confidence is printed on every reply
+
+The same probe put "departs 10:15" and "now departs 8:40" on the page as two undated
+lines, the stale one first, with nothing to say they were two versions of one fact. In
+the MWA BL-40 assessment, "newer facts lose to older sources" cost four checks. Three
+changes, all over the returned set only, so the cost is a few string comparisons a recall:
+
+- `[written YYYY-MM-DD]` after the id on every MCP recall line (the prime hook already
+  printed an age; the MCP format printed nothing).
+- A conflict detector (`src/core/conflicts.ts`): two returned memories that are about the
+  same thing (embedding cosine ≥ 0.80, or word overlap when an embedding is missing) and
+  carry a differing value of the same kind — a time, a date, a money amount, a bare number
+  or a status word — each get `⚠ POSSIBLE CONFLICT with <id> on a <kind> (this one is
+  newer|older; confirm against the source before stating a value)`, the reply gets one
+  footer naming the newest, and `ActivationResult.conflictsWith` carries the marks for
+  harnesses. Pairs where one supersedes the other, or either is stale, are left to those
+  marks. It is phrased as a question because it cannot tell a correction from two facts
+  that share a template ("flight out 8:40" / "flight back 10:15"); on the labelled pairs
+  in `tests/core/conflicts.test.ts` those twins are the only false positives, and the
+  test prints the precision and recall so a change to the heuristics shows its cost there.
+- `[confidence: 0.641]` on every reply. It was printed only on abstention, so a caller
+  could not tell a clear winner from a toss-up.
+
+### `memory_write` takes `correction: true` — supersede by intent, without the old id
+
+The probe's correction ("now departs 8:40") was written as an ordinary observation under a
+new concept: novelty 0.10, so it was stored at confidence 0.25 and ranked below the stale
+"10:15". The writer knew it was a correction; it did not know the id, and the only
+in-band way to say so (`event_type: surprise` on the SAME concept) was undocumented and
+needs the exact concept. `correction: true` names the intent: the closest active memory
+in content (the novelty match, when its score is ≥ 0.6; a superseded match is followed to
+its superseder; never another agent's) is superseded, the correction goes active at no
+less than that memory's confidence, and the reply says what it replaced. Below the floor
+nothing is replaced and the reply says so, because superseding a stranger would retire a
+true fact. A correction never reinforce-merges — merging is how a changed value ended up
+inside the stale memory behind a "--- reinforced ---" marker. The HTTP write route takes
+the same field. The setup guidance tells agents to use it when a value changes, and what
+the `⚠ POSSIBLE CONFLICT` / `⚠ EXPIRED` / `⚠ SUPERSEDED` marks ask of them.
+
+### Recall says when the memories are about the subject but none holds the value asked for
+
+The best-supported account of why models invent (Ferrando et al., ICLR 2025; Lindsey et
+al. 2025) is recognition without the fact: the model knows the entity, so its "can't
+answer" default switches off, and the missing attribute gets made up. A memory layer
+cannot reach the model's internals, but it can stop handing it that exact shape of
+context: three memories plainly about Sam's Denver flight, none with a departure time.
+AWM's abstention gate does not fire there, by design — a near-miss usually has a clear
+winner. Now, when the question asks for a kind of value (a time, a date, an amount, a
+count, a status; "when" takes either a time or a date) and no returned memory holds one,
+the reply ends with one line: "none of them holds a time … do not state one from memory —
+read the source." It never changes ranking and says nothing when the question names no
+kind (`src/core/asked-value.ts`).
+
+### The three measured recall wins are code defaults, not config strings
+
+`AWM_RERANK2=1`, `AWM_RERANK_WINDOW=query` and `AWM_RERANK_TAGS=1` were measured wins
+(+9.7pp, long-memory 25% → 87.5%, +7.4pp) that stayed opt-in env flags, injected into
+every config `awm setup` wrote. A config that did not carry the three strings ran
+degraded: `Personal-Projects\.mcp.json` never had them, so that agent's recall ran
+`Recall config: default` for 47 days (2026-08-24 to 2026-10-10) without anyone noticing,
+because degraded recall looks exactly like working recall; and after the 2026-10-15
+wipe of `~/.claude`, every rebuilt config had to remember them again. The code now does
+the measured-good thing when nothing is set; `AWM_RERANK2=0`, `AWM_RERANK_WINDOW=prefix`
+and `AWM_RERANK_TAGS=0` are the escape hatches, like the other diagnostics knobs. `awm
+setup` still writes the three (explicit is fine), `npm run bench` still sets them (the
+published numbers were measured with them on, so nothing moves), and the recall-config
+label still lists only flags that are set, so `default` now names this configuration.
+Ordered deliberately after the rerank2 supersede fix above: on by default with that hole
+open would have spread it to every consumer.
+
+### A less-trusted write no longer merges into, supersedes or revives a more-trusted memory
+
+Found by MWA BL-17 (2026-10-14/15) with probes: the pipeline merged a write into an
+existing memory on concept equality and the merged engram kept the old engram's tags, so
+a poisoned skill merged into a clean one came back trusted and primeable; an R3
+"correction" (`event_type: surprise`) from untrusted text retired a trusted memory; an
+archived trusted fact was revived with poisoned text merged in. MWA worked around it in
+its own wrapper; every other client writing mixed-trust content was exposed. AWM adds no
+trust model: `src/core/trust.ts` reads the `trust=<tier>` tag MWA's memory spine already
+writes and refuses the dangerous direction — reinforce-merge, R1b revive, R3, `correction:
+true` and a named `supersedes` all fall through to a new engram with the write's own tags
+when the write is explicitly untrusted, or carries a lower tier than the memory it
+matched. The result reports `trustBlocked` and the reason code `trust:no-merge`, so the
+conflict mark can then say the two disagree. Untagged writes and memories behave as before.
+
 ### The MCP process no longer grows to 2–4 GB
 
 Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each

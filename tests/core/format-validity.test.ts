@@ -1,0 +1,61 @@
+import { describe, it, expect } from 'vitest';
+import { formatRecallResultLine } from '../../src/core/format-recall.js';
+
+/** The smallest ActivationResult the formatter needs. */
+function result(engram: Record<string, unknown>) {
+  return {
+    engram: {
+      id: 'e1',
+      concept: 'Studio meeting place',
+      content: 'The studio is closed; the class meets at the cafe.',
+      ...engram,
+    },
+    score: 0.42,
+  } as any;
+}
+
+const MARCH = Date.parse('2026-03-10T12:00:00Z');
+
+describe('formatRecallResultLine — temporal validity', () => {
+  it('labels a memory past its valid_to as EXPIRED, not "valid until"', () => {
+    const line = formatRecallResultLine(result({ validTo: '2026-01-15' }), 0, MARCH);
+    expect(line).toContain('⚠ EXPIRED 2026-01-15');
+    expect(line).not.toContain('[valid until');
+  });
+
+  it('keeps "[valid until …]" while the window holds', () => {
+    const line = formatRecallResultLine(result({ validTo: '2026-06-30' }), 0, MARCH);
+    expect(line).toContain('[valid until 2026-06-30]');
+    expect(line).not.toContain('EXPIRED');
+  });
+
+  it('labels a memory before its valid_from as not yet valid', () => {
+    const line = formatRecallResultLine(result({ validFrom: '2026-11-03' }), 0, MARCH);
+    expect(line).toContain('[not yet valid — from 2026-11-03]');
+  });
+
+  it('says nothing about validity when no bounds are set', () => {
+    const line = formatRecallResultLine(result({}), 0, MARCH);
+    expect(line).not.toMatch(/valid|EXPIRED/);
+  });
+});
+
+describe('formatRecallResultLine — written date and conflict mark', () => {
+  it('prints the written date after the id', () => {
+    const line = formatRecallResultLine(result({ createdAt: new Date('2026-10-17T15:04:00Z') }), 0, MARCH);
+    expect(line).toContain('[id: e1] [written 2026-10-17]');
+  });
+  it('accepts an ISO string createdAt (as over HTTP)', () => {
+    const line = formatRecallResultLine(result({ createdAt: '2026-10-17T15:04:00Z' }), 0, MARCH);
+    expect(line).toContain('[written 2026-10-17]');
+  });
+  it('omits the date when createdAt is missing', () => {
+    expect(formatRecallResultLine(result({}), 0, MARCH)).not.toContain('[written');
+  });
+  it('renders a conflict mark as a question, with newer/older', () => {
+    const r = result({});
+    r.conflictsWith = [{ id: 'e2', newer: true, slot: 'time' }];
+    const line = formatRecallResultLine(r, 0, MARCH);
+    expect(line).toContain('⚠ POSSIBLE CONFLICT with e2 on a time (this one is newer; confirm against the source before stating a value)');
+  });
+});

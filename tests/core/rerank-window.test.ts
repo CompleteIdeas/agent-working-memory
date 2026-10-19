@@ -110,12 +110,14 @@ describe('configuration defaults preserve shipped behaviour', () => {
     expect(rerankTruncation()).toBe(400);
   });
 
-  it('window mode defaults to prefix', () => {
+  it('window mode defaults to query (since 2026-10-19); prefix is the escape hatch', () => {
     delete process.env.AWM_RERANK_WINDOW;
+    expect(rerankWindowMode()).toBe('query');
+    process.env.AWM_RERANK_WINDOW = 'prefix';
     expect(rerankWindowMode()).toBe('prefix');
     process.env.AWM_RERANK_WINDOW = 'query';
     expect(rerankWindowMode()).toBe('query');
     process.env.AWM_RERANK_WINDOW = 'something-else';
-    expect(rerankWindowMode()).toBe('prefix');
+    expect(rerankWindowMode()).toBe('query');
   });
 });

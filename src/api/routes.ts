@@ -127,6 +127,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       recipeId?: string; recipe_id?: string;
       validFrom?: string; valid_from?: string;
       validTo?: string; valid_to?: string;
+      correction?: boolean;
     };
 
     if (!body.agentId || typeof body.agentId !== 'string' ||
@@ -185,6 +186,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       recipeId: body.recipeId ?? body.recipe_id,
       validFrom: body.validFrom ?? body.valid_from,
       validTo: body.validTo ?? body.valid_to,
+      correction: body.correction === true,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).

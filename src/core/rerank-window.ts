@@ -116,9 +116,12 @@ export function buildRerankPassage(
   return extra ? `${concept}: ${body} ${extra}` : `${concept}: ${body}`;
 }
 
-/** Whether topical tags are appended to the rerank passage. Default OFF. */
+/** Whether topical tags are appended to the rerank passage. Default ON since
+ *  2026-10-19 (+7.4pp s@1 measured 2026-08-24); `AWM_RERANK_TAGS=0` disables.
+ *  See rerank2.ts `rerank2Enabled` for why the measured-good settings became
+ *  code defaults rather than config strings. */
 export function rerankTagsEnabled(): boolean {
-  return process.env.AWM_RERANK_TAGS === '1';
+  return process.env.AWM_RERANK_TAGS !== '0';
 }
 
 /** Character budget for the appended tag text. */
@@ -153,7 +156,9 @@ export function rerankTruncation(): number {
   return Number.isFinite(v) && v > 0 ? v : 400;
 }
 
-/** Passage selection mode. Default `prefix` preserves shipped behavior. */
+/** Passage selection mode. Default `query` since 2026-10-19 (long-memory s@1
+ *  25% → 87.5%, measured 2026-08-24); `AWM_RERANK_WINDOW=prefix` restores the
+ *  first-N-chars passage. Must ship with rerank2 on, which it now does. */
 export function rerankWindowMode(): 'prefix' | 'query' {
-  return process.env.AWM_RERANK_WINDOW === 'query' ? 'query' : 'prefix';
+  return process.env.AWM_RERANK_WINDOW === 'prefix' ? 'prefix' : 'query';
 }

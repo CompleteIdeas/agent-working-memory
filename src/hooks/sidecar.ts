@@ -59,11 +59,13 @@ export interface SidecarDeps {
   }) => Promise<Array<{
     engram: {
       id: string; concept: string; content: string;
-      createdAt?: string; memoryClass?: string; validTo?: string | null;
+      createdAt?: string; memoryClass?: string;
+      validFrom?: string | null; validTo?: string | null; supersededBy?: string | null;
     };
     score: number;
     summary?: string;
     confidence?: number;
+    conflictsWith?: Array<{ id: string; newer: boolean; slot: string }>;
   }>>;
 }
 
