@@ -90,6 +90,7 @@ import { buildWhoami, formatWhoami } from './core/whoami.js';
 import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
 import { formatRecallResultLine } from './core/format-recall.js';
 import { newestConflicting } from './core/conflicts.js';
+import { missingValueNote } from './core/asked-value.js';
 import { packRecallByBudget, formatTokenFooter, estimateTokens } from './core/token-budget.js';
 
 // --- Incognito Mode ---
@@ -530,8 +531,12 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     const conflictFooter = marked.length > 0
       ? `\n⚠ ${marked.length} of these memories disagree with each other${newest ? ` — the newest is ${newest}` : ''}. Confirm against the source before stating a value; supersede the stale one when you know which it is.`
       : '';
+    // The near-miss (2026-10-19): memories plainly about the subject, none holding
+    // the kind of value asked for. That is the context shape that invites a made-up
+    // number; say so. See src/core/asked-value.ts.
+    const missingFooter = missingValueNote(queryText ?? '', results);
     const FOOTER_ALLOWANCE = 40;
-    const reserved = estimateTokens(peerSuffix) + estimateTokens(confidenceFooter) + estimateTokens(conflictFooter) + FOOTER_ALLOWANCE;
+    const reserved = estimateTokens(peerSuffix) + estimateTokens(confidenceFooter) + estimateTokens(conflictFooter) + estimateTokens(missingFooter) + FOOTER_ALLOWANCE;
     const packed = packRecallByBudget(
       results, formatRecallResultLine, params.max_tokens, reserved,
     );
@@ -560,7 +565,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     return {
       content: [{
         type: 'text' as const,
-        text: packed.lines.join('\n') + peerSuffix + conflictFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
+        text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
       }],
     };
   }

@@ -68,6 +68,20 @@ inside the stale memory behind a "--- reinforced ---" marker. The HTTP write rou
 the same field. The setup guidance tells agents to use it when a value changes, and what
 the `⚠ POSSIBLE CONFLICT` / `⚠ EXPIRED` / `⚠ SUPERSEDED` marks ask of them.
 
+### Recall says when the memories are about the subject but none holds the value asked for
+
+The best-supported account of why models invent (Ferrando et al., ICLR 2025; Lindsey et
+al. 2025) is recognition without the fact: the model knows the entity, so its "can't
+answer" default switches off, and the missing attribute gets made up. A memory layer
+cannot reach the model's internals, but it can stop handing it that exact shape of
+context: three memories plainly about Sam's Denver flight, none with a departure time.
+AWM's abstention gate does not fire there, by design — a near-miss usually has a clear
+winner. Now, when the question asks for a kind of value (a time, a date, an amount, a
+count, a status; "when" takes either a time or a date) and no returned memory holds one,
+the reply ends with one line: "none of them holds a time … do not state one from memory —
+read the source." It never changes ranking and says nothing when the question names no
+kind (`src/core/asked-value.ts`).
+
 ### The MCP process no longer grows to 2–4 GB
 
 Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each
