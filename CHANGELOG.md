@@ -29,6 +29,29 @@ agent guidance written by `awm setup` says what expiry now does; `docs/claims.md
 no longer says the ranker never considers staged or superseded rows (it down-ranks
 superseded ones and the BM25 channel has no stage filter).
 
+### Every recall line carries its written date; two versions of one fact are marked; confidence is printed on every reply
+
+The same probe put "departs 10:15" and "now departs 8:40" on the page as two undated
+lines, the stale one first, with nothing to say they were two versions of one fact. In
+the MWA BL-40 assessment, "newer facts lose to older sources" cost four checks. Three
+changes, all over the returned set only, so the cost is a few string comparisons a recall:
+
+- `[written YYYY-MM-DD]` after the id on every MCP recall line (the prime hook already
+  printed an age; the MCP format printed nothing).
+- A conflict detector (`src/core/conflicts.ts`): two returned memories that are about the
+  same thing (embedding cosine ≥ 0.80, or word overlap when an embedding is missing) and
+  carry a differing value of the same kind — a time, a date, a money amount, a bare number
+  or a status word — each get `⚠ POSSIBLE CONFLICT with <id> on a <kind> (this one is
+  newer|older; confirm against the source before stating a value)`, the reply gets one
+  footer naming the newest, and `ActivationResult.conflictsWith` carries the marks for
+  harnesses. Pairs where one supersedes the other, or either is stale, are left to those
+  marks. It is phrased as a question because it cannot tell a correction from two facts
+  that share a template ("flight out 8:40" / "flight back 10:15"); on the labelled pairs
+  in `tests/core/conflicts.test.ts` those twins are the only false positives, and the
+  test prints the precision and recall so a change to the heuristics shows its cost there.
+- `[confidence: 0.641]` on every reply. It was printed only on abstention, so a caller
+  could not tell a clear winner from a toss-up.
+
 ### The MCP process no longer grows to 2–4 GB
 
 Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each

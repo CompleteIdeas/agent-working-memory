@@ -62,5 +62,22 @@ export function formatRecallResultLine(r: ActivationResult, index: number, now: 
       : r.engram.validTo
         ? ` [valid until ${r.engram.validTo}]`
         : '';
-  return `${index + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}) [id: ${r.engram.id}]${validity}${faded}: ${body}${chain}`;
+  // The written date on every line (2026-10-19). Two versions of a fact used
+  // to arrive with nothing to say which came first; the prime hook printed an
+  // age, this format printed nothing.
+  const written = writtenDate(r.engram.createdAt);
+  const dated = written ? ` [written ${written}]` : '';
+  // Conflict mark (src/core/conflicts.ts): phrased as a question, because the
+  // detector cannot tell a correction from two facts that share a template.
+  const conflicts = (r.conflictsWith ?? []).map(c =>
+    ` ⚠ POSSIBLE CONFLICT with ${c.id} on a ${c.slot} (this one is ${c.newer ? 'newer' : 'older'}; confirm against the source before stating a value)`,
+  ).join('');
+  return `${index + 1}. **${r.engram.concept}** (${r.score.toFixed(3)}) [id: ${r.engram.id}]${dated}${validity}${faded}: ${body}${chain}${conflicts}`;
+}
+
+/** YYYY-MM-DD from a Date or ISO string; empty when absent or unparseable. */
+export function writtenDate(createdAt: Date | string | null | undefined): string {
+  if (!createdAt) return '';
+  const ms = createdAt instanceof Date ? createdAt.getTime() : Date.parse(createdAt);
+  return Number.isFinite(ms) ? new Date(ms).toISOString().slice(0, 10) : '';
 }

@@ -65,6 +65,7 @@ export interface SidecarDeps {
     score: number;
     summary?: string;
     confidence?: number;
+    conflictsWith?: Array<{ id: string; newer: boolean; slot: string }>;
   }>>;
 }
 

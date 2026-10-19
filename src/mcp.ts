@@ -89,6 +89,7 @@ import { startLoopLagMonitor } from './core/write-telemetry.js';
 import { buildWhoami, formatWhoami } from './core/whoami.js';
 import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
 import { formatRecallResultLine } from './core/format-recall.js';
+import { newestConflicting } from './core/conflicts.js';
 import { packRecallByBudget, formatTokenFooter, estimateTokens } from './core/token-budget.js';
 
 // --- Incognito Mode ---
@@ -507,8 +508,19 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     // WHOLE response and not just the result lines. FOOTER_ALLOWANCE is a
     // fixed upper bound on the accounting line (measured at ~15-25 tokens; the
     // unit test asserts it stays under 40).
+    // 2026-10-19: recall confidence on every reply (it was printed only on
+    // abstention, so a caller could not tell a clear winner from a toss-up),
+    // and one line when the returned set holds two versions of a fact — see
+    // src/core/conflicts.ts. Both are reserved from the budget like the footer.
+    const topConfidence = results[0]?.confidence;
+    const confidenceFooter = topConfidence !== undefined ? `\n[confidence: ${topConfidence.toFixed(3)}]` : '';
+    const marked = results.filter(r => (r.conflictsWith ?? []).length > 0);
+    const newest = newestConflicting(results, results.map(r => r.conflictsWith ?? []));
+    const conflictFooter = marked.length > 0
+      ? `\n⚠ ${marked.length} of these memories disagree with each other${newest ? ` — the newest is ${newest}` : ''}. Confirm against the source before stating a value; supersede the stale one when you know which it is.`
+      : '';
     const FOOTER_ALLOWANCE = 40;
-    const reserved = estimateTokens(peerSuffix) + FOOTER_ALLOWANCE;
+    const reserved = estimateTokens(peerSuffix) + estimateTokens(confidenceFooter) + estimateTokens(conflictFooter) + FOOTER_ALLOWANCE;
     const packed = packRecallByBudget(
       results, formatRecallResultLine, params.max_tokens, reserved,
     );
@@ -537,7 +549,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     return {
       content: [{
         type: 'text' as const,
-        text: packed.lines.join('\n') + peerSuffix + formatTokenFooter(packed, params.max_tokens) + evFooter,
+        text: packed.lines.join('\n') + peerSuffix + conflictFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
       }],
     };
   }
@@ -1401,6 +1413,7 @@ async function main() {
         score: r.score,
         summary: r.summary,
         confidence: r.confidence,
+        conflictsWith: r.conflictsWith,
       }));
     },
     onConsolidate: async (agentId, reason) => {

@@ -60,6 +60,7 @@ import type {
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 import { validityState } from '../core/validity.js';
+import { detectConflicts } from '../core/conflicts.js';
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
@@ -1312,6 +1313,15 @@ export class ActivationEngine {
           ...(summary !== undefined && { summary }),
         };
       });
+
+    // Conflict surfacing over the returned set (2026-10-19): two versions of
+    // one fact used to come back as two undated lines with nothing to say they
+    // disagreed. Pairwise over `limit` results, so it is a handful of string
+    // comparisons; see src/core/conflicts.ts for the rule and its known limit.
+    if (results.length > 1) {
+      const marks = detectConflicts(results, validityNow);
+      results.forEach((r, i) => { if (marks[i].length > 0) r.conflictsWith = marks[i]; });
+    }
 
     const activatedIds = results.map(r => r.engram.id);
 

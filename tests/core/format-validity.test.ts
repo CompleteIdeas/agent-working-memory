@@ -39,3 +39,23 @@ describe('formatRecallResultLine — temporal validity', () => {
     expect(line).not.toMatch(/valid|EXPIRED/);
   });
 });
+
+describe('formatRecallResultLine — written date and conflict mark', () => {
+  it('prints the written date after the id', () => {
+    const line = formatRecallResultLine(result({ createdAt: new Date('2026-10-17T15:04:00Z') }), 0, MARCH);
+    expect(line).toContain('[id: e1] [written 2026-10-17]');
+  });
+  it('accepts an ISO string createdAt (as over HTTP)', () => {
+    const line = formatRecallResultLine(result({ createdAt: '2026-10-17T15:04:00Z' }), 0, MARCH);
+    expect(line).toContain('[written 2026-10-17]');
+  });
+  it('omits the date when createdAt is missing', () => {
+    expect(formatRecallResultLine(result({}), 0, MARCH)).not.toContain('[written');
+  });
+  it('renders a conflict mark as a question, with newer/older', () => {
+    const r = result({});
+    r.conflictsWith = [{ id: 'e2', newer: true, slot: 'time' }];
+    const line = formatRecallResultLine(r, 0, MARCH);
+    expect(line).toContain('⚠ POSSIBLE CONFLICT with e2 on a time (this one is newer; confirm against the source before stating a value)');
+  });
+});

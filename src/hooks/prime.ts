@@ -49,6 +49,8 @@ export interface PrimeCandidate {
   score: number;
   summary?: string;
   confidence?: number;
+  /** Other results in the same recall that look like another version of this fact. */
+  conflictsWith?: Array<{ id: string; newer: boolean; slot: string }>;
 }
 
 export interface PrimeOptions {
@@ -100,6 +102,10 @@ function formatPrimeLine(c: PrimeCandidate, now: number = Date.now()): string {
   // The MCP format has carried this since 0.12.x; the prime line dropped it, so
   // pushed context could present a superseded memory as current with no sign.
   const superseded = c.engram.supersededBy ? ` · superseded by ${c.engram.supersededBy}` : '';
+  // Terse form of the MCP conflict mark: enough to send the agent to the source.
+  const conflicts = (c.conflictsWith ?? []).length > 0
+    ? ` · ${(c.conflictsWith ?? []).some(x => x.newer) ? 'newer than' : 'older than'} ${(c.conflictsWith ?? []).map(x => x.id).join(', ')} — confirm before stating a value`
+    : '';
   // Class + age make the volatility rubric mechanical: a 90-day-old working
   // memory reads differently from a 2-day-old canonical one, and the agent
   // should not have to look either up before deciding how much to trust it.
@@ -110,7 +116,7 @@ function formatPrimeLine(c: PrimeCandidate, now: number = Date.now()): string {
   // is the one failure mode the agent cannot detect for itself. Terser here
   // because this is unrequested context.
   const faded = isFaded(c.engram.content) ? ' · faded' : '';
-  return `- [${cls}${age}${faded}${superseded}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
+  return `- [${cls}${age}${faded}${superseded}${conflicts}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
 }
 
 /**

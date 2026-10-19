@@ -245,6 +245,14 @@ export interface ActivationResult {
    */
   activationEventId?: string;
   /**
+   * Other memories in THIS recall's result set that look like a different
+   * version of the same fact (same subject, a differing time / date / money /
+   * number / status), with which is newer. Detected over the returned set
+   * only — see src/core/conflicts.ts. Absent or empty when none. Harnesses
+   * should treat it as "confirm against the source before stating a value".
+   */
+  conflictsWith?: Array<{ id: string; newer: boolean; slot: 'time' | 'date' | 'money' | 'number' | 'status' }>;
+  /**
    * Confidence-adaptive content preview (Paper 3: cognitive teaming).
    * Set when the query opts in via `granularity: 'compact' | 'auto'`.
    * Trades depth for breadth — short when the agent should scan a diverse
