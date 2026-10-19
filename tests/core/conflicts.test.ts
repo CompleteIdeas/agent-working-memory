@@ -103,6 +103,9 @@ const CONFLICTS: Array<[ReturnType<typeof mem>, ReturnType<typeof mem>]> = [
    mem('Standup time', 'Daily standup moved to 9:45 AM.')],
   [mem('Trip status', 'The museum trip on Nov 8 is confirmed.', { daysAgo: 2 }),
    mem('Trip status', 'The museum trip on Nov 8 was cancelled.')],
+  // Bare month names (MWA's book-club triple, 0.18.1).
+  [mem('Book club pick', 'In October the book club chose a fantasy novel.', { daysAgo: 150 }),
+   mem('Book club pick', 'In March the book club chose a mystery.')],
 ];
 
 const COMPATIBLE: Array<[ReturnType<typeof mem>, ReturnType<typeof mem>]> = [
@@ -125,6 +128,9 @@ const COMPATIBLE: Array<[ReturnType<typeof mem>, ReturnType<typeof mem>]> = [
   // Same subject, different attribute, values only on one side.
   [mem('Rose supplier', 'Bloomberg Wholesale is the rose supplier; contact is Dana.'),
    mem('Rose price', 'Bloomberg Wholesale standard rose price is $1.10 per stem.')],
+  // A full date and a bare month in the same month agree.
+  [mem('Accountant deadline', 'Accountant needs Q3 receipts by Nov 13.'),
+   mem('Accountant deadline', 'The accountant wants the Q3 receipts in November.')],
   // Template twins — the known false-positive class (counted below).
   [mem('Flight out', 'Sam\'s outbound Denver flight departs at 8:40 AM on Nov 14.'),
    mem('Flight back', 'Sam\'s return Denver flight departs at 10:15 AM on Nov 18.')],
@@ -161,8 +167,19 @@ describe('detectConflicts — labelled pairs', () => {
   it('the twin pairs are the only compatible pairs it flags', () => {
     const flagged = COMPATIBLE.map(([a, b], i) => [i, detectConflicts([a, b], NOW)[0].length > 0] as const)
       .filter(([, f]) => f).map(([i]) => i);
-    // Indices 7, 8, 9 are the twins. Anything else flagged is a regression.
-    expect(flagged.every(i => i >= 7)).toBe(true);
+    // Indices 8, 9, 10 are the twins; 7 is the same-month pair, which must NOT be flagged.
+    // Anything else flagged is a regression.
+    expect(flagged).toEqual([8, 9, 10]);
+  });
+
+  it('marks every member of the book-club triple and names the newest', () => {
+    const oct = mem('Book club pick', 'In October the book club chose a fantasy novel.', { daysAgo: 150 });
+    const dec = mem('Book club pick', 'In December the book club chose science fiction.', { daysAgo: 90 });
+    const mar = mem('Book club pick', 'In March the book club chose a mystery.', { daysAgo: 5 });
+    const marks = detectConflicts([dec, oct, mar], NOW);
+    expect(marks.map(m => m.length)).toEqual([2, 2, 2]);
+    expect(marks[2].every(m => m.newer)).toBe(true);
+    expect(newestConflicting([dec, oct, mar], marks)).toBe(mar.engram.id);
   });
 });
 

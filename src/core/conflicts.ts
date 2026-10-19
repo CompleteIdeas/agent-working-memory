@@ -118,6 +118,12 @@ export function valueSlots(text: string): Map<SlotKind, Set<string>> {
     m => add('date', `${m[1].slice(0, 3).toLowerCase()}-${Number(m[2])}`));
   take(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTHS})[a-z]*\\b`, 'gi'),
     m => add('date', `${m[2].slice(0, 3).toLowerCase()}-${Number(m[1])}`));
+  // A bare month ("in October", "by March") is a date too — coarser, but "in
+  // October the club chose fantasy" against "in March … a mystery" is exactly
+  // the two-versions case (MWA, 0.18.1). Runs after the month-day forms, which
+  // have already been blanked, so "Nov 14" is not also counted as "nov".
+  take(new RegExp(`\\b(${MONTHS})(?:uary|ruary|ch|il|e|y|ust|tember|ober|ember)?\\b`, 'gi'),
+    m => add('date', m[1].slice(0, 3).toLowerCase()));
   // Money: $1.45, $2,400, $49/month.
   take(/\$\s?(\d[\d,]*(?:\.\d+)?)/g, m => add('money', m[1].replace(/,/g, '')));
   // Bare numbers (ids, counts, flight numbers): shared ones do no harm, differing ones may.
@@ -161,8 +167,14 @@ export function related(a: ConflictCandidate, b: ConflictCandidate): boolean {
 export function disagreement(a: ConflictCandidate, b: ConflictCandidate): SlotKind | null {
   const sa = valueSlots(a.engram.content), sb = valueSlots(b.engram.content);
   for (const kind of ['time', 'date', 'money', 'status', 'number'] as SlotKind[]) {
-    const va = sa.get(kind), vb = sb.get(kind);
+    let va = sa.get(kind), vb = sb.get(kind);
     if (!va || !vb) continue;
+    // Dates come at three grains (2026-01-15, nov-14, nov). When either side
+    // has a month-only value, compare both at month grain: "Nov 14" and
+    // "in November" agree; "in October" and "in March" do not.
+    if (kind === 'date' && ([...va, ...vb].some(v => /^[a-z]{3}$/.test(v)))) {
+      va = new Set([...va].map(monthOf)); vb = new Set([...vb].map(monthOf));
+    }
     // Disagree when neither set contains the other: a memory that mentions
     // two times, one of which the other repeats, is an elaboration, not a conflict.
     const aInB = [...va].every(v => vb.has(v));
@@ -170,6 +182,14 @@ export function disagreement(a: ConflictCandidate, b: ConflictCandidate): SlotKi
     if (!aInB && !bInA) return kind;
   }
   return null;
+}
+
+const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/** The month token of any date value this file produces. */
+function monthOf(v: string): string {
+  const iso = /^(\d{4})-(\d{2})-\d{2}$/.exec(v);
+  if (iso) return MONTH_NAMES[Number(iso[2]) - 1] ?? v;
+  return v.slice(0, 3);
 }
 
 function createdMs(c: ConflictCandidate): number {

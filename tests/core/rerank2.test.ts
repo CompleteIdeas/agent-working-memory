@@ -32,6 +32,34 @@ describe('reorderByReranker', () => {
     expect(ids(out)).toBe('a,b');
   });
 
+  describe('near-ties — the blend (recency) decides when the cross-encoder cannot', () => {
+    // MWA, 0.18.1: three same-topic facts from October, December and March
+    // scored within hundredths for "what did the club most recently choose",
+    // and the newest came last. `score` is the Phase 7 blend, which carries decay.
+    const b = (id: string, rerankerScore: number, score: number) => ({ id, phaseScores: { rerankerScore }, score });
+
+    it('orders near-equal reranker scores by the blended score', () => {
+      const out = reorderByReranker([b('dec', 0.81, 0.60), b('oct', 0.80, 0.55), b('mar', 0.79, 0.70)], 10);
+      expect(ids(out)).toBe('mar,dec,oct');
+    });
+
+    it('a clear reranker lead still wins over a better blend', () => {
+      const out = reorderByReranker([b('a', 0.60, 0.90), b('b', 0.90, 0.50)], 10);
+      expect(ids(out)).toBe('b,a');
+    });
+
+    it('the epsilon is configurable and 0 restores pure reranker order', () => {
+      const saved = process.env.AWM_RERANK2_TIE_EPS;
+      process.env.AWM_RERANK2_TIE_EPS = '0';
+      try {
+        const out = reorderByReranker([b('dec', 0.81, 0.60), b('mar', 0.79, 0.70)], 10);
+        expect(ids(out)).toBe('dec,mar');
+      } finally {
+        if (saved === undefined) delete process.env.AWM_RERANK2_TIE_EPS; else process.env.AWM_RERANK2_TIE_EPS = saved;
+      }
+    });
+  });
+
   describe('stale penalty — a superseded or expired memory cannot win the window', () => {
     // Phase 8c marks superseded / expired / not-yet-valid rows with
     // stalePenalty 0.15. Before 2026-10-19 this stage ignored it and sorted by

@@ -43,6 +43,29 @@
  *  optionally the stale penalty Phase 8c applied to it (see below). */
 export interface RerankScored {
   phaseScores: { rerankerScore: number; stalePenalty?: number };
+  /** The Phase 7 blended score (composite + reranker). Carries decay, so recency. */
+  score?: number;
+}
+
+/**
+ * NEAR-TIES (0.18.1, found by MWA when it moved to rerank2-on defaults)
+ * -----------------------------------------------------------------------
+ * The cross-encoder judges relevance to the query and nothing else. Three
+ * same-topic facts written in October, December and March ("the book club
+ * chose a fantasy novel / science fiction / a mystery") score within a few
+ * hundredths of each other for "what did the book club most recently
+ * choose", and a sort by reranker score alone put the newest LAST. The blend
+ * carries decay, so it knows which is newest; replacing it outright threw
+ * that away exactly where the cross-encoder has nothing to say.
+ *
+ * So the window is sorted by reranker score, and only when two scores are
+ * within `AWM_RERANK2_TIE_EPS` (default 0.03) does the blended score decide
+ * between them. Outside the epsilon the cross-encoder still wins, which is
+ * where its measured +8pp lives.
+ */
+export function rerank2TieEpsilon(): number {
+  const v = Number(process.env.AWM_RERANK2_TIE_EPS ?? 0.03);
+  return Number.isFinite(v) && v >= 0 ? v : 0.03;
 }
 
 /**
@@ -86,7 +109,12 @@ export function reorderByReranker<T extends RerankScored>(ranked: T[], k: number
     if (!(r.phaseScores.rerankerScore > 0)) return ranked;  // also catches NaN
   }
 
-  const sorted = head.slice().sort((a, b) => rerankSortKey(b) - rerankSortKey(a));
+  const eps = rerank2TieEpsilon();
+  const sorted = head.slice().sort((a, b) => {
+    const d = rerankSortKey(b) - rerankSortKey(a);
+    if (Math.abs(d) < eps) return (b.score ?? 0) - (a.score ?? 0);  // near-tie: the blend decides
+    return d;
+  });
   return sorted.concat(ranked.slice(window));
 }
 

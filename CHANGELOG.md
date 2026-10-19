@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — near-ties go to the newer memory, and a bare month is a date
+
+Both found by MWA within hours of moving to the 0.18 defaults, with a repro.
+
+### rerank2 no longer throws away recency on near-equal scores
+
+Three same-topic facts written in October, December and March ("the book club chose a
+fantasy novel / science fiction / a mystery") score within a few hundredths of each other
+for "what did the book club most recently choose", and with `AWM_RERANK2` on the newest came
+**last**: the second stage sorted by reranker score alone, and the cross-encoder judges
+relevance to the query and nothing else. The blend it replaced carries decay, so it knew
+which was newest. Now the window is still sorted by reranker score, but when two scores are
+within `AWM_RERANK2_TIE_EPS` (default 0.03) the blended score decides between them. Outside
+the epsilon the cross-encoder still wins, which is where its measured gain lives; `0`
+restores the 0.18.0 behaviour (`src/core/rerank2.ts`).
+
+### "In October" is a date
+
+`valueSlots` read `Nov 14`, `14 Nov` and `2026-01-15` as dates but not a bare month, so the
+book-club triple above carried no `⚠ POSSIBLE CONFLICT`. A bare month is now a date at month
+grain, and a comparison involving one is made at month grain on both sides, so "by Nov 13"
+and "in November" agree while "in October" and "in March" do not (`src/core/conflicts.ts`).
+
 ## 0.18.0 (2026-10-19) — stale memories lose, conflicts are said, corrections and trust are honoured; model memory stays bounded
 
 ### A superseded memory can no longer outrank its successor under `AWM_RERANK2`, and `valid_to` now expires
