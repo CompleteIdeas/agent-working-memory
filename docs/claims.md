@@ -33,7 +33,7 @@ is weak, this page says so rather than waiting for a reviewer to find it.
   unchanged on a different transformers major.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
-  - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers staged, retracted or superseded rows. `benchmarks-current.md` says this; make sure every other page does too.
+  - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers retracted rows; staged and superseded rows can still enter the candidate pool (the BM25 channel filters on agent and retraction only) and superseded, expired and not-yet-valid rows are down-ranked to 0.15 of their score rather than excluded. The benchmark denominator excludes them. `benchmarks-current.md` says this; make sure every other page does too.
   - These numbers describe **what is published**. They were measured at `2375582`,
     a commit *inside* the 0.16.1 release; the only source change after it is a
     comment — §7 carries the diff. They also reproduced *identically* across two

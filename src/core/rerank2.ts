@@ -39,9 +39,28 @@
  * >0.15 reranker margin cuts breakage 12->1 but also cuts fixes 61->17.
  */
 
-/** Minimal shape this needs — anything carrying a cross-encoder score. */
+/** Minimal shape this needs — anything carrying a cross-encoder score, and
+ *  optionally the stale penalty Phase 8c applied to it (see below). */
 export interface RerankScored {
-  phaseScores: { rerankerScore: number };
+  phaseScores: { rerankerScore: number; stalePenalty?: number };
+}
+
+/**
+ * THE STALE-SUPPRESSION HOLE (found 2026-10-19, MWA evaluation probe)
+ * --------------------------------------------------------------------
+ * Phase 8c multiplies a superseded (or, since 2026-10-19, expired) memory's
+ * `score` by 0.15 so its successor dominates. This stage sorted the window by
+ * raw `rerankerScore`, which never carried that penalty — so with
+ * `AWM_RERANK2=1` (what `awm setup` writes into every Claude Code install) a
+ * superseded memory came back at rank 1 ABOVE its replacement whenever the
+ * cross-encoder liked its wording better. The supersession test ran with the
+ * reranker off, so nothing caught it. `tests/core/rerank2.test.ts` now pins the
+ * corrected behaviour: the sort key is `rerankerScore × stalePenalty`, the same
+ * factor Phase 8c used, so stale rows sort below current ones here exactly as
+ * they do in the blend. The soundness guards below are unchanged.
+ */
+export function rerankSortKey(r: RerankScored): number {
+  return r.phaseScores.rerankerScore * (r.phaseScores.stalePenalty ?? 1);
 }
 
 /**
@@ -67,7 +86,7 @@ export function reorderByReranker<T extends RerankScored>(ranked: T[], k: number
     if (!(r.phaseScores.rerankerScore > 0)) return ranked;  // also catches NaN
   }
 
-  const sorted = head.slice().sort((a, b) => b.phaseScores.rerankerScore - a.phaseScores.rerankerScore);
+  const sorted = head.slice().sort((a, b) => rerankSortKey(b) - rerankSortKey(a));
   return sorted.concat(ranked.slice(window));
 }
 

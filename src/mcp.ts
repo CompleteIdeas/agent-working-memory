@@ -1394,7 +1394,9 @@ async function main() {
             ? r.engram.createdAt.toISOString()
             : (r.engram.createdAt as unknown as string | undefined),
           memoryClass: r.engram.memoryClass,
+          validFrom: r.engram.validFrom,
           validTo: r.engram.validTo,
+          supersededBy: r.engram.supersededBy,
         },
         score: r.score,
         summary: r.summary,

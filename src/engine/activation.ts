@@ -59,6 +59,7 @@ import type {
 } from '../types/index.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
+import { validityState } from '../core/validity.js';
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
@@ -1137,11 +1138,17 @@ export class ActivationEngine {
       }
     }
 
-    // Phase 8c: Supersession penalty — superseded memories are deprioritized.
-    // They aren't wrong (that's retraction), just outdated.
+    // Phase 8c: Stale penalty — superseded memories, and (since 2026-10-19)
+    // memories outside their valid_from/valid_to window, are deprioritized.
+    // They aren't wrong (that's retraction), just outdated or not yet true.
+    // The factor is also recorded on phaseScores so Phase 9b's re-sort by
+    // reranker score honours it — without that, rerank2 put a superseded
+    // memory above its successor (see src/core/rerank2.ts).
+    const validityNow = query.asOf ?? Date.now();
     for (const item of rerankPool) {
-      if (item.engram.supersededBy) {
-        item.score *= 0.15; // Severe down-rank — successor should dominate
+      if (item.engram.supersededBy || validityState(item.engram, validityNow) !== 'current') {
+        item.score *= 0.15; // Severe down-rank — the current version should dominate
+        item.phaseScores.stalePenalty = 0.15;
       }
     }
 

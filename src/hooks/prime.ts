@@ -34,12 +34,15 @@
 
 import { packRecallByBudget, estimateTokens, type PackedRecall } from '../core/token-budget.js';
 import { isFaded } from '../core/format-recall.js';
+import { validityState } from '../core/validity.js';
 
 /** Shape returned by the sidecar's `activate` dependency. */
 export interface PrimeCandidate {
   engram: {
     id: string; concept: string; content: string; memoryClass?: string;
+    validFrom?: string | null;
     validTo?: string | null;
+    supersededBy?: string | null;
     /** Used for the age label; Date from the store, string over HTTP. */
     createdAt?: Date | string | null;
   };
@@ -87,7 +90,16 @@ export const PRIME_DEFAULTS = {
  *  report. The id is retained so the agent can act on it (feedback, supersede). */
 function formatPrimeLine(c: PrimeCandidate, now: number = Date.now()): string {
   const body = c.summary ?? c.engram.content;
-  const validity = c.engram.validTo ? ` [valid until ${c.engram.validTo}]` : '';
+  // Same validity decision as ranking and the MCP format (core/validity.ts).
+  const vstate = validityState(c.engram, now);
+  const validity = vstate === 'expired'
+    ? ` ⚠ EXPIRED ${c.engram.validTo}`
+    : vstate === 'not-yet-valid'
+      ? ` [not yet valid — from ${c.engram.validFrom}]`
+      : c.engram.validTo ? ` [valid until ${c.engram.validTo}]` : '';
+  // The MCP format has carried this since 0.12.x; the prime line dropped it, so
+  // pushed context could present a superseded memory as current with no sign.
+  const superseded = c.engram.supersededBy ? ` · superseded by ${c.engram.supersededBy}` : '';
   // Class + age make the volatility rubric mechanical: a 90-day-old working
   // memory reads differently from a 2-day-old canonical one, and the agent
   // should not have to look either up before deciding how much to trust it.
@@ -98,7 +110,7 @@ function formatPrimeLine(c: PrimeCandidate, now: number = Date.now()): string {
   // is the one failure mode the agent cannot detect for itself. Terser here
   // because this is unrequested context.
   const faded = isFaded(c.engram.content) ? ' · faded' : '';
-  return `- [${cls}${age}${faded}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
+  return `- [${cls}${age}${faded}${superseded}] ${c.engram.concept}${validity} [${c.engram.id}]: ${body}`;
 }
 
 /**

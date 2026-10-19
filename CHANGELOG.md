@@ -2,6 +2,33 @@
 
 ## Unreleased — model memory stays bounded, and prompts with a paste recall again
 
+### A superseded memory can no longer outrank its successor under `AWM_RERANK2`, and `valid_to` now expires
+
+Found 2026-10-19 by a probe in the MWA evaluation of an architecture brief: with
+`AWM_RERANK2=1` — which `awm setup`, the plugin and the Desktop bundle all turn on — a
+superseded memory came back at rank 1 above its replacement. Phase 8c cut the blended
+score to 0.15, but Phase 9b (rerank2) re-sorted the window by the raw cross-encoder
+score, which never carried that penalty. `tests/core/supersession.test.ts` ran with the
+reranker off, so CI could not see it. The live store had 177 superseded memories still
+active. Phase 8c now records the factor on `phaseScores.stalePenalty`, and rerank2's
+sort key is `rerankerScore × stalePenalty`, so stale rows lose the window exactly as
+they lose the blend. The soundness guards are unchanged, and the window's membership
+and scores are unchanged, so abstention is unaffected (`src/core/rerank2.ts`).
+
+`valid_to` / `valid_from` were display-only: nothing but the two formatters read them,
+and both printed `[valid until …]` on a memory whose date had passed. The live store
+was serving 482 expired memories as current (97 active, 385 archived). A new
+`src/core/validity.ts` is the one place that decides a memory's temporal state; Phase
+8c gives expired and not-yet-valid memories the same 0.15 penalty as superseded ones
+(honouring `asOf`, so a frozen-clock benchmark stays frozen), the MCP recall line says
+`⚠ EXPIRED <date>` or `[not yet valid — from <date>]`, and the prime hook does the same
+tersely. A date-only `valid_to` holds through that whole day. The prime hook also now
+marks a superseded memory (`· superseded by <id>`); it had dropped the marker the MCP
+format carries, so pushed context could present history as current with no sign. The
+agent guidance written by `awm setup` says what expiry now does; `docs/claims.md`
+no longer says the ranker never considers staged or superseded rows (it down-ranks
+superseded ones and the BM25 channel has no stage filter).
+
 ### The MCP process no longer grows to 2–4 GB
 
 Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each

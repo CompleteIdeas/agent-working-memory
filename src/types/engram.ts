@@ -265,6 +265,10 @@ export interface PhaseScores {
   confidenceGate: number;
   composite: number;
   rerankerScore: number;   // Cross-encoder relevance (0-1), 0 if reranker disabled
+  /** Phase 8c's factor (0.15) when the memory is superseded, expired or not yet
+   *  valid; absent otherwise. Phase 9b (rerank2) multiplies its sort key by it
+   *  so a stale memory cannot outrank its successor there either. */
+  stalePenalty?: number;
 }
 
 /**

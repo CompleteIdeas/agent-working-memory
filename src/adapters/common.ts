@@ -568,7 +568,8 @@ people/things you refer to by name often); not yet the default pending evaluatio
 \`memory_write\` accepts \`valid_from\` / \`valid_to\` (ISO dates). Use \`valid_to\` on
 **operational** facts with a real shelf life — a deploy state, "waiting on X's reply",
 a ticket status — so the memory expires instead of relying on you to remember it's
-stale. Recall renders \`[valid until …]\` on results carrying this field. Use
+stale. Recall renders \`[valid until …]\` while the window holds; once it has passed
+the memory is down-ranked like a superseded one and labelled \`⚠ EXPIRED\`. Use
 \`valid_from\` for a fact that becomes true on a known future date (a policy change, a
 season that hasn't started yet). Don't set either for durable facts — most memories
 don't need them.

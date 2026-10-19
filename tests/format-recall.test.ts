@@ -42,6 +42,9 @@ describe('formatRecallResultLine (0.12.1 — engram id in recall output)', () =>
   });
 
   it('still renders validity and superseded-chain alongside the id', () => {
+    // Rendered as of a date INSIDE the validity window: since 2026-10-19 the
+    // formatter checks the clock, and this test was first written with a
+    // valid_to that has since passed on the wall clock.
     const line = formatRecallResultLine(
       result({
         engram: engram({
@@ -51,6 +54,7 @@ describe('formatRecallResultLine (0.12.1 — engram id in recall output)', () =>
         }),
       }),
       0,
+      Date.parse('2026-08-01T00:00:00Z'),
     );
     expect(line).toContain('[id: e2222222-2222-2222-2222-222222222222]');
     expect(line).toContain('[valid until 2026-09-01]');
