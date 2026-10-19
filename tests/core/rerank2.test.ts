@@ -118,9 +118,12 @@ describe('configuration', () => {
     if (saved.AWM_RERANK2_K === undefined) delete process.env.AWM_RERANK2_K;
   });
 
-  it('is OFF unless explicitly enabled', () => {
+  it('is ON unless explicitly disabled (default since 2026-10-19)', () => {
+    // It was opt-in from 2026-08-24; a config that forgot the string ran
+    // degraded for 47 days unnoticed. The code now does the measured-good
+    // thing when nothing is set, and `0` is the escape hatch.
     delete process.env.AWM_RERANK2;
-    expect(rerank2Enabled()).toBe(false);
+    expect(rerank2Enabled()).toBe(true);
     process.env.AWM_RERANK2 = '0';
     expect(rerank2Enabled()).toBe(false);
     process.env.AWM_RERANK2 = '1';

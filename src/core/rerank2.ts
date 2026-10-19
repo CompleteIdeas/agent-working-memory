@@ -95,7 +95,15 @@ export function rerank2WindowSize(): number {
   return Number(process.env.AWM_RERANK2_K ?? 10);
 }
 
-/** Whether the second stage is enabled. Default OFF pending the tracer verdict. */
+/**
+ * Whether the second stage is enabled. Default ON since 2026-10-19; set
+ * `AWM_RERANK2=0` to disable. It was opt-in (`=1`) from 2026-08-24, injected
+ * into every config `awm setup` wrote — and a config that did not carry the
+ * three strings ran degraded for 47 days without anyone noticing, because
+ * degraded recall looks exactly like working recall. The measured-good
+ * configuration is now what the code does when nothing is set; the env var
+ * is the escape hatch, like the other diagnostics knobs.
+ */
 export function rerank2Enabled(): boolean {
-  return process.env.AWM_RERANK2 === '1';
+  return process.env.AWM_RERANK2 !== '0';
 }
