@@ -38,6 +38,7 @@
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConnectionEngine } from '../engine/connections.js';
 import type { Engram, MemoryClass, MemoryType } from '../types/engram.js';
+import { mergeBlockedByTrust, trustTier } from './trust.js';
 import {
   evaluateSalience,
   computeNoveltyWithMatch,
@@ -175,6 +176,12 @@ export interface WriteResult {
    * null when nothing close enough existed and the write was stored as new.
    */
   correctionOf?: { id: string; concept: string; matchScore: number } | null;
+  /**
+   * Set when a merge, supersede, revive or correction was refused because the
+   * write is less trusted than the memory it matched (src/core/trust.ts). The
+   * write was stored as its own engram instead.
+   */
+  trustBlocked?: { matchedId: string; writeTrust: number | null; matchedTrust: number | null };
 }
 
 export interface WritePipelineEngines {
@@ -288,6 +295,7 @@ export async function performWrite(
   const tStartCreate = performance.now();
   let busyHit = false;
   let result: WriteResult | null = null;
+  let trustBlocked: WriteResult['trustBlocked'];
   try {
   if (enableReinforcement && noveltyResult.matchedEngramId) {
     const matched = await store.getEngram(noveltyResult.matchedEngramId);
@@ -295,7 +303,12 @@ export async function performWrite(
     // workspace/hive recall can surface another agent's same-concept engram as the match; mutating it
     // (merge content, re-embed, bump confidence, or supersede) would corrupt that agent's memory. A
     // cross-agent match falls through to createNewEngram so this agent gets its own copy.
-    if (matched && matched.agentId === input.agentId) {
+    // Trust guard (2026-10-19, src/core/trust.ts): a less-trusted write never merges into,
+    // supersedes or revives a more-trusted memory. It falls through to its own engram.
+    if (matched && matched.agentId === input.agentId && mergeBlockedByTrust(input.tags, matched.tags)) {
+      trustBlocked = { matchedId: matched.id, writeTrust: trustTier(input.tags), matchedTrust: trustTier(matched.tags) };
+    }
+    if (matched && matched.agentId === input.agentId && !trustBlocked) {
       const newConcept = (input.concept ?? '').toLowerCase().trim();
       const matchedConcept = (matched.concept ?? '').toLowerCase().trim();
       const sameConcept = newConcept === matchedConcept && newConcept.length > 0;
@@ -385,7 +398,10 @@ export async function performWrite(
       : null;
     if (target?.supersededBy) target = await store.getEngram(target.supersededBy);
     const closeEnough = noveltyResult.matchScore >= CORRECTION_MIN_MATCH;
-    if (target && closeEnough && target.agentId === input.agentId
+    if (target && closeEnough && target.agentId === input.agentId && mergeBlockedByTrust(input.tags, target.tags)) {
+      trustBlocked = { matchedId: target.id, writeTrust: trustTier(input.tags), matchedTrust: trustTier(target.tags) };
+    }
+    if (target && closeEnough && target.agentId === input.agentId && !trustBlocked
         && !target.retracted && target.stage !== 'archived' && !target.supersededBy) {
       const correctionSalience: SalienceResult = {
         ...salience,
@@ -407,6 +423,15 @@ export async function performWrite(
 
   // -- Default: create new engram (if no reinforce/supersede branch fired) --
   if (!result) {
+    // An explicit `supersedes` names the target, but naming it does not make the
+    // write trustworthy: an untrusted write must not retire a trusted memory by id.
+    if (input.supersedes) {
+      const named = await store.getEngram(input.supersedes);
+      if (named && mergeBlockedByTrust(input.tags, named.tags)) {
+        trustBlocked = { matchedId: named.id, writeTrust: trustTier(input.tags), matchedTrust: trustTier(named.tags) };
+        input = { ...input, supersedes: undefined };
+      }
+    }
     // A correction of a near-duplicate has low novelty BY CONSTRUCTION: the replacement
     // says almost what the engram it replaces said. Left on its own salience it lands at
     // `discard` (confidence 0.25, tagged `low-salience`, below HEALTHY_CONFIDENCE_FLOOR)
@@ -430,6 +455,10 @@ export async function performWrite(
   }
   // A correction always reports what it did, including "nothing" (null).
   if (input.correction && !input.supersedes && result) result.correctionOf = correctionOf ?? null;
+  if (trustBlocked && result) {
+    result.trustBlocked = trustBlocked;
+    if (result.salience) result.salience = { ...result.salience, reasonCodes: [...result.salience.reasonCodes, 'trust:no-merge'] };
+  }
   } catch (e) {
     const es = `${(e as { code?: unknown })?.code ?? ''} ${(e as Error)?.message ?? ''}`;
     busyHit = /busy/i.test(es);

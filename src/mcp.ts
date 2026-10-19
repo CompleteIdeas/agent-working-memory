@@ -400,11 +400,16 @@ The concept should be a short label (3-8 words). The content should be the full 
           : `\nNOTE: no existing memory was close enough to correct, so this was stored as new. If you know which memory it replaces, write again with supersedes: '<id>'.`)
       : '';
 
+    const trustNote = result.trustBlocked
+      ? `\nNOTE: stored as its own memory, not merged into ${result.trustBlocked.matchedId} — this write is less trusted than that memory (src/core/trust.ts), so it must not replace or be merged into it.`
+      : '';
+
     return {
       content: [{
         type: 'text' as const,
         text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
           + correctionNote
+          + trustNote
           + (isLowSalience
             ? `\nNOTE: low salience — this memory is kept but demoted and may fade first. If it MUST survive and be recallable, retry with memory_class: 'canonical'. (Discards are audited: reason codes ${JSON.stringify(salience.reasonCodes.slice(0, 4))})`
             : ''),

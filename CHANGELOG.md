@@ -99,6 +99,21 @@ label still lists only flags that are set, so `default` now names this configura
 Ordered deliberately after the rerank2 supersede fix above: on by default with that hole
 open would have spread it to every consumer.
 
+### A less-trusted write no longer merges into, supersedes or revives a more-trusted memory
+
+Found by MWA BL-17 (2026-10-14/15) with probes: the pipeline merged a write into an
+existing memory on concept equality and the merged engram kept the old engram's tags, so
+a poisoned skill merged into a clean one came back trusted and primeable; an R3
+"correction" (`event_type: surprise`) from untrusted text retired a trusted memory; an
+archived trusted fact was revived with poisoned text merged in. MWA worked around it in
+its own wrapper; every other client writing mixed-trust content was exposed. AWM adds no
+trust model: `src/core/trust.ts` reads the `trust=<tier>` tag MWA's memory spine already
+writes and refuses the dangerous direction — reinforce-merge, R1b revive, R3, `correction:
+true` and a named `supersedes` all fall through to a new engram with the write's own tags
+when the write is explicitly untrusted, or carries a lower tier than the memory it
+matched. The result reports `trustBlocked` and the reason code `trust:no-merge`, so the
+conflict mark can then say the two disagree. Untagged writes and memories behave as before.
+
 ### The MCP process no longer grows to 2–4 GB
 
 Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each
