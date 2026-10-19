@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — model memory stays bounded, and prompts with a paste recall again
+## 0.18.0 (2026-10-19) — stale memories lose, conflicts are said, corrections and trust are honoured; model memory stays bounded
 
 ### A superseded memory can no longer outrank its successor under `AWM_RERANK2`, and `valid_to` now expires
 
@@ -267,7 +267,7 @@ continuously: this is a stress test, not a typical session.
 It is off by default until it has run on real day-to-day sessions for a while; check
 `memory_whoami` there.
 
-## Unreleased — the lifecycle was archiving the memories it was supposed to protect
+### Also in 0.18.0 (PR #7): the lifecycle was archiving the memories it was supposed to protect
 
 Seven correctness fixes from `docs/plan-gaps-and-procedural-memory-2026-10-12.md`, all measured
 against the live store rather than argued from the code.

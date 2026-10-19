@@ -651,11 +651,28 @@ Set it in the **MCP server's `env` block**, not a `.env` file: the `.env` loader
 `cli.ts` and `mcp.ts` resolve against `process.cwd()`, which an MCP server launched by a
 host does not control.
 
-**Memory spine (D5/D8, log-only):** writes accept `origin_class`
+**Memory spine (D5/D8):** writes accept `origin_class`
 (`user-stated | tool-output | inference | recipe`), `writer_session`, `recipe_id`,
-`valid_from`, `valid_to`. Recorded on every backend; **never used in ranking** until an eval
-proves benefit (D6). Recall output flags superseded-but-still-ranking memories
-(`⚠ SUPERSEDED by <id>`) and shows `[valid until …]`.
+`valid_from`, `valid_to`. Provenance fields are recorded on every backend and **not used in
+ranking**. Temporal validity **is** (0.18.0): a memory past its `valid_to`, or before its
+`valid_from`, takes the same 0.15 penalty as a superseded one in Phase 8c, and rerank2's
+re-sort honours that penalty (`src/core/validity.ts`, `src/core/rerank2.ts`). Recall output
+shows `[written YYYY-MM-DD]` on every line, `[valid until …]` while the window holds, and
+`⚠ EXPIRED <date>` / `[not yet valid — from <date>]` / `⚠ SUPERSEDED by <id>` otherwise; two
+returned memories that disagree on a time, date, amount, number or status get
+`⚠ POSSIBLE CONFLICT with <id> … (this one is newer|older)` and the reply names the newest
+(`src/core/conflicts.ts`; `ActivationResult.conflictsWith`); every reply ends with
+`[confidence: …]`; and when the question asks for a kind of value no returned memory holds,
+one line says so (`src/core/asked-value.ts`).
+
+**Correcting a fact (0.18.0):** `memory_write` with `correction: true` supersedes the closest
+active memory in content (novelty match score ≥ 0.6, a superseded match followed to its
+superseder, never another agent's), stores the correction active at no less than that
+memory's confidence, and reports `correctionOf` (null when nothing was close enough). It never
+reinforce-merges. **Trust (0.18.0):** a write carrying a `trust=<tier>` tag lower than the
+memory it matched — or explicitly `trust=untrusted` — never merges into, revives, supersedes
+or corrects that memory; it is stored as its own engram and the result carries `trustBlocked`
+(`src/core/trust.ts`). Untagged writes and memories are unaffected.
 
 **Cognition recipes (D14):** AWM contains no LLM — `src/recipes/` ships versioned prompt+contract
 pairs (`skill-derivation@1`, `friction-lesson@1`) the HOST agent runs as a separate focused pass;
@@ -791,7 +808,7 @@ Default half-life: 7 days
 | writer_session | TEXT | Session id that wrote this engram (D5) |
 | recipe_id | TEXT | Cognition recipe that produced it, e.g. `skill-derivation@1` (D14) |
 | valid_from | TEXT | Bi-temporal validity start (D8) |
-| valid_to | TEXT | Bi-temporal validity end — shown as `[valid until …]` in recall (D8) |
+| valid_to | TEXT | Bi-temporal validity end — shown as `[valid until …]` in recall; past it, the memory is down-ranked like a superseded one and shown as `⚠ EXPIRED` (D8, enforced since 0.18.0) |
 
 ### associations
 | Column | Type | Notes |

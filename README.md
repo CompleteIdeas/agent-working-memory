@@ -181,10 +181,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.17.0
+## What's new — v0.18.0
 
 | | |
 |---|---|
+| **0.18.0** | A superseded memory could **outrank its successor** whenever `AWM_RERANK2=1` — the setting `awm setup` writes everywhere — because the second-stage re-sort ignored the supersession penalty; fixed, with the test run reranker-on. `valid_to` now actually expires (it was display-only; the live store served 482 expired memories as current). Every recall line carries its **written date**, two versions of one fact are **marked as a possible conflict** with the newer one named, recall **confidence** is printed on every reply, and when the question asks for a time, date, amount, count or status that no returned memory holds, the reply says so instead of leaving the gap. `memory_write` takes **`correction: true`** to supersede by intent without the old id. The three measured rerank wins are **code defaults** (`=0` / `=prefix` to disable). A less-trusted write (`trust=` tag) **never merges into or retires a more-trusted memory**. Also: the model-memory fixes (ONNX arena bound, optional shared model daemon), the prime hook recalls with the prompt's question rather than its paste, and seven lifecycle fixes (PR #7). |
 | **0.17.0** | `AWM_FEEDBACK_NAMES` shipped a **list of 22 real first names** as its built-in default — one deployment's staff list, published in every npm tarball because `src/` is in `files`. It now ships empty, which turns user-feedback auto-promotion off until an operator configures it; **breaking if you relied on the built-in list**, and the migration is one env var. Separately, `memory_write`'s `supersedes` argument was silently discarded whenever reinforce-on-duplicate fired — which is every correction, since a correction restates what it corrects and therefore matches on concept. The engram you asked to retire stayed live, with your correction merged into it. Re-run `awm setup` for the corrected guidance |
 | **0.16.1** | A tokenizer option the reranker had been passing since 0.5.2 turned out never to have existed in transformers.js — silently ignored for six months, and the library default was what the code wanted anyway, so no ranking behavior changes. Found by a dependency sweep that also clears every advisory in the published tree: an install of 0.16.0 audits at 7 (3 high), this one at **0**. Accuracy reproduced identically across two transformers majors, token spend to the token |
 | **0.16.0** | Two recall defaults changed, each after being measured for the first time. A pseudo-relevance feedback pass that ran on **every** query is now opt-in — it cost 7% of every recall and bought nothing measurable across 950 probes. A reranker shortcut that had never once fired on any store benchmarked here is deleted; forced on, it cost success@1 93.0% → 91.7%. Identifier recall is now **93.0%** success@1 / **97.0%** success@5. Re-run `awm setup` for the corrected agent guidance |
@@ -309,7 +310,7 @@ npm run test:linux      # build + full suite on Linux
 
 ## Status
 
-Active development, v0.17.0. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.18.0. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

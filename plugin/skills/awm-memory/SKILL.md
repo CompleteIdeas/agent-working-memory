@@ -10,7 +10,7 @@ description: >-
 
 # Agent Working Memory
 
-Generated from `src/adapters/common.ts` (AWM v0.17.0) — the same guidance
+Generated from `src/adapters/common.ts` (AWM v0.18.0) — the same guidance
 `awm setup` writes into CLAUDE.md. Do not edit here; edit the source and re-run
 `npm run build:plugin`.
 
@@ -157,7 +157,8 @@ people/things you refer to by name often); not yet the default pending evaluatio
 `memory_write` accepts `valid_from` / `valid_to` (ISO dates). Use `valid_to` on
 **operational** facts with a real shelf life — a deploy state, "waiting on X's reply",
 a ticket status — so the memory expires instead of relying on you to remember it's
-stale. Recall renders `[valid until …]` on results carrying this field. Use
+stale. Recall renders `[valid until …]` while the window holds; once it has passed
+the memory is down-ranked like a superseded one and labelled `⚠ EXPIRED`. Use
 `valid_from` for a fact that becomes true on a known future date (a policy change, a
 season that hasn't started yet). Don't set either for durable facts — most memories
 don't need them.
@@ -285,6 +286,14 @@ the cost/quality tradeoff. Use them when the default doesn't match what you need
 ### Keep memory fresh
 - After recalling a memory, if you observe the real state is different → call
   `memory_supersede` immediately with the corrected version.
+- When a fact has CHANGED (a time, a price, a status, a decision) and you don't have the
+  old memory's id: `memory_write` with `correction: true`. AWM supersedes the closest
+  memory about the same thing and tells you which. Written as a plain observation, a
+  changed value merges into or ranks below the stale version — that is how "departs 8:40"
+  lost to "departs 10:15" in the MWA assessment.
+- A recall line that says `⚠ POSSIBLE CONFLICT`, `⚠ EXPIRED` or `⚠ SUPERSEDED` is
+  telling you not to state that value from memory: read the source, then supersede or
+  correct the stale one.
 - After using a recalled memory: call `memory_feedback` (useful/not-useful) **with the
   `recall_id`** printed at the end of the recall output (`[recall_id: …]`). That id
   joins the feedback to the recall that produced it, which is what lets AWM learn
