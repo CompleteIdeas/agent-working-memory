@@ -56,6 +56,15 @@ import { buildRetrievalText } from './retrieval-text.js';
 /** Confidence floor below which a matched engram is treated as "decaying out". */
 export const HEALTHY_CONFIDENCE_FLOOR = 0.3;
 
+/**
+ * Lowest novelty match score at which `correction: true` may supersede the
+ * match without an id. matchScore is the stronger of BM25 and cosine
+ * similarity (0–1). A paraphrased correction of one fact scores well above
+ * this (the probe's flight correction: 0.95); two unrelated memories about
+ * the same subject do not.
+ */
+const CORRECTION_MIN_MATCH = 0.6;
+
 /** Confidence delta applied on reinforcement. Bounded by REINFORCE_CONFIDENCE_CEIL. */
 export const REINFORCE_CONFIDENCE_DELTA = 0.05;
 export const REINFORCE_CONFIDENCE_CEIL = 0.95;
@@ -108,6 +117,16 @@ export interface WriteInput {
   confidence?: number;
   /** Explicit supersession requested by caller (independent of correction-on-match). */
   supersedes?: string;
+  /**
+   * This write corrects an existing memory whose id the caller does not have
+   * (2026-10-19). The closest active memory about the same thing — the same
+   * concept, else the novelty match when it is close enough — is superseded,
+   * the correction goes active at no less than that memory's confidence, and
+   * the result says what was replaced (`correctionOf`). Never reinforce-merges.
+   * With nothing close enough, the write is stored as new and `correctionOf`
+   * is null. An explicit `supersedes` outranks this.
+   */
+  correction?: boolean;
   /** Workspace scope for cross-agent novelty (v0.5.4+ stores only). */
   workspace?: string | null;
   /** Set to false to skip the reinforce/supersede branching and always create. */
@@ -151,6 +170,11 @@ export interface WriteResult {
   };
   /** Supersession detail — present only for action='supersede'. */
   supersedeOf?: { id: string };
+  /**
+   * Set when the write asked `correction: true`: the memory it replaced, or
+   * null when nothing close enough existed and the write was stored as new.
+   */
+  correctionOf?: { id: string; concept: string; matchScore: number } | null;
 }
 
 export interface WritePipelineEngines {
@@ -197,7 +221,10 @@ export async function performWrite(
   // which supersedes `matched.id` rather than the id the caller actually asked for.
   const enableReinforcement = input.enableReinforcement !== false
     && process.env.AWM_WRITE_PIPELINE !== 'off'
-    && !input.supersedes;
+    && !input.supersedes
+    // A correction must never reinforce-merge: merging is exactly how a changed
+    // value ended up inside the stale memory with a "--- reinforced ---" marker.
+    && !input.correction;
 
   // Profiling: AWM_PROFILE_WRITE=1 logs ms-per-phase to stderr (v0.8.2).
   // Off by default; zero cost when unset.
@@ -339,6 +366,45 @@ export async function performWrite(
     }
   }
 
+  // -- Correction by intent, not by id (2026-10-19) --
+  // The MWA evaluation probe wrote "now departs 8:40" as an ordinary observation
+  // under a new concept: novelty 0.10, so it was stored at confidence 0.25 and
+  // ranked BELOW the stale "10:15". The writer knew it was a correction; it did
+  // not know the old id, and the only in-band way to say so (eventType surprise
+  // on the SAME concept, R3 above) is undocumented and needs the exact concept.
+  // `correction: true` names the intent. The target is the novelty match — the
+  // closest memory in content — when it is close enough to be the same fact;
+  // a superseded match is followed to its superseder. Below the floor nothing
+  // is replaced and the caller is told, because superseding a stranger would
+  // retire a true fact.
+  let correctionOf: WriteResult['correctionOf'];
+  if (!result && input.correction && !input.supersedes) {
+    correctionOf = null;
+    let target: Engram | null = noveltyResult.matchedEngramId
+      ? await store.getEngram(noveltyResult.matchedEngramId)
+      : null;
+    if (target?.supersededBy) target = await store.getEngram(target.supersededBy);
+    const closeEnough = noveltyResult.matchScore >= CORRECTION_MIN_MATCH;
+    if (target && closeEnough && target.agentId === input.agentId
+        && !target.retracted && target.stage !== 'archived' && !target.supersededBy) {
+      const correctionSalience: SalienceResult = {
+        ...salience,
+        disposition: 'active' as const,
+        reasonCodes: [...salience.reasonCodes, 'correction:override-active'],
+      };
+      result = await createNewEngram(engines, {
+        ...input,
+        // The replacement must not stand weaker than what it replaces.
+        confidence: Math.max(input.confidence ?? 0, target.confidence),
+      }, correctionSalience, noveltyResult, {
+        effectiveEventType,
+        effectiveMemoryClass,
+        supersedesId: target.id,
+      }, prewriteEmbedding);
+      correctionOf = { id: target.id, concept: target.concept, matchScore: noveltyResult.matchScore };
+    }
+  }
+
   // -- Default: create new engram (if no reinforce/supersede branch fired) --
   if (!result) {
     // A correction of a near-duplicate has low novelty BY CONSTRUCTION: the replacement
@@ -362,6 +428,8 @@ export async function performWrite(
       supersedesId: input.supersedes,
     }, prewriteEmbedding);
   }
+  // A correction always reports what it did, including "nothing" (null).
+  if (input.correction && !input.supersedes && result) result.correctionOf = correctionOf ?? null;
   } catch (e) {
     const es = `${(e as { code?: unknown })?.code ?? ''} ${(e as Error)?.message ?? ''}`;
     busyHit = /busy/i.test(es);

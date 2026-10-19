@@ -52,6 +52,22 @@ changes, all over the returned set only, so the cost is a few string comparisons
 - `[confidence: 0.641]` on every reply. It was printed only on abstention, so a caller
   could not tell a clear winner from a toss-up.
 
+### `memory_write` takes `correction: true` — supersede by intent, without the old id
+
+The probe's correction ("now departs 8:40") was written as an ordinary observation under a
+new concept: novelty 0.10, so it was stored at confidence 0.25 and ranked below the stale
+"10:15". The writer knew it was a correction; it did not know the id, and the only
+in-band way to say so (`event_type: surprise` on the SAME concept) was undocumented and
+needs the exact concept. `correction: true` names the intent: the closest active memory
+in content (the novelty match, when its score is ≥ 0.6; a superseded match is followed to
+its superseder; never another agent's) is superseded, the correction goes active at no
+less than that memory's confidence, and the reply says what it replaced. Below the floor
+nothing is replaced and the reply says so, because superseding a stranger would retire a
+true fact. A correction never reinforce-merges — merging is how a changed value ended up
+inside the stale memory behind a "--- reinforced ---" marker. The HTTP write route takes
+the same field. The setup guidance tells agents to use it when a value changes, and what
+the `⚠ POSSIBLE CONFLICT` / `⚠ EXPIRED` / `⚠ SUPERSEDED` marks ask of them.
+
 ### The MCP process no longer grows to 2–4 GB
 
 Six Claude Code sessions were holding 13.2 GB of AWM processes (2026-10-16), each

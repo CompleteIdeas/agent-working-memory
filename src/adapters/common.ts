@@ -697,6 +697,14 @@ the cost/quality tradeoff. Use them when the default doesn't match what you need
 ### Keep memory fresh
 - After recalling a memory, if you observe the real state is different → call
   \`memory_supersede\` immediately with the corrected version.
+- When a fact has CHANGED (a time, a price, a status, a decision) and you don't have the
+  old memory's id: \`memory_write\` with \`correction: true\`. AWM supersedes the closest
+  memory about the same thing and tells you which. Written as a plain observation, a
+  changed value merges into or ranks below the stale version — that is how "departs 8:40"
+  lost to "departs 10:15" in the MWA assessment.
+- A recall line that says \`⚠ POSSIBLE CONFLICT\`, \`⚠ EXPIRED\` or \`⚠ SUPERSEDED\` is
+  telling you not to state that value from memory: read the source, then supersede or
+  correct the stale one.
 - After using a recalled memory: call \`memory_feedback\` (useful/not-useful) **with the
   \`recall_id\`** printed at the end of the recall output (\`[recall_id: …]\`). That id
   joins the feedback to the recall that produced it, which is what lets AWM learn
