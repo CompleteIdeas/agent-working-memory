@@ -58,14 +58,20 @@ export interface RerankScored {
  * carries decay, so it knows which is newest; replacing it outright threw
  * that away exactly where the cross-encoder has nothing to say.
  *
- * So the window is sorted by reranker score, and only when two scores are
- * within `AWM_RERANK2_TIE_EPS` (default 0.03) does the blended score decide
- * between them. Outside the epsilon the cross-encoder still wins, which is
- * where its measured +8pp lives.
+ * The first fix tried was a score epsilon: within `AWM_RERANK2_TIE_EPS` the
+ * blended score decides. MEASURED at 0.03 on the private snapshot (2026-10-19):
+ * identifier s@1 93.0% -> 78.7%, topic 92.2% -> 84.4%. The cross-encoder's
+ * scores saturate near 1.0 for the top candidates, so hundredths separate most
+ * top-2 pairs and are informative there; the blend loses to it 77% of the time
+ * on disagreements. So the epsilon DEFAULTS TO 0 (off) and exists only for
+ * experiments. The recency rule lives where it belongs instead: among results
+ * the conflict detector marks as two versions of one fact, the newest goes
+ * first (conflicts.ts `newestFirstAmongConflicts`, applied in activation.ts).
+ * That cannot touch a suite whose golds are single facts.
  */
 export function rerank2TieEpsilon(): number {
-  const v = Number(process.env.AWM_RERANK2_TIE_EPS ?? 0.03);
-  return Number.isFinite(v) && v >= 0 ? v : 0.03;
+  const v = Number(process.env.AWM_RERANK2_TIE_EPS ?? 0);
+  return Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
 /**
@@ -112,7 +118,7 @@ export function reorderByReranker<T extends RerankScored>(ranked: T[], k: number
   const eps = rerank2TieEpsilon();
   const sorted = head.slice().sort((a, b) => {
     const d = rerankSortKey(b) - rerankSortKey(a);
-    if (Math.abs(d) < eps) return (b.score ?? 0) - (a.score ?? 0);  // near-tie: the blend decides
+    if (eps > 0 && Math.abs(d) < eps) return (b.score ?? 0) - (a.score ?? 0);  // experiment only; see above
     return d;
   });
   return sorted.concat(ranked.slice(window));

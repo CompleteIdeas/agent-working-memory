@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { valueSlots, disagreement, related, detectConflicts, newestConflicting } from '../../src/core/conflicts.js';
+import { valueSlots, disagreement, related, detectConflicts, newestConflicting, newestFirstAmongConflicts } from '../../src/core/conflicts.js';
 
 const NOW = Date.parse('2026-10-19T12:00:00Z');
 let n = 0;
@@ -170,6 +170,21 @@ describe('detectConflicts — labelled pairs', () => {
     // Indices 8, 9, 10 are the twins; 7 is the same-month pair, which must NOT be flagged.
     // Anything else flagged is a regression.
     expect(flagged).toEqual([8, 9, 10]);
+  });
+
+  it('newestFirstAmongConflicts puts the newest version first and leaves unmarked results in place', () => {
+    const oct = mem('Book club pick', 'In October the book club chose a fantasy novel.', { daysAgo: 150 });
+    const dec = mem('Book club pick', 'In December the book club chose science fiction.', { daysAgo: 90 });
+    const mar = mem('Book club pick', 'In March the book club chose a mystery.', { daysAgo: 5 });
+    const gym = mem('Gym membership renewal', 'Gym membership auto-renews on Nov 20 at $49/month.', { daysAgo: 1 });
+    // The order the cross-encoder gave MWA: December, October, March — newest last.
+    const results = [dec, oct, gym, mar];
+    const marks = detectConflicts(results, NOW);
+    const out = newestFirstAmongConflicts(results, marks);
+    expect(out.map(r => r.engram.id)).toEqual([mar.engram.id, dec.engram.id, oct.engram.id, gym.engram.id]);
+    // Unrelated to the triple: gym keeps its relative place among the unmarked.
+    expect(newestFirstAmongConflicts([gym, oct], detectConflicts([gym, oct], NOW)).map(r => r.engram.id))
+      .toEqual([gym.engram.id, oct.engram.id]);
   });
 
   it('marks every member of the book-club triple and names the newest', () => {

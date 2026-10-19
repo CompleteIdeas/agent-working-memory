@@ -4,17 +4,26 @@
 
 Both found by MWA within hours of moving to the 0.18 defaults, with a repro.
 
-### rerank2 no longer throws away recency on near-equal scores
+### Two versions of one fact come back newest first
 
 Three same-topic facts written in October, December and March ("the book club chose a
 fantasy novel / science fiction / a mystery") score within a few hundredths of each other
 for "what did the book club most recently choose", and with `AWM_RERANK2` on the newest came
-**last**: the second stage sorted by reranker score alone, and the cross-encoder judges
-relevance to the query and nothing else. The blend it replaced carries decay, so it knew
-which was newest. Now the window is still sorted by reranker score, but when two scores are
-within `AWM_RERANK2_TIE_EPS` (default 0.03) the blended score decides between them. Outside
-the epsilon the cross-encoder still wins, which is where its measured gain lives; `0`
-restores the 0.18.0 behaviour (`src/core/rerank2.ts`).
+**last**: the second stage sorts by reranker score alone, and the cross-encoder judges
+relevance to the query and nothing else.
+
+The first fix tried was a score epsilon — within `AWM_RERANK2_TIE_EPS` the blended score,
+which carries decay, decides. **Measured at 0.03: identifier s@1 93.0% → 78.7%, topic 92.2%
+→ 84.4%.** The cross-encoder's scores saturate near 1.0 for the top candidates, so
+hundredths separate most top-2 pairs and are informative there, and the blend is the wrong
+judge (it loses to the cross-encoder 77% of the time on disagreements). The epsilon now
+defaults to **0** and exists only for experiments.
+
+Recency is applied where it belongs instead: among results the conflict detector has
+already marked as two versions of one fact, the newest moves ahead of the older ones
+(`newestFirstAmongConflicts` in `src/core/conflicts.ts`, applied in `activation.ts` after the
+marks). Unmarked results keep their rank, so a suite whose golds are single facts is
+untouched; the benchmark below confirms it.
 
 ### "In October" is a date
 

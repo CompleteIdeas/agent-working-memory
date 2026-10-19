@@ -60,7 +60,7 @@ import type {
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 import { validityState } from '../core/validity.js';
-import { detectConflicts } from '../core/conflicts.js';
+import { detectConflicts, newestFirstAmongConflicts } from '../core/conflicts.js';
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
@@ -1321,6 +1321,13 @@ export class ActivationEngine {
     if (results.length > 1) {
       const marks = detectConflicts(results, validityNow);
       results.forEach((r, i) => { if (marks[i].length > 0) r.conflictsWith = marks[i]; });
+      // 0.18.1: among two versions of one fact, the newest goes first. Only
+      // marked results move; see conflicts.ts for why this replaced a score
+      // epsilon in rerank2 (measured -14pp identifier s@1).
+      if (marks.some(mk => mk.length > 0)) {
+        const ordered = newestFirstAmongConflicts(results, marks);
+        results.splice(0, results.length, ...ordered);
+      }
     }
 
     const activatedIds = results.map(r => r.engram.id);

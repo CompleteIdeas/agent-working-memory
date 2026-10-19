@@ -228,6 +228,41 @@ export function detectConflicts(results: ConflictCandidate[], now: number = Date
   return marks;
 }
 
+/**
+ * Newest first among results that are two versions of one fact (0.18.1).
+ *
+ * MWA's case: "In October the club chose fantasy / December science fiction /
+ * March a mystery" for "what did the club most recently choose". The
+ * cross-encoder cannot tell them apart, and a sort by its score put the newest
+ * last. A score-epsilon fallback to the blend was measured at -14pp identifier
+ * s@1 (rerank2.ts), so recency is applied only where the detector has already
+ * said the results disagree on a value: a result is moved ahead of an earlier
+ * result it conflicts with and is newer than. Results with no mark keep their
+ * rank, so a suite whose golds are single facts is untouched. `marks` is
+ * parallel to `results` (from `detectConflicts`); the returned array is new and
+ * its marks still describe the same ids.
+ */
+export function newestFirstAmongConflicts<T extends ConflictCandidate>(results: T[], marks: ConflictMark[][]): T[] {
+  const out = results.slice();
+  const m = marks.slice();
+  for (let guard = 0; guard < out.length * out.length; guard++) {
+    let moved = false;
+    for (let j = 1; j < out.length && !moved; j++) {
+      for (let i = 0; i < j; i++) {
+        const mk = m[j].find(x => x.id === out[i].engram.id);
+        if (mk && mk.newer) {
+          const [r] = out.splice(j, 1); const [mm] = m.splice(j, 1);
+          out.splice(i, 0, r); m.splice(i, 0, mm);
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  return out;
+}
+
 /** The id of the most recently written memory among those carrying a mark, or null. */
 export function newestConflicting(results: ConflictCandidate[], marks: ConflictMark[][]): string | null {
   let best: string | null = null, bestMs = -Infinity;
