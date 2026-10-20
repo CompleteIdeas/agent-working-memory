@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the learning loop runs on what the agent does, and a session can keep its own notes
+## 0.20.0 (2026-10-20) — the learning loop runs on what the agent does, and a session can keep its own notes
 
 The two engineering items from the 2026-10-20 end-to-end evaluation. **Existing installs
 must re-run `awm setup --global`** (or update the plugin) to get the new Stop hook; nothing
