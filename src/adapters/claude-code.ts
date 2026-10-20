@@ -184,15 +184,12 @@ const adapter: CLIAdapter = {
     writeFileSync(join(hooksDir, 'awm-hooks.json'), JSON.stringify(record, null, 2) + '\n');
     const script = (file: string) => `node "${join(hooksDir, file).replace(/\\/g, '/')}"`;
 
-    // Stop — remind Claude to write/recall/switch tasks
+    // Stop — implicit feedback (0.20): the turn's reply credits the recalls it
+    // drew on, via the sidecar; the script also prints the write/recall
+    // reminder the Stop hook has always printed.
     setHookGroup(settings, 'Stop', {
       matcher: '',
-      hooks: [{
-        type: 'command',
-        command: 'echo "MEMORY: (1) Did you learn anything new? Call memory_write. (2) Are you about to work on a topic you might have prior knowledge about? Call memory_recall. (3) Switching tasks? Call memory_task_begin."',
-        timeout: 5,
-        async: true,
-      }],
+      hooks: [{ type: 'command', command: script('awm-used.cjs'), timeout: 6, async: true }],
     });
 
     // PreCompact — auto-checkpoint before context compaction

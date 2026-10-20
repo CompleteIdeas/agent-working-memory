@@ -294,6 +294,21 @@ the cost/quality tradeoff. Use them when the default doesn't match what you need
 - A recall line that says `⚠ POSSIBLE CONFLICT`, `⚠ EXPIRED` or `⚠ SUPERSEDED` is
   telling you not to state that value from memory: read the source, then supersede or
   correct the stale one.
+- Feedback is now mostly implicit (0.20): when a write, a supersede, a task summary or your
+  reply carries a recalled memory's identifiers, that recall is credited without a call.
+  `memory_feedback` still works and is the only way to say a recall was NOT useful.
+
+### Session notes (0.20) — the short-term gap
+A long session loses details to compaction, and durable memory was the wrong place for
+them: the salience gate scores novelty against the whole store, so "the port is 4100",
+"step 3 done" or an intermediate result came back as `discard`. Write those with
+`memory_write(..., scope: "session")`: always kept, never merged into a durable memory,
+tagged with this session, expired after `AWM_SESSION_TTL_DAYS` (7). Get them back with
+`memory_recall(..., scope: "session")` (this session only) or `session_first: true` (this
+session's memories ahead of older ones); the prime hook already prefers them after a
+compaction, and `memory_restore` returns THIS session's checkpoint rather than whichever
+parallel session saved last. Durable facts still go through a plain `memory_write`; at the
+end of a task, re-write the session notes worth keeping without `scope`.
 - After using a recalled memory: call `memory_feedback` (useful/not-useful) **with the
   `recall_id`** printed at the end of the recall output (`[recall_id: …]`). That id
   joins the feedback to the recall that produced it, which is what lets AWM learn

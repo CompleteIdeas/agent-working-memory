@@ -88,6 +88,7 @@ import { getExpander } from './core/query-expander.js';
 import { warmModelDaemon } from './core/ml-worker.js';
 import { isModelDaemonEnabled } from './core/model-daemon.js';
 import { startSidecar } from './hooks/sidecar.js';
+import { randomUUID as mintSessionId } from 'node:crypto';
 import { initLogger, log, getLogPath } from './core/logger.js';
 import { VERSION } from './version.js';
 import { buildPack, INTERVIEW_QUESTIONS } from './onboard/index.js';
@@ -129,6 +130,15 @@ const DB_PATH = process.env.AWM_DB_PATH ?? (BACKEND === 'pglite' ? 'memory-pglit
 // hooks always name the same pool for a given directory).
 const deriveAgentFromDir = () => deriveAgentFromDirShared(process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
 const AGENT_ID = process.env.AWM_AGENT_ID ?? process.env.WORKER_NAME ?? deriveAgentFromDir();
+// Session identity (0.20). One MCP process serves one Claude Code session, so
+// the process IS the session: writes carry it as writer_session, session-scoped
+// recall and per-session checkpoints key on it. Claude Code's own session id
+// arrives with the first hook call and is adopted then (unless AWM_SESSION_ID
+// pins one), so hook-saved and tool-saved checkpoints meet under one key.
+let SESSION_ID: string = process.env.AWM_SESSION_ID ?? mintSessionId();
+const SESSION_PINNED = !!process.env.AWM_SESSION_ID;
+/** TTL for session notes; AWM_SESSION_TTL_DAYS, default 7. */
+const SESSION_TTL_MS = Math.max(1, Number(process.env.AWM_SESSION_TTL_DAYS ?? 7)) * 86_400_000;
 const HOOK_PORT = parseInt(process.env.AWM_HOOK_PORT ?? '8401', 10);
 // 0.14.2: ports to try upward from HOOK_PORT when it is busy (see sidecar.ts).
 const HOOK_PORT_RANGE = Math.max(1, parseInt(process.env.AWM_HOOK_PORT_RANGE ?? '10', 10) || 10);
@@ -278,6 +288,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('ID of an older memory this one replaces. The old memory is down-ranked, not deleted.'),
     correction: z.boolean().optional()
       .describe('This write corrects a fact AWM already holds and you do not have its id. AWM supersedes the closest active memory about the same thing, stores the correction active at no less than that memory\'s confidence, and says what it replaced. Use it whenever a value changed (a time, a price, a status, a decision); written as a plain observation, a changed fact merges into or ranks below the stale version. If nothing close enough exists the write is stored as new and the reply says so. An explicit supersedes outranks this.'),
+    scope: z.enum(['session']).optional()
+      .describe('"session": a working note for THIS session — an intermediate result, a value you just found, what step you are on. Always kept (the salience gate is bypassed), never merged into a durable memory, tagged with this session, and it expires after AWM_SESSION_TTL_DAYS (7). Recall it with memory_recall scope: "session" or session_first: true; the prime hook already prefers this session\'s notes after a compaction. Write durable facts without scope so they stay.'),
     // --- Agent-provided metadata (stored as searchable tags) ---
     project: z.string().optional()
       .describe('Project context (e.g., "EquiHub", "AWM"). Becomes a searchable tag.'),
@@ -308,7 +320,10 @@ The concept should be a short label (3-8 words). The content should be the full 
     if (params.topic) metaTags.push(`topic=${params.topic}`);
     if (params.source) metaTags.push(`src=${params.source}`);
     if (params.confidence_level) metaTags.push(`conf=${params.confidence_level}`);
-    if (params.session_id) metaTags.push(`sid=${params.session_id}`);
+    // 0.20: every write carries its session; a session note says so in a tag too.
+    const writerSession = params.session_id ?? SESSION_ID;
+    metaTags.push(`sid=${writerSession}`);
+    if (params.scope === 'session') metaTags.push('scope=session');
     if (params.intent) metaTags.push(`intent=${params.intent}`);
 
     // D14 (2026-07-30): recipe write-backs are contract-checked. Provenance
@@ -354,12 +369,14 @@ The concept should be a short label (3-8 words). The content should be the full 
       intent: params.intent,
       causalDepth: params.causal_depth,
       resolutionEffort: params.resolution_effort,
-      memoryClass: params.memory_class,
+      memoryClass: params.scope === 'session' ? 'ephemeral' : params.memory_class,
       memoryType,
+      scope: params.scope,
+      ttl: params.scope === 'session' ? SESSION_TTL_MS : undefined,
       supersedes: params.supersedes,
       correction: params.correction,
       originClass: params.origin_class,
-      writerSession: params.session_id,
+      writerSession,
       recipeId: params.recipe_id,
       validFrom: params.valid_from,
       validTo: params.valid_to,
@@ -367,6 +384,8 @@ The concept should be a short label (3-8 words). The content should be the full 
 
     // Auto-checkpoint — covers create/reinforce/supersede uniformly
     try { await store.updateAutoCheckpointWrite(AGENT_ID, result.engram.id); } catch { /* non-fatal */ }
+    // Implicit feedback (0.20): a write that carries a recalled memory's identifiers credits that recall.
+    void activationEngine.noteImplicitUse(`${params.concept} ${params.content}`, 'write');
 
     if (result.action === 'reinforce') {
       log(AGENT_ID, 'write:reinforce', `"${params.concept}" → reinforced "${result.engram.concept}" (conf ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)}, novelty=${result.noveltyResult.novelty.toFixed(2)})`);
@@ -450,6 +469,8 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     workspace: z.string().optional().describe('Search across all agents in this workspace (hive mode). Omit for agent-scoped recall only.'),
     require_confidence: z.number().optional().default(0.05).describe('Abstain (return nothing) when recall confidence is below this threshold. Defaults to 0.05 — a LIGHT filter, chosen from measurement: it halves the rate of answering off-topic queries at zero cost to hit rate. Raise it only for push-style use where nobody asked (the prime hook uses 0.10 — it was 0.25 until 0.14.6, when 0.25 was measured silencing prompts with a clear winner). Do NOT raise it for ordinary recall: a miss is expensive, because the agent then reads the codebase instead (~2,106 tokens), so aggressive thresholds measurably destroy value — 0.20+ cut net tokens saved by 25% in tests/abstention-eval. Pass 0 to disable. NOTE: this is NOT min_score — it gates on the SHAPE of the score distribution across the whole result set, not per-result relevance, so memories that pass min_score can still be withheld. When that happens the reply says RECALL ABSTAINED and reports how many were withheld; an empty result is only absence when it does not.'),
     granularity: z.enum(['full', 'compact', 'auto']).optional().describe('Output granularity (Paper 3: cognitive teaming). "full" (default): no change. "compact": every result carries a short summary field. "auto": confidence-adaptive — top result gets a longer summary when there is a clear winner, otherwise everything is compact for scanning.'),
+    scope: z.enum(['session', 'all']).optional().describe('"session": only memories written by THIS session (the working notes written with scope: "session", and anything else this session wrote). Default "all".'),
+    session_first: z.boolean().optional().describe('Put this session\'s own memories ahead of older ones within the returned results. Membership and scores are unchanged. Use after a compaction, or when the question is about what you were just doing.'),
     max_tokens: z.number().optional().describe('Token budget for the response. `limit` is a COUNT and is token-blind — 5 results may cost 400 tokens or 4,000. Use this when context is tight: results are packed by value-per-token until the budget is reached, the top-scored match always gets first refusal, and the reply reports what it cost and what was withheld. Omit for no budget (everything is returned, still with accounting).'),
   },
   async (params) => {
@@ -479,6 +500,8 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       workspace,
       requireConfidence: params.require_confidence,
       granularity: params.granularity,
+      sessionId: SESSION_ID,
+      sessionScope: params.scope === 'session' ? 'only' : params.session_first ? 'first' : undefined,
       onAbstain: (info) => { abstained = info; },
     });
 
@@ -677,6 +700,8 @@ The old memory stays in the database (searchable for history) but is heavily dow
   },
   async (params) => {
     const oldEngram = await store.getEngram(params.old_engram_id);
+    // Implicit feedback (0.20): superseding a recalled memory is the strongest sign it was used.
+    void activationEngine.noteImplicitUse(params.old_engram_id, 'supersede');
     if (!oldEngram) {
       return { content: [{ type: 'text' as const, text: `Old memory not found: ${params.old_engram_id}` }] };
     }
@@ -801,6 +826,8 @@ Also call periodically during long sessions to avoid losing state. The state is 
     };
 
     await store.saveCheckpoint(AGENT_ID, state);
+    // 0.20: also under this session's key, so a parallel session cannot overwrite it.
+    try { store.saveSessionCheckpoint(AGENT_ID, SESSION_ID, state); } catch { /* non-fatal */ }
     log(AGENT_ID, 'checkpoint', `"${params.current_task}" decisions=${params.decisions.length} files=${params.active_files.length}`);
 
     return {
@@ -826,6 +853,15 @@ Use this at the start of every session or after compaction to pick up where you 
   {},
   async () => {
     const checkpoint = await store.getCheckpoint(AGENT_ID);
+    // 0.20: this session's own checkpoint wins over the agent-level slot, which
+    // every parallel session overwrites (on 2026-10-18 a restore here returned
+    // another session's end-of-day state).
+    let sessionCheckpoint: { state: ConsciousState; checkpointAt: Date } | null = null;
+    try { sessionCheckpoint = await store.getSessionCheckpoint(AGENT_ID, SESSION_ID); } catch { /* non-fatal */ }
+    if (checkpoint && sessionCheckpoint) {
+      checkpoint.executionState = sessionCheckpoint.state;
+      checkpoint.checkpointAt = sessionCheckpoint.checkpointAt;
+    }
 
     // Cold-store nudge: an empty store means the agent has nothing to recall — offer to warm-start.
     let coldStoreNudge = '';
@@ -1273,6 +1309,8 @@ This captures what was accomplished so future sessions can recall it.`,
       .describe('IDs of older memories this task summary replaces (marks them as superseded)'),
   },
   async (params) => {
+    // Implicit feedback (0.20): a task summary that names what a recall returned credits that recall.
+    void activationEngine.noteImplicitUse(params.summary, 'task_end');
     // 1. Write summary as a memory
     const salience = evaluateSalience({
       content: params.summary,
@@ -1418,6 +1456,9 @@ async function main() {
     // warm-latency recall without any standing server. Trimmed result shape
     // (no embeddings/phase scores — hooks don't need them and the vectors
     // alone would 10x the payload).
+    // 0.20: adopt Claude Code's session id from the first hook that carries one.
+    onSession: (id) => { if (!SESSION_PINNED && id && SESSION_ID !== id) SESSION_ID = id; },
+    sessionId: () => SESSION_ID,
     activate: async (q) => {
       const results = await activationEngine.activate({
         agentId: AGENT_ID,
@@ -1425,6 +1466,8 @@ async function main() {
         limit: q.limit,
         requireConfidence: q.requireConfidence,
         granularity: q.granularity,
+        sessionId: SESSION_ID,
+        sessionScope: q.sessionFirst ? 'first' : undefined,
       });
       return results.map(r => ({
         engram: {
@@ -1445,6 +1488,8 @@ async function main() {
         conflictsWith: r.conflictsWith,
       }));
     },
+    // Implicit feedback (0.20): the Stop hook posts the turn's reply and tool calls.
+    noteUse: (text, source) => activationEngine.noteImplicitUse(text, source),
     onConsolidate: async (agentId, reason) => {
       console.error(`[mcp] consolidation triggered: ${reason}`);
       const result = await consolidationEngine.consolidate(agentId);

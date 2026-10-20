@@ -396,6 +396,14 @@ export class EngramStore {
 
     // Migration: add conscious_state table for checkpointing
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS session_checkpoints (
+        agent_id TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        execution_state TEXT NOT NULL,
+        checkpoint_at TEXT NOT NULL,
+        PRIMARY KEY (agent_id, session_id)
+      );
+
       CREATE TABLE IF NOT EXISTS conscious_state (
         agent_id TEXT PRIMARY KEY,
         last_write_id TEXT,
@@ -1377,6 +1385,40 @@ export class EngramStore {
   }
 
   // --- Staging buffer ---
+
+  /**
+   * Active ephemeral notes past their TTL (0.20 session scope). Until now only
+   * staged rows carried a TTL anyone read; `memory_class = ephemeral` was a
+   * reason code and nothing else.
+   */
+  getExpiredEphemeral(): Engram[] {
+    const now = Date.now();
+    const rows = this.db.prepare(`
+      SELECT * FROM engrams WHERE stage = 'active' AND memory_class = 'ephemeral' AND ttl IS NOT NULL AND retracted = 0
+    `).all() as any[];
+    return rows
+      .map(r => this.rowToEngram(r))
+      .filter(e => e.ttl && (e.createdAt.getTime() + e.ttl) < now);
+  }
+
+  /** Per-session execution state (0.20): one row per (agent, session), beside the agent-level slot. */
+  saveSessionCheckpoint(agentId: string, sessionId: string, state: ConsciousState): void {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO session_checkpoints (agent_id, session_id, execution_state, checkpoint_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(agent_id, session_id) DO UPDATE SET
+        execution_state = excluded.execution_state,
+        checkpoint_at = excluded.checkpoint_at
+    `).run(agentId, sessionId, JSON.stringify(state), now);
+  }
+
+  getSessionCheckpoint(agentId: string, sessionId: string): { state: ConsciousState; checkpointAt: Date } | null {
+    const row = this.db.prepare('SELECT execution_state, checkpoint_at FROM session_checkpoints WHERE agent_id = ? AND session_id = ?')
+      .get(agentId, sessionId) as { execution_state: string; checkpoint_at: string } | undefined;
+    if (!row) return null;
+    try { return { state: JSON.parse(row.execution_state), checkpointAt: new Date(row.checkpoint_at) }; } catch { return null; }
+  }
 
   getExpiredStaging(): Engram[] {
     const now = Date.now();

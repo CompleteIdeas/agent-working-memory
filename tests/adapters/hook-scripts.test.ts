@@ -310,3 +310,24 @@ describe('awm-prime.cjs', () => {
     expect(r.stdout).toBe('');
   });
 });
+
+describe('awm-used.cjs (0.20 implicit feedback)', () => {
+  it('prints the reminder and posts the payload to its own agent\'s sidecar at /hooks/used', async () => {
+    clearSeen();
+    const payload = { hook_event_name: 'Stop', session_id: 'sess-9', cwd: join(home, 'work', 'app'), transcript_path: join(home, 't.jsonl') };
+    const r = await runHook('awm-used.cjs', payload);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('MEMORY: (1) Did you learn anything new?');
+    const posts = workNew.seen.filter(s => s.url === '/hooks/used');
+    expect(posts.length).toBe(1);
+    expect(posts[0].auth).toBe(`Bearer ${WORK_SECRET}`);
+    expect(posts[0].body).toEqual(payload);
+    expect(personal.seen.filter(s => s.url === '/hooks/used').length).toBe(0);
+  });
+
+  it('still prints the reminder and exits 0 when no sidecar is live', async () => {
+    const r = await runHook('awm-used.cjs', { hook_event_name: 'Stop', cwd: join(home, 'work', 'app') }, { AWM_AGENT_ID: 'nobody' });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('MEMORY:');
+  });
+});

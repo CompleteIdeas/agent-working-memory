@@ -120,7 +120,7 @@ describe('writeHooks', () => {
     expect(cmd('SessionEnd')).toContain('awm-checkpoint.cjs');
     expect(cmd('UserPromptSubmit')).toContain('awm-prime.cjs');
     expect(cmd('PostToolUse')).toContain('awm-db-mutation-reminder.cjs');
-    expect(cmd('Stop')).toContain('MEMORY:');
+    expect(cmd('Stop')).toContain('awm-used.cjs');            // 0.20: implicit feedback; the script prints the reminder
     expect(JSON.stringify(s.hooks)).not.toContain('curl');
     expect(JSON.stringify(s.hooks)).not.toContain(ctx.hookSecret);     // secret never in settings.json
   });
@@ -143,7 +143,9 @@ describe('writeHooks', () => {
     const s = readSettings();
     expect(s.permissions).toEqual({ allow: ['Bash(ls)'] });
     expect(JSON.stringify(s.hooks.Stop)).toContain('my-own-stop-hook.js');
-    expect(s.hooks.Stop.filter((g: any) => JSON.stringify(g).includes('MEMORY:')).length).toBe(1);
+    // 0.20: the inline echo reminder is replaced by awm-used.cjs (which prints the same reminder).
+    expect(s.hooks.Stop.filter((g: any) => JSON.stringify(g).includes('MEMORY:')).length).toBe(0);
+    expect(s.hooks.Stop.filter((g: any) => JSON.stringify(g).includes('awm-used.cjs')).length).toBe(1);
     expect(JSON.stringify(s.hooks.PreCompact)).not.toContain('curl');
     expect(JSON.stringify(s.hooks.SessionEnd)).not.toContain('curl');
     expect(s.hooks.PreCompact.length).toBe(1);

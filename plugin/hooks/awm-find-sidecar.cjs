@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// awm-find-sidecar.cjs — installed by `awm setup` (hooks v0.14.6). Shared resolver: which AWM sidecar belongs to THIS session.
+// awm-find-sidecar.cjs — installed by `awm setup` (hooks v0.20.0). Shared resolver: which AWM sidecar belongs to THIS session.
 // Re-running `awm setup` rewrites this file; put local changes elsewhere.
 // Fails open: on any problem it prints nothing and exits 0.
 

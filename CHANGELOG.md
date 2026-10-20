@@ -1,5 +1,47 @@
 # Changelog
 
+## Unreleased — the learning loop runs on what the agent does, and a session can keep its own notes
+
+The two engineering items from the 2026-10-20 end-to-end evaluation. **Existing installs
+must re-run `awm setup --global`** (or update the plugin) to get the new Stop hook; nothing
+else changes for them.
+
+### Implicit feedback
+
+Measured on the live store: **12 `retrieval_feedback` rows against 23,653 recalls** (4,018 in
+the preceding week). Agents do not rate recalls, however the guidance asks, so every
+adaptive mechanism downstream of `memory_feedback` — confidence updates, validation-gated
+Hebbian strengthening, "AWM learns which recalls were worth their tokens" — ran on nothing.
+Now a recalled memory is credited when its substance shows up in what the agent does next:
+a `memory_write` carrying the same identifiers, a `memory_supersede` of that memory, a task
+summary, or the assistant's reply and tool calls in the turn that followed. The last comes
+from a new Stop hook (`awm-used.cjs`, which also prints the reminder the Stop hook always
+printed) posting the transcript path to the sidecar's `/hooks/used`; the sidecar reads the
+turn back to the previous user message. The matcher (`src/core/implicit-feedback.ts`)
+credits a memory when its id appears or when two of its *distinctive* tokens do —
+identifiers, paths, tag values, proper nouns — never common words, and once per
+(recall, memory). Each credit writes a feedback row joined to the recall (`implicit:<source>`
+with the evidence), bumps confidence at half the explicit rate, and resolves the pending
+Hebbian pairs. Positives only: "not useful" from absence of evidence would weaken good
+memories whenever the agent was interrupted. `AWM_HOOKS_VERSION` is 0.20.0.
+
+### Session scope
+
+Working notes were demoted by a novelty gate tuned for durable facts, recall had no idea
+which session was asking, and one checkpoint slot per agent let parallel sessions
+overwrite each other (a `memory_restore` on 2026-10-18 returned another session's state).
+- `memory_write(..., scope: "session")`: stored active whatever its salience, never
+  reinforce-merged into a durable memory, class ephemeral, tagged `scope=session` and
+  `sid=<session>`, expiring after `AWM_SESSION_TTL_DAYS` (7); the staging sweep archives
+  expired notes rather than deleting them.
+- Every write now carries `writer_session` — the MCP process's session id, which adopts
+  Claude Code's own session id from the first hook that carries one (`AWM_SESSION_ID` pins it).
+- `memory_recall(..., scope: "session")` filters to this session's memories; `session_first:
+  true` puts them ahead of older ones within the returned window with membership and scores
+  unchanged, so no benchmark moves. The prime hook uses `session_first` by default.
+- `memory_checkpoint` and the PreCompact/SessionEnd hook also save under the session's key
+  (`session_checkpoints`), and `memory_restore` prefers that over the agent-level slot.
+
 ## 0.19.0 (2026-10-20) — the q8 reranker, the cold start goes away, and the hooks stop paying for repeats
 
 From the 2026-10-19 speed and memory review: a warm recall was 612 ms at p50 on a loaded
