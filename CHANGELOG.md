@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — near-ties go to the newer memory, and a bare month is a date
+## 0.18.1 (2026-10-19) — conflict marks for bare months; two ranking changes measured and rejected
 
 Both found by MWA within hours of moving to the 0.18 defaults, with a repro.
 
