@@ -708,6 +708,14 @@ the cost/quality tradeoff. Use them when the default doesn't match what you need
 - Feedback is now mostly implicit (0.20): when a write, a supersede, a task summary or your
   reply carries a recalled memory's identifiers, that recall is credited without a call.
   \`memory_feedback\` still works and is the only way to say a recall was NOT useful.
+- After using a recalled memory: call \`memory_feedback\` (useful/not-useful) **with the
+  \`recall_id\`** printed at the end of the recall output (\`[recall_id: …]\`). That id
+  joins the feedback to the recall that produced it, which is what lets AWM learn
+  which recalls were worth their tokens; feedback without it is a bare vote.
+- If you discover a memory is factually wrong: \`memory_retract\` to remove it.
+- **If you bypass AWM (file-memory, in-context notes, "I'll just remember"), the memory
+  drifts out of date. The system relies on you to keep it current. This is the #1
+  failure mode.**
 
 ### Session notes (0.20) — the short-term gap
 A long session loses details to compaction, and durable memory was the wrong place for
@@ -720,14 +728,6 @@ session's memories ahead of older ones); the prime hook already prefers them aft
 compaction, and \`memory_restore\` returns THIS session's checkpoint rather than whichever
 parallel session saved last. Durable facts still go through a plain \`memory_write\`; at the
 end of a task, re-write the session notes worth keeping without \`scope\`.
-- After using a recalled memory: call \`memory_feedback\` (useful/not-useful) **with the
-  \`recall_id\`** printed at the end of the recall output (\`[recall_id: …]\`). That id
-  joins the feedback to the recall that produced it, which is what lets AWM learn
-  which recalls were worth their tokens; feedback without it is a bare vote.
-- If you discover a memory is factually wrong: \`memory_retract\` to remove it.
-- **If you bypass AWM (file-memory, in-context notes, "I'll just remember"), the memory
-  drifts out of date. The system relies on you to keep it current. This is the #1
-  failure mode.**
 
 ### Cognition recipes — YOU do the thinking, AWM keeps the result
 AWM contains no LLM. When memory needs real thinking — distilling a repeatable
