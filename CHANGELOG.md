@@ -14,8 +14,12 @@ private snapshot, q8's rerank p50 was 378–492 ms against 684–1,051 ms for fp
 batch size, a 35–45% cut of the stage that is four-fifths of a recall; the 2026-10-08 sweep
 put it at −29–34% of total recall for 0.0 pp on identifier queries and −0.9 pp on topic
 queries, with success@5 and abstention unchanged. Robert accepted that trade on 2026-10-19.
-`AWM_RERANKER_DTYPE=fp32` restores the 0.18 ranker. The benchmark page is regenerated at q8
-below; every number published before 0.19 was measured at fp32. The q8 ONNX file is 23 MB
+`AWM_RERANKER_DTYPE=fp32` restores the 0.18 ranker. `npm run bench` at q8, in-process:
+identifier s@1 **92.7%** (fp32: 93.0), s@5 97.3% (97.0), MRR 94.9% (94.9); topic s@1
+**92.7%** (92.2), s@5 96.9% (96.9), MRR 94.6% (94.4); abstention 90.0% on both; temporal
+no-cue 95.0% (94.1). The −0.9 pp did not reproduce; the trade is a wash on accuracy. The
+benchmark page and the pages that quote it now carry the q8 numbers; dated reports keep
+their fp32 figures as the record of what they measured. The q8 ONNX file is 23 MB
 against fp32's 91 MB, so a fresh install's first-run fetch shrinks (nothing bundles the
 models in either case).
 
