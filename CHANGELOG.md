@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — the q8 reranker, the cold start goes away, and the hooks stop paying for repeats
+## 0.19.0 (2026-10-20) — the q8 reranker, the cold start goes away, and the hooks stop paying for repeats
 
 From the 2026-10-19 speed and memory review: a warm recall was 612 ms at p50 on a loaded
 machine and 474 ms of it was the cross-encoder; everything else together was 138 ms, and

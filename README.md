@@ -181,10 +181,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.18.1
+## What's new — v0.19.0
 
 | | |
 |---|---|
+| **0.19.0** | From the speed and memory review: a warm recall was 612 ms and 474 ms of it was the cross-encoder. The **q8 reranker is the default** — rerank 35–45% faster in an interleaved in-process comparison, and on the full suites identifier 92.7% / topic 92.7% first-result (fp32: 93.0 / 92.2), top-5 and abstention unchanged. The **shared model daemon is on by default** for `awm mcp` and `awm serve`, ending the ~4 s cold first recall. The **prime hook caches** its answer for the same question for a minute instead of recalling on every prompt. SQLite gets a 64 MB page cache and mmap. The bench and profile scripts now measure in-process. |
 | **0.18.1** | Two defects MWA found within hours of the 0.18 defaults. A bare month after a preposition ("in October") now counts as a date for the conflict detector, so three versions of one fact are marked with newer/older. Two attempts to make the engine put the newest first were **measured and rejected**: a reranker-score epsilon cost identifier s@1 93.0% → 78.7%, and reordering on conflict marks cost 93.0% → 74.7% with s@5 unchanged. Marks are a cue to check the source, not a verdict on rank; `newestFirstAmongConflicts` is exported for harnesses whose policy is "newer beats older". Ranking is unchanged from 0.18.0. |
 | **0.18.0** | A superseded memory could **outrank its successor** whenever `AWM_RERANK2=1` — the setting `awm setup` writes everywhere — because the second-stage re-sort ignored the supersession penalty; fixed, with the test run reranker-on. `valid_to` now actually expires (it was display-only; the live store served 482 expired memories as current). Every recall line carries its **written date**, two versions of one fact are **marked as a possible conflict** with the newer one named, recall **confidence** is printed on every reply, and when the question asks for a time, date, amount, count or status that no returned memory holds, the reply says so instead of leaving the gap. `memory_write` takes **`correction: true`** to supersede by intent without the old id. The three measured rerank wins are **code defaults** (`=0` / `=prefix` to disable). A less-trusted write (`trust=` tag) **never merges into or retires a more-trusted memory**. Also: the model-memory fixes (ONNX arena bound, optional shared model daemon), the prime hook recalls with the prompt's question rather than its paste, and seven lifecycle fixes (PR #7). |
 | **0.17.0** | `AWM_FEEDBACK_NAMES` shipped a **list of 22 real first names** as its built-in default — one deployment's staff list, published in every npm tarball because `src/` is in `files`. It now ships empty, which turns user-feedback auto-promotion off until an operator configures it; **breaking if you relied on the built-in list**, and the migration is one env var. Separately, `memory_write`'s `supersedes` argument was silently discarded whenever reinforce-on-duplicate fired — which is every correction, since a correction restates what it corrects and therefore matches on concept. The engram you asked to retire stayed live, with your correction merged into it. Re-run `awm setup` for the corrected guidance |
@@ -300,7 +301,7 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 1066 tests
+npx vitest run          # 1071 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
@@ -311,7 +312,7 @@ npm run test:linux      # build + full suite on Linux
 
 ## Status
 
-Active development, v0.18.1. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.19.0. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 
