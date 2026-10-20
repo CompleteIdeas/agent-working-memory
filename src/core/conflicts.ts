@@ -118,11 +118,15 @@ export function valueSlots(text: string): Map<SlotKind, Set<string>> {
     m => add('date', `${m[1].slice(0, 3).toLowerCase()}-${Number(m[2])}`));
   take(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTHS})[a-z]*\\b`, 'gi'),
     m => add('date', `${m[2].slice(0, 3).toLowerCase()}-${Number(m[1])}`));
-  // A bare month ("in October", "by March") is a date too — coarser, but "in
-  // October the club chose fantasy" against "in March … a mystery" is exactly
-  // the two-versions case (MWA, 0.18.1). Runs after the month-day forms, which
-  // have already been blanked, so "Nov 14" is not also counted as "nov".
-  take(new RegExp(`\\b(${MONTHS})(?:uary|ruary|ch|il|e|y|ust|tember|ober|ember)?\\b`, 'gi'),
+  // A bare month after a preposition ("in October", "by March", "since
+  // November") is a date too — coarser, but "in October the club chose
+  // fantasy" against "in March … a mystery" is exactly the two-versions case
+  // (MWA, 0.18.1). Full names only and a preposition required: an unanchored
+  // match took the modal verb "may" and every passing "March" as a date, and
+  // on the real store that flagged enough false conflicts to show in the
+  // benchmark. Runs after the month-day forms, which have already been
+  // blanked, so "Nov 14" is not also counted as "nov".
+  take(/\b(?:in|by|until|till|from|since|during|before|after|early|late|mid|next|last|this|of|through)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/gi,
     m => add('date', m[1].slice(0, 3).toLowerCase()));
   // Money: $1.45, $2,400, $49/month.
   take(/\$\s?(\d[\d,]*(?:\.\d+)?)/g, m => add('money', m[1].replace(/,/g, '')));
@@ -229,18 +233,19 @@ export function detectConflicts(results: ConflictCandidate[], now: number = Date
 }
 
 /**
- * Newest first among results that are two versions of one fact (0.18.1).
+ * Newest first among results that are two versions of one fact — FOR HARNESSES.
  *
  * MWA's case: "In October the club chose fantasy / December science fiction /
  * March a mystery" for "what did the club most recently choose". The
  * cross-encoder cannot tell them apart, and a sort by its score put the newest
- * last. A score-epsilon fallback to the blend was measured at -14pp identifier
- * s@1 (rerank2.ts), so recency is applied only where the detector has already
- * said the results disagree on a value: a result is moved ahead of an earlier
- * result it conflicts with and is newer than. Results with no mark keep their
- * rank, so a suite whose golds are single facts is untouched. `marks` is
- * parallel to `results` (from `detectConflicts`); the returned array is new and
- * its marks still describe the same ids.
+ * last. AWM itself does NOT apply this (0.18.1): a score-epsilon fallback to the
+ * blend measured -14pp identifier s@1 (rerank2.ts), and applying this helper
+ * inside the engine measured -18pp with s@5 unchanged, because on a real store
+ * the detector also marks related memories that differ in a ticket id or a
+ * date. The marks are a cue to check the source. A harness whose policy is
+ * "newer beats older" (MWA's is) can call this on the returned results with
+ * their `conflictsWith` marks. `marks` is parallel to `results`; the returned
+ * array is new and its marks still describe the same ids.
  */
 export function newestFirstAmongConflicts<T extends ConflictCandidate>(results: T[], marks: ConflictMark[][]): T[] {
   const out = results.slice();

@@ -60,7 +60,7 @@ import type {
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 import { validityState } from '../core/validity.js';
-import { detectConflicts, newestFirstAmongConflicts } from '../core/conflicts.js';
+import { detectConflicts } from '../core/conflicts.js';
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
@@ -1321,13 +1321,12 @@ export class ActivationEngine {
     if (results.length > 1) {
       const marks = detectConflicts(results, validityNow);
       results.forEach((r, i) => { if (marks[i].length > 0) r.conflictsWith = marks[i]; });
-      // 0.18.1: among two versions of one fact, the newest goes first. Only
-      // marked results move; see conflicts.ts for why this replaced a score
-      // epsilon in rerank2 (measured -14pp identifier s@1).
-      if (marks.some(mk => mk.length > 0)) {
-        const ordered = newestFirstAmongConflicts(results, marks);
-        results.splice(0, results.length, ...ordered);
-      }
+      // The marks do NOT reorder results. Measured 2026-10-19: moving the
+      // newest of a marked pair ahead cost identifier s@1 93.0% -> 74.7% with
+      // s@5 unchanged, because on a real store the detector also marks related
+      // memories that differ in a ticket id or a date — a cue to check the
+      // source, not a verdict on rank. A harness that wants newest-first among
+      // marked results can apply conflicts.ts `newestFirstAmongConflicts` itself.
     }
 
     const activatedIds = results.map(r => r.engram.id);

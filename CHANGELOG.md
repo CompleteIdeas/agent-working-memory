@@ -19,18 +19,23 @@ hundredths separate most top-2 pairs and are informative there, and the blend is
 judge (it loses to the cross-encoder 77% of the time on disagreements). The epsilon now
 defaults to **0** and exists only for experiments.
 
-Recency is applied where it belongs instead: among results the conflict detector has
-already marked as two versions of one fact, the newest moves ahead of the older ones
-(`newestFirstAmongConflicts` in `src/core/conflicts.ts`, applied in `activation.ts` after the
-marks). Unmarked results keep their rank, so a suite whose golds are single facts is
-untouched; the benchmark below confirms it.
+The second attempt moved the newest of a marked pair ahead of the older ones inside the
+engine. **Measured: identifier s@1 93.0% → 74.7% with s@5 unchanged at 97.0%** — on a real
+store the detector also marks related memories that differ in a ticket id or a date, and
+those are a cue to check the source, not a verdict on rank. So AWM does not reorder on
+marks at all; ranking is unchanged from 0.18.0. The helper (`newestFirstAmongConflicts` in
+`src/core/conflicts.ts`) is kept for harnesses whose policy is "newer beats older": MWA
+already reads `conflictsWith`, and the reply footer names the newest.
 
 ### "In October" is a date
 
 `valueSlots` read `Nov 14`, `14 Nov` and `2026-01-15` as dates but not a bare month, so the
-book-club triple above carried no `⚠ POSSIBLE CONFLICT`. A bare month is now a date at month
-grain, and a comparison involving one is made at month grain on both sides, so "by Nov 13"
-and "in November" agree while "in October" and "in March" do not (`src/core/conflicts.ts`).
+book-club triple above carried no `⚠ POSSIBLE CONFLICT`. A bare month after a preposition
+("in October", "by March", "since November") is now a date at month grain, and a comparison
+involving one is made at month grain on both sides, so "by Nov 13" and "in November" agree
+while "in October" and "in March" do not. Full names and a preposition are required: an
+unanchored match took the modal verb "may" and every passing "March" as a date
+(`src/core/conflicts.ts`).
 
 ## 0.18.0 (2026-10-19) — stale memories lose, conflicts are said, corrections and trust are honoured; model memory stays bounded
 

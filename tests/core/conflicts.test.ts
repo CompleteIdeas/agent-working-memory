@@ -38,6 +38,12 @@ describe('valueSlots', () => {
     const s = valueSlots('class at 3:30pm');
     expect(s.get('number')).toBeUndefined();
   });
+  it('reads a bare month only after a preposition, so the modal "may" and a passing "March" are not dates', () => {
+    expect([...valueSlots('In October the book club chose a fantasy novel.').get('date')!]).toEqual(['oct']);
+    expect([...valueSlots('The accountant wants the receipts in November.').get('date')!]).toEqual(['nov']);
+    expect(valueSlots('We may need to march the band past the hall.').get('date')).toBeUndefined();
+    expect(valueSlots('March was the busiest month; May came close.').get('date')).toBeUndefined();
+  });
   it('reads status words', () => {
     expect([...valueSlots('the invoice is overdue and the trip was cancelled').get('status')!].sort())
       .toEqual(['cancelled', 'overdue']);
