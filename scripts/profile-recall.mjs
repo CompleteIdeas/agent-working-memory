@@ -59,7 +59,8 @@ const FIXTURE = arg('fixture', PUBLIC ? 'fixture-public.json' : 'fixture.json');
 const K = arg('k', '3');
 
 /** The recommended retrieval configuration — what `awm setup` installs. */
-const FLAGS = { AWM_RERANK2: '1', AWM_RERANK_WINDOW: 'query', AWM_RERANK_TAGS: '1' };
+// AWM_MODEL_DAEMON=0: profile in-process (see scripts/bench-current.mjs for why).
+const FLAGS = { AWM_RERANK2: '1', AWM_RERANK_WINDOW: 'query', AWM_RERANK_TAGS: '1', AWM_MODEL_DAEMON: '0' };
 
 // Lever pass-throughs, so a sweep is one command per arm and the arm is recorded
 // in the banner rather than in someone's shell history.

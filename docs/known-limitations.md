@@ -40,8 +40,9 @@ is unreachable by that identifier.
   the body, not only in tags.
 
 ### The remaining misses on the real-store benchmark are genuine
-At 93.0% first-result accuracy and 97.0% in the top five, the 9 memories (of 300) that
-never surface at all are real ranking failures, not fixture noise. The per-stage split was
+At 92.7% first-result accuracy and 97.3% in the top five (0.19, q8 reranker; 93.0% / 97.0%
+at fp32), the 8 memories (of 300) that never surface at all are real ranking failures, not
+fixture noise. The per-stage split was
 probed on 2026-09-11, when there were 10 such misses against a 96.7% top-five baseline: 5
 never entered the candidate pool, and 2 reached it with the identifier outside the
 400-character window the reranker reads. That split has **not** been re-probed since

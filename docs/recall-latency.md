@@ -36,6 +36,11 @@ exists.
 >   move the published figures. Identifier s@1 92.7% → **93.0%**, topic 92.0% →
 >   **92.2%**, and every accuracy table below carries the old baseline. Current
 >   figures live in `docs/benchmarks-current.md`.
+> - **0.19 (2026-10-20): the q8 cross-encoder is the default** (the "Levers" section
+>   below is where it was measured). At q8 the full suites read identifier **92.7%** /
+>   97.3% top-5 and topic **92.7%** / 96.9%, abstention 90.0% on both — the −0.9 pp topic
+>   cost measured below did not reproduce. The `fp32 (shipped)` rows stay as the fp32
+>   record; `AWM_RERANKER_DTYPE=fp32` restores that ranker.
 
 ---
 

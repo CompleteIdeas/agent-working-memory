@@ -46,7 +46,11 @@ const OPT = { all: argv.includes('--all'), dryRun: argv.includes('--dry-run') };
 const sh = (cmd) => { try { return execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
 
 /** Recommended retrieval configuration — what `awm setup` installs, so what we measure. */
-const FLAGS = { AWM_RERANK2: '1', AWM_RERANK_WINDOW: 'query', AWM_RERANK_TAGS: '1' };
+// AWM_MODEL_DAEMON=0: measure in-process. A user environment that enables the shared daemon
+// (this machine's does) would otherwise route every recall through a daemon shared with
+// every open session's prime-hook recalls, and a dtype or batch arm would spawn a second
+// daemon — the 2026-10-19 latency columns were taken that way and were not comparable.
+const FLAGS = { AWM_RERANK2: '1', AWM_RERANK_WINDOW: 'query', AWM_RERANK_TAGS: '1', AWM_MODEL_DAEMON: '0' };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rule 1 — preflight
