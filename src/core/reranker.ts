@@ -43,7 +43,14 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
  * is untouched because it is a product decision, not because the cost is
  * unknown; see docs/recall-latency.md.
  */
-const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'fp32') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
+// Default q8 since 0.19 (Robert's decision, 2026-10-19, after the speed review). The
+// cross-encoder is ~80% of a warm recall; q8 cut its p50 by 35–45% in an interleaved
+// in-process comparison (378–492 ms against 684–1,051 ms for fp32) and 29–34% of total
+// recall in the 2026-10-08 sweep, for 0.0 pp on identifier queries and −0.9 pp on topic
+// queries with success@5 and abstention unchanged. Batch size 4/8/16 made no consistent
+// difference in the same comparison, so RERANK_BATCH stays at 8. `AWM_RERANKER_DTYPE=fp32`
+// restores the 0.18 ranker; every number published before 0.19 stands at fp32.
+const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'q8') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
 
 // --- In-process fallback ---
 

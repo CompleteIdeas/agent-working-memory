@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased — the q8 reranker, the cold start goes away, and the hooks stop paying for repeats
+
+From the 2026-10-19 speed and memory review: a warm recall was 612 ms at p50 on a loaded
+machine and 474 ms of it was the cross-encoder; everything else together was 138 ms, and
+there was no leak. One change below has an accuracy price and was taken on purpose; the
+rest cost nothing.
+
+### The cross-encoder runs at q8 by default
+
+`AWM_RERANKER_DTYPE` now defaults to `q8`. In an interleaved in-process comparison on the
+private snapshot, q8's rerank p50 was 378–492 ms against 684–1,051 ms for fp32 at the same
+batch size, a 35–45% cut of the stage that is four-fifths of a recall; the 2026-10-08 sweep
+put it at −29–34% of total recall for 0.0 pp on identifier queries and −0.9 pp on topic
+queries, with success@5 and abstention unchanged. Robert accepted that trade on 2026-10-19.
+`AWM_RERANKER_DTYPE=fp32` restores the 0.18 ranker. The benchmark page is regenerated at q8
+below; every number published before 0.19 was measured at fp32. The q8 ONNX file is 23 MB
+against fp32's 91 MB, so a fresh install's first-run fetch shrinks (nothing bundles the
+models in either case).
+
+Rerank batch size was measured in the same comparison at 4, 8 and 16 and made no
+consistent difference, so it stays at 8.
+
+### The shared model daemon is on by default for the servers
+
+`awm mcp` and `awm serve` now set `AWM_MODEL_DAEMON=1` unless the environment says
+otherwise (`0` disables). Measured in 0.18: results byte-identical to in-process; four
+sessions 4,825 MB → 1,730 MB; and the first recall of every session after the first drops
+from about 4 s (three models loading into a fresh process) to the warm ~0.6 s. The library
+default stays off, so tests and embedded callers do not spawn daemons.
+
+### The prime hook caches its answer for a minute
+
+Every prompt paid a full recall, synchronously, before Claude Code saw it. Consecutive
+prompts often repeat or extend the same question, and priming is advisory context nobody
+asked for, so the sidecar now serves the last injection again for the same shaped question
+(same agent, same thresholds) within `AWM_PRIME_CACHE_MS` (default 60 s; `0` disables). A
+hit is logged as `cached`.
+
+### SQLite page cache and mmap
+
+The store ran on SQLite's 2 MB default page cache against a ~270 MB file. `cache_size` is
+now 64 MB and `mmap_size` 256 MB (`AWM_SQLITE_CACHE_MB` / `AWM_SQLITE_MMAP_MB`; `0` restores
+the default), with `temp_store = MEMORY`. No effect on results.
+
+### The `memory_recall` tool text had the rerank pool wrong
+
+It said `min(limit*8, 40)`, 24 at k=3; the code is `max(limit*4, 40)`, and the median of 24
+comes from the pool filter. Corrected.
+
 ## 0.18.1 (2026-10-19) — conflict marks for bare months; two ranking changes measured and rejected
 
 Both found by MWA within hours of moving to the 0.18 defaults, with a repro.

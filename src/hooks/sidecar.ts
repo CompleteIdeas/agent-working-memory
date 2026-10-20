@@ -69,6 +69,33 @@ export interface SidecarDeps {
   }>>;
 }
 
+/** Prime-hook result cache: shaped question → last injection, for a short window. */
+type PrimeCacheEntry = { at: number; value: ReturnType<typeof buildPrimeInjection> };
+const primeCache = new Map<string, PrimeCacheEntry>();
+const PRIME_CACHE_MAX = 64;
+function primeCacheTtlMs(): number {
+  const v = Number(process.env.AWM_PRIME_CACHE_MS ?? 60_000);
+  return Number.isFinite(v) && v >= 0 ? v : 60_000;
+}
+export function primeCacheGet(key: string, now: number = Date.now()): PrimeCacheEntry['value'] | null {
+  const ttl = primeCacheTtlMs();
+  if (ttl === 0) return null;
+  const e = primeCache.get(key);
+  if (!e) return null;
+  if (now - e.at > ttl) { primeCache.delete(key); return null; }
+  return e.value;
+}
+export function primeCachePut(key: string, value: PrimeCacheEntry['value'], now: number = Date.now()): void {
+  if (primeCacheTtlMs() === 0) return;
+  if (primeCache.size >= PRIME_CACHE_MAX) {
+    const oldest = primeCache.keys().next().value;
+    if (oldest !== undefined) primeCache.delete(oldest);
+  }
+  primeCache.set(key, { at: now, value });
+}
+/** Test seam. */
+export function primeCacheClear(): void { primeCache.clear(); }
+
 interface HookInput {
   session_id?: string;
   transcript_path?: string;
@@ -301,6 +328,22 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
           json(res, 200, { inject: '', kept: 0, total: 0, tokens: 0, reason: 'no-prompt' });
           return;
         }
+        // Prime cache (0.19). Every prompt pays a full recall here, synchronously,
+        // before Claude Code sees it — about 600 ms. Consecutive prompts in one
+        // session often repeat or extend the same question ("continue", a
+        // follow-up on the same topic), and priming is push-style context nobody
+        // asked for, so serving the last answer for the same shaped question
+        // within AWM_PRIME_CACHE_MS (default 60 s; 0 disables) costs nothing in
+        // accuracy and saves the whole recall. Keyed on the agent, the shaped
+        // question and the caller's thresholds; a write in between invalidates
+        // nothing because the window is short and the context is advisory.
+        const cacheKey = `${agentId}|${query}|${body.maxTokens ?? ''}|${body.minConfidence ?? ''}|${body.minScore ?? ''}`;
+        const hit = primeCacheGet(cacheKey);
+        if (hit) {
+          log(agentId, 'hook:prime', `"${query.slice(0, 60)}" → cached (${hit.kept}/${hit.total}, ~${hit.tokens} tok)`);
+          json(res, 200, { ...hit, cached: true });
+          return;
+        }
         const candidates = await deps.activate({
           context: query,
           limit: 8,
@@ -311,6 +354,7 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
           minConfidence: body.minConfidence,
           minScore: body.minScore,
         });
+        primeCachePut(cacheKey, primed);
         log(agentId, 'hook:prime',
           `"${query.slice(0, 60)}"${query === context ? '' : ` (shaped ${context.length}→${query.length} chars)`} → ${primed.kept}/${primed.total} injected, ~${primed.tokens} tok${primed.reason ? ` (${primed.reason})` : ''}`);
         json(res, 200, { ...primed });

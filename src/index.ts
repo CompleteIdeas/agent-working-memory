@@ -19,6 +19,9 @@ try {
     if (!process.env[key]) process.env[key] = val; // Don't override existing env
   }
 } catch { /* No .env file — that's fine */ }
+// Shared model daemon ON by default for the HTTP server (0.19); see mcp.ts for
+// the measurement. AWM_MODEL_DAEMON=0 turns it off.
+if (process.env.AWM_MODEL_DAEMON === undefined) process.env.AWM_MODEL_DAEMON = '1';
 import { EngramStore } from './storage/sqlite.js';
 import { ActivationEngine } from './engine/activation.js';
 import { ConnectionEngine } from './engine/connections.js';

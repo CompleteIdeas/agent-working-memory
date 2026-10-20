@@ -49,6 +49,14 @@ try {
   }
 } catch { /* No .env file */ }
 
+// Shared model daemon ON by default for the MCP server (0.19). Measured in 0.18:
+// results byte-identical to in-process, four sessions 4,825 MB → 1,730 MB, and
+// the first recall of every session after the first drops from ~4 s (three
+// models loading into a fresh process) to the warm ~0.6 s. The library default
+// stays off so tests and embedded callers do not spawn daemons; the server
+// entry points opt in here, and AWM_MODEL_DAEMON=0 turns it off.
+if (process.env.AWM_MODEL_DAEMON === undefined) process.env.AWM_MODEL_DAEMON = '1';
+
 // MCP uses stdout for JSON-RPC. Redirect console.log to stderr so engine
 // startup messages (ConsolidationScheduler, model loading, etc.) don't
 // corrupt the transport. This MUST happen before any engine imports.
@@ -433,7 +441,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
   {
     query: z.string().optional().describe('What to search for — describe the situation, question, or topic'),
     context: z.string().optional().describe('Alias for query (either works)'),
-    limit: z.number().optional().default(3).describe('Max memories to return (default 3). Measured on 400 real-store probes: k=3 is the only token-POSITIVE setting (+115 tok/recall, against -680 at k=5) and is 41% faster at p50, because `limit` sizes the cross-encoder rerank pool (min(limit*8, 40) — so 24 at k=3 against 40 at k=5) and rerank is 83% of warm recall time. It costs ~0.5pp success@1 versus k=5 — about 3 queries in 400, inside noise. Raise it explicitly when you want breadth for orientation rather than a specific fact; that is the case this default deliberately does not optimize for.'),
+    limit: z.number().optional().default(3).describe('Max memories to return (default 3). Measured on 400 real-store probes: k=3 is the only token-POSITIVE setting (+115 tok/recall, against -680 at k=5) and is 41% faster at p50, because `limit` sizes the cross-encoder rerank pool (max(limit*4, 40), so 40 at k=3 and at k=5 before the pool filter trims it, 24 at the median) and rerank is 83% of warm recall time. It costs ~0.5pp success@1 versus k=5 — about 3 queries in 400, inside noise. Raise it explicitly when you want breadth for orientation rather than a specific fact; that is the case this default deliberately does not optimize for.'),
     min_score: z.number().optional().default(0.05).describe('Minimum relevance score (default 0.05)'),
     include_staging: z.boolean().optional().default(false).describe('Include weak/unconfirmed memories?'),
     use_reranker: z.boolean().optional().default(true).describe('Use cross-encoder re-ranking for better relevance (default true)'),

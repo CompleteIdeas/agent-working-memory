@@ -63,6 +63,19 @@ export class EngramStore {
     this.db.pragma('busy_timeout = 5000');
     this.db.pragma('synchronous = NORMAL');
     this.db.pragma('wal_autocheckpoint = 1000');
+    // Page cache and mmap (0.19). Until now the store ran on SQLite's 2 MB default
+    // page cache against a ~270 MB file, so the BM25 and association-stats
+    // phases of a recall paid page faults on every query: 42 ms / 14 ms at p50
+    // but 156 ms / 167 ms at p95 in the 2026-10-19 profile. 64 MB of cache
+    // holds the hot FTS and association pages; mmap lets reads come straight
+    // from the OS file cache without a copy. Both are per-connection settings
+    // with no effect on results; mmap is safe with WAL and multiple processes.
+    // AWM_SQLITE_CACHE_MB / AWM_SQLITE_MMAP_MB override (0 = SQLite default).
+    const cacheMb = Number(process.env.AWM_SQLITE_CACHE_MB ?? 64);
+    const mmapMb = Number(process.env.AWM_SQLITE_MMAP_MB ?? 256);
+    if (Number.isFinite(cacheMb) && cacheMb > 0) this.db.pragma(`cache_size = ${-Math.round(cacheMb * 1024)}`);
+    if (Number.isFinite(mmapMb) && mmapMb > 0) this.db.pragma(`mmap_size = ${Math.round(mmapMb * 1024 * 1024)}`);
+    this.db.pragma('temp_store = MEMORY');
     this.init();
     this.startWalCheckpointTimer();
   }
