@@ -32,6 +32,42 @@ describe('reorderByReranker', () => {
     expect(ids(out)).toBe('a,b');
   });
 
+  describe('near-ties — the blend (recency) decides when the cross-encoder cannot', () => {
+    // MWA, 0.18.1: three same-topic facts from October, December and March
+    // scored within hundredths for "what did the club most recently choose",
+    // and the newest came last. `score` is the Phase 7 blend, which carries decay.
+    const b = (id: string, rerankerScore: number, score: number) => ({ id, phaseScores: { rerankerScore }, score });
+
+    const withEps = (eps: string | undefined, fn: () => void) => {
+      const saved = process.env.AWM_RERANK2_TIE_EPS;
+      if (eps === undefined) delete process.env.AWM_RERANK2_TIE_EPS; else process.env.AWM_RERANK2_TIE_EPS = eps;
+      try { fn(); } finally {
+        if (saved === undefined) delete process.env.AWM_RERANK2_TIE_EPS; else process.env.AWM_RERANK2_TIE_EPS = saved;
+      }
+    };
+
+    it('by default the reranker order stands even on near-ties (an epsilon of 0.03 measured -14pp s@1)', () => {
+      withEps(undefined, () => {
+        const out = reorderByReranker([b('dec', 0.81, 0.60), b('oct', 0.80, 0.55), b('mar', 0.79, 0.70)], 10);
+        expect(ids(out)).toBe('dec,oct,mar');
+      });
+    });
+
+    it('with an experimental epsilon, near-equal reranker scores go to the blend', () => {
+      withEps('0.03', () => {
+        const out = reorderByReranker([b('dec', 0.81, 0.60), b('oct', 0.80, 0.55), b('mar', 0.79, 0.70)], 10);
+        expect(ids(out)).toBe('mar,dec,oct');
+      });
+    });
+
+    it('a clear reranker lead wins over a better blend whatever the epsilon', () => {
+      withEps('0.03', () => {
+        const out = reorderByReranker([b('a', 0.60, 0.90), b('b', 0.90, 0.50)], 10);
+        expect(ids(out)).toBe('b,a');
+      });
+    });
+  });
+
   describe('stale penalty — a superseded or expired memory cannot win the window', () => {
     // Phase 8c marks superseded / expired / not-yet-valid rows with
     // stalePenalty 0.15. Before 2026-10-19 this stage ignored it and sorted by

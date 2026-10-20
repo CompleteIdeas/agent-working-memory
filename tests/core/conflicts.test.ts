@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { valueSlots, disagreement, related, detectConflicts, newestConflicting } from '../../src/core/conflicts.js';
+import { valueSlots, disagreement, related, detectConflicts, newestConflicting, newestFirstAmongConflicts } from '../../src/core/conflicts.js';
 
 const NOW = Date.parse('2026-10-19T12:00:00Z');
 let n = 0;
@@ -37,6 +37,12 @@ describe('valueSlots', () => {
   it('does not split a time into two numbers', () => {
     const s = valueSlots('class at 3:30pm');
     expect(s.get('number')).toBeUndefined();
+  });
+  it('reads a bare month only after a preposition, so the modal "may" and a passing "March" are not dates', () => {
+    expect([...valueSlots('In October the book club chose a fantasy novel.').get('date')!]).toEqual(['oct']);
+    expect([...valueSlots('The accountant wants the receipts in November.').get('date')!]).toEqual(['nov']);
+    expect(valueSlots('We may need to march the band past the hall.').get('date')).toBeUndefined();
+    expect(valueSlots('March was the busiest month; May came close.').get('date')).toBeUndefined();
   });
   it('reads status words', () => {
     expect([...valueSlots('the invoice is overdue and the trip was cancelled').get('status')!].sort())
@@ -103,6 +109,9 @@ const CONFLICTS: Array<[ReturnType<typeof mem>, ReturnType<typeof mem>]> = [
    mem('Standup time', 'Daily standup moved to 9:45 AM.')],
   [mem('Trip status', 'The museum trip on Nov 8 is confirmed.', { daysAgo: 2 }),
    mem('Trip status', 'The museum trip on Nov 8 was cancelled.')],
+  // Bare month names (MWA's book-club triple, 0.18.1).
+  [mem('Book club pick', 'In October the book club chose a fantasy novel.', { daysAgo: 150 }),
+   mem('Book club pick', 'In March the book club chose a mystery.')],
 ];
 
 const COMPATIBLE: Array<[ReturnType<typeof mem>, ReturnType<typeof mem>]> = [
@@ -125,6 +134,9 @@ const COMPATIBLE: Array<[ReturnType<typeof mem>, ReturnType<typeof mem>]> = [
   // Same subject, different attribute, values only on one side.
   [mem('Rose supplier', 'Bloomberg Wholesale is the rose supplier; contact is Dana.'),
    mem('Rose price', 'Bloomberg Wholesale standard rose price is $1.10 per stem.')],
+  // A full date and a bare month in the same month agree.
+  [mem('Accountant deadline', 'Accountant needs Q3 receipts by Nov 13.'),
+   mem('Accountant deadline', 'The accountant wants the Q3 receipts in November.')],
   // Template twins — the known false-positive class (counted below).
   [mem('Flight out', 'Sam\'s outbound Denver flight departs at 8:40 AM on Nov 14.'),
    mem('Flight back', 'Sam\'s return Denver flight departs at 10:15 AM on Nov 18.')],
@@ -161,8 +173,34 @@ describe('detectConflicts — labelled pairs', () => {
   it('the twin pairs are the only compatible pairs it flags', () => {
     const flagged = COMPATIBLE.map(([a, b], i) => [i, detectConflicts([a, b], NOW)[0].length > 0] as const)
       .filter(([, f]) => f).map(([i]) => i);
-    // Indices 7, 8, 9 are the twins. Anything else flagged is a regression.
-    expect(flagged.every(i => i >= 7)).toBe(true);
+    // Indices 8, 9, 10 are the twins; 7 is the same-month pair, which must NOT be flagged.
+    // Anything else flagged is a regression.
+    expect(flagged).toEqual([8, 9, 10]);
+  });
+
+  it('newestFirstAmongConflicts puts the newest version first and leaves unmarked results in place', () => {
+    const oct = mem('Book club pick', 'In October the book club chose a fantasy novel.', { daysAgo: 150 });
+    const dec = mem('Book club pick', 'In December the book club chose science fiction.', { daysAgo: 90 });
+    const mar = mem('Book club pick', 'In March the book club chose a mystery.', { daysAgo: 5 });
+    const gym = mem('Gym membership renewal', 'Gym membership auto-renews on Nov 20 at $49/month.', { daysAgo: 1 });
+    // The order the cross-encoder gave MWA: December, October, March — newest last.
+    const results = [dec, oct, gym, mar];
+    const marks = detectConflicts(results, NOW);
+    const out = newestFirstAmongConflicts(results, marks);
+    expect(out.map(r => r.engram.id)).toEqual([mar.engram.id, dec.engram.id, oct.engram.id, gym.engram.id]);
+    // Unrelated to the triple: gym keeps its relative place among the unmarked.
+    expect(newestFirstAmongConflicts([gym, oct], detectConflicts([gym, oct], NOW)).map(r => r.engram.id))
+      .toEqual([gym.engram.id, oct.engram.id]);
+  });
+
+  it('marks every member of the book-club triple and names the newest', () => {
+    const oct = mem('Book club pick', 'In October the book club chose a fantasy novel.', { daysAgo: 150 });
+    const dec = mem('Book club pick', 'In December the book club chose science fiction.', { daysAgo: 90 });
+    const mar = mem('Book club pick', 'In March the book club chose a mystery.', { daysAgo: 5 });
+    const marks = detectConflicts([dec, oct, mar], NOW);
+    expect(marks.map(m => m.length)).toEqual([2, 2, 2]);
+    expect(marks[2].every(m => m.newer)).toBe(true);
+    expect(newestConflicting([dec, oct, mar], marks)).toBe(mar.engram.id);
   });
 });
 

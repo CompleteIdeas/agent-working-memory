@@ -1321,6 +1321,12 @@ export class ActivationEngine {
     if (results.length > 1) {
       const marks = detectConflicts(results, validityNow);
       results.forEach((r, i) => { if (marks[i].length > 0) r.conflictsWith = marks[i]; });
+      // The marks do NOT reorder results. Measured 2026-10-19: moving the
+      // newest of a marked pair ahead cost identifier s@1 93.0% -> 74.7% with
+      // s@5 unchanged, because on a real store the detector also marks related
+      // memories that differ in a ticket id or a date — a cue to check the
+      // source, not a verdict on rank. A harness that wants newest-first among
+      // marked results can apply conflicts.ts `newestFirstAmongConflicts` itself.
     }
 
     const activatedIds = results.map(r => r.engram.id);

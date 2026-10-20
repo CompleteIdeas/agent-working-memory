@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased — near-ties go to the newer memory, and a bare month is a date
+
+Both found by MWA within hours of moving to the 0.18 defaults, with a repro.
+
+### Two versions of one fact come back newest first
+
+Three same-topic facts written in October, December and March ("the book club chose a
+fantasy novel / science fiction / a mystery") score within a few hundredths of each other
+for "what did the book club most recently choose", and with `AWM_RERANK2` on the newest came
+**last**: the second stage sorts by reranker score alone, and the cross-encoder judges
+relevance to the query and nothing else.
+
+The first fix tried was a score epsilon — within `AWM_RERANK2_TIE_EPS` the blended score,
+which carries decay, decides. **Measured at 0.03: identifier s@1 93.0% → 78.7%, topic 92.2%
+→ 84.4%.** The cross-encoder's scores saturate near 1.0 for the top candidates, so
+hundredths separate most top-2 pairs and are informative there, and the blend is the wrong
+judge (it loses to the cross-encoder 77% of the time on disagreements). The epsilon now
+defaults to **0** and exists only for experiments.
+
+The second attempt moved the newest of a marked pair ahead of the older ones inside the
+engine. **Measured: identifier s@1 93.0% → 74.7% with s@5 unchanged at 97.0%** — on a real
+store the detector also marks related memories that differ in a ticket id or a date, and
+those are a cue to check the source, not a verdict on rank. So AWM does not reorder on
+marks at all; ranking is unchanged from 0.18.0. The helper (`newestFirstAmongConflicts` in
+`src/core/conflicts.ts`) is kept for harnesses whose policy is "newer beats older": MWA
+already reads `conflictsWith`, and the reply footer names the newest.
+
+### "In October" is a date
+
+`valueSlots` read `Nov 14`, `14 Nov` and `2026-01-15` as dates but not a bare month, so the
+book-club triple above carried no `⚠ POSSIBLE CONFLICT`. A bare month after a preposition
+("in October", "by March", "since November") is now a date at month grain, and a comparison
+involving one is made at month grain on both sides, so "by Nov 13" and "in November" agree
+while "in October" and "in March" do not. Full names and a preposition are required: an
+unanchored match took the modal verb "may" and every passing "March" as a date
+(`src/core/conflicts.ts`).
+
 ## 0.18.0 (2026-10-19) — stale memories lose, conflicts are said, corrections and trust are honoured; model memory stays bounded
 
 ### A superseded memory can no longer outrank its successor under `AWM_RERANK2`, and `valid_to` now expires

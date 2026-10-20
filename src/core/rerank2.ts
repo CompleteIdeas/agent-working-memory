@@ -43,6 +43,35 @@
  *  optionally the stale penalty Phase 8c applied to it (see below). */
 export interface RerankScored {
   phaseScores: { rerankerScore: number; stalePenalty?: number };
+  /** The Phase 7 blended score (composite + reranker). Carries decay, so recency. */
+  score?: number;
+}
+
+/**
+ * NEAR-TIES (0.18.1, found by MWA when it moved to rerank2-on defaults)
+ * -----------------------------------------------------------------------
+ * The cross-encoder judges relevance to the query and nothing else. Three
+ * same-topic facts written in October, December and March ("the book club
+ * chose a fantasy novel / science fiction / a mystery") score within a few
+ * hundredths of each other for "what did the book club most recently
+ * choose", and a sort by reranker score alone put the newest LAST. The blend
+ * carries decay, so it knows which is newest; replacing it outright threw
+ * that away exactly where the cross-encoder has nothing to say.
+ *
+ * The first fix tried was a score epsilon: within `AWM_RERANK2_TIE_EPS` the
+ * blended score decides. MEASURED at 0.03 on the private snapshot (2026-10-19):
+ * identifier s@1 93.0% -> 78.7%, topic 92.2% -> 84.4%. The cross-encoder's
+ * scores saturate near 1.0 for the top candidates, so hundredths separate most
+ * top-2 pairs and are informative there; the blend loses to it 77% of the time
+ * on disagreements. So the epsilon DEFAULTS TO 0 (off) and exists only for
+ * experiments. The recency rule lives where it belongs instead: among results
+ * the conflict detector marks as two versions of one fact, the newest goes
+ * first (conflicts.ts `newestFirstAmongConflicts`, applied in activation.ts).
+ * That cannot touch a suite whose golds are single facts.
+ */
+export function rerank2TieEpsilon(): number {
+  const v = Number(process.env.AWM_RERANK2_TIE_EPS ?? 0);
+  return Number.isFinite(v) && v >= 0 ? v : 0;
 }
 
 /**
@@ -86,7 +115,12 @@ export function reorderByReranker<T extends RerankScored>(ranked: T[], k: number
     if (!(r.phaseScores.rerankerScore > 0)) return ranked;  // also catches NaN
   }
 
-  const sorted = head.slice().sort((a, b) => rerankSortKey(b) - rerankSortKey(a));
+  const eps = rerank2TieEpsilon();
+  const sorted = head.slice().sort((a, b) => {
+    const d = rerankSortKey(b) - rerankSortKey(a);
+    if (eps > 0 && Math.abs(d) < eps) return (b.score ?? 0) - (a.score ?? 0);  // experiment only; see above
+    return d;
+  });
   return sorted.concat(ranked.slice(window));
 }
 

@@ -118,6 +118,16 @@ export function valueSlots(text: string): Map<SlotKind, Set<string>> {
     m => add('date', `${m[1].slice(0, 3).toLowerCase()}-${Number(m[2])}`));
   take(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTHS})[a-z]*\\b`, 'gi'),
     m => add('date', `${m[2].slice(0, 3).toLowerCase()}-${Number(m[1])}`));
+  // A bare month after a preposition ("in October", "by March", "since
+  // November") is a date too — coarser, but "in October the club chose
+  // fantasy" against "in March … a mystery" is exactly the two-versions case
+  // (MWA, 0.18.1). Full names only and a preposition required: an unanchored
+  // match took the modal verb "may" and every passing "March" as a date, and
+  // on the real store that flagged enough false conflicts to show in the
+  // benchmark. Runs after the month-day forms, which have already been
+  // blanked, so "Nov 14" is not also counted as "nov".
+  take(/\b(?:in|by|until|till|from|since|during|before|after|early|late|mid|next|last|this|of|through)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/gi,
+    m => add('date', m[1].slice(0, 3).toLowerCase()));
   // Money: $1.45, $2,400, $49/month.
   take(/\$\s?(\d[\d,]*(?:\.\d+)?)/g, m => add('money', m[1].replace(/,/g, '')));
   // Bare numbers (ids, counts, flight numbers): shared ones do no harm, differing ones may.
@@ -161,8 +171,14 @@ export function related(a: ConflictCandidate, b: ConflictCandidate): boolean {
 export function disagreement(a: ConflictCandidate, b: ConflictCandidate): SlotKind | null {
   const sa = valueSlots(a.engram.content), sb = valueSlots(b.engram.content);
   for (const kind of ['time', 'date', 'money', 'status', 'number'] as SlotKind[]) {
-    const va = sa.get(kind), vb = sb.get(kind);
+    let va = sa.get(kind), vb = sb.get(kind);
     if (!va || !vb) continue;
+    // Dates come at three grains (2026-01-15, nov-14, nov). When either side
+    // has a month-only value, compare both at month grain: "Nov 14" and
+    // "in November" agree; "in October" and "in March" do not.
+    if (kind === 'date' && ([...va, ...vb].some(v => /^[a-z]{3}$/.test(v)))) {
+      va = new Set([...va].map(monthOf)); vb = new Set([...vb].map(monthOf));
+    }
     // Disagree when neither set contains the other: a memory that mentions
     // two times, one of which the other repeats, is an elaboration, not a conflict.
     const aInB = [...va].every(v => vb.has(v));
@@ -170,6 +186,14 @@ export function disagreement(a: ConflictCandidate, b: ConflictCandidate): SlotKi
     if (!aInB && !bInA) return kind;
   }
   return null;
+}
+
+const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+/** The month token of any date value this file produces. */
+function monthOf(v: string): string {
+  const iso = /^(\d{4})-(\d{2})-\d{2}$/.exec(v);
+  if (iso) return MONTH_NAMES[Number(iso[2]) - 1] ?? v;
+  return v.slice(0, 3);
 }
 
 function createdMs(c: ConflictCandidate): number {
@@ -206,6 +230,42 @@ export function detectConflicts(results: ConflictCandidate[], now: number = Date
     }
   }
   return marks;
+}
+
+/**
+ * Newest first among results that are two versions of one fact — FOR HARNESSES.
+ *
+ * MWA's case: "In October the club chose fantasy / December science fiction /
+ * March a mystery" for "what did the club most recently choose". The
+ * cross-encoder cannot tell them apart, and a sort by its score put the newest
+ * last. AWM itself does NOT apply this (0.18.1): a score-epsilon fallback to the
+ * blend measured -14pp identifier s@1 (rerank2.ts), and applying this helper
+ * inside the engine measured -18pp with s@5 unchanged, because on a real store
+ * the detector also marks related memories that differ in a ticket id or a
+ * date. The marks are a cue to check the source. A harness whose policy is
+ * "newer beats older" (MWA's is) can call this on the returned results with
+ * their `conflictsWith` marks. `marks` is parallel to `results`; the returned
+ * array is new and its marks still describe the same ids.
+ */
+export function newestFirstAmongConflicts<T extends ConflictCandidate>(results: T[], marks: ConflictMark[][]): T[] {
+  const out = results.slice();
+  const m = marks.slice();
+  for (let guard = 0; guard < out.length * out.length; guard++) {
+    let moved = false;
+    for (let j = 1; j < out.length && !moved; j++) {
+      for (let i = 0; i < j; i++) {
+        const mk = m[j].find(x => x.id === out[i].engram.id);
+        if (mk && mk.newer) {
+          const [r] = out.splice(j, 1); const [mm] = m.splice(j, 1);
+          out.splice(i, 0, r); m.splice(i, 0, mm);
+          moved = true;
+          break;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+  return out;
 }
 
 /** The id of the most recently written memory among those carrying a mark, or null. */
