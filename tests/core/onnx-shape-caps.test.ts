@@ -72,13 +72,25 @@ describe('capRerankQuery', () => {
 });
 
 describe('rerank chunking', () => {
-  it('scores in chunks of 8 match one 20-pair batch', async () => {
+  // At fp32 a pair's score does not depend on its batch, to 1e-5. At q8 (the default
+  // since 0.19) it does, slightly: dynamic quantisation scales activations per batch,
+  // so the same pair scored in a chunk of 8 and in one batch of 20 differs by up to
+  // ~1e-3 (measured 2026-10-20: max 0.00105 over 80 pairs, top-1 never changed, the
+  // order of near-zero tail scores reshuffled on every query). The bound below is
+  // five times the measured drift; the fp32 branch keeps the exact invariant.
+  const dtype = (process.env.AWM_RERANKER_DTYPE || 'q8');
+  it(`scores in chunks of 8 match one 20-pair batch (${dtype === 'fp32' ? 'exactly' : 'to 5e-3 at ' + dtype})`, async () => {
     const q = 'which platform hosts the PostRoom deploy?';
     const one = await inProcessRerank({ query: q, passages: PASSAGES }, { batch: 0, queryTokens: 0 });
     const chunked = await inProcessRerank({ query: q, passages: PASSAGES }, { batch: 8, queryTokens: 0 });
-    expect(chunked.map(r => r.index)).toEqual(one.map(r => r.index));
     const byIndex = new Map(one.map(r => [r.index, r.score]));
-    for (const r of chunked) expect(Math.abs(r.score - byIndex.get(r.index)!)).toBeLessThan(1e-5);
+    if (dtype === 'fp32') {
+      expect(chunked.map(r => r.index)).toEqual(one.map(r => r.index));
+      for (const r of chunked) expect(Math.abs(r.score - byIndex.get(r.index)!)).toBeLessThan(1e-5);
+    } else {
+      for (const r of chunked) expect(Math.abs(r.score - byIndex.get(r.index)!)).toBeLessThan(5e-3);
+      expect(chunked[0].index).toBe(one[0].index);
+    }
     expect(chunked[0].index).toBe(GOLD);
   }, 120_000);
 });

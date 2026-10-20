@@ -24,7 +24,12 @@ against fp32's 91 MB, so a fresh install's first-run fetch shrinks (nothing bund
 models in either case).
 
 Rerank batch size was measured in the same comparison at 4, 8 and 16 and made no
-consistent difference, so it stays at 8.
+consistent difference, so it stays at 8. One property changes at q8 and is worth knowing:
+a pair's score depends slightly on the other pairs in its batch (dynamic quantisation
+scales activations per batch) — measured max 0.00105 over 80 pairs, top-1 never changed,
+the order of near-zero tail scores reshuffled. fp32 is exact to 1e-5. Results are still
+reproducible for a given query and store; the chunking test asserts exactness at fp32 and
+a 5e-3 bound at q8.
 
 ### The shared model daemon is on by default for the servers
 

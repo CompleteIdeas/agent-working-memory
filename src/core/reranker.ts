@@ -50,6 +50,12 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
 // queries with success@5 and abstention unchanged. Batch size 4/8/16 made no consistent
 // difference in the same comparison, so RERANK_BATCH stays at 8. `AWM_RERANKER_DTYPE=fp32`
 // restores the 0.18 ranker; every number published before 0.19 stands at fp32.
+// One property changes at q8: a pair's score depends slightly on the other pairs in its
+// batch (dynamic quantisation scales activations per batch) — measured max 0.00105 over 80
+// pairs, top-1 unchanged, the order of near-zero tail scores reshuffled. fp32 is exact to
+// 1e-5. For a given query and store the pool and its chunks are deterministic, so results
+// are reproducible; what is lost is batch-independence, which tests/core/onnx-shape-caps
+// asserts exactly at fp32 and to 5e-3 at q8.
 const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'q8') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
 
 // --- In-process fallback ---
