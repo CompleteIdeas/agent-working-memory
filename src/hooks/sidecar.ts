@@ -51,11 +51,17 @@ export interface SidecarDeps {
    * owned by the session that spawned it. Optional so older callers and
    * tests keep working unchanged.
    */
+  /** 0.20: Claude Code's session id, from the first hook that carries one. */
+  onSession?: (id: string) => void;
+  /** 0.20: the MCP process's current session id, for per-session checkpoints. */
+  sessionId?: () => string;
   activate?: (q: {
     context: string;
     limit?: number;
     requireConfidence?: number;
     granularity?: 'full' | 'compact' | 'auto';
+    /** 0.20: this session's own memories first within the window. */
+    sessionFirst?: boolean;
   }) => Promise<Array<{
     engram: {
       id: string; concept: string; content: string;
@@ -67,6 +73,44 @@ export interface SidecarDeps {
     confidence?: number;
     conflictsWith?: Array<{ id: string; newer: boolean; slot: string }>;
   }>>;
+  /** Implicit feedback (0.20): credit recalled memories whose substance appears in `text`. */
+  noteUse?: (text: string, source: string) => Promise<number>;
+}
+
+/**
+ * The assistant's last turn from a Claude Code transcript: its text parts and
+ * its tool calls (name + input), from the end of the file back to the previous
+ * user message. Claude Code writes one JSON object per line, each with
+ * `type` and a `message` holding `role` and `content`; older shapes put `role`
+ * at the top level, and both are read. Tool results are user-role entries and
+ * are skipped rather than treated as the turn boundary.
+ */
+export function lastAssistantTurnText(transcriptPath: string, maxChars: number = 20_000): string {
+  let raw = '';
+  try { raw = readFileSync(transcriptPath, 'utf-8'); } catch { return ''; }
+  const lines = raw.trim().split('\n').filter(Boolean).slice(-200);
+  const parts: string[] = [];
+  for (let i = lines.length - 1; i >= 0; i--) {
+    let entry: any;
+    try { entry = JSON.parse(lines[i]); } catch { continue; }
+    const msg = entry?.message ?? entry;
+    const role = msg?.role ?? entry?.type;
+    const content = msg?.content;
+    if (role === 'user') {
+      const isToolResult = Array.isArray(content) && content.every((p: any) => p?.type === 'tool_result');
+      if (!isToolResult) break;
+      continue;
+    }
+    if (role !== 'assistant') continue;
+    if (typeof content === 'string') parts.unshift(content);
+    else if (Array.isArray(content)) {
+      for (const p of content) {
+        if (p?.type === 'text' && typeof p.text === 'string') parts.unshift(p.text);
+        else if (p?.type === 'tool_use') parts.unshift(`${p.name ?? ''} ${JSON.stringify(p.input ?? {})}`);
+      }
+    }
+  }
+  return parts.join('\n').slice(0, maxChars);
 }
 
 /** Prime-hook result cache: shaped question → last injection, for a short window. */
@@ -344,10 +388,12 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
           json(res, 200, { ...hit, cached: true });
           return;
         }
+        if (body.session_id && deps.onSession) deps.onSession(body.session_id);
         const candidates = await deps.activate({
           context: query,
           limit: 8,
           granularity: 'compact',   // priming is a brief note, not a report
+          sessionFirst: true,       // 0.20: after a compaction the question is "what was I doing"
         });
         const primed = buildPrimeInjection(candidates as any, {
           maxTokens: body.maxTokens,
@@ -390,6 +436,14 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
         };
 
         await store.saveCheckpoint(agentId, state);
+        // 0.20: per-session too, under Claude Code's own session id, so
+        // memory_restore in this session finds THIS session's state.
+        if (hookInput.session_id && deps.onSession) deps.onSession(hookInput.session_id);
+        const sessionKey = hookInput.session_id ?? deps.sessionId?.();
+        const s = store as unknown as { saveSessionCheckpoint?: (a: string, s: string, st: ConsciousState) => void };
+        if (sessionKey && typeof s.saveSessionCheckpoint === 'function') {
+          try { s.saveSessionCheckpoint(agentId, sessionKey, state); } catch { /* non-fatal */ }
+        }
         log(agentId, `hook:${event}`, `auto-checkpoint files=${state.activeFiles.length} task="${state.currentTask.slice(0, 80)}"`);
 
         // On SessionEnd: run full consolidation (sleep cycle) before process dies
@@ -417,6 +471,25 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
     }
 
     // 404
+    // Implicit feedback (0.20): the Stop hook posts the transcript path; the
+    // turn's reply and tool calls credit the recalls they drew on. Always 200
+    // with a count — a hook that errors on every turn is worse than none.
+    if (req.url === '/hooks/used' && req.method === 'POST') {
+      try {
+        if (!deps.noteUse) { json(res, 200, { credited: 0, reason: 'not-wired' }); return; }
+        const body = JSON.parse((await readBody(req)) || '{}') as HookInput & { text?: string };
+        if (body.session_id && deps.onSession) deps.onSession(body.session_id);
+        const text = body.text ?? (body.transcript_path ? lastAssistantTurnText(body.transcript_path) : '');
+        if (!text.trim()) { json(res, 200, { credited: 0, reason: 'no-text' }); return; }
+        const credited = await deps.noteUse(text, 'reply');
+        if (credited > 0) log(agentId, 'hook:used', `${credited} recalled memor${credited === 1 ? 'y' : 'ies'} credited from the reply`);
+        json(res, 200, { credited });
+      } catch (err) {
+        json(res, 200, { credited: 0, reason: 'error', detail: String(err) });
+      }
+      return;
+    }
+
     json(res, 404, { error: 'Not found' });
   });
 

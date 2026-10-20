@@ -340,6 +340,10 @@ export interface ActivationQuery {
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default
   workspace?: string;          // Search across all agents in this workspace (hive mode). If unset, agent-scoped only.
+  /** 0.20: the calling session. With `sessionScope`, scopes or orders results by `writerSession`. */
+  sessionId?: string;
+  /** `'only'`: candidates written by this session only. `'first'`: this session's results ahead of the rest within the returned window. */
+  sessionScope?: 'only' | 'first';
   /**
    * Anchor for relative temporal expressions ("last Friday", "last week").
    * Defaults to now. Passed explicitly by evals so a fixture stays

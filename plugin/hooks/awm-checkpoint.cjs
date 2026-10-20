@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// awm-checkpoint.cjs — installed by `awm setup` (hooks v0.14.6). PreCompact / SessionEnd: checkpoint this session into ITS agent's AWM.
+// awm-checkpoint.cjs — installed by `awm setup` (hooks v0.20.0). PreCompact / SessionEnd: checkpoint this session into ITS agent's AWM.
 // Re-running `awm setup` rewrites this file; put local changes elsewhere.
 // Fails open: on any problem it prints nothing and exits 0.
 

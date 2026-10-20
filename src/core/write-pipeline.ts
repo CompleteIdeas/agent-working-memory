@@ -128,6 +128,15 @@ export interface WriteInput {
    * is null. An explicit `supersedes` outranks this.
    */
   correction?: boolean;
+  /**
+   * `'session'` (0.20): a working note for this session. Stored active whatever
+   * its salience, never reinforce-merged into a durable memory, class
+   * ephemeral, expiring on `ttl`. The caller sets `writerSession`, `ttl` and
+   * the `scope=session` tag; this flag only changes the pipeline's gates.
+   */
+  scope?: 'session';
+  /** Time to live in ms for an active ephemeral note (0.20); staged rows get the staging TTL when unset. */
+  ttl?: number;
   /** Workspace scope for cross-agent novelty (v0.5.4+ stores only). */
   workspace?: string | null;
   /** Set to false to skip the reinforce/supersede branching and always create. */
@@ -231,7 +240,10 @@ export async function performWrite(
     && !input.supersedes
     // A correction must never reinforce-merge: merging is exactly how a changed
     // value ended up inside the stale memory with a "--- reinforced ---" marker.
-    && !input.correction;
+    && !input.correction
+    // A session note must never merge into a durable memory: that is how working
+    // chatter would end up inside a canonical fact.
+    && input.scope !== 'session';
 
   // Profiling: AWM_PROFILE_WRITE=1 logs ms-per-phase to stderr (v0.8.2).
   // Off by default; zero cost when unset.
@@ -446,7 +458,18 @@ export async function performWrite(
           disposition: 'active' as const,
           reasonCodes: [...salience.reasonCodes, 'supersede:override-active'],
         }
-      : salience;
+      : input.scope === 'session'
+        // Session scope (0.20): a working note is kept regardless of salience.
+        // The gate scores novelty against the whole store, which is exactly
+        // why a session's own notes ("the port is 4100", "step 3 done") came
+        // back as discard and trained the agent to stop writing them. They
+        // are ephemeral, carry the session id, and expire on their TTL.
+        ? {
+            ...salience,
+            disposition: 'active' as const,
+            reasonCodes: [...salience.reasonCodes, 'scope:session'],
+          }
+        : salience;
     result = await createNewEngram(engines, input, supersedeSalience, noveltyResult, {
       effectiveEventType,
       effectiveMemoryClass,
@@ -692,7 +715,7 @@ async function createNewEngram(
     reasonCodes: salience.reasonCodes,
     memoryClass: meta.effectiveMemoryClass,
     memoryType: input.memoryType,
-    ttl: salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined,
+    ttl: input.ttl ?? (salience.disposition === 'staging' ? DEFAULT_AGENT_CONFIG.stagingTtlMs : undefined),
     supersedes: meta.supersedesId,
     sequence: input.sequence,
     references: input.references,

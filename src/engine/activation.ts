@@ -61,6 +61,13 @@ import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
 import { validityState } from '../core/validity.js';
 import { detectConflicts } from '../core/conflicts.js';
+import { matchUses, type RecallRecord } from '../core/implicit-feedback.js';
+import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
+
+/** How many recent recalls implicit feedback remembers per process. */
+const RECENT_RECALLS_MAX = 24;
+/** Implicit credit is a weaker signal than an explicit rating: half the confidence boost. */
+const IMPLICIT_FEEDBACK_FACTOR = 0.5;
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
@@ -962,6 +969,14 @@ export class ActivationEngine {
         if (injectedIds.has(item.engram.id)) rerankPool.push(item);
       }
     }
+    // Session scope (0.20): "what did I learn in this session" is a filter on
+    // writer_session, applied to the full-engram pool before the reranker.
+    if (query.sessionScope === 'only' && query.sessionId) {
+      const sid = query.sessionId;
+      const own = rerankPool.filter(item => item.engram.writerSession === sid);
+      rerankPool.splice(0, rerankPool.length, ...own);
+      if (rerankPool.length === 0) return [];
+    }
 
     // Phase 7a: every candidate in the pool is judged by the cross-encoder.
     //
@@ -1329,6 +1344,19 @@ export class ActivationEngine {
       // marked results can apply conflicts.ts `newestFirstAmongConflicts` itself.
     }
 
+    // Session-first (0.20): the prime hook's question after a compaction is
+    // "what was I doing", so this session's own notes come ahead of older
+    // memories WITHIN the returned window. Membership and scores are
+    // unchanged, so this cannot move a benchmark that carries no session ids.
+    if (query.sessionScope === 'first' && query.sessionId && results.length > 1) {
+      const sid = query.sessionId;
+      const own = results.filter(r => r.engram.writerSession === sid);
+      if (own.length > 0 && own.length < results.length) {
+        const rest = results.filter(r => r.engram.writerSession !== sid);
+        results.splice(0, results.length, ...own, ...rest);
+      }
+    }
+
     const activatedIds = results.map(r => r.engram.id);
 
     // Side effects: touch, co-activate, defer Hebbian to validation gate (skip for internal/system calls)
@@ -1374,6 +1402,14 @@ export class ActivationEngine {
       // like `confidence`) so the MCP layer can render it once in the footer.
       for (const r of results) r.activationEventId = eventId;
       this.lastActivationEventId = eventId;
+      // Implicit feedback (0.20): remember what this recall returned, so a
+      // later write, supersede, task summary or reply that carries the same
+      // identifiers can credit it without the agent calling memory_feedback.
+      this.recentRecalls.push({
+        eventId, at: Date.now(), agentId: query.agentId,
+        engrams: results.map(r => ({ id: r.engram.id, concept: r.engram.concept, content: r.engram.content, tags: r.engram.tags })),
+      });
+      if (this.recentRecalls.length > RECENT_RECALLS_MAX) this.recentRecalls.splice(0, this.recentRecalls.length - RECENT_RECALLS_MAX);
     }
 
     prof.finish({ results: results.length });
@@ -1382,6 +1418,41 @@ export class ActivationEngine {
 
   /** Id of the most recent non-internal activation this engine logged (0.14.3). */
   lastActivationEventId: string | null = null;
+
+  /** Recalls this process returned recently (see src/core/implicit-feedback.ts). */
+  private recentRecalls: RecallRecord[] = [];
+  private implicitCredited = new Set<string>();
+  /** Test seam. */
+  recentRecallRecords(): readonly RecallRecord[] { return this.recentRecalls; }
+
+  /**
+   * Credit recalled memories whose substance appears in `text` — a write, a
+   * supersede target, a task summary, or the assistant's reply and tool calls
+   * from the Stop hook. Each (recall, memory) pair is credited once: a
+   * retrieval_feedback row joined to the recall, a confidence bump at half the
+   * explicit rate, and the validation-gated Hebbian resolution. Returns the
+   * number of memories credited. Never throws: a failure here must not fail
+   * the write or hook that triggered it.
+   */
+  async noteImplicitUse(text: string, source: string): Promise<number> {
+    let credited = 0;
+    try {
+      const uses = matchUses(this.recentRecalls, text, { credited: this.implicitCredited });
+      for (const u of uses) {
+        try {
+          await this.store.logRetrievalFeedback(u.eventId, u.engramId, true, `implicit:${source} (${u.evidence.slice(0, 3).join(', ')})`);
+          const engram = await this.store.getEngram(u.engramId);
+          if (engram) {
+            await this.store.updateConfidence(engram.id, Math.min(1, engram.confidence + DEFAULT_AGENT_CONFIG.feedbackPositiveBoost * IMPLICIT_FEEDBACK_FACTOR));
+          }
+          await this.resolveHebbianFeedback(u.engramId, true);
+          credited++;
+        } catch { /* one memory's credit failing must not stop the others */ }
+      }
+      if (this.implicitCredited.size > 2000) this.implicitCredited.clear();
+    } catch { /* best effort */ }
+    return credited;
+  }
 
   /**
    * Multi-graph traversal (MAGMA-inspired).

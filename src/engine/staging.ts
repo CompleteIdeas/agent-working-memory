@@ -14,6 +14,7 @@
  */
 
 import type { IEngramStore as EngramStore } from '../storage/store.js';
+import type { Engram } from '../types/engram.js';
 import type { ActivationEngine } from './activation.js';
 
 export class StagingBuffer {
@@ -46,6 +47,15 @@ export class StagingBuffer {
   async sweep(): Promise<{ promoted: string[]; discarded: string[] }> {
     const promoted: string[] = [];
     const discarded: string[] = [];
+
+    // Session notes (0.20): an active ephemeral note past its TTL is archived,
+    // not deleted — it stays reachable by cue, like any archived memory.
+    const s = this.store as unknown as { getExpiredEphemeral?: () => Engram[] };
+    if (typeof s.getExpiredEphemeral === 'function') {
+      for (const note of s.getExpiredEphemeral()) {
+        try { await this.store.updateStage(note.id, 'archived'); } catch { /* best effort */ }
+      }
+    }
 
     const expired = await this.store.getExpiredStaging();
     for (const engram of expired) {

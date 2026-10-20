@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// awm-prime.cjs — installed by `awm setup` (hooks v0.14.6). UserPromptSubmit: prime the turn with relevant memories, or stay silent.
+// awm-prime.cjs — installed by `awm setup` (hooks v0.20.0). UserPromptSubmit: prime the turn with relevant memories, or stay silent.
 // Re-running `awm setup` rewrites this file; put local changes elsewhere.
 // Fails open: on any problem it prints nothing and exits 0.
 

@@ -47,8 +47,9 @@ Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboa
 | `~/.claude/CLAUDE.md` | Memory workflow instructions (when to write, recall, checkpoint) |
 | `~/.claude/settings.json` | Wires the hooks below on Stop, PreCompact, SessionEnd, UserPromptSubmit and PostToolUse. Since 0.14.6 these reference **shipped script files**, not inline `curl` — see [reference.md → Hook Configuration](reference.md#hook-configuration) |
 | `~/.claude/hooks/awm-find-sidecar.cjs` | Resolves which sidecar to talk to: reads the MCP config governing the session's cwd, probes the port range, and picks the one whose `/health` reports that agent |
-| `~/.claude/hooks/awm-checkpoint.cjs` | Checkpoint on PreCompact / SessionEnd; forwards the whole hook payload. **Not Stop** — that hook is a local reminder `echo` with no network call, despite what this row said before 2026-10-09 |
+| `~/.claude/hooks/awm-checkpoint.cjs` | Checkpoint on PreCompact / SessionEnd; forwards the whole hook payload. Since 0.20 the Stop hook is `awm-used.cjs` (below); before that it was a local `echo` with no network call. |
 | `~/.claude/hooks/awm-prime.cjs` | `UserPromptSubmit` — primes relevant memory into context. `--no-prime` skips it; an empty `~/.claude/hooks/awm-prime.disabled` turns it off without uninstalling |
+| `~/.claude/hooks/awm-used.cjs` | `Stop` (0.20) — prints the write / recall reminder and posts the transcript path to `/hooks/used`, so the recalls the reply drew on are credited without a `memory_feedback` call |
 | `~/.claude/hooks/awm-hooks.json` | Records what setup installed, so the hooks can find the server even with no project config |
 
 The bearer secret lives in the MCP config and is read at run time, so regenerating it does
