@@ -46,12 +46,16 @@ dated files under [`archive/`](archive/README.md).
 
 | test | what it asks | result |
 |---|---|---|
-| Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **92.7%** correct on the first result, 97.3% in the top 5 |
-| Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **92.7%** first-result, 96.9% top-5 |
+| Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **97.3%** in the top five, **92.7%** correct on the first result |
+| Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **96.9%** in the top five, **92.7%** first-result |
 | Adversarial, 10 queries | Ask about something that was never stored | **90%** correctly return nothing |
 
 The two fixtures are built differently and agree within a point. Both run against a frozen
-copy of a real 30,000-memory store, not synthetic test data.
+copy of a real 30,000-memory store, not synthetic test data. The assistant sees the top three
+by default, so the top-five figure is the one that describes what it gets; the first-result
+figure is the stricter gauge used to catch ranking regressions. Both depend on memories being
+written the way [`writing-memories.md`](writing-memories.md) says to, and that guidance applies
+to any model, not only Claude.
 
 **Effect on real work — does the assistant do better with it?**
 
@@ -98,7 +102,7 @@ remembered, it is silently re-decided.
 |---|---|
 | **Install** | `npm install -g agent-working-memory && awm setup --global`, then restart Claude Code. About two minutes, plus a one-time ~600 MB model download that dominates it. |
 | **Footprint** | One database file (a mature store is ~250 MB), three cached models (~600 MB), one lightweight background process per assistant session. |
-| **Latency** | A recall takes roughly half a second to a second. Noticeable; not disruptive. |
+| **Latency** | A recall takes about a quarter of a second once warm (p50 256 ms); the first one in a session can take a few seconds while models load. Not disruptive. |
 | **Data** | Stays local. Separate memory pools per project or per person are supported. |
 | **Lock-in** | The store is a plain SQLite file with a documented schema and an export command. |
 | **Team use** | Several sessions can share one store safely; a multi-agent mode exists for automated pipelines. |

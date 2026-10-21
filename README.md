@@ -42,12 +42,15 @@ including the ones we think are weakest.
 
 | | |
 |---|---|
-| **Returns the right memory first** | **92.7%** of identifier queries · **92.7%** of topic queries · **97.3%** in the top five |
+| **Finds the right memory** | In the top five for **97.3%** of identifier queries and **96.9%** of topic queries — and **first** for **92.7%** of both. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to |
 | **Stays silent when it should** | **90.0%** correct abstention on questions about facts never stored |
 | **Costs the same at any scale** | Scoped recall answers in **~630 tokens flat**. Carrying the store instead: ~1.3M tokens |
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
 
-Two independently built fixtures agree within a point. Warm recall takes about half a second.
+Two independently built fixtures agree within a point. A warm recall takes about a quarter of a
+second (p50 256 ms). Those figures are for memories written the way
+[`docs/writing-memories.md`](docs/writing-memories.md) says to — the rules hold for any model
+that writes to the store, and the write is where recall quality is decided.
 
 <details>
 <summary>Two more, from real work rather than fixtures</summary>
@@ -292,6 +295,7 @@ The README points outward; it does not duplicate. Everything below is the author
 | What each eval suite measures, and the measurement caveats | [`docs/benchmarks.md`](docs/benchmarks.md) |
 | Building an agent on AWM as a substrate (PRIME → ACT → VERIFY → LEARN) | [`docs/patterns/awm-native-harness.md`](docs/patterns/awm-native-harness.md) · [agent playbook](https://completeideas.github.io/agent-working-memory/awm-for-agents.html) |
 | Running it as a service; backup, restore, migration | [`docs/deployment.md`](docs/deployment.md) |
+| **Writing memories any model can recall** — the rules behind the retrieval figures, harness-neutral, with a block to paste into an agent's instructions | [`docs/writing-memories.md`](docs/writing-memories.md) |
 | Behaviour as the store grows | [`docs/using-awm-at-scale.md`](docs/using-awm-at-scale.md) |
 | The vocabulary — engram, salience, activation, Hebbian, staging | [`docs/onboarding-vocabulary.md`](docs/onboarding-vocabulary.md) |
 | When something is wrong | [`docs/troubleshooting.md`](docs/troubleshooting.md) |
