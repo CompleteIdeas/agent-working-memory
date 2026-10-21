@@ -265,6 +265,10 @@ question), `memory_stats`.
 
 ## 6. Writing so that recall can find it
 
+The standalone, harness-neutral version of this section — with the before/after
+example and a block to paste into any agent's instructions — is
+`docs/writing-memories.md`. It applies to any model that writes to the store.
+
 Recall quality is decided when you write. Be slightly more verbose at the front
 than feels natural: the head of the body is what all three channels weight most.
 
