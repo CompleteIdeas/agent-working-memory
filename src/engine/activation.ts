@@ -68,6 +68,27 @@ import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 const RECENT_RECALLS_MAX = 24;
 /** Implicit credit is a weaker signal than an explicit rating: half the confidence boost. */
 const IMPLICIT_FEEDBACK_FACTOR = 0.5;
+
+/**
+ * How hard an engram's confidence gates its composite score. The composite is
+ * multiplied by `1 - k * (1 - confidence)`: k=1 is the raw confidence (the
+ * behaviour before 0.20.1), k=0 removes confidence from the ranking entirely.
+ *
+ * Why it is compressible at all: write-time confidence is a PRIOR set by the write
+ * kind (decision 0.65, observation 0.45 — write-pipeline CONFIDENCE_PRIORS), not an
+ * earned quality signal, and most memories keep that prior for life. At k=1 a
+ * decision-kind memory outscores an observation of identical relevance by 0.65/0.45
+ * = 1.44x, so the memory that holds a measured number loses to the principle that
+ * cites it. Measured on the MWA experience-pilot store (580 memories, 18 questions),
+ * see docs/ and the 0.20.1 changelog. Env: AWM_CONFIDENCE_GATE_K.
+ */
+const CONFIDENCE_GATE_K = (() => {
+  const v = Number(process.env.AWM_CONFIDENCE_GATE_K ?? NaN);
+  return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+})();
+export function confidenceGateFor(confidence: number): number {
+  return 1 - CONFIDENCE_GATE_K * (1 - confidence);
+}
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
@@ -628,8 +649,9 @@ export class ActivationEngine {
         ? Math.min(0.1, 0.03 * Math.log1p(stats.sumWeight))
         : 0;
 
-      // Confidence gate — multiplicative quality signal
-      const confidenceGate = engram.confidence;
+      // Confidence gate — multiplicative quality signal, compressed by
+      // CONFIDENCE_GATE_K (see confidenceGateFor): at k=1 it is the raw confidence.
+      const confidenceGate = confidenceGateFor(engram.confidence);
 
       // Feedback bonus — memories confirmed useful via explicit feedback get a
       // direct additive boost. Models how a senior dev "just knows" certain things
@@ -752,7 +774,7 @@ export class ActivationEngine {
             const rh = associations.length > 0 ? Math.min(associations.reduce((s, a) => s + a.weight, 0) / associations.length, 0.5) : 0;
             const tn = Math.min(softplus(ds + rh), 3.0) / 3.0;
             const rg = tm > 0.1 ? tm : 0.0;
-            let comp = (adaptive.textWeight * tm + adaptive.temporalWeight * tn * rg) * engram.confidence;
+            let comp = (adaptive.textWeight * tm + adaptive.temporalWeight * tn * rg) * confidenceGateFor(engram.confidence);
             // Same in-window preference as the main pass, for candidates this
             // feedback re-search discovers.
             if (temporal) {

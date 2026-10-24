@@ -1,5 +1,56 @@
 # Changelog
 
+## Unreleased — consolidation stops archiving distinct facts as duplicates; a supersede inherits what it replaces
+
+Four items from the MWA experience-pilot diagnostic (2026-10-24; AWM memories ae6c3c64, d0bf9f3f).
+
+### `embedding_model` is stamped whenever a vector is written
+
+The SQLite `INSERT` had no `embedding_model` column at all, and every `updateEmbedding()`
+caller except consolidation's re-embed omitted the model id, so every fresh write in every
+consumer landed NULL (the MWA pilot stores: NULL on all 924 rows). The cosine thresholds above
+are calibrated per model, so a store must be able to say which model produced its vectors. All
+three stores now default the column to the current model (`getModelId()`) when a vector is
+written and none is named; `EngramCreate.embeddingModel` lets an import carry the exporting
+model through, and `awm import` does. Test: `tests/storage/embedding-model-stamp.test.ts`.
+
+### Redundancy pruning (Phase 6.5) — threshold, grace period, class guard
+
+A `consolidate()` run straight after a batch write archived 25 distinct observation-kind
+memories (exactly the per-cycle cap) as duplicates of neighbours at 0.77–0.92 cosine — among
+them the only memory holding a calibration's measured numbers. `REDUNDANCY_THRESHOLD` was
+0.75, calibrated for MiniLM-L6, while the store embeds with bge-small-en-v1.5, whose scale is
+compressed upward: on a 622-engram store, UNRELATED active pairs score p50 0.566 / p90 0.652 /
+p99 0.757; same-fact pairs (one engram superseding another, n=298) p10 0.789 / p50 0.889 /
+p75 0.924; verbatim repeats 0.96+. The pass also had no age guard (Phase 6 refuses to judge
+anything younger than `FORGET_GRACE_DAYS`; this phase did not) and no class guard.
+- Threshold 0.90 (env `AWM_REDUNDANCY_THRESHOLD`): near-verbatim repeats only; paraphrases
+  of the same fact are the writer's `supersede` decision, not the sleep cycle's.
+- Candidates must be older than `FORGET_GRACE_DAYS` (7).
+- `canonical` and `structural` engrams are never pruned as redundant.
+- Tests: `tests/engine/redundancy-prune-guards.test.ts` (embeddings supplied directly, no model).
+
+### Explicit `supersedes` floors confidence at the replaced memory's
+
+`correction: true` already did this; `supersedes: <id>` did not, so a merge written as an
+observation (prior 0.45) retired a decision-kind memory (0.65) and ranked below where the stale
+one had been — and sat under the 0.6 line Phase 6.5 treats as disposable. Both paths now pass
+a `confidenceFloor` into `createNewEngram`, applied AFTER caller/prior resolution; the old
+correction path passed it as `input.confidence`, which also pre-empted the write-kind prior
+(a decision-kind correction of a 0.45 observation landed at 0.45). Tests:
+`tests/core/supersede-confidence-floor.test.ts`.
+
+### Confidence gate — measured, made tunable, default unchanged
+
+The composite score is multiplied by the engram's confidence, and confidence is mostly a
+write-kind PRIOR (decision 0.65, observation 0.45), so a principle outscores a number-bearing
+fact of equal relevance by 1.44x. `AWM_CONFIDENCE_GATE_K` now sets the gate to
+`1 - k(1 - confidence)`; k=1 (default) is the old behaviour, k=0 removes confidence from
+ranking. Measured on the pilot stores (18 questions, AWM's own order): k=0.5 moved as many
+questions out of the primed twelve as in (+2/−2 framed, +3/−1 bare on one store; neutral on
+the other); the public benchmark (400 probes) was identical to the digit at k=1, 0.5 and 0.
+Attractor memories did not move with k. Not an improvement on evidence, so the default stays.
+
 ## 0.20.0 (2026-10-20) — the learning loop runs on what the agent does, and a session can keep its own notes
 
 The two engineering items from the 2026-10-20 end-to-end evaluation. **Existing installs

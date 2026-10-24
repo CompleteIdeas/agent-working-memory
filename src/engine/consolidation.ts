@@ -71,9 +71,23 @@ const FORGET_ARCHIVE_DAYS = 30;
 const FORGET_DELETE_DAYS = 90;
 
 /** Cosine similarity above which two low-confidence memories are considered redundant.
- * MiniLM-L6 paraphrases typically score 0.75-0.88 cosine; 0.85 misses most of them.
- * 0.75 catches paraphrases while keeping precision above 0.60 for unrelated facts. */
-const REDUNDANCY_THRESHOLD = 0.75;
+ *
+ * 0.75 was calibrated for MiniLM-L6 ("paraphrases typically score 0.75-0.88"). The
+ * embedding model is now bge-small-en-v1.5, whose cosine scale is compressed upward:
+ * measured on the MWA pilot store (2026-10-24, 622 engrams), UNRELATED active pairs
+ * score p50 0.566 / p90 0.652 / p99 0.757, so 0.75 sat at the 99th percentile of
+ * unrelated pairs — in a 600-memory store that is ~1,800 unrelated pairs over the
+ * line, and 25 distinct memories were archived as duplicates of neighbours at
+ * 0.77-0.92 ("Clef calibration, measured result" pruned against "Jev Router
+ * calibration limits" at 0.81). Same-fact pairs (one engram superseding another,
+ * n=298) score p10 0.789 / p50 0.889 / p75 0.924; verbatim near-duplicates 0.96+.
+ * 0.90 keeps the pass for what it was built for — near-verbatim repeats — and
+ * leaves paraphrases of the same fact to supersede(), which the writer controls.
+ * Env: AWM_REDUNDANCY_THRESHOLD. */
+const REDUNDANCY_THRESHOLD = (() => {
+  const v = Number(process.env.AWM_REDUNDANCY_THRESHOLD ?? NaN);
+  return Number.isFinite(v) && v > 0 && v <= 1 ? v : 0.90;
+})();
 
 /** Max redundant memories to prune per cycle (gradual, not sudden).
  * Raised from 10 to 25 — the eval harness runs multiple cycles anyway,
@@ -730,8 +744,22 @@ export class ConsolidationEngine {
     // Only consider memories that are both low-confidence AND rarely accessed.
     // Memories retrieved 3+ times have proven useful — they stay even if similar
     // to others. This prevents pruning seed memories that match bulk templates.
+    //
+    // Two guards added 2026-10-24 (MWA experience pilot, 580-memory store):
+    //  - FORGET_GRACE_DAYS: a memory written minutes ago has accessCount 0 by
+    //    construction, so Phase 6 refuses to judge it — and this phase did not.
+    //    A consolidate() run straight after a batch write archived 25 of that
+    //    batch's observation-kind memories (the per-cycle cap, exactly) as
+    //    "redundant" with other memories written the same hour, among them the
+    //    only memory holding a calibration's measured numbers.
+    //  - FADE_PROTECTED_CLASSES: a canonical or structural engram is a source-of-
+    //    truth record. Two of them that read alike are a supersede decision for
+    //    the writer, not a dedupe for the sleep cycle; the cost of archiving the
+    //    wrong one (a number gone from the active store) is asymmetric.
     const lowConfEngrams = engrams.filter(e =>
-      e.confidence < 0.6 && e.accessCount < 3 && e.embedding && e.embedding.length > 0);
+      e.confidence < 0.6 && e.accessCount < 3 && e.embedding && e.embedding.length > 0
+      && !FADE_PROTECTED_CLASSES.has(e.memoryClass)
+      && (Date.now() - e.createdAt.getTime()) / (1000 * 60 * 60 * 24) >= FORGET_GRACE_DAYS);
     const pruned = new Set<string>();
     let redundancyCount = 0;
 

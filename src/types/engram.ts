@@ -173,6 +173,8 @@ export interface EngramCreate {
   content: string;
   tags?: string[];
   embedding?: number[];
+  /** Model that produced `embedding`. Defaults to the current model when an embedding is given. */
+  embeddingModel?: string;
   salience?: number;
   confidence?: number;
   salienceFeatures?: SalienceFeatures;

@@ -30,6 +30,7 @@
 import pg from 'pg';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
+import { getModelId } from '../core/embeddings.js';
 import type {
   Engram, EngramCreate, EngramStage, Association, AssociationType,
   SearchQuery, ActivationEvent, StagingEvent,
@@ -380,7 +381,7 @@ export class PostgresEngramStore {
         input.concept,
         input.content,
         vectorToLiteral(input.embedding ?? null),
-        (input as any).embeddingModel ?? null,
+        input.embeddingModel ?? (input.embedding ? getModelId() : null),
         input.confidence ?? 0.5,
         input.salience ?? 0.5,
         now, now,
@@ -606,7 +607,7 @@ export class PostgresEngramStore {
     await this.q(`UPDATE engrams SET confidence = $1 WHERE id = $2`, [clamped, id]);
   }
 
-  async updateEmbedding(id: string, embedding: number[], modelId?: string): Promise<void> {
+  async updateEmbedding(id: string, embedding: number[], modelId: string = getModelId()): Promise<void> {
     await this.readyPromise;
     if (modelId) {
       await this.q(

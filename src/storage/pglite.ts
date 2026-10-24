@@ -18,6 +18,7 @@ import { PGlite } from '@electric-sql/pglite';
 // usage pattern, new package.
 import { vector } from '@electric-sql/pglite-pgvector';
 import { randomUUID } from 'node:crypto';
+import { getModelId } from '../core/embeddings.js';
 
 import type {
   Engram, EngramCreate, EngramStage, Association, AssociationType,
@@ -281,7 +282,7 @@ export class PGliteEngramStore {
         input.concept,
         input.content,
         vectorToLiteral(input.embedding ?? null),
-        (input as any).embeddingModel ?? null,
+        input.embeddingModel ?? (input.embedding ? getModelId() : null),
         input.confidence ?? 0.5,
         input.salience ?? 0.5,
         now, now,
@@ -507,7 +508,7 @@ export class PGliteEngramStore {
     await this.db.query(`UPDATE engrams SET confidence = $1 WHERE id = $2`, [clamped, id]);
   }
 
-  async updateEmbedding(id: string, embedding: number[], modelId?: string): Promise<void> {
+  async updateEmbedding(id: string, embedding: number[], modelId: string = getModelId()): Promise<void> {
     await this.readyPromise;
     if (modelId) {
       await this.db.query(

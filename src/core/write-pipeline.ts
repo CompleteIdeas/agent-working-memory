@@ -420,14 +420,15 @@ export async function performWrite(
         disposition: 'active' as const,
         reasonCodes: [...salience.reasonCodes, 'correction:override-active'],
       };
-      result = await createNewEngram(engines, {
-        ...input,
-        // The replacement must not stand weaker than what it replaces.
-        confidence: Math.max(input.confidence ?? 0, target.confidence),
-      }, correctionSalience, noveltyResult, {
+      result = await createNewEngram(engines, input, correctionSalience, noveltyResult, {
         effectiveEventType,
         effectiveMemoryClass,
         supersedesId: target.id,
+        // The replacement must not stand weaker than what it replaces. A floor, not
+        // an override: before 2026-10-24 this was passed as input.confidence, which
+        // also pre-empted the write-kind prior, so a decision-kind correction of a
+        // 0.45 observation landed at 0.45 instead of its own 0.65.
+        confidenceFloor: target.confidence,
       }, prewriteEmbedding);
       correctionOf = { id: target.id, concept: target.concept, matchScore: noveltyResult.matchScore };
     }
@@ -437,11 +438,21 @@ export async function performWrite(
   if (!result) {
     // An explicit `supersedes` names the target, but naming it does not make the
     // write trustworthy: an untrusted write must not retire a trusted memory by id.
+    let supersedeConfidenceFloor: number | undefined;
     if (input.supersedes) {
       const named = await store.getEngram(input.supersedes);
       if (named && mergeBlockedByTrust(input.tags, named.tags)) {
         trustBlocked = { matchedId: named.id, writeTrust: trustTier(input.tags), matchedTrust: trustTier(named.tags) };
         input = { ...input, supersedes: undefined };
+      } else if (named) {
+        // The replacement must not stand weaker than what it replaces — the same
+        // floor `correction: true` applies (above). Without it a supersede written
+        // as an observation was born at the 0.45 prior while the decision-kind
+        // memory it retired had held 0.65, so the corrected fact ranked below
+        // where the stale one had been, and sat under the 0.6 line Phase 6.5
+        // redundancy pruning treats as disposable (MWA experience pilot,
+        // 2026-10-23: 17 of 273 merged memories archived minutes after birth).
+        supersedeConfidenceFloor = named.confidence;
       }
     }
     // A correction of a near-duplicate has low novelty BY CONSTRUCTION: the replacement
@@ -474,6 +485,7 @@ export async function performWrite(
       effectiveEventType,
       effectiveMemoryClass,
       supersedesId: input.supersedes,
+      confidenceFloor: supersedeConfidenceFloor,
     }, prewriteEmbedding);
   }
   // A correction always reports what it did, including "nothing" (null).
@@ -651,6 +663,10 @@ async function createNewEngram(
     effectiveEventType: SalienceEventType;
     effectiveMemoryClass: MemoryClass | undefined;
     supersedesId: string | undefined;
+    /** The replacement must not stand weaker than what it replaces: the superseded
+     *  engram's confidence, applied AFTER the caller/prior resolution below so a
+     *  decision-kind correction of an observation still gets the decision prior. */
+    confidenceFloor?: number;
   },
   /** Pre-computed embedding from performWrite (v0.8.5). If non-null, used
    *  directly + skips the post-create async embed pass. */
@@ -662,12 +678,15 @@ async function createNewEngram(
 
   // Confidence: caller wins, then disposition-aware prior, then fall back
   // to eventType prior.
-  const confidence = input.confidence
-    ?? (isLowSalience
-      ? 0.25
-      : salience.disposition === 'staging'
-        ? 0.40
-        : CONFIDENCE_PRIORS[meta.effectiveEventType] ?? 0.45);
+  const confidence = Math.max(
+    input.confidence
+      ?? (isLowSalience
+        ? 0.25
+        : salience.disposition === 'staging'
+          ? 0.40
+          : CONFIDENCE_PRIORS[meta.effectiveEventType] ?? 0.45),
+    meta.confidenceFloor ?? 0,
+  );
 
   const tags = [...(input.tags ?? [])];
   if (isLowSalience && !tags.includes('low-salience')) tags.push('low-salience');

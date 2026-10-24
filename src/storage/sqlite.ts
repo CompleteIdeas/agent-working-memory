@@ -9,7 +9,7 @@
 
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import { cosineSimilarity } from '../core/embeddings.js';
+import { cosineSimilarity, getModelId } from '../core/embeddings.js';
 import type {
   Engram, EngramCreate, EngramStage, Association, AssociationType,
   SearchQuery, SalienceFeatures, ActivationEvent, StagingEvent,
@@ -464,13 +464,19 @@ export class EngramStore {
       : null;
 
     this.db.prepare(`
-      INSERT INTO engrams (id, agent_id, concept, content, embedding, confidence, salience,
+      INSERT INTO engrams (id, agent_id, concept, content, embedding, embedding_model, confidence, salience,
         access_count, last_accessed, created_at, salience_features, reason_codes, stage, tags, episode_id,
         ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type,
         sequence, references_json, origin_class, writer_session, recipe_id, valid_from, valid_to)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.agentId, input.concept, input.content, embeddingBlob,
+      // Stamp the model with the vector (2026-10-24). This INSERT never wrote
+      // embedding_model, so every fresh write in every consumer landed NULL and only
+      // consolidation's re-embed ever filled it. Cosine thresholds (REDUNDANCY_THRESHOLD,
+      // SIM_FLOOR) are calibrated per model, so a store has to be able to say which
+      // model its vectors came from.
+      embeddingBlob ? (input.embeddingModel ?? getModelId()) : null,
       input.confidence ?? 0.5,
       input.salience ?? 0.5,
       now, now,
@@ -811,7 +817,7 @@ export class EngramStore {
     );
   }
 
-  updateEmbedding(id: string, embedding: number[], modelId?: string): void {
+  updateEmbedding(id: string, embedding: number[], modelId: string = getModelId()): void {
     const blob = Buffer.from(new Float32Array(embedding).buffer);
     if (modelId) {
       this.db.prepare('UPDATE engrams SET embedding = ?, embedding_model = ? WHERE id = ?').run(blob, modelId, id);
