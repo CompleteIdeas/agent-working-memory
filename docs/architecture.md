@@ -106,7 +106,7 @@ The sleep cycle in `src/engine/consolidation.ts`:
 | 5 | Homeostasis | Normalize hub weights to prevent domination |
 | **5.5** | **Content fade** (v0.8.5) | Trim content of accessed-but-stale engrams to 150 chars; transition `active → fading`. Preserves concept, tags, embedding. |
 | 6 | Forget | Archive/delete low-confidence, low-access memories |
-| 6.5 | Redundancy prune | Archive semantically similar (>0.85) low-conf duplicates |
+| 6.5 | Redundancy prune | Archive near-verbatim duplicates: cosine > 0.90 (`AWM_REDUNDANCY_THRESHOLD`), confidence < 0.6, access < 3, older than the forget grace period; canonical and structural engrams exempt |
 | 6.7 | Confidence drift | Adjust confidence based on structural signals |
 | 7 | Sweep staging | Promote or discard memories in staging buffer |
 

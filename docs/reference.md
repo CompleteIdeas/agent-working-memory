@@ -620,6 +620,18 @@ via the marker at the end of the content; `deleteEngram` clears `retrieval_feedb
 found in the live store); and a declared `intent: 'decision'` on `memory_write` now reaches the
 salience filter instead of only becoming a tag.
 
+### 0.20.1 additions (consolidation calibration, 2026-10-24)
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_REDUNDANCY_THRESHOLD` | `0.90` | Cosine above which consolidation Phase 6.5 archives a low-confidence (< 0.6), rarely-accessed (< 3) engram as a duplicate of an active neighbour. Was 0.75, calibrated for MiniLM-L6; the store embeds with bge-small-en-v1.5, where UNRELATED active pairs reach p99 0.757 and same-fact pairs sit at p10 0.789 / p50 0.889, so a cycle straight after a batch write archived 25 distinct minute-old memories. 0.90 catches near-verbatim repeats only; paraphrases are the writer's `supersede` decision. Candidates must also be older than `FORGET_GRACE_DAYS` (7), and `canonical` / `structural` engrams are never pruned here. |
+| `AWM_CONFIDENCE_GATE_K` | `1` | The composite recall score is multiplied by `1 - k(1 - confidence)`. k=1 is the historical behaviour (score x confidence); k=0 removes confidence from ranking. Confidence is mostly a write-kind prior (decision 0.65, observation 0.45), so at k=1 a principle outscores a number-bearing fact of equal relevance by 1.44x. Measured on the MWA pilot stores and the 400-probe public benchmark: a trade on the former, identical on the latter — so the default stays. |
+
+Also in this group, no env var: a `supersedes` write (and `correction: true`) floors the new
+engram's confidence at the replaced memory's, applied after the caller's value or the write-kind
+prior is resolved; and `embedding_model` is stamped on every vector written (see the schema
+below) — `EngramCreate.embeddingModel` carries an importing store's model through `awm import`.
+
 ### 0.11.x additions (Waves 1–3 + D11, 2026-07-30)
 
 **Write-path telemetry (D1)** — always-on slow-write attribution:

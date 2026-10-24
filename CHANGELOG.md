@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — consolidation stops archiving distinct facts as duplicates; a supersede inherits what it replaces
+## 0.20.1 (2026-10-24) — consolidation stops archiving distinct facts as duplicates; a supersede inherits what it replaces
 
 Four items from the MWA experience-pilot diagnostic (2026-10-24; AWM memories ae6c3c64, d0bf9f3f).
 
