@@ -236,7 +236,8 @@ export async function performWrite(
   // S1: redact BEFORE novelty matching, embedding and storage, so no stage ever sees the
   // credential. The store wrapper (storage/redacting-store.ts) repeats it as a guarantee
   // for paths that bypass this pipeline; redaction is idempotent, so this costs nothing.
-  const { fields, findings } = redactFields(input, ['concept', 'content', 'tags']);
+  // seal: a secret in a memory is something AWM KNOWS — kept in the vault, a handle left here.
+  const { fields, findings } = redactFields(input, ['concept', 'content', 'tags'], { seal: true });
   const result = await performWriteRedacted(engines, fields);
   if (findings.length) result.redaction = findings;
   return result;

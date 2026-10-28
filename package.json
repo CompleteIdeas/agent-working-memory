@@ -102,5 +102,8 @@
   "homepage": "https://github.com/CompleteIdeas/agent-working-memory#readme",
   "bugs": {
     "url": "https://github.com/CompleteIdeas/agent-working-memory/issues"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^2.1.2"
   }
 }

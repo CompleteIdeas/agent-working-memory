@@ -106,6 +106,9 @@ export const NEGATIVES: FixtureCase[] = [
   { text: 'DATABASE_URL="postgresql://postgres:postgres@localhost:5544/rowos"', expect: [], note: 'user == password local default' },
   { text: 'build postgresql://PGUSER:PGPASSWORD@RAILWAY_TCP_PROXY_DOMAIN:5432/PGDATABASE', expect: [] },
   { text: '| Password | reset through the portal |', expect: [] },
+  // Found by the vault migration rehearsal on a copy of the live store, 2026-10-28.
+  { text: "View gained `{name:'join'; token:string}` in App.tsx", expect: [], note: 'a type annotation' },
+  { text: 'DATABASE_URL overridden to postgres://nobody:nothing@127.0.0.1:1/none', expect: [], note: 'a deliberately fake test URL' },
   { text: '| Forgot password | Services\\ForgotPassword.aspx.cs |', expect: [] },
   { text: 'RAILWAY_API_TOKEN="<railway token>" railway up', expect: [] },
   { text: 'a key-rotation script for MEDICAL_ENCRYPTION_KEY: rotate-medical-encryption.ts', expect: [] },

@@ -6,6 +6,9 @@ So AWM masks secrets **before** a write is stored, indexed, embedded or logged.
 
 This is item S1 of [`decision-gap-closure-2026-10-10.md`](decision-gap-closure-2026-10-10.md).
 
+**Want AWM to keep the secret instead of forgetting it?** Turn on the vault (`AWM_VAULT=on`):
+the value is sealed and the memory keeps a handle it can use. See [`vault.md`](vault.md).
+
 ## The policy
 
 | Tier | What | Default | Switch |

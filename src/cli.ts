@@ -61,6 +61,8 @@ Usage:
             [--dedupe] [--dry-run]                  Merge multiple memory DBs
   awm migrate --from <sqlite.db> --to <pglite-dir> [--dry-run] [--verbose]
                                                     Migrate SQLite DB to PGlite
+  awm vault list | run <id> [--env NAME] -- <cmd> | allow | reveal | forget | status
+                                                    Use sealed secrets without showing them
 
 Setup targets:
   claude-code (default)   .mcp.json + CLAUDE.md + hooks
@@ -912,6 +914,11 @@ switch (command) {
   case 'onboard':
     onboardCmd();
     break;
+  case 'vault': {
+    const { vaultCmd } = await import('./cli/vault.js');
+    process.exitCode = await vaultCmd(args.slice(1));
+    break;
+  }
   case '--help':
   case '-h':
   case undefined:

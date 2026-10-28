@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased — write-time redaction (S1)
+## Unreleased — the vault (S1b, opt-in) and write-time redaction (S1)
+
+### The vault: knowing without telling (`AWM_VAULT=on`)
+
+Docs: `docs/vault.md`. Opt-in; off, S1's mask-and-forget is unchanged.
+- A secret in memory text is **sealed**, not destroyed: AES-256-GCM in a separate `vault.db`,
+  with the key in the OS credential store (`@napi-rs/keyring`, an optional dependency; a key
+  file fallback where none exists). The memory keeps a handle, `[VAULT:type …last4 #id]`, so
+  recall still knows the secret exists and what it is for. The same value sealed twice is one
+  item.
+- **Known secrets:** once sealed, a value is replaced by its handle wherever it appears again,
+  with or without a label, on every write, log line and checkpoint.
+- **`awm vault`:** `list`, `run <id> --env NAME -- <cmd>` (into allowed commands only, value
+  scrubbed from output, chaining never allowed), `allow`/`disallow`, `reveal` (interactive
+  terminal only), `forget`, `status`, `migrate [--apply]`. There is no MCP tool that returns a
+  value. `memory_recall` tells the agent how to use a handle when one is in its results.
+- **`migrate`** seals an existing store in two passes. The second sweeps every text column of
+  every table and `awm.log`. It then optimizes FTS and vacuums. Rehearsed on a copy of a
+  19,071-memory store:
+  - 63 memories sealed (40 values), and 439 more rows found by the second pass;
+  - 0 of 40 values left anywhere in the file's bytes;
+  - recall unchanged (same #1 for 8/8 questions, top-5 39/40).
+- **Tests:** `tests/core/vault.test.ts` (12) reads both files back.
+
+### Write-time redaction
 
 Item S1 of `docs/decision-gap-closure-2026-10-10.md`: secrets are masked before anything is
 stored, indexed, embedded or logged. Policy, rules and measurements: `docs/redaction.md`.

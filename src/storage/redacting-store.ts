@@ -20,6 +20,9 @@ import type { ConsciousState } from '../types/checkpoint.js';
 
 const r = (s: string): string => redactText(s).text;
 const rList = (xs: string[] | undefined): string[] | undefined => xs?.map((x) => (typeof x === 'string' ? r(x) : x));
+// Memory text is sealed (kept in the vault behind a handle); logs and checkpoints only mask.
+const seal = (s: string): string => redactText(s, { seal: true }).text;
+const sealList = (xs: string[] | undefined): string[] | undefined => xs?.map((x) => (typeof x === 'string' ? seal(x) : x));
 
 function redactState(state: ConsciousState): ConsciousState {
   if (!state) return state;
@@ -39,11 +42,11 @@ function redactState(state: ConsciousState): ConsciousState {
  */
 const REWRITE: Record<string, (args: any[]) => any[]> = {
   createEngram: ([input, ...rest]) => [
-    input ? { ...input, concept: r(input.concept ?? ''), content: r(input.content ?? ''), tags: rList(input.tags) } : input,
+    input ? { ...input, concept: seal(input.concept ?? ''), content: seal(input.content ?? ''), tags: sealList(input.tags) } : input,
     ...rest,
   ],
-  updateContent: ([id, content, ...rest]) => [id, typeof content === 'string' ? r(content) : content, ...rest],
-  updateTags: ([id, tags, ...rest]) => [id, rList(tags) ?? tags, ...rest],
+  updateContent: ([id, content, ...rest]) => [id, typeof content === 'string' ? seal(content) : content, ...rest],
+  updateTags: ([id, tags, ...rest]) => [id, sealList(tags) ?? tags, ...rest],
   saveCheckpoint: ([agentId, state, ...rest]) => [agentId, redactState(state), ...rest],
   saveSessionCheckpoint: ([agentId, sessionId, state, ...rest]) => [agentId, sessionId, redactState(state), ...rest],
   logActivationEvent: ([event, ...rest]) => [event ? { ...event, context: r(event.context ?? '') } : event, ...rest],

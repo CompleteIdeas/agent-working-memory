@@ -600,11 +600,17 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     // to this recall. Rendered after the token footer; cheap (one short line).
     const evId = results[0]?.activationEventId;
     const evFooter = evId ? `\n[recall_id: ${evId}]` : '';
+    // S1b: a memory can know a secret it will not say. Tell the agent how to use one.
+    const vaultFooter = packed.lines.some((l) => l.includes('[VAULT:'))
+      ? '\n🔐 [VAULT:… #id] is a sealed value this memory knows. Use it without showing it: '
+        + '`awm vault run <id> --env NAME -- <command>` (only for commands the user allowed). '
+        + 'There is no way to read it into the conversation.'
+      : '';
 
     return {
       content: [{
         type: 'text' as const,
-        text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
+        text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + vaultFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
       }],
     };
   }

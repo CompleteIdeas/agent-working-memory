@@ -35,6 +35,8 @@
  *   AWM_REDACT_PII  report (default) | mask | off   — email and phone
  */
 
+import { getVault, vaultIdsIn } from './vault.js';
+
 export type RedactTier = 'secret' | 'pii';
 export type RedactMode = 'mask' | 'report' | 'off';
 
@@ -44,6 +46,17 @@ export interface RedactFinding {
   tier: RedactTier;
   /** True when the text was changed; false when the finding was only reported. */
   masked: boolean;
+  /** Vault id when the value was sealed rather than destroyed (S1b). */
+  sealed?: string;
+}
+
+export interface RedactOptions {
+  /**
+   * Seal masked values in the vault and leave a handle, instead of destroying them. Used
+   * for memory text — what AWM KNOWS. Logs, recall queries and checkpoints only mask: a
+   * token that appeared in a search is not something to remember.
+   */
+  seal?: boolean;
 }
 
 export interface RedactResult {
@@ -73,7 +86,7 @@ interface Rule {
 const PLACEHOLDER = /^(?:x{3,}|\*{3,}|\.{3,}|…|<[^>]*>|\{\{.*\}\}|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|\$env:[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|process\.env\.[A-Za-z_][A-Za-z0-9_]*|changeme|redacted|your[_-]?\w*|example\w*|placeholder|null|none|undefined|true|false|n\/a)$/i;
 
 function looksLikePlaceholder(v: string): boolean {
-  return PLACEHOLDER.test(v) || v.includes('…') || v.includes('...') || /^\[REDACTED/.test(v)
+  return PLACEHOLDER.test(v) || v.includes('…') || v.includes('...') || /^\[(?:REDACTED|VAULT)/.test(v)
     // `<railway token>`, `<paste`: a template the writer meant to be filled in.
     || v.startsWith('<');
 }
@@ -86,7 +99,9 @@ function looksLikePlaceholder(v: string): boolean {
 function looksLikeNonValue(v: string): boolean {
   return v.includes('\\')
     || /\.(?:ts|js|mjs|cjs|tsx|jsx|cs|aspx|py|json|md|sql|ya?ml|env|txt|html|ps1|sh|cmd)$/i.test(v)
-    || /^[A-Za-z_][A-Za-z0-9_]*=/.test(v);
+    || /^[A-Za-z_][A-Za-z0-9_]*=/.test(v)
+    // A type name closing a code construct: `token:string}`, `secret: Buffer)`.
+    || /^[A-Za-z]+[}\])>;,.]+$/.test(v);
 }
 
 /**
@@ -147,7 +162,9 @@ const RULES: Rule[] = [
       // An env-var name standing in for the password (PGPASSWORD) is a template, not a secret.
       && !/^[A-Z][A-Z0-9_]*$/.test(v)
       // user == password is a throwaway local default (postgres:postgres), not a credential.
-      && v !== m[1] },
+      && v !== m[1]
+      // A plain lowercase word (`nobody:nothing@`) is a placeholder in a test URL, not a password.
+      && !/^[a-z]+$/.test(v) },
   { type: 'bearer_token', tier: 'secret', switch: 'secret', group: 1,
     pattern: /\bBearer\s+([A-Za-z0-9._~+/=-]{20,})/g,
     accept: (v) => /\d/.test(v) && /[A-Za-z]/.test(v) },
@@ -209,10 +226,11 @@ function maskFor(rule: Rule, value: string): string {
  * value masked by a specific rule (a Stripe key) is not re-reported by a generic one
  * (`api_key=`): the mask text no longer looks like a credential.
  */
-export function redactText(text: string): RedactResult {
+export function redactText(text: string, opts: RedactOptions = {}): RedactResult {
   const findings: RedactFinding[] = [];
   if (!text) return { text, findings };
   let out = text;
+  const vault = opts.seal ? getVault() : null;
 
   for (const rule of RULES) {
     const mode = modeFor(rule.switch);
@@ -230,18 +248,50 @@ export function redactText(text: string): RedactResult {
       const value = m[g];
       if (value === undefined) continue;
       if (rule.accept && !rule.accept(value, m)) continue;
-      if (value.startsWith('[REDACTED')) continue;
+      if (value.startsWith('[REDACTED') || value.startsWith('[VAULT')) continue;
       const masked = mode === 'mask';
-      findings.push({ type: rule.type, tier: rule.tier, masked });
-      if (!masked) continue;
+      if (!masked) { findings.push({ type: rule.type, tier: rule.tier, masked }); continue; }
       // Locate the captured group inside the match so only the value is replaced.
       const valueStart = g === 0 ? m.index : m.indices![g]![0];
-      pieces.push(out.slice(cursor, valueStart), maskFor(rule, value));
+      let replacement = maskFor(rule, value);
+      let sealed: string | undefined;
+      if (vault) {
+        try {
+          // The words just before the value say what it is ("RAILWAY_API_TOKEN=", "Stripe
+          // payout key:"), which is what `awm vault list` shows a human later.
+          const label = out.slice(Math.max(0, valueStart - 80), valueStart).replace(/\s+/g, ' ').trim();
+          replacement = vault.seal(value, rule.type, label);
+          sealed = vaultIdsIn(replacement)[0];
+        } catch (err) {
+          // A vault failure must never store the value: fall back to the plain mask.
+          process.stderr.write(`[awm] vault seal failed, masking instead: ${(err as Error).message}
+`);
+        }
+      }
+      findings.push({ type: rule.type, tier: rule.tier, masked, ...(sealed ? { sealed } : {}) });
+      pieces.push(out.slice(cursor, valueStart), replacement);
       cursor = valueStart + value.length;
     }
     if (cursor > 0) {
       pieces.push(out.slice(cursor));
       out = pieces.join('');
+    }
+  }
+
+  // Known secrets (S1b): a value already in the vault is replaced by its handle wherever it
+  // turns up — with or without a label the shape rules can see. Runs for every surface,
+  // sealed or masked, whenever a vault is open; a handle names a value, it does not contain it.
+  const known = modeFor('secret') === 'mask' ? getVault() : null;
+  if (known) {
+    try {
+      for (const k of known.knownSecrets()) {
+        if (!out.includes(k.value)) continue;
+        const n = out.split(k.value).length - 1;
+        out = out.split(k.value).join(k.handle);
+        for (let i = 0; i < n; i++) findings.push({ type: 'known_secret', tier: 'secret', masked: true, sealed: vaultIdsIn(k.handle)[0] });
+      }
+    } catch (err) {
+      process.stderr.write(`[awm] vault lookup failed: ${(err as Error).message}\n`);
     }
   }
   return { text: out, findings };
@@ -251,19 +301,20 @@ export function redactText(text: string): RedactResult {
 export function redactFields<T extends object>(
   fields: T,
   keys: Array<keyof T>,
+  opts: RedactOptions = {},
 ): { fields: T; findings: RedactFinding[] } {
   const findings: RedactFinding[] = [];
   const outFields = { ...fields };
   for (const key of keys) {
     const v = fields[key];
     if (typeof v === 'string') {
-      const r = redactText(v);
+      const r = redactText(v, opts);
       findings.push(...r.findings);
       (outFields as Record<string, unknown>)[key as string] = r.text;
     } else if (Array.isArray(v)) {
       (outFields as Record<string, unknown>)[key as string] = v.map((item) => {
         if (typeof item !== 'string') return item;
-        const r = redactText(item);
+        const r = redactText(item, opts);
         findings.push(...r.findings);
         return r.text;
       });
@@ -280,9 +331,15 @@ export function describeFindings(findings: RedactFinding[]): string {
     for (const f of list) by.set(f.type, (by.get(f.type) ?? 0) + 1);
     return [...by].map(([t, n]) => (n > 1 ? `${t} ×${n}` : t)).join(', ');
   };
-  const masked = findings.filter((f) => f.masked);
+  const sealed = findings.filter((f) => f.sealed);
+  const masked = findings.filter((f) => f.masked && !f.sealed);
   const reported = findings.filter((f) => !f.masked);
   const parts: string[] = [];
+  if (sealed.length) {
+    const ids = [...new Set(sealed.map((f) => f.sealed))].map((id) => `#${id}`).join(', ');
+    parts.push(`🔐 Sealed in the vault: ${count(sealed)} (${ids}). The memory keeps a handle, so recall still knows it. `
+      + `To use a value without showing it: \`awm vault run <id> --env NAME -- <command>\`.`);
+  }
   if (masked.length) {
     parts.push(`🔒 Redacted before storing: ${count(masked)}. Store a pointer (where the value lives) instead of the value itself.`);
   }

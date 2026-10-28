@@ -40,6 +40,9 @@ import { existsSync, statSync } from 'node:fs';
 import type { IEngramStore } from './store.js';
 import { assertNotLiveStoreUnderTest } from '../adapters/common.js';
 import { withRedaction } from './redacting-store.js';
+import { initVault } from '../core/vault.js';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 export type StoreBackend = 'sqlite' | 'pglite' | 'postgres';
 
@@ -162,6 +165,7 @@ export async function openStore(): Promise<{
     const { PostgresEngramStore } = await import('./postgres.js');
     const store = new PostgresEngramStore(path);
     await store.ready();
+    initVault(join(homedir(), '.awm', 'memory.db'));
     return { store: withRedaction(store as unknown as IEngramStore), backend, path };
   }
 
@@ -169,10 +173,12 @@ export async function openStore(): Promise<{
     const { PGliteEngramStore } = await import('./pglite.js');
     const store = new PGliteEngramStore(path);
     await store.ready();
+    initVault(path);
     return { store: withRedaction(store as unknown as IEngramStore), backend, path };
   }
 
   const { EngramStore } = await import('./sqlite.js');
   const store = new EngramStore(path);
+  initVault(path);
   return { store: withRedaction(store as unknown as IEngramStore), backend, path };
 }
