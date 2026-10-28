@@ -16,7 +16,7 @@ Four items scheduled, one measurement first, in this order:
 | # | Item | Kind | Why this position |
 |---|---|---|---|
 | M1 | Long-context embedding A/B on first-stage recall | **measurement** | Closes a transfer-risk hole in a prior rejection; cheap; it is a measurement, which is what this project is for |
-| S1 | Write-time redaction + PII policy + its own eval harness | build | Trust-critical. **Must precede S2** — see the ordering constraint below |
+| S1 | Write-time redaction + PII policy + its own eval harness | build | Trust-critical. **Must precede S2** — see the ordering constraint below. **Built 2026-10-28, unreleased: [`redaction.md`](redaction.md)** |
 | S2 | Recall-trace explain artifact, CLI/JSON-first | build | The differentiator is invisible; this is the cheapest way to make it visible without becoming a web app |
 | S3 | Reduce missed writes — deterministic hooks + explicit promote path | build | The write half of the #1 documented failure mode, scoped to what is possible without an LLM |
 | S4 | Encryption at rest — threat-model RFC, then build | spec first | Not one checkbox; key-management UX is the hard part and the dangerous part |

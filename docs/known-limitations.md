@@ -125,6 +125,13 @@ migration, not a toggle. A larger model (bge-base, 768d) was measured and reject
 Upgrades apply `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` at startup. Every release to
 date has opened older databases cleanly. There is no down-migration.
 
+### Redaction is shape-based and does not reach old memories
+
+Write-time redaction ([`redaction.md`](redaction.md)) masks credentials that have a known shape
+or a label. A bare random string in prose is not caught. Memories written before it shipped
+are not rewritten, so a store can still hold credentials from earlier. `scripts/redact-scan.ts`
+counts them read-only.
+
 ## Measurement
 
 ### The benchmark has been wrong three times this month

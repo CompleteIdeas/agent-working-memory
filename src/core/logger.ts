@@ -11,6 +11,7 @@
 
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { redactText } from './redact.js';
 
 let logPath: string | null = null;
 
@@ -23,7 +24,9 @@ export function initLogger(dbPath: string): void {
 export function log(agentId: string, event: string, detail: string): void {
   if (!logPath) return;
   const ts = new Date().toISOString();
-  const line = `${ts} | ${agentId} | ${event} | ${detail}\n`;
+  // S1: awm.log is a file on disk next to the store, and log lines quote concepts and
+  // recall queries, so it gets the same redaction as the store itself.
+  const line = `${ts} | ${agentId} | ${event} | ${redactText(detail).text}\n`;
   try {
     appendFileSync(logPath, line);
   } catch {

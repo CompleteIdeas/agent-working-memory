@@ -39,6 +39,7 @@
 import { existsSync, statSync } from 'node:fs';
 import type { IEngramStore } from './store.js';
 import { assertNotLiveStoreUnderTest } from '../adapters/common.js';
+import { withRedaction } from './redacting-store.js';
 
 export type StoreBackend = 'sqlite' | 'pglite' | 'postgres';
 
@@ -161,17 +162,17 @@ export async function openStore(): Promise<{
     const { PostgresEngramStore } = await import('./postgres.js');
     const store = new PostgresEngramStore(path);
     await store.ready();
-    return { store: store as unknown as IEngramStore, backend, path };
+    return { store: withRedaction(store as unknown as IEngramStore), backend, path };
   }
 
   if (backend === 'pglite') {
     const { PGliteEngramStore } = await import('./pglite.js');
     const store = new PGliteEngramStore(path);
     await store.ready();
-    return { store: store as unknown as IEngramStore, backend, path };
+    return { store: withRedaction(store as unknown as IEngramStore), backend, path };
   }
 
   const { EngramStore } = await import('./sqlite.js');
   const store = new EngramStore(path);
-  return { store: store as unknown as IEngramStore, backend, path };
+  return { store: withRedaction(store as unknown as IEngramStore), backend, path };
 }

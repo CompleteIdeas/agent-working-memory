@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased — write-time redaction (S1)
+
+Item S1 of `docs/decision-gap-closure-2026-10-10.md`: secrets are masked before anything is
+stored, indexed, embedded or logged. Policy, rules and measurements: `docs/redaction.md`.
+
+### What is masked, and where
+
+- **Secret tier (masked by default):** provider keys with a known shape (Anthropic, OpenAI,
+  Stripe secret/restricted/webhook, GitHub, AWS access key ids, Google API, Slack, Resend, npm),
+  PEM private keys, JWTs, the password inside a connection URL, `Bearer` tokens, and labelled
+  values (`password=`, `API_KEY:`, `"client_secret": "…"`, a markdown-table `| Password | … |`,
+  `` password `…` ``). A mask keeps the rule name and, for long keys, the last four
+  characters: `[REDACTED:stripe_key …0dWz]`. Labelled values keep their label, so the memory
+  stays findable.
+- **PII tier:** US SSNs and payment cards (Luhn-checked, issuer prefix, consistent grouping;
+  the networks' public test numbers excepted) are masked. Email addresses and phone numbers
+  are **reported, not masked** by default — in a personal or team store the contact is often
+  the point of the memory. Names are not detected.
+- **Every surface:** `performWrite` redacts concept, content and tags before novelty
+  matching and embedding, and returns what it found (`WriteResult.redaction`), which
+  `memory_write` and the HTTP write routes now report. Underneath that, `openStore()` wraps
+  every backend (SQLite, PGlite, Postgres) in `storage/redacting-store.ts`, so the nine store
+  methods that persist free text — engrams, content merges, tags, both checkpoint kinds, the
+  recall-query and feedback logs, the auto-checkpoint, episode labels — are masked whichever
+  path called them. `awm.log` lines are masked. The HTTP batch route embeds redacted text.
+- **Switches:** `AWM_REDACT=mask|report|off` (secret tier, SSN, card; default `mask`) and
+  `AWM_REDACT_PII=report|mask|off` (email, phone; default `report`).
+
+### Measured
+
+- Labelled fixture (`tests/core/redact-fixture.ts`): 32 positives, 47 hard negatives, every
+  rule covered; per-rule false positives and false negatives fail CI. 0 / 0 at release.
+- The live store (19,071 engrams), scanned read-only with `scripts/redact-scan.ts`: the
+  rules find real credentials in ~70 memories (Stripe, webhook, npm, Resend, Anthropic and
+  Railway tokens; database passwords; admin headers). Two review rounds of masked samples
+  removed six false-positive shapes (floats and id lists read as cards, a code expression,
+  file paths in table cells, `<placeholder>` values, a blank assignment swallowing the next
+  one, user==password local defaults) and two misses (markdown-table passwords; a backticked
+  value after a label). Each is now a fixture case.
+- End to end (`tests/core/redact-store.test.ts`) reads the SQLite file and WAL back and finds
+  no credential after a write, a direct `createEngram`, a content merge, a recall-query log or
+  a checkpoint, nor in `awm.log`. With `AWM_REDACT=off` all six checks fail, as they should.
+
+### Not done here
+
+Memories written before this release are untouched: a backfill rewrites thousands of rows
+and is its own decision (the plan's risk table). `scripts/redact-scan.ts` reports what a
+backfill would change, read-only.
+
 ## 0.20.1 (2026-10-24) — consolidation stops archiving distinct facts as duplicates; a supersede inherits what it replaces
 
 Four items from the MWA experience-pilot diagnostic (2026-10-24; AWM memories ae6c3c64, d0bf9f3f).

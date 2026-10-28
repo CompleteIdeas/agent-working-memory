@@ -78,6 +78,7 @@ import { ConsolidationEngine } from './engine/consolidation.js';
 import { ConsolidationScheduler } from './engine/consolidation-scheduler.js';
 import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './core/salience.js';
 import { performWrite } from './core/write-pipeline.js';
+import { describeFindings } from './core/redact.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority, AbstentionInfo } from './types/engram.js';
@@ -392,7 +393,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       return {
         content: [{
           type: 'text' as const,
-          text: `Reinforced existing memory "${result.engram.concept}" (confidence ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)})`,
+          text: `Reinforced existing memory "${result.engram.concept}" (confidence ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)})`
+            + (result.redaction ? `\n${describeFindings(result.redaction)}` : ''),
         }],
       };
     }
@@ -412,7 +414,7 @@ The concept should be a short label (3-8 words). The content should be the full 
         if (agent) {
           coordDb.prepare(
             `INSERT INTO coord_decisions (author_id, assignment_id, tags, summary) VALUES (?, ?, ?, ?)`
-          ).run(agent.id, agent.current_task, params.tags ? JSON.stringify(params.tags) : null, params.concept);
+          ).run(agent.id, agent.current_task, engram.tags?.length ? JSON.stringify(engram.tags) : null, engram.concept);
         }
       } catch { /* decision propagation is non-fatal */ }
     }
@@ -434,7 +436,8 @@ The concept should be a short label (3-8 words). The content should be the full 
     return {
       content: [{
         type: 'text' as const,
-        text: `Stored (${salience.disposition}) "${params.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
+        text: `Stored (${salience.disposition}) "${engram.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
+          + (result.redaction ? `\n${describeFindings(result.redaction)}` : '')
           + correctionNote
           + trustNote
           + (isLowSalience

@@ -47,6 +47,7 @@ import type { ConsolidationScheduler } from '../engine/consolidation-scheduler.j
 import { evaluateSalience, computeNovelty } from '../core/salience.js';
 import type { SalienceEventType } from '../core/salience.js';
 import { performWrite } from '../core/write-pipeline.js';
+import { redactText } from '../core/redact.js';
 import type { TaskStatus, TaskPriority } from '../types/engram.js';
 import type { ConsciousState } from '../types/checkpoint.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
@@ -200,6 +201,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         engram: result.engram,
         reinforce: result.reinforce,
         novelty: result.noveltyResult.novelty,
+        ...(result.redaction ? { redaction: result.redaction } : {}),
       });
     }
 
@@ -232,6 +234,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     return reply.code(201).send({
       stored: true,
       action: result.action,
+      ...(result.redaction ? { redaction: result.redaction } : {}),
       // disposition: legacy field — 'low-salience' is returned for discard so
       // callers know the engram was kept but marked low-value. The raw inner
       // salience decision is exposed as `salienceDisposition` for callers
@@ -296,7 +299,8 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
     }
 
     // Batch embed synchronously — ensures embeddings are ready before queries hit
-    const texts = body.memories.map((m, i) => `${m.concept} ${m.content}`);
+    // S1: embed the redacted text, as the store wrapper stores it — never the raw body.
+    const texts = body.memories.map((m) => redactText(`${m.concept} ${m.content}`).text);
     try {
       const vecs = await embedBatch(texts);
       for (let i = 0; i < vecs.length; i++) {

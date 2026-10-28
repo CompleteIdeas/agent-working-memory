@@ -53,6 +53,7 @@ import { extractEntitiesFromTags } from './entity-extract.js';
 import { reportWrite } from './write-telemetry.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 import { buildRetrievalText } from './retrieval-text.js';
+import { redactFields, type RedactFinding } from './redact.js';
 
 /** Confidence floor below which a matched engram is treated as "decaying out". */
 export const HEALTHY_CONFIDENCE_FLOOR = 0.3;
@@ -181,6 +182,11 @@ export interface WriteResult {
   /** Supersession detail — present only for action='supersede'. */
   supersedeOf?: { id: string };
   /**
+   * What write-time redaction found in the input (S1): masked secrets, and personal
+   * contact data that was only reported. Absent when nothing was found.
+   */
+  redaction?: RedactFinding[];
+  /**
    * Set when the write asked `correction: true`: the memory it replaced, or
    * null when nothing close enough existed and the write was stored as new.
    */
@@ -224,6 +230,19 @@ export interface WritePipelineEngines {
  * behavior (the same write inputs but every write creates a new engram).
  */
 export async function performWrite(
+  engines: WritePipelineEngines,
+  input: WriteInput,
+): Promise<WriteResult> {
+  // S1: redact BEFORE novelty matching, embedding and storage, so no stage ever sees the
+  // credential. The store wrapper (storage/redacting-store.ts) repeats it as a guarantee
+  // for paths that bypass this pipeline; redaction is idempotent, so this costs nothing.
+  const { fields, findings } = redactFields(input, ['concept', 'content', 'tags']);
+  const result = await performWriteRedacted(engines, fields);
+  if (findings.length) result.redaction = findings;
+  return result;
+}
+
+async function performWriteRedacted(
   engines: WritePipelineEngines,
   input: WriteInput,
 ): Promise<WriteResult> {
