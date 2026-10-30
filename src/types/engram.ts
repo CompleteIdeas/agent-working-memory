@@ -240,6 +240,12 @@ export interface ActivationResult {
    */
   confidence?: number;
   /**
+   * Store-calibrated signal for this recall (AWM_ABSTAIN_GATE=calibrated): `answer`, or
+   * `low` when the store probably does not hold the answer and the results are a best guess.
+   * Same value on every result in the recall. Absent when the gate is off or uncalibrated.
+   */
+  signal?: import('../engine/abstention-gate.js').SignalReport;
+  /**
    * Id of the activation_events row this recall logged (0.14.3). Same value on
    * every result in the same recall. Hand it back on memory_feedback so the
    * feedback joins to the recall that produced it — before this, the id was
@@ -297,7 +303,7 @@ export type QueryMode = 'targeted' | 'exploratory' | 'balanced' | 'auto';
 export interface AbstentionInfo {
   /** `confidence` = score-distribution gate (`requireConfidence`).
    *  `agreement`  = cross-channel agreement gate (`abstentionThreshold`). */
-  reason: 'confidence' | 'agreement';
+  reason: 'confidence' | 'agreement' | 'calibrated';
   /** Candidates that survived scoring and were then withheld. Never 0 — a genuinely
    *  empty result does not produce an AbstentionInfo at all. */
   candidates: number;
@@ -307,6 +313,8 @@ export interface AbstentionInfo {
   /** Computed recall confidence, and the threshold it failed. */
   confidence?: number;
   threshold?: number;
+  /** `calibrated` only: the store-calibrated signal report that withheld the results. */
+  signal?: import('../engine/abstention-gate.js').SignalReport;
 }
 
 export interface ActivationQuery {
@@ -338,6 +346,8 @@ export interface ActivationQuery {
    */
   onAbstain?: (info: AbstentionInfo) => void;
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
+  /** Calibration runs recall with the calibrated gate off, so it measures the raw signals. */
+  skipCalibratedGate?: boolean;
   spread?: boolean;            // R2: when AWM_SPREAD=1, set false to skip iterative spreading activation (connection-discovery uses this so edge-building doesn't recurse)
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default

@@ -1,6 +1,49 @@
 # Changelog
 
-## Unreleased — the vault (S1b, opt-in) and write-time redaction (S1)
+## Unreleased — calibrated abstention, the vault (S1b), and write-time redaction (S1)
+
+### Calibrated abstention (`AWM_ABSTAIN_GATE=calibrated`, opt-in)
+
+Docs: `docs/abstention.md`.
+
+**A correction comes first.** "90.0% correct abstention" was measured with a strict gate that
+drops first-result accuracy to 38% / 57%, on 10 probes. It was published next to 92.7% accuracy,
+and the two were never true together. With the shipped default, AWM withheld 0 of 10. The old
+`require_confidence` gate judges score *shape*, and could not separate absent from answerable at
+any threshold (0.30 silences ~88% of absent facts and 293 of 695 correct answers).
+
+**The new gate:**
+- **Signal:** the cross-encoder score of the top result (AUC 0.998 against absent vocabulary,
+  0.905 against familiar vocabulary with the answer deleted), with vector similarity and the
+  #1–#2 margin.
+- **Self-calibrated per agent, with no labels:** a logistic model is fitted on about 300 synthetic
+  queries the store generates from itself (answerable, familiar nonsense, random), run as internal
+  recalls that leave no trace.
+- **Three bands:**
+  - answer;
+  - ⚠ low signal (answered, flagged);
+  - withhold (reported as `RECALL ABSTAINED`, never a silent empty result).
+- **Refit and override:** refitted after consolidation when the model is stale; `awm calibrate`
+  fits it now; `require_confidence: 0` opens it.
+
+**Measured** with the shipped code on the real 29,853-memory snapshot
+(`tests/realstore-eval/gate-eval.ts`):
+- withholds 66 of 73 never-stored facts (was ~0);
+- withholds 0 of 694 correct answers, and flags 4;
+- on 200 familiar-vocabulary absent questions: withholds 92, flags 30.
+
+`tests/core/abstention-gate.test.ts` (12) pins the math, the model file and the recall contract.
+
+### Baselines
+
+`tests/realstore-eval/baselines.ts` runs random, BM25, dense and RRF over the same questions.
+- **On the retrievable pool,** plain BM25 puts the right memory first for 95.7% / 91.6%, against
+  AWM's 92.7% / 92.7%. These fixtures are keyword-friendly by construction.
+- **Over the raw store,** BM25 falls to 87.7% / 79.8% and returns a superseded memory first 8–15%
+  of the time.
+
+The README now states these baselines.
+
 
 ### The vault: knowing without telling (`AWM_VAULT=on`)
 

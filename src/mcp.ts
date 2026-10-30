@@ -29,6 +29,7 @@
  * Config: add to ~/.claude.json or .mcp.json
  */
 
+import { recalibrateIfStale } from './engine/abstention-calibration.js';
 import { readFileSync } from 'node:fs';
 import { deriveAgentFromDir as deriveAgentFromDirShared } from './core/agent-id.js';
 import { resolve, basename } from 'node:path';
@@ -167,7 +168,8 @@ const evictionEngine = new EvictionEngine(store);
 const retractionEngine = new RetractionEngine(store);
 const evalEngine = new EvalEngine(store);
 const consolidationEngine = new ConsolidationEngine(store, connectionEngine);
-const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine);
+const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine,
+  (agentId) => recalibrateIfStale(store, activationEngine, agentId));
 
 stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
 consolidationScheduler.start();
@@ -502,6 +504,9 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       memoryType: params.memory_type,
       workspace,
       requireConfidence: params.require_confidence,
+      // require_confidence: 0 is the documented "show me what was withheld" escape hatch;
+      // it opens the calibrated gate too, or a withheld recall would have no way back.
+      skipCalibratedGate: params.require_confidence === 0,
       granularity: params.granularity,
       sessionId: SESSION_ID,
       sessionScope: params.scope === 'session' ? 'only' : params.session_first ? 'first' : undefined,
@@ -526,7 +531,18 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
       // "No relevant memories found." — a claim of absence the system cannot make
       // when a gate withheld matches. Callers read it as absence and stopped
       // looking, for memories scoring well above minScore.
-      const text = abstained
+      const text = abstained?.reason === 'calibrated' && abstained.signal
+        ? [
+            `RECALL ABSTAINED — this store most likely does not hold this.`,
+            ``,
+            `${abstained.candidates} candidate${abstained.candidates === 1 ? '' : 's'} matched, but the best ` +
+              `is below this store's noise floor (signal ${abstained.signal.score.toFixed(2)}, floor ` +
+              `${abstained.signal.withholdBelow.toFixed(2)}, answer level ${abstained.signal.answerAt.toFixed(2)}). ` +
+              `The floor is learned from this store's own synthetic no-answer queries.`,
+            ``,
+            `If you have reason to think it IS stored: re-run with require_confidence: 0 to see the closest matches.`,
+          ].join('\n') + peerSuffix
+        : abstained
         ? [
             `RECALL ABSTAINED — this is NOT "no memories exist".`,
             ``,
@@ -601,6 +617,12 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     const evId = results[0]?.activationEventId;
     const evFooter = evId ? `\n[recall_id: ${evId}]` : '';
     // S1b: a memory can know a secret it will not say. Tell the agent how to use one.
+    // Graded signal (AWM_ABSTAIN_GATE=calibrated): a low signal still answers, but says so.
+    const sig = results[0]?.signal;
+    const signalFooter = sig?.band === 'low'
+      ? `\n⚠ LOW SIGNAL — these are the closest matches, but this store probably does not hold the answer `
+        + `(signal ${sig.score.toFixed(2)}, answer level ${sig.answerAt.toFixed(2)}, learned from this store). Verify before relying on them.`
+      : '';
     const vaultFooter = packed.lines.some((l) => l.includes('[VAULT:'))
       ? '\n🔐 [VAULT:… #id] is a sealed value this memory knows. Use it without showing it: '
         + '`awm vault run <id> --env NAME -- <command>` (only for commands the user allowed). '
@@ -610,7 +632,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     return {
       content: [{
         type: 'text' as const,
-        text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + vaultFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
+        text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + signalFooter + vaultFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
       }],
     };
   }

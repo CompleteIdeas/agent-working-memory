@@ -44,12 +44,13 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 2. Correct silence
 
-> **90.0%** correct abstention on questions about facts never stored
+> With the opt-in calibrated gate, AWM withholds **66 of 73** questions about facts never stored, and withholds **0 of 694** correct answers
 
-- **Produced by:** the same runner. Adversarial probes are plausible in register and absent from the store; returning nothing is the correct answer and scores positively.
-- **Reproducibility:** **Method public** — the public corpus carries the same ten adversarial probes and scores **100%** on them.
+- **Produced by:** `tests/realstore-eval/gate-eval.ts`. The shipped `calibrateGate()` fits each agent's gate from the store alone, on synthetic queries with no labels. Then every labelled question goes through ordinary recall: 750 answerable, 73 verified absent (`fixture-absent.json`, every distinctive term checked absent from the store), and 200 "familiar" absent (real questions asked of a copy with their answer deleted). Method and full table: `docs/abstention.md`.
+- **Also measured:** of the 200 familiar-vocabulary absent questions, it withholds 92, flags 30 as low signal and answers 78. That is the hard case, and the figure is pessimistic, because a deleted fact may be repeated elsewhere.
+- **Reproducibility:** **Private corpus**, one real store. The gate's tests (`tests/core/abstention-gate.test.ts`) pin the mechanics anywhere; the rates are measured only on the private snapshot so far.
+- **Correction (2026-10-29):** this row used to read "**90.0%** correct abstention", published next to 92.7% first-result accuracy. The two were measured in different configurations and were never true together. The 90% came from a strict gate (`abstentionThreshold` 0.3) that drops first-result accuracy to 38% (identifier) and 57% (topic), and it was measured on 10 probes. With the gate actually shipped, `require_confidence` 0.05, AWM withheld **0 of 10**. The old gate could not separate absent from answerable at any threshold; the calibrated gate replaces it as the opt-in.
 - **Why it matters:** this is the metric most agent-memory benchmarks invert. LoCoMo rewards indiscriminate retention, so it caps a salience filter at ~50% however good ranking gets, which is why it was retired in 0.13.x (`docs/benchmarks.md`).
-- **Caveat:** ten probes is a small adversarial set. It demonstrates the property; it does not pin the rate to a point.
 
 ## 3. Token economics
 

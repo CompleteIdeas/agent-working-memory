@@ -42,8 +42,8 @@ including the ones we think are weakest.
 
 | | |
 |---|---|
-| **Finds the right memory** | In the top five for **97.3%** of identifier queries and **96.9%** of topic queries — and **first** for **92.7%** of both. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to |
-| **Stays silent when it should** | **90.0%** correct abstention on questions about facts never stored |
+| **Finds the right memory** | In the top five for **97.3%** of identifier queries and **96.9%** of topic queries — and **first** for **92.7%** of both. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to. **Baselines on the same questions:** plain keyword search (BM25) puts the right memory first for 95.7% / 91.6%. These fixtures are keyword-friendly by construction. Over the raw store BM25 falls to 87.7% / 79.8% and returns a superseded memory first 8–15% of the time; AWM's lifecycle is what it adds there |
+| **Stays silent when it should** | With the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`), withholds **66 of 73** questions about facts never stored, while withholding **0 of 694** correct answers. The gate learns its noise floor from the store itself; [how it works and what it costs](docs/abstention.md). Off (the default), AWM answers almost every question with its nearest match. |
 | **Costs the same at any scale** | Scoped recall answers in **~630 tokens flat**. Carrying the store instead: ~1.3M tokens |
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
 

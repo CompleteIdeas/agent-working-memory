@@ -61,6 +61,7 @@ Usage:
             [--dedupe] [--dry-run]                  Merge multiple memory DBs
   awm migrate --from <sqlite.db> --to <pglite-dir> [--dry-run] [--verbose]
                                                     Migrate SQLite DB to PGlite
+  awm calibrate [--agent <id>]                      Fit the store-calibrated abstention gate now
   awm vault list | run <id> [--env NAME] -- <cmd> | allow | reveal | forget | status
                                                     Use sealed secrets without showing them
 
@@ -914,6 +915,11 @@ switch (command) {
   case 'onboard':
     onboardCmd();
     break;
+  case 'calibrate': {
+    const { calibrateCmd } = await import('./cli/calibrate.js');
+    process.exitCode = await calibrateCmd(args.slice(1));
+    break;
+  }
   case 'vault': {
     const { vaultCmd } = await import('./cli/vault.js');
     process.exitCode = await vaultCmd(args.slice(1));

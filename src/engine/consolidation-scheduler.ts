@@ -112,6 +112,8 @@ export class ConsolidationScheduler {
   constructor(
     private store: EngramStore,
     private consolidationEngine: ConsolidationEngine,
+    /** Runs after each full consolidation — e.g. refitting the calibrated abstention gate. */
+    private afterConsolidation?: (agentId: string) => Promise<unknown>,
   ) {
     this.cronExpr = process.env.AWM_CONSOLIDATION_CRON ?? DEFAULT_CRON;
     this.disabled = process.env.AWM_DISABLE_SCHEDULER === '1' || process.env.AWM_DISABLE_SCHEDULER === 'true';
@@ -233,6 +235,10 @@ export class ConsolidationScheduler {
       const result = await this.consolidationEngine.consolidate(agentId);
       await this.store.markConsolidation(agentId, false);
       console.log(`[scheduler] consolidation done: ${result.edgesStrengthened} strengthened, ${result.memoriesForgotten} forgotten`);
+      if (this.afterConsolidation) {
+        try { await this.afterConsolidation(agentId); }
+        catch (err) { console.error(`[scheduler] post-consolidation step failed for ${agentId}:`, err); }
+      }
     } catch (err) {
       console.error(`[scheduler] consolidation failed for ${agentId}:`, err);
     } finally {

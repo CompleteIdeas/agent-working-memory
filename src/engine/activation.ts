@@ -46,6 +46,7 @@
  * Logs activation events for eval metrics.
  */
 
+import { classify, gateEnabled, loadModel, type SignalReport } from './abstention-gate.js';
 import { randomUUID } from 'node:crypto';
 import { baseLevelActivation, softplus } from '../core/decay.js';
 import { strengthenAssociation, CoActivationBuffer, ValidationGatedBuffer } from '../core/hebbian.js';
@@ -1327,6 +1328,31 @@ export class ActivationEngine {
       ? reorderByReranker(finalRanked, rerank2WindowSize())
       : finalRanked;
 
+    // ── Calibrated abstention (AWM_ABSTAIN_GATE=calibrated) ──
+    // Judges the FINAL order — the same order the calibration measured — against this
+    // agent's store-fitted model (src/engine/abstention-gate.ts). Withhold is reported via
+    // onAbstain, never a silent []; a low signal still returns, flagged. Skipped when the
+    // cross-encoder did not run: every reranker feature would read 0 and look like noise.
+    let signal: SignalReport | undefined;
+    if (gateEnabled() && !query.skipCalibratedGate && ordered.length > 0
+        && ordered.some((r) => (r.phaseScores.rerankerScore ?? 0) > 0)) {
+      const model = loadModel(query.agentId);
+      if (model) {
+        signal = classify(model, {
+          rerankTop: ordered[0]!.phaseScores.rerankerScore ?? 0,
+          rerankSecond: ordered[1]?.phaseScores.rerankerScore ?? 0,
+          vectorTop: ordered[0]!.phaseScores.vectorMatch ?? 0,
+        });
+        if (signal.band === 'withhold') {
+          query.onAbstain?.({
+            reason: 'calibrated', candidates: ordered.length, topScore: ordered[0]!.score, confidence, signal,
+          });
+          prof.finish({ results: 0, abstained: 'calibrated' });
+          return [];
+        }
+      }
+    }
+
     const results: ActivationResult[] = ordered
       .slice(0, limit)
       .map((r, idx) => {
@@ -1347,6 +1373,7 @@ export class ActivationEngine {
           why: this.explain(r.phaseScores, r.engram, r.associations),
           associations: r.associations,
           confidence,
+          ...(signal !== undefined && { signal }),
           ...(summary !== undefined && { summary }),
         };
       });

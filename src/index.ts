@@ -1,5 +1,6 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
+import { recalibrateIfStale } from './engine/abstention-calibration.js';
 import { readFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import Fastify from 'fastify';
@@ -130,7 +131,8 @@ async function main() {
   const retractionEngine = new RetractionEngine(store);
   const evalEngine = new EvalEngine(store);
   const consolidationEngine = new ConsolidationEngine(store, connectionEngine);
-  const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine);
+  const consolidationScheduler = new ConsolidationScheduler(store, consolidationEngine,
+    (agentId) => recalibrateIfStale(store, activationEngine, agentId));
 
   // API — disable Fastify's default request logging (too noisy for hive polling)
   // bodyLimit: 512KB to prevent Content-Length mismatch errors with large task payloads
