@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### The model daemon refused a world-writable run dir only in theory
+
+`startModelDaemon` tightened its run directory to 0700 *before* checking it, so the "writable
+by other users" refusal could never fire for a directory the user owns. A run dir that was
+already world-writable — where another user could have planted a symlink before AWM tightened
+it — was accepted, and the daemon's auth token and log are written there. It is now refused
+before anything is changed. Group-writable is still tightened rather than refused: umask 002
+makes 0775 the norm on user-private-group distros. Windows is unaffected (the run dir sits in
+the user profile, whose ACL excludes other users). Found because the Linux suite ran green for
+the first time: the test had been correct all along and was skipped on Windows.
+
+### The Linux suite passes
+
+`npm run test:linux`: 96 files, 1,139 tests. The tree-kill test reads `/proc` on Linux
+instead of needing `ps`, which slim containers do not ship.
+
+### Baselines are part of `npm run bench`
+
+Random, BM25, dense and RRF run on the same probes as AWM, on the retrievable pool and on the
+whole store (counting stale top answers), and `docs/benchmarks-current.md` publishes them
+under "Baselines on the same questions". No figure about ranking can now be generated
+without its baseline beside it.
+
 ## 0.21.0 (2026-10-29) — AWM knows what it doesn't know, keeps secrets without telling them, and corrects its abstention claim
 
 ### Calibrated abstention (`AWM_ABSTAIN_GATE=calibrated`, opt-in)

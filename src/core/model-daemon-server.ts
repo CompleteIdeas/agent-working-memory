@@ -30,7 +30,7 @@
 
 import { createServer, connect, type Server, type Socket } from 'node:net';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   PROTOCOL_VERSION, HELLO_MAX_BYTES, MAX_FRAME_BYTES, addressProblem, encodeFrame, envInt, FrameReader,
@@ -115,6 +115,16 @@ export async function startModelDaemon(opts: DaemonOptions): Promise<RunningDaem
 
   const problem = addressProblem(paths);
   if (problem) throw new Error(problem);
+  // A run dir that ALREADY exists and is world-writable is refused before anything is
+  // tightened: another user may have planted a symlink in it while it was open, and the
+  // token and log are about to be written there. The chmod below used to run first, so the
+  // check after it could never fire for a directory this user owns — found by the Linux
+  // suite (the test is skipped on Windows). Group-writable is still tightened, not refused:
+  // umask 002 makes 0775 the norm on user-private-group distros, and the group is the user's own.
+  if (process.platform !== 'win32' && existsSync(paths.runDir)) {
+    const pre = statSync(paths.runDir);
+    if (pre.mode & 0o002) throw new Error(`run dir ${paths.runDir} is writable by other users`);
+  }
   mkdirSync(paths.runDir, { recursive: true, mode: 0o700 });
   try { chmodSync(paths.runDir, 0o700); } catch { /* not ours to change, or Windows */ }
   const unsafe = runDirProblem(paths.runDir);

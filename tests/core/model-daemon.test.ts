@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, afterAll, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { connect, createServer } from 'node:net';
@@ -476,7 +476,18 @@ describe('daemon processes (real models)', () => {
     // What Claude Code does to an MCP server that does not exit when its session closes.
     const treeKill = (pid: number) => {
       if (process.platform === 'win32') { execFileSync('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore' }); return; }
-      const rows = execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }).trim().split('\n').map(l => l.trim().split(/\s+/).map(Number));
+      // Linux: read the process table from /proc — slim containers ship no `ps` (the Linux
+      // suite's node:22 image failed here with spawnSync ps ENOENT). Elsewhere, `ps`.
+      const rows: number[][] = process.platform === 'linux'
+        ? readdirSync('/proc').filter((d) => /^\d+$/.test(d)).flatMap((d) => {
+            try {
+              const stat = readFileSync(`/proc/${d}/stat`, 'utf8');
+              // Field 4 is the ppid; the command (field 2) may contain spaces, so split after its ')'.
+              const after = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+              return [[Number(d), Number(after[1])]];
+            } catch { return []; }
+          })
+        : execFileSync('ps', ['-A', '-o', 'pid=,ppid='], { encoding: 'utf8' }).trim().split('\n').map(l => l.trim().split(/\s+/).map(Number));
       const tree = [pid];
       for (let i = 0; i < tree.length; i++) for (const [p, pp] of rows) if (pp === tree[i]) tree.push(p);
       for (const p of tree) { try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }

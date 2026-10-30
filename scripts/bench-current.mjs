@@ -171,6 +171,20 @@ const RETRIEVAL_SUITES = [
     cmd: ['npx', 'tsx', 'tests/realstore-eval/runner.ts'],
     env: { ...FLAGS, REALSTORE_FIXTURE: 'fixture-category.json' },
   },
+  // Baselines on the SAME questions (tests/realstore-eval/baselines.ts): what random, plain
+  // BM25, plain vector search and a textbook hybrid score. Published next to AWM's figures so
+  // a high score cannot describe the benchmark rather than the product — MemPalace's 96.6%
+  // was matched by 30 lines of BM25, and on these keyword-friendly fixtures BM25 is within
+  // a few points of AWM. The RAW arms give the baselines the whole store, superseded and
+  // retracted rows included, and count how often their top answer is stale.
+  ...[['identifier', 'fixture.json'], ['category', 'fixture-category.json']].flatMap(([id, fx]) => [
+    { id: `baselines-${id}`, title: `Baselines — ${id === 'identifier' ? 'identifier' : 'topic'} queries`,
+      what: `random / BM25 / dense / RRF on the ${id} probes, retrievable pool`,
+      cmd: ['npx', 'tsx', 'tests/realstore-eval/baselines.ts', fx], env: { AWM_MODEL_DAEMON: '0' }, baseline: true },
+    { id: `baselines-raw-${id}`, title: `Baselines, raw store — ${id === 'identifier' ? 'identifier' : 'topic'} queries`,
+      what: `the same arms over the whole store, counting stale top answers`,
+      cmd: ['npx', 'tsx', 'tests/realstore-eval/baselines.ts', fx], env: { AWM_MODEL_DAEMON: '0', BASELINE_RAW: '1' }, baseline: true },
+  ]),
   {
     id: 'temporal',
     title: 'Temporal cues',
@@ -255,6 +269,12 @@ function parseMetrics(out) {
     // The temporal runner prints a per-phrasing comparison, not one score.
     temporalBaseline: num(/^\s*none\s+([\d.]+)%/m),
     temporalOracle: num(/ORACLE \(week-filtered\)\s+([\d.]+)%/),
+    // baselines.ts: one row per arm — "bm25      95.7%    99.0%   97.3%" — and, in RAW mode,
+    // "top answer was a superseded / retracted / non-active memory: random 63.3% · bm25 8.3% · …".
+    baselines: Object.fromEntries([...out.matchAll(/^(random|bm25|dense|rrf)\s+([\d.]+)%\s+([\d.]+)%\s+([\d.]+)%/gm)]
+      .map((m) => [m[1], { s1: Number(m[2]), s3: Number(m[3]), mrr: Number(m[4]) }])),
+    staleTop: Object.fromEntries([...(out.match(/non-active memory: (.*)$/m)?.[1] ?? '').matchAll(/(random|bm25|dense|rrf) ([\d.]+)%/g)]
+      .map((m) => [m[1], Number(m[2])])),
   };
 }
 
@@ -320,7 +340,7 @@ function render(meta, results) {
   L.push('');
   L.push('| Suite | probes | s@1 | s@5 | MRR | abstention | p50 | p90 |');
   L.push('|---|---|---|---|---|---|---|---|');
-  for (const r of results.filter(r => RETRIEVAL_SUITES.some(s => s.id === r.id) && r.id !== 'temporal')) {
+  for (const r of results.filter(r => RETRIEVAL_SUITES.some(s => s.id === r.id && !s.baseline) && r.id !== 'temporal')) {
     if (!r.ok) { L.push(`| ${r.title} | — | _run failed_ | | | | | |`); continue; }
     const m = r.metrics;
     L.push(`| ${r.title} | ${m.answerable ?? '—'} | **${pct(m.s1)}** | ${pct(m.s5)} | ${pct(m.mrr)} | ${pct(m.adversarialSilent)} | ${ms(m.p50ms)} | ${ms(m.p90ms)} |`);
@@ -328,6 +348,28 @@ function render(meta, results) {
   L.push('');
   for (const r of results.filter(r => r.ok && r.metrics?.sufficiency !== null && r.metrics?.sufficiency !== undefined)) {
       L.push(`- **${r.title}** — of the golds retrieved, ${pct(r.metrics.sufficiency)} actually contain the answer${r.metrics.netTokensPerRecall !== null && r.metrics.netTokensPerRecall !== undefined ? `; net token economics ${r.metrics.netTokensPerRecall >= 0 ? '+' : ''}${r.metrics.netTokensPerRecall} per recall` : ''}.`);
+  }
+  const baseRows = results.filter(r => r.baseline);
+  if (baseRows.length) {
+    L.push('');
+    L.push('## Baselines on the same questions');
+    L.push('');
+    L.push('What a naive retriever scores on exactly the probes above (`tests/realstore-eval/baselines.ts`):');
+    L.push('same snapshot, sample, agent scoping and k=3. The identifier fixture is keyword-friendly by');
+    L.push('construction — every gold contains its query’s identifier — so BM25 is close to ideal there.');
+    L.push('The raw-store rows hand the baselines every row, superseded and retracted included, as a');
+    L.push('plain index over a memory table would; "stale top" is how often their first answer is outdated.');
+    L.push('');
+    L.push('| Questions | Pool | random s@1 | BM25 s@1 | dense s@1 | hybrid (RRF) s@1 | stale top (BM25 / dense) |');
+    L.push('|---|---|---|---|---|---|---|');
+    for (const r of baseRows) {
+      if (!r.ok) { L.push(`| ${r.title} | — | _run failed_ | | | | |`); continue; }
+      const b = r.metrics.baselines ?? {};
+      const st = r.metrics.staleTop ?? {};
+      const raw = r.id.includes('-raw-');
+      const q = r.id.endsWith('identifier') ? 'Identifier' : 'Topic';
+      L.push(`| ${q} | ${raw ? 'whole store' : 'retrievable'} | ${pct(b.random?.s1)} | **${pct(b.bm25?.s1)}** | ${pct(b.dense?.s1)} | ${pct(b.rrf?.s1)} | ${raw ? `${pct(st.bm25)} / ${pct(st.dense)}` : '—'} |`);
+    }
   }
   const temporal = results.find(r => r.id === 'temporal');
   if (temporal?.ok && temporal.metrics?.temporalBaseline !== null && temporal.metrics?.temporalBaseline !== undefined) {
