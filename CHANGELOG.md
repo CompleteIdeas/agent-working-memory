@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — calibrated abstention, the vault (S1b), and write-time redaction (S1)
+## 0.21.0 (2026-10-29) — AWM knows what it doesn't know, keeps secrets without telling them, and corrects its abstention claim
 
 ### Calibrated abstention (`AWM_ABSTAIN_GATE=calibrated`, opt-in)
 

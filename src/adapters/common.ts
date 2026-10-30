@@ -686,7 +686,21 @@ the cost/quality tradeoff. Use them when the default doesn't match what you need
   Leave it alone for ordinary recall; \`0.10\` is the ceiling that still helps for
   push-style use where nobody asked. When abstention fires, reformulate once
   with the exact identifier, then read the code — don't retry with a lower
-  threshold to force an answer.
+  threshold to force an answer. That default is light: on a real store it
+  withheld none of 73 questions about facts never stored, so an answer is not
+  proof the fact exists.
+- **Calibrated abstention** (when the operator set \`AWM_ABSTAIN_GATE=calibrated\`)
+  — the store learns its own noise floor. A reply ending **\`⚠ LOW SIGNAL\`** is the
+  closest match to a question the store probably cannot answer: verify before
+  relying on it. **\`RECALL ABSTAINED — this store most likely does not hold this\`**
+  means what it says; read the source instead. If you have reason to think the fact
+  IS stored, re-run with \`require_confidence: 0\` to see the closest matches.
+- **Secrets** — credentials are masked before anything is stored, so write *where*
+  a secret lives (the env var, the vault), never the value. With the vault on, a
+  memory may show **\`[VAULT:type …last4 #id]\`**: a sealed value AWM knows but will
+  not say. Use it without reading it: \`awm vault run <id> --env NAME -- <command>\`
+  (only for commands the user allowed). There is no way to read it into the
+  conversation, and you should not try.
 - **\`workspace: "<name>"\`** — hive-mode recall across all agents in the
   workspace. Use when other agents may have written canonical knowledge you
   need. Default is agent-scoped (your own memories only). Can also be set
