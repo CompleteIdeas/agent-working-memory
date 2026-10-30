@@ -429,6 +429,15 @@ export class ConsolidationEngine {
     // --- Type B: Pattern synthesis (vector-similarity clusters, speculative) ---
     // Only create these for clusters where members come from DIFFERENT sessions/projects.
     // This finds cross-domain patterns: "debugging technique A" + "architecture pattern B"
+    //
+    // A pattern whose concept already exists is not written again. Before this check the only
+    // guard was "no cluster member is a synthesis", and the same clusters re-formed every cycle
+    // without their synthesis in them, so each consolidation wrote another copy: the 2026-08-24
+    // snapshot held 18,368 pattern rows with 147 distinct concepts. Each copy carries the cluster
+    // centroid as its embedding, so the copies took dense #1 on 119 of 194 natural-language
+    // questions and crowded the candidate shortlist.
+    const patternConcepts = new Set(
+      allActive.filter(e => e.tags.includes('synth-type=pattern')).map(e => e.concept));
     for (const cluster of clusters) {
       if (cluster.length < MIN_CLUSTER_SIZE_FOR_SYNTHESIS) continue;
       if (synthCount >= MAX_SYNTHESES_PER_CYCLE) break;
@@ -462,9 +471,13 @@ export class ConsolidationEngine {
         `Common themes: ${keyTerms.join(', ')}.`,
       ].join(' ');
 
+      const patternConcept = `pattern: ${keyTerms.slice(0, 3).join(', ')}`;
+      if (patternConcepts.has(patternConcept)) continue;
+      patternConcepts.add(patternConcept);
+
       const synthEngram = await this.store.createEngram({
         agentId,
-        concept: `pattern: ${keyTerms.slice(0, 3).join(', ')}`,
+        concept: patternConcept,
         content: synthContent,
         tags: [...sessionTags, 'synth=true', 'synth-type=pattern'],
         salience: 0.5,       // Lower — speculative
