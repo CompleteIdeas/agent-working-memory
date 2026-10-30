@@ -51,6 +51,29 @@ describing that run rather than a fresh count of the current 9. Maximum headroom
 is about 7 points.
 - **Evidence:** `tests/realstore-eval/miss-stage-probe.ts`, 2026-09-11.
 
+### On the benchmark's questions, keyword search ranks about as well
+Plain BM25 over the same retrievable pool puts the right memory first for 95.7% of identifier
+queries and 91.6% of topic queries, against AWM's 92.7% / 92.7%. The fixtures are
+keyword-friendly by construction (each question is built around an identifier unique to one
+memory), so they cannot show a ranking advantage over keyword search, and AWM does not claim
+one. What they do show is the lifecycle: over the raw store, with superseded and retracted
+memories still present, BM25 falls to 87.7% / 79.8% and returns a superseded memory first
+8–15% of the time.
+- **Evidence:** `tests/realstore-eval/baselines.ts` (`BASELINE_RAW=1` for the raw-store arm).
+
+### Saying "I don't know" is opt-in, and measured on one store
+The default `require_confidence` gate (0.05) judges the shape of one query's scores and cannot
+separate absent facts from stored ones: it withheld 0 of 10 absent-fact probes. The opt-in
+calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) withholds 66 of 73 never-stored facts and 0 of
+694 correct answers, but:
+- it has been measured on **one** real store (29,853 memories);
+- the question set is **keyword-style**, with no natural-language questions;
+- the hard case is weaker: of 200 absent facts asked in familiar vocabulary it withholds 92,
+  flags 30 and answers 78 (pessimistic, since a deleted fact may be repeated elsewhere);
+- it needs the cross-encoder; with the reranker disabled the gate stands aside.
+- **Evidence:** `tests/realstore-eval/gate-eval.ts`, [`abstention.md`](abstention.md).
+- **Workaround:** `npm run bench:public` is the reproducible check on other data.
+
 ## Learning
 
 ### The feedback loop has almost no signal yet
@@ -129,8 +152,27 @@ date has opened older databases cleanly. There is no down-migration.
 
 Write-time redaction ([`redaction.md`](redaction.md)) masks credentials that have a known shape
 or a label. A bare random string in prose is not caught. Memories written before it shipped
-are not rewritten, so a store can still hold credentials from earlier. `scripts/redact-scan.ts`
-counts them read-only.
+are not rewritten, so a store can still hold credentials from earlier, and their embeddings
+were computed from the raw text. `scripts/redact-scan.ts` counts them read-only. Email
+addresses and phone numbers are reported, not masked, unless `AWM_REDACT_PII=mask`; names are
+not detected.
+- **Workaround:** with the vault on, `awm vault migrate --apply` seals what the rules can see in
+  an existing SQLite store (see below).
+
+### The vault's output scrubbing is literal
+
+With `AWM_VAULT=on`, `awm vault run` replaces the sealed value in a command's output with its
+handle. The match is literal: a command that prints the value base64-encoded, or split across
+lines, gets past it. Allow only tools that do not echo their credentials, and avoid allowing
+interpreters or network tools (`awm vault allow` warns on them). Also:
+- the vault catches a secret by shape, label or an exact earlier value, so an unlabelled secret
+  with no recognisable shape, written before anything taught the vault its value, is not caught;
+- a sealed value goes stale when the real key is rotated (`awm vault forget` removes it);
+- `awm vault migrate` works on SQLite stores only, and its backup holds every secret in
+  plaintext until you delete it;
+- where no OS credential store exists, the key falls back to a `vault.key` file beside the
+  vault, and anyone who can read both files can open it (`awm vault status` says which).
+- **Evidence:** [`vault.md`](vault.md) → Limits.
 
 ## Measurement
 
@@ -163,3 +205,4 @@ These appeared in earlier versions and were still being quoted. Each is now fals
 | "No authentication" | Sidecar bearer auth; HTTP API refuses non-loopback bind without `AWM_API_KEY`. |
 | "Running HTTP and MCP on one DB causes locking" | WAL mode; concurrent sessions are the normal deployment. |
 | "`discardRegret` always 0" | Computed since D12 (2026-07-30). |
+| "90.0% correct abstention" *(withdrawn 2026-10-29)* | Measured with a strict, non-default gate on 10 probes; with the shipped default AWM withheld 0 of 10. The opt-in calibrated gate is the current figure (above). |

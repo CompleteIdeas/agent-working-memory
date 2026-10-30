@@ -161,6 +161,29 @@ Claude Code uses the closest `.mcp.json` ancestor, so any project under `work/` 
 
 ---
 
+## Two opt-in switches (optional)
+
+Both go in the same `env` block as above. Neither is on by default.
+
+```json
+"env": {
+  "AWM_VAULT": "on",
+  "AWM_ABSTAIN_GATE": "calibrated"
+}
+```
+
+- **`AWM_VAULT=on`** seals secrets in an encrypted `vault.db`, with the key in your OS credential
+  store, so the agent can use a credential (`awm vault run`) without it ever appearing in a
+  transcript. Off, secrets are masked and forgotten: write-time redaction is on by default
+  either way. See [vault.md](vault.md).
+- **`AWM_ABSTAIN_GATE=calibrated`** makes recall say when the store most likely does not hold
+  the answer. Run `awm calibrate` once after setting it, or let the next consolidation fit it.
+  See [abstention.md](abstention.md).
+
+Restart Claude Code after changing either.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |

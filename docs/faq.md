@@ -29,6 +29,24 @@ Active memories persist indefinitely but their retrieval priority decays over ti
 
 No. All three ML models (embeddings, reranker, query expander) run locally via ONNX. No data leaves your machine.
 
+### Will AWM store my API keys?
+
+Not by default. Write-time redaction is on: provider keys with a known shape, private keys, JWTs,
+passwords in connection URLs, `Bearer` tokens and labelled values (`password=`, `API_KEY:`) are
+masked before the write is stored, indexed, embedded or logged. The mask keeps the rule name and,
+for long keys, the last four characters (`[REDACTED:stripe_key …0dWz]`), and the write response
+says what was masked. Email addresses and phone numbers are reported but kept, unless you set
+`AWM_REDACT_PII=mask`.
+
+Two limits. Detection is shape-based, so a bare random string with no label is not caught. And
+memories written before redaction shipped are not rewritten; `scripts/redact-scan.ts` scans a
+store read-only to show what is there. See [redaction.md](redaction.md).
+
+If you want the agent to be able to *use* a key later, the opt-in vault (`AWM_VAULT=on`) keeps
+the value encrypted in a separate `vault.db`, with the key in your OS credential store. The memory
+holds a handle, and `awm vault run` injects the value into commands you have allowed. No MCP tool
+returns a value. See [vault.md](vault.md).
+
 ## Activation & Retrieval
 
 ### Why did an irrelevant memory rank highly?
@@ -44,7 +62,47 @@ Possible causes:
 - No memories stored for the `agentId`
 - All memories scored below `minScore` (default 0.01)
 - `abstentionThreshold` is set and the reranker scored everything below it
+- `AWM_ABSTAIN_GATE=calibrated` is on and the recall fell in the withhold band. Over MCP this is
+  reported as `RECALL ABSTAINED — this store most likely does not hold this`, never as a silent
+  empty result. `require_confidence: 0` opens the gate for one call.
 - All memories are in staging and `includeStaging` is false (default)
+
+### How does AWM know it doesn't have something?
+
+By default it does not try very hard. The shipped `require_confidence` gate (0.05) judges the
+*shape* of one query's scores, and on a real 29,853-memory store it could not separate "stored"
+from "never stored" at any threshold. With the default it withheld 0 of 10 adversarial probes.
+An earlier "90.0% correct abstention" figure came from a strict, non-default setting on those 10
+probes and has been withdrawn.
+
+The opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) listens to the cross-encoder instead,
+which reads the question and the top memory together. It learns a noise floor from the store
+itself: about 300 synthetic queries the store generates (answerable ones, and familiar-sounding
+nonsense), with no labels. Fit it with `awm calibrate`; it is refitted after consolidation when it
+goes stale. Each recall is then answered, answered with a `⚠ LOW SIGNAL` flag, or withheld.
+
+Measured on that one store with keyword-style questions:
+- it withholds 66 of 73 questions about facts never stored;
+- it withholds 0 of 694 correct answers, and flags 4;
+- of 200 absent questions asked in familiar vocabulary (the answer deleted, its neighbours
+  kept), it withholds 92 and flags 30. That is the hard case.
+
+It has not been measured on natural-language questions or on other stores. See
+[abstention.md](abstention.md).
+
+### Is AWM's ranking better than keyword search?
+
+Not on its own benchmark. On the real-store fixtures, plain BM25 puts the right memory first for
+95.7% of identifier queries and 91.6% of topic queries, against AWM's 92.7% and 92.7%. The
+fixtures are keyword-friendly by construction: each question is built around an identifier that
+appears in exactly one memory, which is the case BM25 is best at.
+
+Where AWM measurably differs is its lifecycle: supersession and retraction. The BM25 figures above
+were measured on the pool AWM's lifecycle leaves retrievable. Run over the raw store, with
+superseded and retracted memories still in it, BM25 falls to 87.7% / 79.8% and returns a superseded
+memory first 8–15% of the time. Knowing which version of a fact is current is what AWM adds. A
+plain retriever also cannot abstain: it always returns something. The baselines are in
+`tests/realstore-eval/baselines.ts`.
 
 ### What does the `why` string mean?
 

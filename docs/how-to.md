@@ -176,3 +176,82 @@ npm run test:workday
 # LOCOMO benchmark (199 QA pairs, industry standard)
 npm run test:locomo
 ```
+
+## 13. Keep secrets out of memory
+
+Nothing to turn on. Write-time redaction is on by default: provider keys, private keys, JWTs,
+connection-URL passwords, `Bearer` tokens and labelled values (`password=`, `API_KEY:`) are
+masked before the write is stored, indexed, embedded or logged. The write response says what was
+masked:
+
+```
+🔒 Redacted before storing: stripe_key. Store a pointer (where the value lives) instead of the value itself.
+```
+
+Write the pointer, not the value: "the Stripe key is in `STRIPE_SECRET_KEY` on Railway". The label
+survives masking, so the memory stays findable.
+
+- Email addresses and phone numbers are reported, not masked. Set `AWM_REDACT_PII=mask` to mask
+  them too.
+- `AWM_REDACT=report` reports secrets without masking them; `off` disables redaction.
+- Memories written before redaction shipped are not rewritten. To see what an existing store
+  holds, scan it read-only from a repository checkout:
+
+```bash
+npx tsx scripts/redact-scan.ts ~/.awm/memory.db
+```
+
+Detection is shape-based: a bare random string with no label is not caught. See
+[redaction.md](redaction.md).
+
+## 14. Let AWM keep a secret it can use
+
+Masking forgets the value. If the agent needs to use a credential later (to deploy, say), turn on
+the vault instead. Set `AWM_VAULT=on` in the AWM server's environment and restart the session.
+
+A secret in a write is then sealed in `vault.db`, with the key in the OS credential store, and the
+memory keeps a handle such as `RAILWAY_API_TOKEN=[VAULT:labelled_secret #3f9c2e71b0d4]`. Recall still finds the
+memory and knows what the secret is for, without showing it.
+
+Allow the commands the value may be used with, then the agent can run them:
+
+```bash
+awm vault allow 3f9c2e71b0d4 "railway up"
+awm vault run 3f9c2e71b0d4 --env RAILWAY_API_TOKEN -- railway up --service my-app --ci
+```
+
+The value goes into that one command's environment, and the command's output has it replaced by
+the handle. Chained or redirected commands are never allowed by prefix. Anything not allowed is
+refused when there is no terminal, which is always the case for an agent.
+
+To seal the secrets already in a store, stop AWM sessions and run `awm vault migrate` (dry run),
+then `awm vault migrate --apply`. The backup it makes holds every secret in plaintext; delete it
+once the store checks out.
+
+`awm vault list`, `status`, `forget` and `reveal` (interactive terminal only) cover the rest. See
+[vault.md](vault.md).
+
+## 15. Make AWM say when it doesn't know
+
+By default AWM returns the closest matches even when the store does not hold the answer. To have
+it say so, set `AWM_ABSTAIN_GATE=calibrated` in the AWM server's environment, then fit the gate:
+
+```bash
+awm calibrate                    # the default agent
+awm calibrate --agent personal   # another pool
+```
+
+The gate learns a noise floor from the store itself, with no labels, and is refitted after
+consolidation when it goes stale (`AWM_ABSTAIN_RECALIBRATE_DAYS`, default 7, or the store has
+grown by 20%). Each recall then lands in one of three bands:
+
+- **Answer:** results as usual.
+- **Low signal:** results, flagged `⚠ LOW SIGNAL`. Verify before relying on them.
+- **Withhold:** no results, and the reply says `RECALL ABSTAINED — this store most likely does not
+  hold this`.
+
+If you have reason to think the fact is stored, pass `require_confidence: 0` on `memory_recall` to
+open the gate for that call.
+
+Measured on one real store with keyword-style questions, it withheld 66 of 73 questions about
+facts never stored and none of 694 correct answers. See [abstention.md](abstention.md).

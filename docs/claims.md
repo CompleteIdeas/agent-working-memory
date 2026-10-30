@@ -181,6 +181,31 @@ inference from a subset, not a re-run of the 400.
 
 ---
 
+## 9. One thread, any number of topics
+
+> Context comes fresh from memory every turn, so one long-running agent can switch topics, lose detail to compaction, and get it back
+
+- **What it is:** the model AWM is built around (Robert Winter, 2026-10-16: "Fresh context comes from AWM every time"). The agent's working context is not carried forward and patched. It is re-drawn from memory: a recall primed on every prompt, per step, and after compaction. Three consequences are claimed:
+  - topic switching is cheap;
+  - compaction loses little, because the detail is recalled back;
+  - recalled memories reinforce what the agent needs mid-window.
+- **Produced by:** the memory-working-agent BL-30 measurement (2026-10-17, `scripts/measure-topic-switch.mts`). One continuous multi-task run, closed book, gpt-5.4-mini, 26 trials. Runs with a fully right final report:
+
+  | Arm | Fully right |
+  |---|---|
+  | summary compaction **+ AWM** | **4/5** |
+  | full 200-step window, no memory (the ceiling) | 3/5 |
+  | OpenClaw-style summary + MEMORY.md | 2/3 |
+  | 12-step window, no memory | 0/5 |
+  | 12-step window + AWM | 0/5 |
+
+- **What it does not show:** AWM's own share. In the fully right compaction runs the facts came mostly from the summary, and there was no "compaction without memory" arm besides OpenClaw's. The 12-step-window arm shows that AWM recall alone does not give an agent back its place in a multi-task job when its history is cut that short.
+- **What would settle it:** one continuous run that switches A→B→C→A, **compaction on in every arm**, with and without AWM, scored on per-topic fact errors, cross-topic bleed, and stale use of a fact changed mid-run.
+- **Reproducibility:** **Not reproducible** from this repository; the harness lives in memory-working-agent.
+- **In daily use:** the maintainer runs single Claude Code threads across days and unrelated projects, with compactions, restored by AWM. That is a use pattern, not a measurement.
+
+---
+
 ## Where the evidence is weakest
 
 Listed deliberately, in the order we would attack it ourselves:
@@ -202,7 +227,11 @@ Listed deliberately, in the order we would attack it ourselves:
 4. **The 41% "entered only through a recall" figure has no harness** (§6),
    despite being the most load-bearing claim about whether any of this changes
    outcomes.
-5. **Ten adversarial probes** is a thin basis for an abstention rate (§2).
+5. **The abstention figures come from one store and keyword-style questions** (§2). The old
+   ten-probe basis is replaced by 73 verified-absent plus 200 familiar-vocabulary probes, but
+   the benchmark still has no natural-language questions.
+6. **The headline model — one thread, any number of topics — rests on 4/5 vs 3/5** in one
+   multi-task run, where AWM's own share was not isolated (§9).
 
 Weaknesses AWM already publishes about itself, with evidence, live in
 [`known-limitations.md`](known-limitations.md) — including the measured finding

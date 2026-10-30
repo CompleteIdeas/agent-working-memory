@@ -44,6 +44,10 @@ covers everything else.
 | Doc | What it covers |
 |---|---|
 | [troubleshooting.md](troubleshooting.md) | When something is wrong |
+| **[abstention.md](abstention.md)** | **Knowing what it doesn't know** — the store-calibrated gate (opt-in), the measurement behind it, and the correction to the old abstention figure |
+| [redaction.md](redaction.md) | Write-time redaction: what is masked before anything is stored, and how it was measured |
+| [vault.md](vault.md) | The vault (opt-in): AWM keeps a secret sealed and can use it without ever saying it |
+| [claims.md](claims.md) | Every published figure, what produced it, who can reproduce it, and where the evidence is weakest |
 | [known-limitations.md](known-limitations.md) | What it does not do well, stated plainly |
 | [using-awm-at-scale.md](using-awm-at-scale.md) | Behaviour as the store grows |
 | [telemetry-recommendations.md](telemetry-recommendations.md) | What to instrument |

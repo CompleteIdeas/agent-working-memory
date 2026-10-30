@@ -604,6 +604,45 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 expansion-only 63%±14 · all-four 74%±10 · entity-index config 74%±5. No single-factor cell
 reproduced the combined wins; all CIs overlap at k=3 — no default flip without a k≥10 run.
 
+### Unreleased additions (redaction, the vault, calibrated abstention, 2026-10-29)
+
+Write-time redaction is **on by default**. The vault and the calibrated gate are **opt-in**.
+Full write-ups: [`redaction.md`](redaction.md), [`vault.md`](vault.md),
+[`abstention.md`](abstention.md).
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_REDACT` | `mask` | Secret tier (provider keys with a known shape, PEM keys, JWTs, connection-URL passwords, `Bearer` tokens, labelled values) plus US SSNs and payment cards. `mask` replaces them before the write is stored, indexed, embedded or logged; `report` only says what it found; `off` disables. |
+| `AWM_REDACT_PII` | `report` | Email addresses and phone numbers. Reported, not masked, by default, because in a personal or team store the contact is often the point of the memory. `mask` or `off`. Names are not detected. |
+| `AWM_VAULT` | off | `on` seals secrets instead of masking them: the value is encrypted (AES-256-GCM) in `vault.db`, the memory keeps a handle `[VAULT:type …last4 #id]`, and a value once sealed is recognised and replaced wherever it appears again. |
+| `AWM_VAULT_PATH` | beside the store | Path to `vault.db`. It is a separate file, so exporting or sharing `memory.db` never carries a secret. |
+| `AWM_VAULT_KEY_STORE` | `keyring` | Where the vault key lives: the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service). `file` forces the weaker `vault.key` fallback beside the vault, which is used automatically where no credential store exists. |
+| `AWM_ABSTAIN_GATE` | off | `calibrated` turns on the store-calibrated abstention gate. Each recall lands in one of three bands: answer; ⚠ LOW SIGNAL (answered, flagged); withhold (reported as `RECALL ABSTAINED — this store most likely does not hold this`, never a silent empty result). `require_confidence: 0` on `memory_recall` opens it for one call. With the reranker disabled the gate stands aside. |
+| `AWM_ABSTAIN_RECALIBRATE_DAYS` | `7` | After a full consolidation, the gate's model is refitted when it is missing, older than this, or the store has grown by 20%. The model is saved per agent in `abstention-model.json` beside the store. |
+
+Measured with the calibrated gate on the real 29,853-memory snapshot
+(`tests/realstore-eval/gate-eval.ts`): it withholds 66 of 73 never-stored facts, withholds 0 of
+694 correct answers (flags 4), and of 200 absent questions asked in familiar vocabulary withholds
+92 and flags 30. One store, keyword-style questions; see [`abstention.md`](abstention.md).
+
+**Responses.** `POST /memory/write` (and `memory_write`) carries a `redaction` field naming what
+was masked. With the gate on, each `/memory/activate` result carries `signal`
+(`band: answer | low | withhold`, `score`, `answerAt`, `withholdBelow`).
+
+**Commands:**
+
+| Command | What it does |
+|---------|-------------|
+| `awm calibrate [--agent <id>]` | Fit the abstention gate now (92–118 s per agent on the real snapshot) instead of waiting for the next consolidation. Read-only on memories; writes only `abstention-model.json`. |
+| `awm vault list` | What is sealed, with use counts and allowed commands. Never the values. |
+| `awm vault run <id> [--env NAME] -- <cmd>` | Run `<cmd>` with the value in `$NAME` (default `AWM_SECRET`). Allowed command prefixes only; a command that chains or redirects (`;`, `&&`, `\|`, `>`, backticks, `$(`) is never allowed by prefix. The value is replaced by its handle in the command's output. |
+| `awm vault allow <id> "<prefix>"` / `disallow` | Add or remove a command prefix `run` may use the value for. Allowing an interpreter or network tool prints a warning. |
+| `awm vault reveal <id>` | Print a value. Interactive terminal only, and asks you to type the id. There is no MCP tool that returns a value. |
+| `awm vault forget <id>` | Delete a sealed value. Memories keep the dead handle. |
+| `awm vault status` | Where the vault and its key live. |
+| `awm vault migrate [--apply] [--db <memory.db>]` | Seal the secrets already in a store. Without `--apply`, a dry run. `--apply` backs up `memory.db` first (the backup holds every secret in plaintext; delete it once the store checks out), sweeps every text column and `awm.log`, then optimizes the index and vacuums. SQLite stores only. Stop AWM sessions first. |
+| `npx tsx scripts/redact-scan.ts [db] [--samples N]` | Repository script, not a CLI command. Scans a store read-only and prints per-rule counts of what redaction would mask. |
+
 ### Unreleased additions (lifecycle correctness, 2026-10-12)
 
 | Env var | Default | Meaning |

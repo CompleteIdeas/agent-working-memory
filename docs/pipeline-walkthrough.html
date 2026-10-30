@@ -356,6 +356,15 @@ confidence = sharpness<span class="k">^0.4</span> &middot; cliff<span class="k">
   <p>When guard two fires, the reply says <code>RECALL ABSTAINED</code> and reports how many results were
   withheld. An empty result <i>without</i> that line is genuine absence. The distinction matters: the
   first means reformulate with the exact identifier, the second means go and read the source.</p>
+
+  <p>A third guard is opt-in. With <code>AWM_ABSTAIN_GATE=calibrated</code>, the store learns its own
+  noise floor from about 300 queries it generates from itself, and judges the cross-encoder&rsquo;s score
+  for the top result rather than the shape of the list. A recall is then answered, answered with
+  <code>&#9888; LOW SIGNAL</code>, or withheld as <code>RECALL ABSTAINED &mdash; this store most likely does
+  not hold this</code>. That last message means what it says: go and read the source. Measured on one real
+  store with keyword-style questions, it withholds 66 of 73 never-stored facts and none of 694 correct
+  answers. <code>require_confidence: 0</code> opens it. Method:
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</p>
 </section>
 
 <section class="clock">
@@ -481,9 +490,18 @@ B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
   <div class="nums">
     <div><div class="v">92.7%</div><div class="l">Right memory first, identifier queries (300)</div></div>
     <div><div class="v">92.7%</div><div class="l">Right memory first, topic queries (450)</div></div>
-    <div><div class="v">90.0%</div><div class="l">Correctly silent on facts never stored</div></div>
+    <div><div class="v">66/73</div><div class="l">Never-stored facts withheld, opt-in calibrated gate</div></div>
     <div><div class="v">500<span style="font-size:16px;color:var(--mut)">ms</span></div><div class="l">Median warm recall, local</div></div>
   </div>
+
+  <p>A baseline belongs next to the first two: plain keyword search (BM25) puts the right memory first
+  for 95.7% and 91.6% of the same questions, which are keyword-friendly by construction. Over the raw
+  store, with superseded and retracted memories still in it, keyword search falls to 87.7% / 79.8% and
+  puts a superseded memory first 8&ndash;15% of the time; tracking what is current is what AWM adds. The
+  third figure is the opt-in calibrated gate (<code>AWM_ABSTAIN_GATE=calibrated</code>), which also
+  withholds 0 of 694 correct answers. It replaces an earlier &ldquo;90.0% correctly silent&rdquo;, measured
+  with a strict non-default setting on 10 probes; the shipped default withheld 0 of those 10. See
+  <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</p>
 
   <p>Two fixtures built independently agree within a point. Both were corrected upward twice in September
   2026, when the instrument rather than the engine turned out to be wrong &mdash; once for the unpinned

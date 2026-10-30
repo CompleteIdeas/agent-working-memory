@@ -200,8 +200,13 @@ async function main() {
   // Selectivity: silence on absent facts is the CORRECT answer and is rewarded.
   let abstained = 0, advWasteTok = 0;
   for (const a of advs) {
+    // 2026-10-29: measured at the SHIPPED memory_recall settings (k=3, min_score 0.05,
+    // require_confidence 0.05). This pass used minScore 0.3 + abstentionThreshold 0.3 — a strict
+    // gate nothing ships, which drops s@1 to 38%/57% — and its 90% was published next to the
+    // default-config s@1 as if both held at once. With AWM_ABSTAIN_GATE=calibrated set (and a
+    // model fitted) the calibrated gate applies here too. See docs/abstention.md.
     const res: any[] = await activation.activate({
-      agentId: 'work', context: a.query, limit: 10, minScore: 0.3, abstentionThreshold: 0.3, internal: true,
+      agentId: 'work', context: a.query, limit: RECALL_LIMIT, minScore: 0.05, requireConfidence: 0.05, internal: true,
       now: snapshotNow, asOf: snapshotNow,
     } as any);
     if (res.length === 0) abstained++;

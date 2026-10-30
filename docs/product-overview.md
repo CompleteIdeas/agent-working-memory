@@ -39,6 +39,9 @@ no external calls. The rest of this page is the plain-language tour of those pie
 3. **Learn from feedback** — When a recalled memory is useful (or not), update its confidence score so the system improves over time
 4. **Self-correct** — Retract wrong memories, create corrections, and automatically reduce confidence in associated memories that may also be contaminated
 5. **Stay bounded** — Automatic eviction, edge pruning, and association decay prevent unbounded memory growth
+6. **Keep secrets out of the store** — Write-time redaction (on by default) masks credentials before a write is stored, indexed, embedded or logged. It is shape-based: a bare random string with no label is not caught. See [`redaction.md`](redaction.md)
+7. **Know a secret without telling it** *(opt-in, `AWM_VAULT=on`)* — Secrets are sealed in an encrypted `vault.db` with the key in the OS credential store; the memory keeps a handle, and `awm vault run` injects the value into commands the user allowed. See [`vault.md`](vault.md)
+8. **Say when it doesn't have something** *(opt-in, `AWM_ABSTAIN_GATE=calibrated`)* — A gate fitted per agent from the store itself answers, flags a low signal, or withholds. Measured on one real store with keyword-style questions: it withholds 66 of 73 never-stored facts and 0 of 694 correct answers. The default gate does not do this (it withheld 0 of 10 absent-fact probes). See [`abstention.md`](abstention.md)
 
 ## Glossary
 
@@ -52,6 +55,9 @@ no external calls. The rest of this page is the plain-language tour of those pie
 | **Retraction** | Marking a memory as wrong, optionally creating a correction, and propagating confidence penalties to neighbors |
 | **Eviction** | Removing the least valuable memories when capacity limits are reached |
 | **Phase scores** | Per-phase breakdown of how each retrieval signal contributed to a memory's activation score |
+| **Redaction** | Masking a secret before a write is stored, e.g. `[REDACTED:stripe_key …0dWz]` |
+| **Vault handle** | `[VAULT:type …last4 #id]` — what a memory holds in place of a sealed secret when the vault is on |
+| **Abstention** | Recall withholding results because the store most likely does not hold the answer, reported as `RECALL ABSTAINED` |
 
 ## Tech Stack
 
@@ -65,6 +71,7 @@ no external calls. The rest of this page is the plain-language tour of those pie
 | Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (92 MB download at fp32; ~24 MB at `AWM_RERANKER_DTYPE=q8`) | Cross-encoder passage relevance |
 | Query Expander | Xenova/flan-t5-small (377 MB download at fp32) | Synonym/related term expansion |
 | ML Runtime | @huggingface/transformers | Local ONNX inference (no API calls) |
+| Vault key store | @napi-rs/keyring (optional dependency) | Holds the vault key in the OS credential store when `AWM_VAULT=on`; a key-file fallback where none exists |
 | Test Framework | Vitest 4 | Unit and integration tests |
 | Runtime | Node.js >= 20, tsx for dev | TypeScript execution |
 | Validation | Zod 4 | MCP tool parameter schemas |

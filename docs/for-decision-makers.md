@@ -26,9 +26,9 @@ A small local program that runs alongside the AI assistant. It has two jobs:
    the system — it stores a short note. AWM scores each note for importance and discards the
    ones that are not worth keeping. Roughly a third of what is offered gets stored.
 2. **Recall.** Before the assistant works on something, it asks AWM "what do I know about
-   this?" and gets back the two or three most relevant notes. Or nothing, if nothing
-   relevant exists — AWM is built to say "I don't know" rather than return the best of a
-   bad set.
+   this?" and gets back the two or three most relevant notes. By default it returns the
+   closest matches it has. With an opt-in gate switched on, it can instead say "this store
+   most likely does not hold that" (see below).
 
 Everything runs on the user's machine. One SQLite database file and three ML models
 (about 600 MB total, downloaded once on first use — none of it is bundled in the package).
@@ -48,7 +48,14 @@ dated files under [`archive/`](archive/README.md).
 |---|---|---|
 | Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **97.3%** in the top five, **92.7%** correct on the first result |
 | Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **96.9%** in the top five, **92.7%** first-result |
-| Adversarial, 10 queries | Ask about something that was never stored | **90%** correctly return nothing |
+
+**A baseline belongs next to those numbers.** Plain keyword search (BM25) on the same questions
+puts the right memory first for **95.7%** (identifier) and **91.6%** (topic). The fixtures are
+keyword-friendly by construction, so they do not show AWM ranking better than keyword search.
+What they do show is the cost of ignoring a memory's lifecycle: run over the raw store, with
+replaced and retracted notes still in it, keyword search falls to 87.7% / 79.8% and puts an
+outdated note first 8–15% of the time. Keeping track of which version of a fact is current
+(supersession and retraction) is AWM's measurable edge.
 
 The two fixtures are built differently and agree within a point. Both run against a frozen
 copy of a real 30,000-memory store, not synthetic test data. The assistant sees the top three
@@ -67,6 +74,36 @@ and produced no answer; the memory arm answered in 4 queries.
 
 That is four tickets — directional, not statistically conclusive. It is reported at that
 weight.
+
+**Saying "I don't know" — opt-in, measured on one store**
+
+By default AWM returns its closest matches even when the store does not hold the answer. An
+earlier figure of "90% correctly return nothing" was measured with a strict setting nobody ships,
+on 10 questions; with the default setting AWM stayed quiet on 0 of those 10. That figure has been
+withdrawn.
+
+An opt-in gate (`AWM_ABSTAIN_GATE=calibrated`) learns from the store itself what "no answer
+here" looks like. Measured on the same real store, with keyword-style questions:
+
+| question | result |
+|---|---|
+| 73 questions about facts that were never stored | **66** withheld |
+| 694 questions whose answer is stored | **0** withheld, 4 answered with a warning |
+| 200 questions about a deleted fact, asked in the vocabulary of its neighbours | 92 withheld, 30 answered with a warning |
+
+It has not yet been measured on other stores or on natural-language questions. Method:
+[`abstention.md`](abstention.md).
+
+**Credentials — what happens to a password the assistant writes down**
+
+- **Masked by default.** API keys, private keys, tokens and labelled passwords are masked before
+  a note is stored, indexed or logged, so they are not replayed into later sessions. Detection is
+  by shape and label; a bare random string with no label is not caught. Notes written before this
+  shipped are not rewritten. [`redaction.md`](redaction.md)
+- **Kept and usable, opt-in.** With the vault on (`AWM_VAULT=on`), a secret is encrypted in a
+  separate file with the key in the operating system's credential store. The assistant can use it
+  in a command you have allowed, without the value appearing in the conversation, and no tool
+  returns the value to the model. [`vault.md`](vault.md)
 
 **Where the value concentrates — long-horizon work**
 
@@ -111,8 +148,10 @@ remembered, it is silently re-decided.
 ## The one-sentence version
 
 AWM lets an AI assistant remember what your team decided and why, across months of work,
-on your own machine — and it is measured to return the right memory about 92% of the time
-and to say "I don't know" when it should.
+on your own machine. It returns the right memory first about 92% of the time on its
+benchmark (plain keyword search manages about the same on those questions); what it adds is
+knowing which version of a fact is current and, with an opt-in gate, saying when it does not
+have the answer.
 
 ---
 

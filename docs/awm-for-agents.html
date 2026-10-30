@@ -341,8 +341,16 @@
     <tr><th>Feature</th><th>What it gives the agent</th></tr>
     <tr><td><strong>Cognitive recall</strong></td><td>Not cosine-only: dual BM25 (keyword + expanded) + vectors + cross-encoder rerank + graph walk + ACT-R decay + coreference expansion. See the <a href="pipeline-walkthrough.html">pipeline walkthrough</a>.</td></tr>
     <tr><td><strong>Granularity</strong></td><td><code>full</code> (default), <code>compact</code> (a query-aware ~200-char snippet per result — ~70% fewer output tokens when scanning many), <code>auto</code> (confidence-adaptive).</td></tr>
-    <tr><td><strong>Abstention</strong></td><td><code>require_confidence</code> makes recall return nothing rather than best-of-bad noise — so the agent can act on "I don't know" instead of a plausible-but-wrong fact. A multi-channel agreement gate backs it (2+ channels must agree).</td></tr>
+    <tr><td><strong>Abstention</strong></td><td><code>require_confidence</code> makes recall return nothing rather than best-of-bad noise. It judges the <em>shape</em> of the scores, so the light default (0.05) rarely fires: it withheld 0 of 10 absent-fact probes. A multi-channel agreement gate backs it (2+ channels must agree).</td></tr>
+    <tr><td><strong>Calibrated abstention</strong> <span class="pill">(opt-in)</span></td><td><code>AWM_ABSTAIN_GATE=calibrated</code>: the store learns its own noise floor from queries it generates from itself (<code>awm calibrate</code>, refitted after consolidation), and each recall is answered, answered with <code>⚠ LOW SIGNAL</code>, or withheld as <code>RECALL ABSTAINED — this store most likely does not hold this</code>. Measured on one real store with keyword-style questions: withholds 66 of 73 never-stored facts and 0 of 694 correct answers. <code>require_confidence: 0</code> opens it. See <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</td></tr>
     <tr><td><strong>Tag-set search</strong> <span class="pill">(0.8)</span></td><td>AND / OR / NOT tag operators, <code>latest-by-tag</code>, <code>top-by</code> numeric tag sort, race-free <code>sequence</code> allocator — relational-style queries over the memory store.</td></tr>
+  </table>
+
+  <h3>Secrets</h3>
+  <table>
+    <tr><th>Feature</th><th>What it gives the agent</th></tr>
+    <tr><td><strong>Write-time redaction</strong> <span class="pill">(on by default)</span></td><td>Provider keys, private keys, JWTs, connection-URL passwords, <code>Bearer</code> tokens and labelled values are masked before a write is stored, indexed, embedded or logged, so a credential is not replayed into every later session. Email and phone are reported, not masked. Shape-based: an unlabelled random string is not caught. <code>AWM_REDACT</code>, <code>AWM_REDACT_PII</code>. See <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/redaction.md">redaction.md</a>.</td></tr>
+    <tr><td><strong>The vault</strong> <span class="pill">(opt-in)</span></td><td><code>AWM_VAULT=on</code>: secrets are sealed in <code>vault.db</code>, key in the OS credential store, and the memory keeps a handle <code>[VAULT:type …last4 #id]</code>, so the agent knows a secret without telling it. A known value is recognised again wherever it appears. <code>awm vault run &lt;id&gt; --env NAME -- &lt;cmd&gt;</code> injects it into commands the user allowed, never chained, with the value scrubbed from output (literally: an encoded echo gets past it). No MCP tool returns a value. See <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/vault.md">vault.md</a>.</td></tr>
   </table>
 
   <h3>Interfaces, hooks &amp; the bearer token</h3>
@@ -655,6 +663,11 @@
       read/grep the code for ground truth on a miss, and <code>supersede</code> when reality differs.</li>
     <li><strong>Recall quality is bounded by write quality.</strong> Lead with the fact; tag with
       identifiers (file, table, ticket). A vague write can't be rescued by any retriever.</li>
+    <li><strong>Ranking alone is not the reason to adopt it.</strong> On AWM's own real-store fixtures,
+      which are keyword-friendly by construction, plain BM25 puts the right memory first for 95.7% /
+      91.6% against AWM's 92.7% / 92.7%. The measurable edge is the lifecycle: over the raw store, with
+      superseded and retracted memories still in it, BM25 falls to 87.7% / 79.8% and returns a
+      superseded memory first 8–15% of the time.</li>
   </ul>
 </section>
 

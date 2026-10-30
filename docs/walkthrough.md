@@ -119,9 +119,14 @@ plus the memory's tags. That one change moved recall on long memories from 25% t
 results, AWM looks at the *shape* of the scores. If the best candidate is only slightly
 better than the tenth, the query probably has no good answer in the store, and AWM returns
 nothing — with a message saying how many candidates it withheld and why. The threshold is
-deliberately light by default (it halves off-topic answers at no cost to real ones). The
-benchmark scores this correct silence as a *win*: on ten questions about facts that were
-never stored, AWM stays quiet on nine.
+deliberately light by default (on a small synthetic seed set it halved off-topic answers at no cost
+to real ones; on the real 29,853-memory snapshot it withheld 0 of 73 absent questions), and
+light enough that it rarely fires: on ten questions about facts that were never stored, the
+default stayed quiet on none. (An earlier "nine of ten" came from a strict setting nobody
+ships, and has been withdrawn.) The opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`)
+does this job properly: it learns from the store what "no answer here" looks like and, on the
+same real store, withholds 66 of 73 never-stored facts and none of 694 correct answers. See
+[abstention.md](abstention.md).
 
 For our query, the top result is the memory written in step 1. It arrives as:
 
@@ -216,14 +221,17 @@ a shared **workspace** so specialised agents read from a common pool.
 | score liveness, not just relevance (ACT-R decay) | the store forgets gracefully without anyone curating it |
 | link what is used together (Hebbian edges) | related context surfaces without being asked for |
 | re-read the shortlist with a small model (reranker) | the final order is based on actually reading the text |
-| return nothing when nothing fits (abstention) | a wrong confident answer is more expensive than an admitted gap |
+| return nothing when nothing fits (abstention, opt-in calibrated gate) | a wrong confident answer is more expensive than an admitted gap |
 | mark replaced facts rather than deleting them (supersede) | the store knows what changed; a notes file does not |
 | keep it local and per-agent | no data leaves the box; work and personal never mix |
 
 Measured, on a frozen copy of a real 30,000-memory store: the right memory is the **first**
 result **92.7%** of the time on identifier queries and **92.7%** on topic queries, in the
-top five about 97% of the time, and the system correctly stays silent on 90% of questions
-it has no answer to. Warm recall takes about half a second.
+top five about 97% of the time. Plain keyword search scores about the same on those
+questions (95.7% / 91.6% first), because they are keyword-friendly by construction; over the
+raw store, with replaced facts still in it, keyword search falls to 87.7% / 79.8% and puts a
+superseded memory first 8–15% of the time. With the opt-in calibrated gate, AWM withholds 66
+of 73 questions it has no answer to. Warm recall takes about half a second.
 
 ## What it does not do, stated plainly
 

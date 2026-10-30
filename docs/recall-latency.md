@@ -41,6 +41,9 @@ exists.
 >   97.3% top-5 and topic **92.7%** / 96.9%, abstention 90.0% on both — the −0.9 pp topic
 >   cost measured below did not reproduce. The `fp32 (shipped)` rows stay as the fp32
 >   record; `AWM_RERANKER_DTYPE=fp32` restores that ranker.
+> - **2026-10-29: the "abstention 90.0%" column is not a current property.** It was measured
+>   with a strict non-default gate on 10 probes; with the shipped default AWM withheld 0 of 10.
+>   The tables below keep it as measured. Current figures: [`abstention.md`](abstention.md).
 
 ---
 

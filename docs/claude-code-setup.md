@@ -110,8 +110,31 @@ Default `memory_recall` is tuned for the common case. Three parameters change th
 | Param | Values | Use when |
 |-------|--------|----------|
 | `granularity` | `full` (default) / `compact` / `auto` | `compact` puts a short query-aware summary on every result — cheaper to scan when you expect 5+ hits. `auto` gives the top result a longer summary only when it's a clear winner. |
-| `require_confidence` | `0.10` / `0.25` / `0.40` | Opt-in abstention — recall returns `[]` instead of low-confidence noise. Use right before acting on a recalled fact. Higher = more willing to say "I don't know." |
+| `require_confidence` | `0.10` / `0.25` / `0.40` | Score-shape abstention — recall returns nothing instead of low-confidence noise. Higher = more willing to say "I don't know", but it judges the *shape* of the scores and silences correct answers along with absent ones (see [abstention.md](abstention.md)). With the calibrated gate on, `0` opens that gate for one call. |
 | `workspace` | a workspace name | Hive-mode recall across every agent in that workspace, not just this one. Use when another agent may hold canonical knowledge you need. |
+
+### Server-side switches (opt-in)
+
+Two behaviours are set in the AWM server's environment, the `env` block of the MCP config, not
+per call. Restart Claude Code after changing either.
+
+```json
+"env": {
+  "AWM_VAULT": "on",
+  "AWM_ABSTAIN_GATE": "calibrated"
+}
+```
+
+- **`AWM_ABSTAIN_GATE=calibrated`**: the store learns its own noise floor (`awm calibrate`, or
+  the next consolidation), and each recall is answered, answered with a `⚠ LOW SIGNAL` flag, or
+  withheld as `RECALL ABSTAINED — this store most likely does not hold this`. Measured on one real
+  store: it withheld 66 of 73 never-stored facts and 0 of 694 correct answers.
+  See [abstention.md](abstention.md).
+- **`AWM_VAULT=on`**: secrets are sealed in `vault.db` instead of masked, and the memory keeps a
+  handle the agent can use through `awm vault run`. See [vault.md](vault.md).
+
+Write-time redaction of secrets is already on by default (`AWM_REDACT`, `AWM_REDACT_PII`); see
+[redaction.md](redaction.md).
 
 ---
 

@@ -1,15 +1,34 @@
 # AgentWorkingMemory (AWM)
 
-**Give your AI coding agent a memory that survives the conversation — and knows when to stay quiet.**
+**One agent thread, any number of topics. AWM gives your AI agent a memory it draws fresh context
+from at every turn — so it can switch topics, survive compaction, come back — and know what it
+doesn't know.**
 
-Every session with an AI assistant starts blank. It has forgotten what your team decided last
-week, which approach was tried and rejected, and which table actually holds the thing it needs.
-So it re-derives all of it — reading files, running searches, asking you — and on a large project
-it will confidently rebuild something that was already decided against.
+Every session with an AI assistant starts blank, and every long session decays: the context
+window fills, compaction summarises away the detail, and switching from one job to another means
+the first job's facts are gone by the time you return. So the agent re-derives everything —
+reading files, running searches, asking you — and on a large project it will confidently rebuild
+something that was already decided against.
 
-AWM fixes that with one local process and one SQLite file. The agent writes short notes as it
-learns; AWM decides which are worth keeping, hands back the two or three that matter when asked,
-and says **nothing** when nothing fits.
+AWM changes the model. The agent's working context is not carried forward and patched; it is
+**drawn fresh from memory every time** — a recall primed on each prompt, per step, and after every
+compaction. That is what lets one continuous thread move from RosterKeep to a workshop deck to a
+security fix and back without losing its place. One local process, one SQLite file: the agent
+writes short notes as it learns, AWM decides which are worth keeping, hands back the two or three
+that matter, and says **nothing** when nothing fits.
+
+## Why use it
+
+| | | Evidence |
+|---|---|---|
+| **One thread, any number of topics** | Context comes from memory each turn, so a single long-running agent can switch topics, lose detail to compaction, and get it back | Early: in a measured multi-task run, compaction **+ AWM** was fully right **4 of 5** times — above the full-history ceiling (3/5) and every memory-less arm. AWM's own share is not yet isolated; [what would settle it](docs/claims.md) |
+| **Knows what's current** | A corrected fact supersedes the old one, and recall serves the new version — the old one surfaces only with a warning | Measured: plain keyword search over a raw store returns a **superseded** memory first **8–15%** of the time; AWM's lifecycle is why it doesn't |
+| **Knows what it doesn't know** | A gate calibrated on the store itself withholds answers it doesn't have, and flags the ones it isn't sure of | Measured, one store: withholds **66 of 73** never-stored facts and **0 of 694** correct answers (opt-in, [details](docs/abstention.md)) |
+| **Selective, not a sponge** | It keeps what is worth keeping and returns the two or three memories that matter, not the top-K of everything | By design; the salience filter and its audit are in [`docs/cognitive-model.md`](docs/cognitive-model.md) |
+| **Costs the same at any scale** | A scoped recall costs about the same whether the store holds a hundred memories or thirty thousand | Measured as flat; the size is disputed — published as ~630 tokens, the harness measures ~1,518. Either way against ~1.3M to carry the store ([claims §3](docs/claims.md)) |
+| **Lets a cheap model punch up** | A small model with the right memory beats a frontier model without it on domain work | One experiment: **14/15 vs 7/15** on a 15-task workload, at ~1/40th the cost — n = 15, not reproducible ([claims §4](docs/claims.md)) |
+| **Keeps secrets out — or keeps them safely** | Credentials are masked before anything is stored; with the vault on, AWM *keeps* them sealed and can use one in a command without ever saying it | Measured: 0 of 40 sealed values left anywhere in a migrated real store ([redaction](docs/redaction.md), [vault](docs/vault.md)) |
+| **Yours, on your machine** | No cloud, no account, no API keys, no telemetry | One process, one SQLite file |
 
 ```bash
 npm install -g agent-working-memory && awm setup --global
@@ -44,7 +63,8 @@ including the ones we think are weakest.
 |---|---|
 | **Finds the right memory** | In the top five for **97.3%** of identifier queries and **96.9%** of topic queries — and **first** for **92.7%** of both. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to. **Baselines on the same questions:** plain keyword search (BM25) puts the right memory first for 95.7% / 91.6%. These fixtures are keyword-friendly by construction. Over the raw store BM25 falls to 87.7% / 79.8% and returns a superseded memory first 8–15% of the time; AWM's lifecycle is what it adds there |
 | **Stays silent when it should** | With the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`), withholds **66 of 73** questions about facts never stored, while withholding **0 of 694** correct answers. The gate learns its noise floor from the store itself; [how it works and what it costs](docs/abstention.md). Off (the default), AWM answers almost every question with its nearest match. |
-| **Costs the same at any scale** | Scoped recall answers in **~630 tokens flat**. Carrying the store instead: ~1.3M tokens |
+| **Costs the same at any scale** | Scoped recall stays flat as the store grows — published as **~630 tokens**, measured by the harness at ~1,518 ([claims §3](docs/claims.md) explains the gap). Carrying the store instead: ~1.3M tokens |
+| **Keeps secrets out** | On by default: credentials are masked before store, index, embedding or log. A read-only scan of the real store found them in ~70 memories written before this existed — exactly what it now stops. With the opt-in vault, a migration of a copy of that store sealed 40 distinct values and left **0** anywhere in the file, with recall unchanged (same first result for 8 of 8 test questions) |
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
 
 Two independently built fixtures agree within a point. A warm recall takes about a quarter of a
@@ -73,6 +93,7 @@ The honest version, because the overhead is real and it does not pay back for ev
 
 | If you are… | What you actually get | It pays back when |
 |---|---|---|
+| **Running one long agent thread across many topics** | Context re-drawn from memory each turn, so switching jobs and compaction cost little and the agent comes back to where it was | Your sessions run for hours or days and cover more than one project |
 | **A solo developer on one long-lived project** | The agent stops re-asking what you already told it, and stops re-proposing approaches you rejected | The project outgrows the context window — roughly, when you start saying "I have explained this before" |
 | **A team sharing conventions** | One pool where a decision written by anyone is recalled by everyone, with corrections superseding rather than accumulating | More than one person is steering agents at the same codebase |
 | **Running support or operations agents** | Ticket-scoped recall by real identifiers, so the second agent to touch a ticket knows what the first one did | Work arrives as a queue that several sessions or people share |
@@ -184,10 +205,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.20.1
+## What's new — unreleased (0.21.0)
 
 | | |
 |---|---|
+| **Unreleased** | **Knows what it doesn't know** (opt-in, `AWM_ABSTAIN_GATE=calibrated`): a gate fitted per agent on queries the store generates from itself withholds answers the store doesn't hold — **66 of 73** never-stored facts — and **0 of 694** correct answers; uncertain recalls are answered with a ⚠ low-signal flag. `awm calibrate` fits it now; consolidation refits it. **A correction comes with it:** the old "90.0% correct abstention" was measured on a strict non-default gate and 10 probes, and was never true alongside the 92.7% accuracy figure — with the shipped default AWM withheld 0 of 10. **Secrets:** credentials are masked before store, index, embedding or log (on by default, `AWM_REDACT`), and with the opt-in vault (`AWM_VAULT=on`) AWM keeps them sealed in the OS credential store and can use one in a command without ever saying it (`awm vault`). **Baselines** now sit next to the accuracy figures: plain BM25 scores within a few points on these keyword-friendly fixtures, and AWM's measurable edge is knowing what is current. [abstention](docs/abstention.md) · [vault](docs/vault.md) · [redaction](docs/redaction.md) |
 | **0.20.1** | Consolidation stopped archiving distinct facts as duplicates: the redundancy-prune threshold (0.75, calibrated for MiniLM-L6) was below where UNRELATED bge-small pairs sit (p99 0.757), so a sleep cycle straight after a batch write archived 25 minute-old memories as duplicates. Now **0.90** (`AWM_REDUNDANCY_THRESHOLD`), only after the 7-day grace period, never canonical or structural. A `supersedes` write inherits the replaced memory's confidence floor, `embedding_model` is stamped on every vector written (it was NULL everywhere), and `AWM_CONFIDENCE_GATE_K` makes the confidence multiplier tunable — measured, default unchanged. |
 | **0.20.0** | The learning loop now runs on what the agent does: a recalled memory is credited when its identifiers show up in a later write, a supersede of it, a task summary, or the turn's reply and tool calls (a new Stop hook posts the transcript to the sidecar). Before this the live store had **12 feedback rows against 23,653 recalls**. And a session can keep its own notes: `memory_write(scope: "session")` is kept whatever its salience and never merged into durable memory; `memory_recall(scope: "session")` / `session_first`; checkpoints are saved per session so parallel sessions stop overwriting each other. **Re-run `awm setup --global`** once to get the new Stop hook. Recall p50 on a quiet machine at the q8 default: **256 ms** identifier, **258 ms** topic. |
 | **0.19.0** | From the speed and memory review: a warm recall was 612 ms and 474 ms of it was the cross-encoder. The **q8 reranker is the default** — rerank 35–45% faster in an interleaved in-process comparison, and on the full suites identifier 92.7% / topic 92.7% first-result (fp32: 93.0 / 92.2), top-5 and abstention unchanged. The **shared model daemon is on by default** for `awm mcp` and `awm serve`, ending the ~4 s cold first recall. The **prime hook caches** its answer for the same question for a minute instead of recalling on every prompt. SQLite gets a 64 MB page cache and mmap. The bench and profile scripts now measure in-process. |
@@ -277,6 +299,14 @@ The theory and its citations: [`docs/cognitive-model.md`](docs/cognitive-model.m
 - Recall is bounded by what was written. A memory that never names its subject cannot be found by
   it. The writing guidance exists for this reason.
 - The association graph, as of this release, rarely changes a final answer; the reranker does.
+- On the benchmark's keyword-style questions, **plain BM25 ranks about as well as AWM** — the
+  fixtures are keyword-friendly by construction. AWM's measured edge is knowing what is current
+  and knowing what it doesn't know, not raw ranking.
+- The abstention gate is measured on one real store and on keyword-style questions; the benchmark
+  has no natural-language questions yet. Redaction is shape-based: a credential with no
+  recognisable shape and no label gets through.
+- The headline thread model rests on early evidence (4/5 vs 3/5 in one multi-task run) with AWM's
+  own share not yet isolated — [claims §9](docs/claims.md).
 - It is 0.x. Benchmark figures have been corrected upward more than once after the *instrument*
   turned out to be wrong; every correction is documented in place rather than revised away.
 
@@ -299,6 +329,9 @@ The README points outward; it does not duplicate. Everything below is the author
 | **Writing memories any model can recall** — the rules behind the retrieval figures, harness-neutral, with a block to paste into an agent's instructions | [`docs/writing-memories.md`](docs/writing-memories.md) |
 | Behaviour as the store grows | [`docs/using-awm-at-scale.md`](docs/using-awm-at-scale.md) |
 | The vocabulary — engram, salience, activation, Hebbian, staging | [`docs/onboarding-vocabulary.md`](docs/onboarding-vocabulary.md) |
+| **Knowing what it doesn't know** — the calibrated abstention gate, how it is fitted, what it costs | [`docs/abstention.md`](docs/abstention.md) |
+| **Secrets** — write-time redaction, and the vault that keeps them sealed and usable | [`docs/redaction.md`](docs/redaction.md) · [`docs/vault.md`](docs/vault.md) |
+| Every published claim, what produced it, who can reproduce it, and where it is weakest | [`docs/claims.md`](docs/claims.md) |
 | When something is wrong | [`docs/troubleshooting.md`](docs/troubleshooting.md) |
 | Full index | [`docs/README.md`](docs/README.md) |
 
@@ -307,7 +340,7 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 1097 tests
+npx vitest run          # 1140 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball

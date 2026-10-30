@@ -2,8 +2,8 @@
 
 > Persistent, local-first memory for AI coding agents. One Node process, one
 > SQLite file, no cloud and no API keys. It decides what is worth keeping,
-> returns the two or three memories that matter, and returns nothing when
-> nothing fits.
+> masks secrets before it stores anything, returns the two or three memories
+> that matter and, with an opt-in gate, says when it does not have the answer.
 
 **If you are a language model, read this file first.** It is written to be
 ingested whole. It gives you the mental model, the setup for each situation,
@@ -251,7 +251,10 @@ question), `memory_stats`.
   `0.05`. **Do not raise it for ordinary recall**: a miss is expensive because
   you then go and read the codebase instead (~2,106 tokens, measured), and
   thresholds of 0.20+ cut net tokens saved by 25% in `tests/abstention-eval`.
-  Raise it only for push-style use where nobody asked.
+  Raise it only for push-style use where nobody asked. It judges the *shape*
+  of the scores, not whether the answer is stored: at the default it withheld
+  0 of 10 absent-fact probes. For that job use the calibrated gate (§7); with
+  it on, `require_confidence: 0` opens it for one call.
 - `workspace` — cross-agent recall, opt-in.
 - `limit` — default **3**, and this is a measured choice, not a guess. On 400
   real-store probes k=3 is the only **token-positive** setting: **+115 tokens
@@ -306,7 +309,90 @@ facts.
 
 ---
 
-## 7. Gotchas, in the order they bite
+## 7. Secrets, and knowing what it does not have
+
+Three features. Redaction is on by default; the other two are opt-in. Each
+has a full write-up: `docs/redaction.md`, `docs/vault.md`,
+`docs/abstention.md`.
+
+### Write-time redaction (on by default)
+
+Secrets are masked **before** a write is stored, indexed, embedded or logged:
+provider keys with a known shape, PEM private keys, JWTs, passwords in
+connection URLs, `Bearer` tokens, labelled values (`password=`, `API_KEY:`),
+US SSNs and payment cards. A mask keeps the rule name and, for long keys, the
+last four characters: `[REDACTED:stripe_key …0dWz]`. Labels survive, so write
+the **pointer** ("the Stripe key is in `STRIPE_SECRET_KEY`"), not the value.
+`memory_write` tells you what was masked.
+
+```
+AWM_REDACT=mask|report|off        # secrets, SSNs, cards; default mask
+AWM_REDACT_PII=report|mask|off    # email, phone; default report (kept)
+```
+
+Shape-based: a bare random string with no label is not caught. Memories
+written before it shipped are not rewritten; `npx tsx scripts/redact-scan.ts
+[db]` scans a store read-only (repository checkout only).
+
+### The vault (opt-in, `AWM_VAULT=on`)
+
+Instead of masking, a secret is **sealed**: AES-256-GCM in a separate
+`vault.db` (`AWM_VAULT_PATH`), key in the OS credential store
+(`AWM_VAULT_KEY_STORE=keyring`, or `file` for the weaker key-file fallback).
+The memory keeps a handle, `[VAULT:type …last4 #id]`, so recall knows the
+secret exists and what it is for without telling it. A value once sealed is
+recognised and replaced wherever it appears again, labelled or not.
+
+If you recall a handle, use it like this, through your own shell:
+
+```
+awm vault run <id> --env NAME -- <command>
+```
+
+The value goes into that one command's environment, and the output has it
+replaced by the handle. Only command prefixes the user allowed
+(`awm vault allow <id> "<prefix>"`); chained or redirected commands are never
+allowed; anything else is refused without a terminal. **There is no MCP tool
+that returns a value**, and `awm vault reveal` works only at an interactive
+terminal. Do not try to get the value into the conversation. Scrubbing is
+literal, so do not run a command that prints the value encoded.
+
+Other commands: `awm vault list`, `disallow`, `forget`, `status`,
+`migrate [--apply]` (seals the secrets already in a SQLite store; the backup
+it makes holds them in plaintext).
+
+### Calibrated abstention (opt-in, `AWM_ABSTAIN_GATE=calibrated`)
+
+The gate learns a noise floor from the store itself: about 300 synthetic
+queries it generates (answerable, familiar nonsense, random), no labels, a
+small logistic model over the cross-encoder's top score, the top vector
+similarity and the #1–#2 margin. `awm calibrate [--agent <id>]` fits it now;
+it is refitted after consolidation when stale
+(`AWM_ABSTAIN_RECALIBRATE_DAYS`, default 7, or the store grew 20%).
+
+Every recall lands in one band:
+
+- **answer** — results as usual;
+- **⚠ LOW SIGNAL** — results, flagged; verify before relying on them;
+- **withhold** — no results; the reply says `RECALL ABSTAINED — this store
+  most likely does not hold this`. Read the source. Do not retry with a
+  lower threshold; pass `require_confidence: 0` only when you have reason to
+  think the fact is stored.
+
+Measured on the real 29,853-memory snapshot
+(`tests/realstore-eval/gate-eval.ts`): withholds **66 of 73** never-stored
+facts; withholds **0 of 694** correct answers and flags 4; of 200 absent
+questions asked in familiar vocabulary, withholds 92 and flags 30. One store,
+keyword-style questions only. With the reranker disabled the gate stands
+aside.
+
+**A correction.** AWM used to publish "90.0% correct abstention". It came
+from a strict non-default gate on 10 probes, and with the shipped default AWM
+withheld 0 of 10. Do not quote it as a current property.
+
+---
+
+## 8. Gotchas, in the order they bite
 
 1. **Retrieval flags unset.** §3. Silent, and the largest single effect.
 2. **The decisive identifier sits past character 400.** 97.3% -> 46.8% on the
@@ -369,7 +455,11 @@ they are not re-reported. Read it before filing anything.
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
+
+**`RECALL ABSTAINED — this store most likely does not hold this`.** The
+calibrated gate (§7) judged the store does not have it. Read the source. If
+you have reason to think it is stored, `require_confidence: 0` opens the gate.
 
 **Nothing is recalled, or the wrong things are.**
 `awm doctor` → are the three flags from §3 set? Then: does the memory's body
@@ -392,7 +482,7 @@ Deeper: `docs/troubleshooting.md`, `docs/faq.md`, `docs/unknowns.md`.
 
 ---
 
-## 9. Reproducing the measurements
+## 10. Reproducing the measurements
 
 Two benchmark paths, and the difference matters:
 
@@ -422,9 +512,17 @@ path — gives a mechanically checkable right answer. Adversarial probes are
 included so that **correct silence scores positively**, which is the opposite
 of what LoCoMo does. `docs/benchmarks.md` explains why LoCoMo was retired.
 
+**Baselines.** `tests/realstore-eval/baselines.ts` runs random, BM25, dense
+and RRF over the same questions. Plain BM25 puts the right memory first for
+**95.7%** (identifier) / **91.6%** (topic), against AWM's **92.7%** / **92.7%**:
+the fixtures are keyword-friendly by construction, so they do not show AWM
+out-ranking keyword search. Over the raw store, without lifecycle filtering,
+BM25 falls to 87.7% / 79.8% and returns a superseded memory first 8–15% of the
+time. AWM's measurable edge is its lifecycle: supersession and retraction.
+
 ---
 
-## 10. Further reading
+## 11. Further reading
 
 | For | Read |
 |---|---|
@@ -434,6 +532,9 @@ of what LoCoMo does. `docs/benchmarks.md` explains why LoCoMo was retired.
 | Cognitive model (ACT-R, Hebbian, fade) | `docs/cognitive-model.md` |
 | Recall quality at scale | `docs/using-awm-at-scale.md` |
 | Weaknesses, with evidence | `docs/known-limitations.md` |
+| Secrets: redaction and the vault | `docs/redaction.md`, `docs/vault.md` |
+| Knowing what it does not have | `docs/abstention.md` |
+| Every published claim and its source | `docs/claims.md` |
 | What we do not know yet | `docs/unknowns.md` |
 | Benchmark method and history | `docs/benchmarks.md` |
 | Current scores, machine-generated | `docs/benchmarks-current.md` |
