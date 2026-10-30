@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Recall: a fused shortlist, a 40-candidate floor, and a blended final order
+
+Measured on the frozen real store at k=3, first result correct:
+
+| | natural-language (194) | topic (450) | identifier (1,316) |
+|---|---|---|---|
+| 0.21.0 | 41.2% | 92.7% | 91.6% |
+| this release | **45.9%** | **95.8%** | **93.4%** |
+
+Three changes in `src/engine/activation.ts`, each measured separately
+(`tests/realstore-eval/stage-diagnose.ts`, `blend-offline.ts`):
+
+- **The shortlist is never shorter than the rerank pool.** At k=3 the cut before the
+  graph walk was 3×8 = 24, so the documented 40-candidate cross-encoder pool was really 24.
+  On natural-language questions the right memory died there in 41 of 194.
+- **The shortlist is chosen by reciprocal-rank fusion** of the BM25, vector and composite
+  ranks, not the composite alone. With the floor, the right memory reaches the
+  cross-encoder in 90% of natural-language questions (was 71%).
+- **The final order blends the cross-encoder with the fused rank** (0.85 / 0.15, a convex
+  combination, times the stale penalty). The cross-encoder used to decide alone, and on
+  natural-language questions it picked worse than plain fusion (42% vs 45%).
+
+`AWM_PRESELECT=composite`, `AWM_TOPN_MIN`, `AWM_BLEND=<weight>|off` restore or tune each one.
+The calibrated gate reads reranker scores and should be recalibrated (`awm calibrate`).
+
+**What this does and doesn't say.** On natural-language questions AWM now matches plain
+BM25+vector fusion over the same current memories (45.4%) rather than trailing it; it does not
+beat it. AWM's lead over a plain vector database comes from knowing what is current: over the
+raw store, with superseded memories still in it, BM25 scores 35.6% and fusion 32.5% on the
+same questions.
+
+Also: a reranker that fails to load is now reported once on stderr instead of silently leaving
+recall unranked. An `AWM_RERANKER_MODEL` without a quantized ONNX file did exactly that.
+
+Tried and not adopted: the bge query instruction (no gain once the reranker runs),
+the reranker reading each memory's prefix (NL 39.2%), EmbeddingGemma-300m as the embedder (NL
++3.6 dense-only but identifier −2.6 and topic −4.7, and 30 minutes to embed 8,673 memories on CPU), keyword
+rewrites of questions by a small LLM (34.5–37.6%), and natural-shaped calibration probes for
+the gate (it stopped withholding never-stored facts: 0 of 73).
+
 ### Correction: the calibrated gate does withhold correct answers
 
 0.21.0 said the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) withheld **0 of 694**

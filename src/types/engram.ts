@@ -348,6 +348,10 @@ export interface ActivationQuery {
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
   /** Calibration runs recall with the calibrated gate off, so it measures the raw signals. */
   skipCalibratedGate?: boolean;
+  /** Diagnostics only: receives the candidate ids at each pipeline stage, in stage order. */
+  onStages?: (stages: Record<string, string[]>) => void;
+  /** Diagnostics only: every rerank-pool candidate's scores, after the cross-encoder. */
+  onRerankScores?: (pool: Array<{ id: string; rr: number; composite: number; text: number; vec: number }>) => void;
   spread?: boolean;            // R2: when AWM_SPREAD=1, set false to skip iterative spreading activation (connection-discovery uses this so edge-building doesn't recurse)
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default

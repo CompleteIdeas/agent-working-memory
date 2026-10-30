@@ -224,6 +224,8 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return union > 0 ? intersection / union : 0;
 }
 
+let rerankFailureReported = false;
+
 export class ActivationEngine {
   private store: EngramStore;
   private coActivationBuffer: CoActivationBuffer;
@@ -952,12 +954,41 @@ export class ActivationEngine {
     // 22.7→25.1 (every recall category up), 4-suite unchanged, recall 35→77ms; small
     // adversarial cost 73.4→71.0 (a fixed step, recoverable on the abstention gate).
     // Tunable via AWM_TOPN_MULT.
+    //
+    // Floor (0.21.1): never shorter than the rerank pool. At the shipped k=3 the cut was 3×8 =
+    // 24, so the documented max(limit*4, 40) cross-encoder pool was really 24, and on the
+    // natural-language fixture the gold died here before the cross-encoder in 41 of 194
+    // questions (tests/realstore-eval/stage-diagnose.ts). AWM_TOPN_MIN overrides the floor.
     const topNMult = Number(process.env.AWM_TOPN_MULT ?? 8);
-    const topN = sorted.slice(0, limit * topNMult);
+    const topNFloor = Number(process.env.AWM_TOPN_MIN ?? process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 40));
+    const topNSize = Math.max(limit * topNMult, topNFloor);
+    // Shortlist by reciprocal-rank fusion (0.21.1): the BM25 rank, the vector rank and the
+    // composite rank, instead of the composite alone. The composite is a poor shortlister for
+    // natural phrasing — vector search put the gold first for 67 of 194 natural-language
+    // questions, the composite for 19. Scores are untouched; only which candidates survive the
+    // cut changes. With the floor above: gold reaches the cross-encoder 71% -> 90% (NL),
+    // identifier top-1 91.6 -> 93.7. AWM_PRESELECT=composite restores the old cut.
+    let preselect = sorted;
+    if (process.env.AWM_PRESELECT !== 'composite') {
+      const RRF_K = 60;
+      const rankOf = (ids: string[]) => new Map(ids.map((id, i) => [id, i]));
+      const bRank = rankOf(bm25Ranked.map(r => r.engram.id));
+      const vRank = rankOf([...rawCosineSims.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id));
+      const rrf = new Map<string, number>();
+      sorted.forEach((r, i) => {
+        const id = r.engram.id;
+        let s = 1 / (RRF_K + i);
+        const b = bRank.get(id); if (b !== undefined) s += 1 / (RRF_K + b);
+        const v = vRank.get(id); if (v !== undefined) s += 1 / (RRF_K + v);
+        rrf.set(id, s);
+      });
+      preselect = [...sorted].sort((a, b) => rrf.get(b.engram.id)! - rrf.get(a.engram.id)!);
+    }
+    const topN = preselect.slice(0, topNSize);
     // D11 guard 1/4: injected entity-index candidates ride into the graph/rerank stages even
     // when their (boost-free) composite fell below the topN cut.
     if (injectedIds.size > 0) {
-      for (const item of sorted.slice(limit * topNMult)) {
+      for (const item of preselect.slice(topNSize)) {
         if (injectedIds.has(item.engram.id)) topN.push(item);
       }
     }
@@ -1039,6 +1070,14 @@ export class ActivationEngine {
     // `use_reranker` parameter) and the catch below. Separate defect, needs its
     // own measurement — AWM task 2026-10-09.
     prof.note('rerankPool', rerankPool.length);
+    query.onStages?.({
+      bm25: bm25Ranked.map(r => r.engram.id),
+      vector: vectorHits.map(e => e.id),
+      scored: sorted.map(r => r.engram.id),
+      topN: topN.map(r => r.engram.id),
+      pool: pool.map(r => r.engram.id),
+      rerankPool: rerankPool.map(r => r.engram.id),
+    });
     if (useReranker && rerankPool.length > 0) {
       try {
         // Passage selection for the cross-encoder. Truncation exists for a real
@@ -1085,10 +1124,20 @@ export class ActivationEngine {
           item.phaseScores.rerankerScore = rr.score;
           item.score = compositeWeight * item.phaseScores.composite + rerankWeight * rr.score;
         }
-      } catch {
-        // Re-ranker unavailable — keep original scores
+      } catch (err) {
+        // Re-ranker unavailable — keep original scores. Said once, loudly: a reranker that
+        // fails to load degrades every recall while looking exactly like a working one (an
+        // AWM_RERANKER_MODEL without a quantized ONNX file did this silently, 2026-10-30).
+        if (!rerankFailureReported) {
+          rerankFailureReported = true;
+          console.error(`[awm] reranker unavailable, recall is running without it: ${(err as Error)?.message ?? err}`);
+        }
       }
     }
+    query.onRerankScores?.(rerankPool.map(r => ({
+      id: r.engram.id, rr: r.phaseScores.rerankerScore, composite: r.phaseScores.composite,
+      text: r.phaseScores.textMatch, vec: rawCosineSims.get(r.engram.id) ?? 0,
+    })));
 
     // Phase 8: Multi-channel OOD detection + agreement gate
     // Requires at least 2 of 3 retrieval channels to agree the query is in-domain.
@@ -1323,10 +1372,38 @@ export class ActivationEngine {
     // See src/core/rerank2.ts for the measurement and the safety argument.
     // Placed here deliberately: after the agreement gate, after
     // computeRecallConfidence, and after the requireConfidence check, so it
-    // cannot influence abstention. Default OFF (AWM_RERANK2=1).
-    const ordered = rerank2Enabled()
-      ? reorderByReranker(finalRanked, rerank2WindowSize())
-      : finalRanked;
+    // cannot influence abstention. Default ON; AWM_RERANK2=0 disables it.
+    // Blend (0.21.1, the second stage when rerank2 is on): order the whole pool by a convex
+    // combination of the cross-encoder score and the candidate's rank under BM25+vector
+    // reciprocal-rank fusion (rank-normalised to 0..1 within the pool), times the stale penalty.
+    // The cross-encoder's own confidence then sets how far it overrides the first stage:
+    // decisive on keyword-shaped queries, flat on natural-language ones, where on its own it
+    // loses to plain fusion (42% vs 45%). Measured end to end on the realstore snapshot at
+    // k=3 with the fused shortlist: NL 41.8 -> 45.9, topic 93.1 -> 95.8, identifier
+    // 93.7 -> 93.4 (shipped 0.21.0: 41.2 / 92.7 / 91.6). Convex combination over RRF follows
+    // Bruch et al., arXiv 2210.11934. AWM_BLEND=<a> sets the weight; AWM_BLEND=off restores
+    // the rerank2 sort by cross-encoder score alone.
+    const blendA = process.env.AWM_BLEND === 'off' ? NaN : Number(process.env.AWM_BLEND ?? 0.85);
+    let ordered: typeof finalRanked;
+    if (rerank2Enabled() && Number.isFinite(blendA) && finalRanked.length > 1
+        && finalRanked.every(r => r.phaseScores.rerankerScore > 0)) {
+      const RRF_K = 60;
+      const bRank = new Map(bm25Ranked.map((r, i) => [r.engram.id, i]));
+      const vRank = new Map([...rawCosineSims.entries()].sort((a, b) => b[1] - a[1]).map(([id], i) => [id, i]));
+      const rrf2 = (id: string) => {
+        const b = bRank.get(id), v = vRank.get(id);
+        return (b === undefined ? 0 : 1 / (RRF_K + b)) + (v === undefined ? 0 : 1 / (RRF_K + v));
+      };
+      const byFused = [...finalRanked].sort((a, b) => rrf2(b.engram.id) - rrf2(a.engram.id));
+      const fused = new Map(byFused.map((r, i) => [r.engram.id, 1 - i / (byFused.length - 1)]));
+      const key = (r: typeof finalRanked[number]) =>
+        (blendA * r.phaseScores.rerankerScore + (1 - blendA) * fused.get(r.engram.id)!) * (r.phaseScores.stalePenalty ?? 1);
+      ordered = [...finalRanked].sort((a, b) => key(b) - key(a));
+    } else {
+      ordered = rerank2Enabled()
+        ? reorderByReranker(finalRanked, rerank2WindowSize())
+        : finalRanked;
+    }
 
     // ── Calibrated abstention (AWM_ABSTAIN_GATE=calibrated) ──
     // Judges the FINAL order — the same order the calibration measured — against this
