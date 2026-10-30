@@ -3,7 +3,7 @@
 
 # Current benchmark results — v0.21.0
 
-Generated 2026-10-30 from commit `3779b49`.
+Generated 2026-10-30 from commit `6c5d4f5`.
 
 Every number on this page came from one run of `npm run bench` against the snapshot and
 flags named below. Nothing here is carried forward from an earlier version; if a row is
@@ -14,7 +14,7 @@ missing, that suite did not run, and the reason is at the bottom.
 | | |
 |---|---|
 | Version | 0.21.0 |
-| Commit | `3779b49` |
+| Commit | `6c5d4f5` |
 | Date | 2026-10-30 |
 | Retrieval flags | `AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1 AWM_MODEL_DAEMON=0` |
 | Snapshot | `tests/realstore-eval/snapshot/store.db` |
@@ -31,10 +31,25 @@ missing, that suite did not run, and the reason is at the bottom.
 
 | Suite | probes | s@1 | s@5 | MRR | abstention | p50 | p90 |
 |---|---|---|---|---|---|---|---|
-| Identifier queries (real store) | 300 | **92.7%** | 97.3% | 94.9% | 0.0% | 309 ms | 402 ms |
-| Topic queries (real store) | 450 | **92.7%** | 96.9% | 94.6% | 0.0% | 283 ms | 355 ms |
+| Identifier queries (real store) | 300 | **92.7%** | 97.3% | 94.9% | 0.0% | 330 ms | 426 ms |
+| Topic queries (real store) | 450 | **92.7%** | 96.9% | 94.6% | 0.0% | 328 ms | 412 ms |
 
 - **Identifier queries (real store)** — of the golds retrieved, 99.7% actually contain the answer; net token economics +502 per recall.
+
+## Baselines on the same questions
+
+What a naive retriever scores on exactly the probes above (`tests/realstore-eval/baselines.ts`):
+same snapshot, sample, agent scoping and k=3. The identifier fixture is keyword-friendly by
+construction — every gold contains its query’s identifier — so BM25 is close to ideal there.
+The raw-store rows hand the baselines every row, superseded and retracted included, as a
+plain index over a memory table would; "stale top" is how often their first answer is outdated.
+
+| Questions | Pool | random s@1 | BM25 s@1 | dense s@1 | hybrid (RRF) s@1 | stale top (BM25 / dense) |
+|---|---|---|---|---|---|---|
+| Identifier | retrievable | 0.0% | **95.7%** | 78.3% | 89.7% | — |
+| Identifier | whole store | 0.0% | **87.7%** | 73.7% | 83.7% | 8.3% / 14.3% |
+| Topic | retrievable | 0.0% | **91.6%** | 42.0% | 72.9% | — |
+| Topic | whole store | 0.2% | **79.8%** | 36.7% | 67.1% | 14.7% / 32.4% |
 
 ## Temporal cues
 

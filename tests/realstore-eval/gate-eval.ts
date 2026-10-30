@@ -26,17 +26,22 @@ const seeded = <T,>(arr: T[], seed = 1337): T[] => {
 const ident = JSON.parse(readFileSync(join(dir, 'fixture.json'), 'utf8'));
 const cat = JSON.parse(readFileSync(join(dir, 'fixture-category.json'), 'utf8'));
 const absent = JSON.parse(readFileSync(join(dir, 'fixture-absent.json'), 'utf8'));
-const topics = seeded(cat.items as any[]);
+// GATE_FIXTURE=fixture-nl.json: answerable and familiar-absent come from that fixture instead
+// (natural-language questions); absent-new stays the same set.
+const alt = process.env.GATE_FIXTURE ? JSON.parse(readFileSync(join(dir, process.env.GATE_FIXTURE), 'utf8')) : null;
+const topics = alt ? seeded(alt.items as any[]) : seeded(cat.items as any[]);
 type P = { pop: string; query: string; goldId: string | null; agent: string };
-const answerable: P[] = [
-  ...seeded(ident.items as any[]).slice(0, 300).map((i) => ({ pop: 'answerable', query: i.query, goldId: i.goldId, agent: i.agent ?? 'work' })),
-  ...topics.map((i) => ({ pop: 'answerable', query: i.query, goldId: i.goldId, agent: i.agent ?? 'work' })),
-];
+const answerable: P[] = alt
+  ? topics.map((i) => ({ pop: 'answerable', query: i.query, goldId: i.goldId, agent: i.agent ?? 'work' }))
+  : [
+    ...seeded(ident.items as any[]).slice(0, 300).map((i) => ({ pop: 'answerable', query: i.query, goldId: i.goldId, agent: i.agent ?? 'work' })),
+    ...topics.map((i) => ({ pop: 'answerable', query: i.query, goldId: i.goldId, agent: i.agent ?? 'work' })),
+  ];
 const absentNew: P[] = [
   ...(absent.items as any[]).map((i) => ({ pop: 'absent-new', query: i.query, goldId: null, agent: 'work' })),
   ...(ident.adversarialItems as any[]).map((i) => ({ pop: 'absent-new', query: i.query, goldId: null, agent: 'work' })),
 ];
-const familiar = topics.slice(-200);
+const familiar = alt ? topics.slice(-Math.min(100, Math.floor(topics.length / 2))) : topics.slice(-200);
 const absentFamiliar: P[] = familiar.map((i) => ({ pop: 'absent-familiar', query: i.query, goldId: null, agent: i.agent ?? 'work' }));
 const now = Date.parse('2026-08-24T09:27:21.841Z');
 setGateModelPathForTests(join(tmpdir(), `awm-gate-eval-${process.pid}.json`));
@@ -89,5 +94,5 @@ for (const pop of ['answerable', 'absent-new', 'absent-familiar']) {
   console.log(`${pop.padEnd(24)}${bands.map((b) => String(xs.filter((o) => o.band === b).length).padStart(9)).join('')}   (n=${xs.length})`);
 }
 const correct = outs.filter((o) => o.pop === 'answerable' && o.correct);
-console.log(`\ncorrect answers (gold #1): ${correct.length}/750 · in answer band ${correct.filter((o) => o.band === 'answer').length} · flagged low ${correct.filter((o) => o.band === 'low').length} · withheld ${correct.filter((o) => o.band === 'withhold').length}`);
+console.log(`\ncorrect answers (gold #1): ${correct.length}/${answerable.length} · in answer band ${correct.filter((o) => o.band === 'answer').length} · flagged low ${correct.filter((o) => o.band === 'low').length} · withheld ${correct.filter((o) => o.band === 'withhold').length}`);
 process.exit(0);

@@ -61,3 +61,6 @@ tests/realstore-eval/fixture*.json*
 !tests/realstore-eval/fixture-public.json
 tests/realstore-eval/trace-*.jsonl
 tests/realstore-eval/miss-*.jsonl
+
+# Natural-language fixture: built from the private snapshot, so it holds real memory content.
+tests/realstore-eval/nl-*.json
