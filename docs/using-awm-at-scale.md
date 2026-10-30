@@ -11,7 +11,7 @@ AWM is a **fast, local, precision-first cognitive memory** with built-in **abste
 
 - **Precision over recall by design.** AWM would rather return *nothing* than return facts you
   didn't ask for. With the opt-in calibrated gate it withholds 66 of 73 "is this even in memory?" questions
-  on a real store while withholding 0 of 694 correct answers ([abstention.md](abstention.md));
+  on a real store while withholding 1 of 695 correct keyword-shaped answers (18 of 80 natural-language ones) ([abstention.md](abstention.md));
   the old ~73% figure came from the retired LoCoMo benchmark. On broad open-domain recall it scores lower **on purpose** — surfacing every
   loosely-related memory would poison the prompt.
 - **Single-machine, in-process, fast.** Recall is tens-to-~150ms locally — no network round-trip.

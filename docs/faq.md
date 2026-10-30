@@ -83,11 +83,12 @@ goes stale. Each recall is then answered, answered with a `⚠ LOW SIGNAL` flag,
 
 Measured on that one store with keyword-style questions:
 - it withholds 66 of 73 questions about facts never stored;
-- it withholds 0 of 694 correct answers, and flags 4;
+- it withholds 1 of 695 correct answers, and flags 4;
 - of 200 absent questions asked in familiar vocabulary (the answer deleted, its neighbours
   kept), it withholds 92 and flags 30. That is the hard case.
 
-It has not been measured on natural-language questions or on other stores. See
+On natural-language questions it is much less careful: it withholds 18 of 80 correct answers,
+because its calibration probes are keyword-shaped. It has not been measured on other stores. See
 [abstention.md](abstention.md).
 
 ### Is AWM's ranking better than keyword search?

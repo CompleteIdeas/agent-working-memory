@@ -381,9 +381,10 @@ Every recall lands in one band:
 
 Measured on the real 29,853-memory snapshot
 (`tests/realstore-eval/gate-eval.ts`): withholds **66 of 73** never-stored
-facts; withholds **0 of 694** correct answers and flags 4; of 200 absent
-questions asked in familiar vocabulary, withholds 92 and flags 30. One store,
-keyword-style questions only. With the reranker disabled the gate stands
+facts; withholds **1 of 695** correct answers and flags 4; of 200 absent
+questions asked in familiar vocabulary, withholds 92 and flags 30. One store. On
+natural-language questions it withholds **18 of 80** correct answers
+(calibration probes are keyword-shaped). With the reranker disabled the gate stands
 aside.
 
 **A correction.** AWM used to publish "90.0% correct abstention". It came

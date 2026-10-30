@@ -128,7 +128,8 @@ per call. Restart Claude Code after changing either.
 - **`AWM_ABSTAIN_GATE=calibrated`**: the store learns its own noise floor (`awm calibrate`, or
   the next consolidation), and each recall is answered, answered with a `⚠ LOW SIGNAL` flag, or
   withheld as `RECALL ABSTAINED — this store most likely does not hold this`. Measured on one real
-  store: it withheld 66 of 73 never-stored facts and 0 of 694 correct answers.
+  store: it withheld 66 of 73 never-stored facts and 1 of 695 correct answers to keyword-shaped questions,
+  but 18 of 80 correct answers to natural-language ones.
   See [abstention.md](abstention.md).
 - **`AWM_VAULT=on`**: secrets are sealed in `vault.db` instead of masked, and the memory keeps a
   handle the agent can use through `awm vault run`. See [vault.md](vault.md).

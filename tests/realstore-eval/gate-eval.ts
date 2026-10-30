@@ -76,11 +76,16 @@ const outs: Out[] = [];
 async function evaluate(probes: P[], deleteIds: string[] = []) {
   const { store, eng } = await open(deleteIds);
   for (const p of probes) {
+    const base = { agentId: p.agent, context: p.query, limit: 3, minScore: 0.05, requireConfidence: 0.05, internal: true, now, asOf: now } as any;
+    // Correctness MUST come from an ungated recall. Judging it from the gated one made
+    // "correct answers withheld" structurally zero: a withheld recall returns nothing, so
+    // it could never be counted as correct. (Found 2026-10-30; the 0.21.0 "0 of 694" figure
+    // was produced that way and is re-measured with this fix.)
+    const ungated: any[] = await eng.activate({ ...base, skipCalibratedGate: true });
     let withheld = false;
-    const res: any[] = await eng.activate({ agentId: p.agent, context: p.query, limit: 3, minScore: 0.05, requireConfidence: 0.05,
-      internal: true, now, asOf: now, onAbstain: (i: any) => { if (i.reason === 'calibrated') withheld = true; } } as any);
+    const res: any[] = await eng.activate({ ...base, onAbstain: (i: any) => { if (i.reason === 'calibrated') withheld = true; } });
     const band = withheld ? 'withhold' : res.length === 0 ? 'empty' : (res[0].signal?.band ?? 'ungated');
-    outs.push({ pop: p.pop, band, correct: !!p.goldId && res[0]?.engram.id === p.goldId });
+    outs.push({ pop: p.pop, band, correct: !!p.goldId && ungated[0]?.engram.id === p.goldId });
   }
   store.close();
 }

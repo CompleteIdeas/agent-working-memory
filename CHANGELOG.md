@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Correction: the calibrated gate does withhold correct answers
+
+0.21.0 said the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) withheld **0 of 694**
+correct answers. `tests/realstore-eval/gate-eval.ts` judged correctness from the gated recall,
+so a withheld answer could never be counted as correct, and the figure was 0 by construction.
+It now judges correctness from an ungated recall. Re-measured: **1 of 695** on the keyword-shaped
+fixtures, and **18 of 80** (22%) on a new natural-language fixture of 194 questions. The gate's
+calibration probes are keyword-shaped, so naturally phrased questions score below the floor it
+learns. Never-stored facts are still withheld at the same rate (65 of 73, plus 1 empty). Every
+doc carrying the old figure is corrected.
+
 ### The model daemon refused a world-writable run dir only in theory
 
 `startModelDaemon` tightened its run directory to 0700 *before* checking it, so the "writable
