@@ -39,7 +39,7 @@ Real-store snapshot, k = 3, first result correct, interleaved latency on the sam
 | | 0.21.0 (shipped) | 0.21.1 (local, ready) | 0.22 target |
 |---|---|---|---|
 | natural-language (194) | 41.2% | 45.4% | **≥ 50%** |
-| topic (450) | 92.7% | 95.8% | ≥ 95.8% |
+| topic (450) | 92.7% | 96.0% | ≥ 96.0% |
 | identifier (1,316) | 91.6% | 93.3% | ≥ 93.3% |
 | recall latency, median | baseline | ≈ +21% | ≤ 0.21.1 |
 | gate: NL correct answers withheld | 18 / 80 | 21 / 88 | **≤ 9 / 88** |

@@ -94,7 +94,7 @@ because its calibration probes are keyword-shaped. It has not been measured on o
 ### Is AWM's ranking better than keyword search?
 
 Not on its own benchmark. On the real-store fixtures, plain BM25 puts the right memory first for
-95.7% of identifier queries and 91.6% of topic queries, against AWM's 92.7% and 92.7%. The
+95.7% of identifier queries and 91.6% of topic queries, against AWM's 93.3% and 96.0%. The
 fixtures are keyword-friendly by construction: each question is built around an identifier that
 appears in exactly one memory, which is the case BM25 is best at.
 

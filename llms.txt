@@ -515,9 +515,9 @@ of what LoCoMo does. `docs/benchmarks.md` explains why LoCoMo was retired.
 
 **Baselines.** `tests/realstore-eval/baselines.ts` runs random, BM25, dense
 and RRF over the same questions. Plain BM25 puts the right memory first for
-**95.7%** (identifier) / **91.6%** (topic), against AWM's **92.7%** / **92.7%**:
-the fixtures are keyword-friendly by construction, so they do not show AWM
-out-ranking keyword search. Over the raw store, without lifecycle filtering,
+**95.7%** (identifier) / **91.6%** (topic), against AWM's **93.3%** / **96.0%**:
+the fixtures are keyword-friendly by construction; AWM trails keyword search
+on identifier lookups and leads it on topic questions. Over the raw store, without lifecycle filtering,
 BM25 falls to 87.7% / 79.8% and returns a superseded memory first 8–15% of the
 time. AWM's measurable edge is its lifecycle: supersession and retraction.
 

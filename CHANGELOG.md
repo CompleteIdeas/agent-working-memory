@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.21.1 (2026-10-31) — recall ranks natural questions as well as plain search, and every published number rises
 
 ### Behaviour changes — read before upgrading
 
@@ -8,7 +8,8 @@
   combined, are new (below). Measured better on every fixture; a recall can still return a
   different first result than 0.21.0. `AWM_PRESELECT=composite`, `AWM_RERANK_POOL=40` with
   `AWM_TOPN_MIN=0`, and `AWM_BLEND=off` restore each piece.
-- **Recall is about 21% slower at the median** (32 cross-encoder pairs instead of 24).
+- **Recall is slower at the median:** about 12–21% depending on the measurement (32
+  cross-encoder pairs instead of 24).
 - **Recalibrate the opt-in gate.** It reads cross-encoder scores, and their distribution moved:
   run `awm calibrate` after upgrading if `AWM_ABSTAIN_GATE=calibrated` is set.
 - **Consolidation no longer rewrites the same pattern synthesis each cycle.** Existing duplicates
@@ -18,12 +19,13 @@
 
 ### Recall: a fused shortlist, a 32-candidate pool that is real, and a blended final order
 
-Measured on the frozen real store at k=3, first result correct:
+Measured on the frozen real store at k=3 (`npm run bench`, `docs/benchmarks-current.md`;
+natural-language from `tests/realstore-eval/stage-diagnose.ts`):
 
-| | natural-language (194) | topic (450) | identifier (1,316) |
+| | identifier (300): first / top 5 / MRR | topic (450): first / top 5 / MRR | natural-language (194): first |
 |---|---|---|---|
-| 0.21.0 | 41.2% | 92.7% | 91.6% |
-| this release | **45.4%** | **95.8%** | **93.3%** |
+| 0.21.0 | 92.7 / 97.3 / 94.9 | 92.7 / 96.9 / 94.6 | 41.2 |
+| this release | **93.3 / 98.7 / 95.8** | **96.0 / 98.7 / 97.3** | **45.4** |
 
 Three changes in `src/engine/activation.ts`, each measured separately
 (`tests/realstore-eval/stage-diagnose.ts`, `blend-offline.ts`):
@@ -36,20 +38,27 @@ Three changes in `src/engine/activation.ts`, each measured separately
 - **The shortlist is chosen by reciprocal-rank fusion** of the BM25, vector and composite
   ranks, not the composite alone. With 32 candidates, the right memory reaches the
   cross-encoder in 87% of natural-language questions (was 71%).
-- **The final order blends the cross-encoder with the fused rank** (0.85 / 0.15, a convex
-  combination, times the stale penalty). The cross-encoder used to decide alone, and on
-  natural-language questions it picked worse than plain fusion (42% vs 45%).
+- **The final order blends the cross-encoder with the fused rank** (a convex combination, times
+  the stale penalty). The cross-encoder used to decide alone, and on natural-language questions
+  it picked worse than plain fusion (42% vs 45%).
+- **The blend weight is routed by the query's shape** (`src/core/query-shape.ts`): a natural
+  question blends at 0.85, a keyword lookup at 0.95. With one weight of 0.85 the published
+  identifier sample dipped to 91.7% — 15 exact lookups lost first place to a near-duplicate the
+  fused rank lifted, 12 gained — while keyword lookups rank best when the cross-encoder decides
+  almost alone. Routed, every published number rises.
 
-**It costs recall time:** the cross-encoder scores 32 pairs instead of 24, and a recall takes
-about 21% longer than 0.21.0 (median, interleaved per query; 40 candidates cost 44%).
+**It costs recall time:** the cross-encoder scores 32 pairs instead of 24. Interleaved per query,
+a recall took about 21% longer than 0.21.0 at the median (40 candidates cost 44%); the benchmark's
+own medians rose from 330 / 328 ms to 387 / 366 ms (identifier / topic).
 
-`AWM_PRESELECT=composite`, `AWM_RERANK_POOL`, `AWM_TOPN_MIN`, `AWM_BLEND=<weight>|off` restore
-or tune each one.
+`AWM_PRESELECT=composite`, `AWM_RERANK_POOL`, `AWM_TOPN_MIN`, `AWM_BLEND=<weight>|off` (the
+natural-question weight) and `AWM_BLEND_KEYWORD=<weight>` restore or tune each one.
 The calibrated gate reads reranker scores and should be recalibrated (`awm calibrate`).
 
 **What this does and doesn't say.** On natural-language questions AWM now ties plain
 BM25+vector fusion over the same current memories (45.4%) rather than trailing it; it does not
-beat it. AWM's lead over a plain vector database comes from knowing what is current: over the
+beat it. On identifier lookups plain BM25 still leads (95.7% vs 93.3%); on topic questions AWM now
+leads it (96.0% vs 91.6%). AWM's lead over a plain vector database comes from knowing what is current: over the
 raw store, with superseded memories still in it, BM25 scores 35.6% and fusion 32.5% on the
 same questions.
 

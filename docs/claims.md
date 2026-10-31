@@ -20,12 +20,12 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 1. Retrieval accuracy
 
-> **92.7%** of identifier queries · **92.7%** of topic queries · **97.3%** in the top five
+> **93.3%** of identifier queries · **96.0%** of topic queries · **98.7%** in the top five (both)
 
 - **Produced by:** `tests/realstore-eval/runner.ts` over `fixture.json` (300 probes) and `fixture-category.json` (450 probes).
 - **Corpus:** `snapshot/store.db` — a frozen copy of a real work store, 29,853 engrams total, **11,262 retrievable**. Gitignored and will stay that way.
 - **Ground truth:** unique-identifier hold-out. An identifier appearing in exactly one active engram, uniqueness confirmed through FTS — the real retrieval path, not a regex. Derived by `tests/realstore-eval/build-fixture.mjs`.
-- **Stamped at:** v0.16.0, commit `2375582`, 2026-10-10 — `bench-runs/0.16.0-2026-10-10/`
+- **Stamped at:** v0.21.1, 2026-10-31 — `bench-runs/0.21.0-2026-10-31/` (the run directory carries the pre-bump version number). Previously 92.7% / 92.7% / 97.3% at v0.16.0 – v0.21.0.
   (identifier.log, category.log; gitignored and maintainer-only, like the snapshot
   itself). `npm run bench` measured this run once. The same figures were measured
   twice by different drivers at `eb0620f` — `npm run bench` and
