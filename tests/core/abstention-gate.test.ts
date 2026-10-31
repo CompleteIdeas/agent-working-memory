@@ -18,8 +18,8 @@ import { EngramStore } from '../../src/storage/sqlite.js';
 import { ActivationEngine } from '../../src/engine/activation.js';
 
 const model = (over: Partial<GateModel> = {}): GateModel => ({
-  version: 1, agentId: 'a', fittedAt: new Date().toISOString(), storeSize: 100,
-  mu: [0, 0, 0], sd: [1, 1, 1], w: [1, 0, 0], b: 0, answerAt: 1, withholdBelow: -1,
+  version: 2, agentId: 'a', fittedAt: new Date().toISOString(), storeSize: 100,
+  mu: new Array(8).fill(0), sd: new Array(8).fill(1), w: [1, 0, 0, 0, 0, 0, 0, 0], b: 0, answerAt: 1, withholdBelow: -1,
   stats: { positives: 100, positivesCorrect: 90, nulls: 100 }, ...over,
 });
 
@@ -103,6 +103,22 @@ describe('recall with the gate', () => {
     return p.then((res) => ({ res, abstained }));
   };
 
+  it('excludeIds recalls as if those memories were never stored (calibration held-out probes)', async () => {
+    const { res: all } = await recall();
+    const target = all.find((r: any) => r.engram.concept === 'RosterKeep deploy command')!;
+    expect(target).toBeDefined();
+    const { res: held } = await recall({ excludeIds: [target.engram.id] });
+    expect(held.some((r: any) => r.engram.id === target.engram.id)).toBe(false);
+  });
+
+  it('attaches the gate features to the first result, whether or not the gate is on', async () => {
+    const { res } = await recall();
+    expect(res[0].gateFeatures).toBeDefined();
+    expect(res[0].gateFeatures.rerankTop).toBe(res[0].phaseScores.rerankerScore);
+    expect(res[0].gateFeatures.bm25Top).toBeGreaterThan(0);
+    expect(res[1]?.gateFeatures).toBeUndefined();
+  });
+
   it('is inert when AWM_ABSTAIN_GATE is not set, even with a model saved', async () => {
     saveModel(model({ agentId: 'a', answerAt: 1e9, withholdBelow: 1e9 }));
     const { res } = await recall();
@@ -141,5 +157,37 @@ describe('recall with the gate', () => {
     const { res } = await recall();
     expect(res.length).toBeGreaterThan(0);
     expect(res[0].signal).toBeUndefined();
+  });
+});
+
+describe('feature version 2 (0.21.1: match density)', () => {
+  it('builds eight features, the first three unchanged from version 1', () => {
+    const f = { rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6, bm25Top: 12.5, cosineTop: 0.81, cosineGap: 0.2, cosineAbove70: 7, bm25RankTop: 0 };
+    const v2 = featureVector(f), v1 = featureVector(f, 1);
+    expect(v2).toHaveLength(8);
+    expect(v2.slice(0, 3)).toEqual(v1);
+    expect(v2[3]).toBeCloseTo(Math.log1p(12.5));
+    expect(v2[7]).toBe(1);
+  });
+
+  it('treats missing density fields as zero, and an absent BM25 rank as zero', () => {
+    const v = featureVector({ rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6 });
+    expect(v.slice(3)).toEqual([0, 0, 0, 0, 0]);
+    expect(featureVector({ rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6, bm25RankTop: -1 })[7]).toBe(0);
+  });
+
+  it('does not score a saved model of another feature version', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'awm-gate-v-'));
+    setGateModelPathForTests(join(dir, 'abstention-model.json'));
+    try {
+      saveModel(model({ version: 1 }));
+      expect(loadModel('a')).toBeNull();
+      expect(needsRecalibration(loadModel('a'), 100)).toBe(true);
+      saveModel({ ...model(), version: 2, mu: new Array(8).fill(0), sd: new Array(8).fill(1), w: [1, 0, 0, 0, 0, 0, 0, 0] });
+      expect(loadModel('a')?.version).toBe(2);
+    } finally {
+      setGateModelPathForTests(null);
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
