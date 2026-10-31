@@ -65,7 +65,8 @@ async function open(deleteIds: string[] = []) {
     const m = await calibrateGate(store as any, eng, agent, { seed: 20261029 });
     if (!m) { console.log(`calibration skipped for ${agent}`); continue; }
     saveModel(m);
-    console.log(`calibrated ${agent}: ${m.storeSize} memories · pos ${m.stats.positives} (${m.stats.positivesCorrect} correct) · nulls ${m.stats.nulls} · answer ≥ ${m.answerAt.toFixed(2)} · withhold < ${m.withholdBelow.toFixed(2)} · ${((Date.now() - t0) / 1000).toFixed(0)} s`);
+    console.log(`calibrated ${agent}: ${m.storeSize} memories · pos ${m.stats.positives} (${m.stats.positivesCorrect} correct) · nulls ${m.stats.nulls} · answer ≥ ${m.answerAt.toFixed(2)} · withhold < ${m.withholdBelow.toFixed(2)} · ${((Date.now() - t0) / 1000).toFixed(0)} s`
+      + (m.natural ? `\n  natural model: pos ${m.natural.stats.positives} (${m.natural.stats.positivesCorrect} correct) · nulls ${m.natural.stats.nulls} · answer ≥ ${m.natural.answerAt.toFixed(2)} · withhold < ${m.natural.withholdBelow.toFixed(2)}` : '\n  natural model: none'));
   }
   store.close();
 }

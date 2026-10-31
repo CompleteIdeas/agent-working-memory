@@ -1473,7 +1473,7 @@ export class ActivationEngine {
         && ordered.some((r) => (r.phaseScores.rerankerScore ?? 0) > 0)) {
       const model = loadModel(query.agentId);
       if (model) {
-        signal = classify(model, gateFeatures);
+        signal = classify(model, gateFeatures, naturalQuery);
         if (signal.band === 'withhold') {
           query.onAbstain?.({
             reason: 'calibrated', candidates: ordered.length, topScore: ordered[0]!.score, confidence, signal,

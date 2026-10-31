@@ -61,6 +61,26 @@ export interface GateModel {
   withholdBelow: number;
   /** What the fit saw, for `awm doctor` and for honest reporting. */
   stats: { positives: number; positivesCorrect: number; nulls: number };
+  /**
+   * 0.22: a second model for natural-language questions (src/core/query-shape.ts), fitted on
+   * natural practice — memories' stored questions as positives; held-out stored questions and
+   * other agents' questions as no-answer probes. One shared model had to choose: calibrated on
+   * keyword probes it withheld a quarter of correct natural answers; with natural positives mixed
+   * in, it went soft on every query (never-stored withheld 24/73 instead of 65/73). Absent when
+   * the store has too few questions to fit it; natural queries then use the main model.
+   */
+  natural?: ShapeModel;
+}
+
+/** The fitted parameters and thresholds for one query shape. */
+export interface ShapeModel {
+  mu: number[];
+  sd: number[];
+  w: number[];
+  b: number;
+  answerAt: number;
+  withholdBelow: number;
+  stats: { positives: number; positivesCorrect: number; nulls: number };
 }
 
 export interface GateFeatures {
@@ -107,17 +127,20 @@ export function featureVector(f: GateFeatures, version: 1 | 2 = GATE_MODEL_VERSI
     Math.log1p(Math.min(50, Math.max(0, f.cosineAbove70 ?? 0))), rank < 0 ? 0 : 1 / (1 + rank)];
 }
 
-export function scoreWith(model: GateModel, f: GateFeatures): number {
+export function scoreWith(model: GateModel, f: GateFeatures, shape?: ShapeModel): number {
+  const m = shape ?? model;
   const x = featureVector(f, model.version);
-  let s = model.b;
-  for (let j = 0; j < x.length; j++) s += model.w[j]! * (x[j]! - model.mu[j]!) / model.sd[j]!;
+  let s = m.b;
+  for (let j = 0; j < x.length; j++) s += m.w[j]! * (x[j]! - m.mu[j]!) / m.sd[j]!;
   return s;
 }
 
-export function classify(model: GateModel, f: GateFeatures): SignalReport {
-  const score = scoreWith(model, f);
-  const band: SignalBand = score >= model.answerAt ? 'answer' : score >= model.withholdBelow ? 'low' : 'withhold';
-  return { band, score, answerAt: model.answerAt, withholdBelow: model.withholdBelow };
+export function classify(model: GateModel, f: GateFeatures, natural: boolean = false): SignalReport {
+  const shape = natural && model.natural ? model.natural : undefined;
+  const t = shape ?? model;
+  const score = scoreWith(model, f, shape);
+  const band: SignalBand = score >= t.answerAt ? 'answer' : score >= t.withholdBelow ? 'low' : 'withhold';
+  return { band, score, answerAt: t.answerAt, withholdBelow: t.withholdBelow };
 }
 
 /**
