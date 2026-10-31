@@ -44,7 +44,7 @@ Real-store snapshot, k = 3, first result correct, interleaved latency on the sam
 | recall latency, median | baseline | ≈ +21% | ≤ 0.21.1 |
 | gate: NL correct answers withheld | 18 / 80 | 21 / 88 | **≤ 9 / 88** |
 | gate: never-stored withheld (73) | 65 | 65 | ≥ 63 |
-| gate: NL deleted withheld (97) | 69 | 60 | ≥ 60 |
+| gate: NL deleted withheld (97) | 69 | 60 | ≥ 60 (≥ 75 if the answer check ships, §4.6b) |
 | stale memory ranked first | not measured | not measured | measured, ≤ 1% |
 
 The natural-language target is set from the sample result (+6.2) applied to 0.21.1's 45.4, rounded
@@ -156,8 +156,14 @@ think first (half the first run came back empty at 200).
 3. **Cross-encoder** over the shortlist, MiniLM-L6 at q8 (0.21.1; Ettin measured better on NL but
    3× slower — stays opt-in).
 4. **One probability model per store,** two outputs:
-   - per candidate: P(this is the answer), from the 0.85 / 0.15 blend of cross-encoder and fused
-     rank (0.21.1), kept as the ranking until a fitted ranker beats it on all fixtures;
+   - per candidate: P(this is the answer), from the blend of cross-encoder and fused rank,
+     **with the weight routed by the query's shape** (added 2026-10-31 from step 0): a natural
+     question (question word, question mark, or ≥ 30% common words) blends at 0.5, a keyword lookup
+     at 0.95. With questions indexed, the fused rank carries the question phrasings, so natural
+     questions want it weighted more and keyword lookups still want the cross-encoder. Offline
+     replay on the full store: NL 50.0 / topic 95.6 / identifier 93.5, against 44.8 / 95.6 / 93.4 at
+     the single 0.85 weight. Without questions the same routing hurts NL (43.8 vs 45.9), so it ships
+     only with them. Kept as the ranking until a fitted ranker beats it on all fixtures;
    - per query: P(the store holds the answer), from gate v2's eight features (cross-encoder top,
      second, vector; raw BM25 of best match; whole-store cosine top, gap, count ≥ 0.7; BM25 rank of
      the top). Answer / flag low / withhold.
@@ -178,6 +184,28 @@ vocabulary becomes trivially easy once density features exist (ledger §8); and 
 under-confident on natural correct answers because it has never seen one (ledger §4). Calibration
 still runs after consolidation and on `awm calibrate`; models carry `version: 2` and a v1 model is
 ignored with a one-time notice (built).
+
+### 4.6b Answer check: a small reading model (experiment, then decide)
+
+Every retrieval signal measures whether a memory is *about* the question; none checks whether it
+*states the answer*. That is why deleted facts in familiar territory stay at 0.82–0.83 AUC whatever
+the signals (ledger §4–5): the deleted fact's neighbours are still there and look like answers.
+
+A question-answering encoder trained on SQuAD 2.0 does exactly the missing check: given a question
+and a passage it returns an answer span or "no answer". It is an encoder of the cross-encoder's
+class, not a generative model, and it runs on the **read** side, on the top 1–3 results only — so
+it does not touch the recorded "no LLM in the write path" decision. Its no-answer score becomes one
+more gate feature (and, where it finds a span, the span is the memory's quotable answer).
+
+Before it is built:
+- **Candidate models:** a SQuAD 2.0 encoder with ONNX weights transformers.js can load, as small
+  as works; verify the repo and its no-answer head before measuring (the Ettin lesson: a model can
+  load and score everything 0).
+- **Experiment:** add its no-answer score to the gate's features offline (`prob-model.ts`) and end
+  to end (`gate-eval.ts`), on both fixtures.
+- **Ships only if:** NL deleted-fact AUC rises from 0.82 to at least 0.88 and NL correct answers
+  withheld fall, with recall p50 rising no more than 15% (it reads 1–3 passages, not 32).
+- **If it fails,** the 0.82 ceiling is stated as AWM's limit, in the docs, with this measurement.
 
 ### 4.7 Consolidation, scaled back
 
@@ -276,6 +304,8 @@ Each step lands with its tests and its benchmark run; nothing proceeds on an unm
 | 2 | Schema: `questions` column + FTS, `slots` table; migrations for SQLite, PGlite, Postgres | — | 2 days |
 | 3 | `memory_write` fields, guidance, enrichment queue, `awm enrich --backfill` | write path | 3 days |
 | 4 | Gate v2 calibration on stored questions + held-out probes; measure end to end | gate targets | 2 days |
+| 4b | Routed blend implemented in `activation.ts` and run end to end with questions indexed | NL ≥ 50% | 1 day |
+| 4c | Answer-check experiment (§4.6b): reading model's no-answer score as a gate feature | deleted-fact ceiling | 2 days |
 | 5 | Ranking factors: measure removal one by one; retire what does not move a fixture | simpler core | 2 days |
 | 6 | Slots: inference, automatic supersession, history queries; stale-top-1 fixture | lifecycle target | 3 days |
 | 7 | Consolidation scaled back; trace output; bench as release gate; generated claims | observability | 2 days |
