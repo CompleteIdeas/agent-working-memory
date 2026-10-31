@@ -364,7 +364,7 @@ Each step lands with its tests and its benchmark run; nothing proceeds on an unm
 | 3 | `memory_write` fields, guidance, enrichment queue, `awm enrich --backfill` | write path | 3 days |
 | 4 | Gate v2 calibration on stored questions + held-out probes; measure end to end | gate targets | 2 days |
 | 4b | Routed blend implemented in `activation.ts` and run end to end with questions indexed — **done 2026-10-31: NL 50.0, identifier and topic identical to 0.21.1; two keyword indexes on SQLite, `fts` + `fts_q` on Postgres/PGlite (ledger §11)** | NL ≥ 50% | 1 day |
-| 4c | Answer-check experiment (§4.6b): reading model's no-answer score as a gate feature | deleted-fact ceiling | 2 days |
+| 4c | Answer-check experiment (§4.6b): reading model's no-answer score as a gate feature — **measured 2026-10-31: NL ceiling 0.827 → 0.840, bar 0.88, 86 ms; not built; the limit is documented (ledger §12)** | deleted-fact ceiling | 2 days |
 | 5 | Ranking factors: measure removal one by one; retire what does not move a fixture | simpler core | 2 days |
 | 6 | Slots: inference, automatic supersession, history queries; stale-top-1 fixture — **explicit slots built 2026-10-31 (scope, newer-only, no concept merge, opt-out, trust); inference and the stale-top-1 fixture still to do** | lifecycle target | 3 days |
 | 7 | Consolidation scaled back; trace output; bench as release gate; generated claims | observability | 2 days |

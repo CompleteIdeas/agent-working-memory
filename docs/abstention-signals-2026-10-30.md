@@ -322,3 +322,33 @@ Findings:
    reads the four-column one. Cost: a second FTS index and its trigger writes.
 4. Postgres and PGlite: split the same way the same day — `fts` (concept, content, tags) and
    `fts_q` (+ questions), chosen by the same flag.
+
+## 12. The answer check (plan §4.6b): measured, does not meet its bar (2026-10-31)
+
+Reader: `deepset/minilm-uncased-squad2` (33M, SQuAD 2.0, with a no-answer head), exported to ONNX
+locally and quantized to int8 (`tests/realstore-eval/qa-signal.ts`). It reads the top result's
+query-centred 1,200-character window and scores best answer span minus no-answer. Sanity check on a
+deploy note: "How do I deploy RosterKeep?" +1.50; two unrelated questions −8.75 and −16.16.
+
+| | keyword | natural-language |
+|---|---|---|
+| reader alone, correct vs never-stored (AUC) | 0.773 | **0.946** |
+| reader alone, correct vs deleted | 0.592 | 0.722 (cross-encoder alone: 0.746) |
+| ceiling, shipped 3 gate signals, correct vs deleted | 0.969 | 0.827 |
+| ceiling, + reader | 0.968 | **0.840** |
+| plan's bar | — | ≥ 0.88 |
+
+Median margin: natural-language correct −1.29, deleted −6.29, never-stored −12.94. Time: 86 ms per
+question on this machine with another benchmark running, over the ~55 ms budget.
+
+Findings:
+1. **The reader separates "never stored" well and "deleted" weakly.** A deleted fact's neighbour
+   usually still contains an answer-shaped span about the same thing, so the reader finds
+   *something*; it cannot know that the something is not what was asked.
+2. **It adds 0.013 to the natural-language ceiling** — below the bar, and at more than the speed
+   budget. Not built into recall.
+3. **So the deleted-fact limit stands: about 0.83 AUC on natural-language questions** with every
+   signal measured — retrieval, density, query shape, memory kind, and now an answer reader. It is
+   documented as AWM's limit (docs/abstention.md). Closing it would need a model that compares the
+   question's specifics with the memory's — a larger generative check, which is outside the speed
+   rule for the recall path.
