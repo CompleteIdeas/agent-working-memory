@@ -22,14 +22,14 @@ import { fitLogistic } from '../../src/engine/abstention-gate.js';
 env.allowLocalModels = true; env.allowRemoteModels = false;
 env.localModelPath = resolve('data/models/local') + '/';
 const DTYPE = (process.env.QA_DTYPE ?? 'q8') as 'q8' | 'fp32';
-const tok = await AutoTokenizer.from_pretrained('minilm-uncased-squad2');
-const model = await AutoModelForQuestionAnswering.from_pretrained('minilm-uncased-squad2', { dtype: DTYPE });
+const QA_MODEL = process.env.QA_MODEL ?? 'minilm-uncased-squad2';
+const tok = await AutoTokenizer.from_pretrained(QA_MODEL);
+const model = await AutoModelForQuestionAnswering.from_pretrained(QA_MODEL, { dtype: DTYPE });
 
 const dir = import.meta.dirname;
 const S = JSON.parse(readFileSync(join(tmpdir(), 'awm-signals.json'), 'utf8'));
 const db = new Database(join(dir, 'snapshot', 'store.db'), { readonly: true });
 const get = db.prepare('SELECT concept, content, tags FROM engrams WHERE id = ?');
-const SEP = (tok as any).model?.tokens_to_ids?.get?.('[SEP]') ?? 102;
 
 async function margin(query: string, id: string | null | undefined): Promise<number | null> {
   if (!id || !query) return null;
@@ -40,22 +40,32 @@ async function margin(query: string, id: string | null | undefined): Promise<num
   const out: any = await model(inputs);
   const s = out.start_logits.data as Float32Array, en = out.end_logits.data as Float32Array;
   const ids = Array.from(inputs.input_ids.data as BigInt64Array).map(Number);
-  const ctx = ids.indexOf(SEP) + 1;
+  // A pair ends with the separator token, whatever its id ([SEP]=102 for BERT, 2 for DeBERTa):
+  // the context starts after its first occurrence.
+  const ctx = ids.indexOf(ids[ids.length - 1]!) + 1;
   let best = -Infinity;
   for (let i = ctx; i < s.length - 1; i++) for (let j = i; j < Math.min(s.length - 1, i + 30); j++) best = Math.max(best, s[i]! + en[j]!);
-  return best - (s[0]! + en[0]!);
+  const m = best - (s[0]! + en[0]!);
+  // No room for a span (passage truncated away) means no answer found: a floor, not -Infinity,
+  // which would poison the fit below (and is written to JSON as null).
+  return Number.isFinite(m) ? m : -30;
 }
 
 const t0 = Date.now();
-const out: { probes: Array<number | null>; calib: Record<string, Array<number | null>> } = { probes: [], calib: {} };
-for (const [i, p] of (S.probes as any[]).entries()) {
+let out: { probes: Array<number | null>; calib: Record<string, Array<number | null>> } = { probes: [], calib: {} };
+if (process.env.QA_REUSE === '1') {
+  // Reuse a saved run. A probe whose top result exists but scored null was -Infinity (JSON writes
+  // it as null): no span found, so the floor.
+  out = JSON.parse(readFileSync(join(tmpdir(), `awm-qa-${QA_MODEL}.json`), 'utf8'));
+  out.probes = out.probes.map((v, i) => (v === null && (S.probes as any[])[i]?.top?.[0] ? -30 : v));
+} else for (const [i, p] of (S.probes as any[]).entries()) {
   out.probes.push(await margin(p.query, p.top?.[0]));
   if (i % 300 === 0) process.stderr.write(`probes ${i}/${S.probes.length}\n`);
 }
 // calibration probes carry no query text in the dump; they are regenerated in signal-fit later
-writeFileSync(join(tmpdir(), 'awm-qa.json'), JSON.stringify(out));
+writeFileSync(join(tmpdir(), `awm-qa-${QA_MODEL}.json`), JSON.stringify(out));
 const per = (Date.now() - t0) / S.probes.length;
-console.log(`reader margins for ${out.probes.length} probes, ${per.toFixed(1)} ms each (${DTYPE})`);
+console.log(`${QA_MODEL}: reader margins for ${out.probes.length} probes, ${per.toFixed(1)} ms each (${DTYPE})`);
 
 // ── separation: correct answer vs never-stored / deleted, per question shape ──
 const auc = (pos: number[], neg: number[]) => { let s = 0; for (const a of pos) for (const b of neg) s += a > b ? 1 : a === b ? 0.5 : 0; return s / (pos.length * neg.length); };

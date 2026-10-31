@@ -352,3 +352,21 @@ Findings:
    documented as AWM's limit (docs/abstention.md). Closing it would need a model that compares the
    question's specifics with the memory's — a larger generative check, which is outside the speed
    rule for the recall path.
+
+**Addendum, same day — a larger reader, under the revised speed rule.** Robert set the speed rule in
+absolute terms (a recall under about one second; tens to hundreds of milliseconds are fine for a
+real gain), so the stronger `deepset/deberta-v3-base-squad2` (184M) was measured too. Int8
+quantization breaks it (every passage gets the same span and margin); at fp32 it reads well —
+"railway up --service rowos-app --ci" for the deploy question, margins −22 and −24 for unrelated
+ones.
+
+| Reader | NL correct vs deleted, alone | NL ceiling with gate signals | time per question |
+|---|---|---|---|
+| none | — | 0.827 | — |
+| MiniLM (33M, int8) | 0.722 | 0.840 | ~86 ms |
+| DeBERTa-v3-base (184M, fp32) | 0.746 | 0.845 | ~655 ms |
+
+A reader 5.5× larger and 8× slower adds 0.005. Both fail the same way: the deleted fact's neighbour
+does contain an answer — to a nearby question — and an extractive reader cannot tell. The limit is
+about 0.83–0.85 for readers of this kind, measured at two sizes. (A `-Infinity` margin when a
+passage leaves no room for a span first poisoned the fit; it is now floored at −30.)

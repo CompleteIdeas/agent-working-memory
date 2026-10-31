@@ -220,7 +220,10 @@ Before it is built:
 - **Experiment:** add its no-answer score to the gate's features offline (`prob-model.ts`) and end
   to end (`gate-eval.ts`), on both fixtures.
 - **Ships only if:** NL deleted-fact AUC rises from 0.82 to at least 0.88 and NL correct answers
-  withheld fall, with recall p50 rising no more than 15% (it reads 1–3 passages, not 32).
+  withheld fall, with a recall still under about one second on this CPU. (Revised 2026-10-31: the
+  speed rule is absolute, not a percentage — Robert: "If we're talking seconds versus milliseconds,
+  maybe it doesn't matter... it just can't be super slow." Anything pushing a recall into seconds
+  becomes an opt-in profile with its cost and gain shown.)
 - **If it fails,** the 0.82 ceiling is stated as AWM's limit, in the docs, with this measurement.
 
 ### 4.7 Consolidation, scaled back
