@@ -129,6 +129,8 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       validFrom?: string; valid_from?: string;
       validTo?: string; valid_to?: string;
       correction?: boolean;
+      /** 0.22: natural questions this memory answers (≤ 5), indexed for keyword search only. */
+      questions?: string[];
     };
 
     if (!body.agentId || typeof body.agentId !== 'string' ||
@@ -188,6 +190,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       validFrom: body.validFrom ?? body.valid_from,
       validTo: body.validTo ?? body.valid_to,
       correction: body.correction === true,
+      questions: Array.isArray(body.questions) ? body.questions : undefined,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
@@ -202,6 +205,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         reinforce: result.reinforce,
         novelty: result.noveltyResult.novelty,
         ...(result.redaction ? { redaction: result.redaction } : {}),
+        ...(result.questions ? { questions: result.questions } : {}),
       });
     }
 
@@ -235,6 +239,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       stored: true,
       action: result.action,
       ...(result.redaction ? { redaction: result.redaction } : {}),
+      ...(result.questions ? { questions: result.questions } : {}),
       // disposition: legacy field — 'low-salience' is returned for discard so
       // callers know the engram was kept but marked low-value. The raw inner
       // salience decision is exposed as `salienceDisposition` for callers

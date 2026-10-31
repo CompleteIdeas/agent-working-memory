@@ -175,6 +175,14 @@ stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
 consolidationScheduler.start();
 startLoopLagMonitor();
 
+/** 0.22: one line on what happened to the questions a write offered. Empty when none were offered. */
+function describeQuestions(q: import('./core/questions.js').QuestionsOutcome | undefined): string {
+  if (!q) return '';
+  return `\nQuestions: ${q.kept.length} indexed`
+    + (q.dropped.some((d) => d.reason === 'over-limit') ? '; some dropped over the limit of 5' : '')
+    + (q.dropped.some((d) => d.reason === 'invalid') ? '; some dropped as empty, too short or too long' : '');
+}
+
 // Coordination DB handle — set when AWM_COORDINATION=true, used by memory_write for decision propagation
 let coordDb: import('better-sqlite3').Database | null = null;
 
@@ -312,6 +320,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('ISO date when the FACT becomes valid (temporal validity, not ingestion time).'),
     valid_to: z.string().optional()
       .describe('ISO date when the FACT stops being valid (e.g., a deadline or a superseding change).'),
+    questions: z.array(z.string()).max(10).optional()
+      .describe('Up to 5 natural questions this memory answers, the way someone would ask them later without remembering its wording, file names or IDs (e.g. "How do I ship the club app to production?"). Indexed for keyword search only (never embedded). Measured: lifts recall of naturally phrased questions with no loss on exact lookups.'),
     intent: z.enum(['decision', 'question', 'todo', 'finding', 'context']).optional()
       .describe('What kind of memory this is.'),
   },
@@ -383,6 +393,7 @@ The concept should be a short label (3-8 words). The content should be the full 
       recipeId: params.recipe_id,
       validFrom: params.valid_from,
       validTo: params.valid_to,
+      questions: params.questions,
     });
 
     // Auto-checkpoint — covers create/reinforce/supersede uniformly
@@ -396,7 +407,8 @@ The concept should be a short label (3-8 words). The content should be the full 
         content: [{
           type: 'text' as const,
           text: `Reinforced existing memory "${result.engram.concept}" (confidence ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)})`
-            + (result.redaction ? `\n${describeFindings(result.redaction)}` : ''),
+            + (result.redaction ? `\n${describeFindings(result.redaction)}` : '')
+            + describeQuestions(result.questions),
         }],
       };
     }
@@ -440,6 +452,7 @@ The concept should be a short label (3-8 words). The content should be the full 
         type: 'text' as const,
         text: `Stored (${salience.disposition}) "${engram.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
           + (result.redaction ? `\n${describeFindings(result.redaction)}` : '')
+          + describeQuestions(result.questions)
           + correctionNote
           + trustNote
           + (isLowSalience

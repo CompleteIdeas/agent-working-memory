@@ -510,6 +510,14 @@ extraction all see most strongly.
   that exists only as a tag is invisible to the embedding entirely, and
   invisible to the ranker unless it is one of those three prefixes inside that
   budget. Tag it *and* write it.
+- **Add 2–5 \`questions\` the memory answers.** Write them the way someone
+  would ask later without remembering your wording, file names or IDs:
+  "How do I ship the club app to production?" for a note about
+  \`railway up --service rowos-app\`. They are indexed for keyword search only
+  (never embedded), so they bridge the gap between how people ask and how
+  notes are written. Measured on a real store: natural-language recall up
+  6 points, no loss on exact lookups. Vary them — what happened or was
+  decided, why, and a practical "how do I / where is".
 - **Reserve canonical for stable invariants.** Decisions, requirements,
   hard facts, cross-agent shared context. Working class (default) is correct
   for findings, observations, and progress notes. The canonical floor is
@@ -744,7 +752,8 @@ parallel session saved last. Durable facts still go through a plain \`memory_wri
 end of a task, re-write the session notes worth keeping without \`scope\`.
 
 ### Cognition recipes — YOU do the thinking, AWM keeps the result
-AWM contains no LLM. When memory needs real thinking — distilling a repeatable
+AWM never calls a hosted model, and any model it embeds must not slow recall.
+So when memory needs real thinking — distilling a repeatable
 procedure, reflecting on a failure — AWM hands YOU a versioned recipe (prompt +
 strict output shape) and you run it as a SEPARATE focused pass, then write the
 result back as an ordinary memory with provenance.

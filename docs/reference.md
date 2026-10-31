@@ -729,7 +729,7 @@ memory it matched — or explicitly `trust=untrusted` — never merges into, rev
 or corrects that memory; it is stored as its own engram and the result carries `trustBlocked`
 (`src/core/trust.ts`). Untagged writes and memories are unaffected.
 
-**Cognition recipes (D14):** AWM contains no LLM — `src/recipes/` ships versioned prompt+contract
+**Cognition recipes (D14):** AWM never calls a hosted model (any model it embeds must not slow recall) — `src/recipes/` ships versioned prompt+contract
 pairs (`skill-derivation@1`, `friction-lesson@1`) the HOST agent runs as a separate focused pass;
 `memory_task_end` responses carry the invitations, and `memory_write` validates recipe-attributed
 write-backs (unknown recipe ids and malformed shapes rejected with the contract echoed).

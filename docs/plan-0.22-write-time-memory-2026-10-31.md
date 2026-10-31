@@ -150,8 +150,13 @@ Two deterministic guards, whichever source wrote the questions:
 - **Coverage is measured.** `awm doctor` and `memory_stats` report the share of active memories
   with questions, per agent; gate calibration (§4.6) uses stored questions only where coverage is
   at least 50%, and falls back to the 0.21 probes below that.
-- **A question must find its own memory.** A question is kept only if a keyword search for it
-  ranks its memory in the top 10 (the Doc2Query-- filter, arXiv 2301.03266).
+- **Normalised, not filtered (corrected 2026-10-31 while building step 3).** The planned
+  self-retrieval filter is circular — once a question is indexed on its memory, a search for it
+  finds that memory — and a word-overlap filter would drop 14% of 25,992 generated questions,
+  often the most useful ones ("How is the awm source code organized?" for "src module map"). The
+  +6.2 was measured unfiltered. A real relevance filter (Doc2Query--, arXiv 2301.03266) needs a
+  relevance model, e.g. the cross-encoder scoring question against memory; it is evaluated with the
+  embedded generator, not assumed.
 
 `awm enrich --backfill` fills an existing store through the same queue and prints the count and
 an estimated time first. For reference, the experiment's questions were generated with Claude Haiku

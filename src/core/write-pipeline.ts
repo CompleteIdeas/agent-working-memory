@@ -35,6 +35,7 @@
  * the new engram (typically active because corrections are high-salience).
  */
 
+import { attachQuestions, type QuestionsOutcome } from './questions.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import type { ConnectionEngine } from '../engine/connections.js';
 import type { Engram, MemoryClass, MemoryType } from '../types/engram.js';
@@ -159,10 +160,14 @@ export interface WriteInput {
   /** Temporal validity (D8): ISO bounds on when the FACT holds. */
   validFrom?: string;
   validTo?: string;
+  /** 0.22: natural questions this memory answers (≤ 5), indexed for keyword search only. */
+  questions?: string[];
 }
 
 export interface WriteResult {
   action: WriteAction;
+  /** 0.22: what happened to the questions offered with this write. */
+  questions?: QuestionsOutcome;
   /**
    * For action='create' or 'supersede': the newly created engram.
    * For action='reinforce': the EXISTING engram that was reinforced
@@ -237,9 +242,16 @@ export async function performWrite(
   // credential. The store wrapper (storage/redacting-store.ts) repeats it as a guarantee
   // for paths that bypass this pipeline; redaction is idempotent, so this costs nothing.
   // seal: a secret in a memory is something AWM KNOWS — kept in the vault, a handle left here.
-  const { fields, findings } = redactFields(input, ['concept', 'content', 'tags'], { seal: true });
+  const { fields, findings } = redactFields(input, ['concept', 'content', 'tags', 'questions'], { seal: true });
   const result = await performWriteRedacted(engines, fields);
   if (findings.length) result.redaction = findings;
+  // 0.22: whichever path ran (create, reinforce, supersede), the questions land on the memory
+  // that now holds the fact, merged with any it already had.
+  if (fields.questions?.length && result.engram?.id) {
+    try {
+      result.questions = await attachQuestions(engines.store, result.engram.id, fields.questions, result.engram.questions);
+    } catch { /* questions are an index aid; a failure must not fail the write */ }
+  }
   return result;
 }
 

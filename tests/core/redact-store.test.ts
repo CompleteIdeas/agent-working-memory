@@ -102,7 +102,7 @@ describe('redaction at the storage boundary', () => {
     // added to the wrapper too. This lists the ones known to persist text.
     expect(REDACTED_METHODS.sort()).toEqual([
       'createEngram', 'createEpisode', 'logActivationEvent', 'logRetrievalFeedback', 'saveCheckpoint',
-      'saveSessionCheckpoint', 'updateAutoCheckpointRecall', 'updateContent', 'updateTags',
+      'saveSessionCheckpoint', 'setQuestions', 'updateAutoCheckpointRecall', 'updateContent', 'updateTags',
     ]);
   });
 
