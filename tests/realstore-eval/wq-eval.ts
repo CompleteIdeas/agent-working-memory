@@ -18,7 +18,7 @@ import { pipeline, env } from '@huggingface/transformers';
 
 env.allowLocalModels = true;
 const dir = import.meta.dirname;
-const WQ = JSON.parse(readFileSync(join(dir, 'nl-wq.json'), 'utf8')) as { sample: string[]; questions: Record<string, string[]> };
+const WQ = JSON.parse(readFileSync(join(dir, process.env.WQ_FILE ?? 'nl-wq.json'), 'utf8')) as { sample: string[]; questions: Record<string, string[]> };
 const db = new Database(join(dir, 'snapshot', 'store.db'), { readonly: true });
 const get = db.prepare('SELECT id, agent_id, concept, content FROM engrams WHERE id = ?');
 const docs = WQ.sample.filter((id) => WQ.questions[id]?.length).map((id) => get.get(id) as { id: string; agent_id: string; concept: string; content: string });
@@ -45,7 +45,7 @@ async function embedAll(texts: string[]): Promise<Float32Array[]> {
   }
   return out;
 }
-const cacheF = join(tmpdir(), `awm-wq-vec-${docs.length}.json`);
+const cacheF = join(tmpdir(), `awm-wq-vec-${(process.env.WQ_FILE ?? "nl-wq.json").replace(/\W/g, "_")}-${docs.length}.json`);
 let noteV: Float32Array[], qV: Float32Array[][];
 if (existsSync(cacheF)) {
   const c = JSON.parse(readFileSync(cacheF, 'utf8'));
