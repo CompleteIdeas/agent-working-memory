@@ -60,6 +60,7 @@ import type {
 } from '../types/index.js';
 import type { IEngramStore as EngramStore } from '../storage/store.js';
 import { reorderByReranker, rerank2Enabled, rerank2WindowSize } from '../core/rerank2.js';
+import { isNaturalQuery } from '../core/query-shape.js';
 import { validityState } from '../core/validity.js';
 import { detectConflicts } from '../core/conflicts.js';
 import { matchUses, type RecallRecord } from '../core/implicit-feedback.js';
@@ -1387,9 +1388,17 @@ export class ActivationEngine {
     // loses to plain fusion (42% vs 45%). Measured end to end on the realstore snapshot at
     // k=3 with the fused shortlist: NL 41.8 -> 45.9, topic 93.1 -> 95.8, identifier
     // 93.7 -> 93.4 (shipped 0.21.0: 41.2 / 92.7 / 91.6). Convex combination over RRF follows
-    // Bruch et al., arXiv 2210.11934. AWM_BLEND=<a> sets the weight; AWM_BLEND=off restores
-    // the rerank2 sort by cross-encoder score alone.
-    const blendA = process.env.AWM_BLEND === 'off' ? NaN : Number(process.env.AWM_BLEND ?? 0.85);
+    // Bruch et al., arXiv 2210.11934.
+    //
+    // The weight is routed by the query's shape (src/core/query-shape.ts). Keyword lookups rank
+    // best when the cross-encoder decides almost alone; natural questions keep the fused rank's
+    // larger say. On the same saved scores: one weight of 0.85 gave NL 45.9 / topic 95.6 /
+    // identifier 93.3 (all 1,316); routed 0.85 natural / 0.95 keyword gave 45.9 / 96.0 / 93.8.
+    // AWM_BLEND=<a> sets the natural weight, AWM_BLEND_KEYWORD=<a> the keyword one;
+    // AWM_BLEND=off restores the rerank2 sort by cross-encoder score alone.
+    const blendA = process.env.AWM_BLEND === 'off' ? NaN
+      : isNaturalQuery(query.context ?? '') ? Number(process.env.AWM_BLEND ?? 0.85)
+      : Number(process.env.AWM_BLEND_KEYWORD ?? 0.95);
     let ordered: typeof finalRanked;
     if (rerank2Enabled() && Number.isFinite(blendA) && finalRanked.length > 1
         && finalRanked.every(r => r.phaseScores.rerankerScore > 0)) {
