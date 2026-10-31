@@ -370,3 +370,29 @@ A reader 5.5× larger and 8× slower adds 0.005. Both fail the same way: the del
 does contain an answer — to a nearby question — and an extractive reader cannot tell. The limit is
 about 0.83–0.85 for readers of this kind, measured at two sizes. (A `-Infinity` margin when a
 passage leaves no room for a span first poisoned the fit; it is now floored at −30.)
+
+## 13. Recent decisions: a fixture for what Robert uses AWM for (2026-10-31)
+
+Robert: "it's decisions that are made throughout that are important to bring back in real time."
+No fixture tested recency, and since 0.21.1 decay no longer changes the top result, so
+`tests/realstore-eval/decisions-eval.ts` builds one from the snapshot: every current
+`intent=decision` memory with at least two OLDER current memories sharing a `proj=` and `topic=`
+tag (120 decisions, median 4 older neighbours), asked with one of its generated natural questions.
+
+| Pipeline | decision first | in top 3 | lost to an older memory | lost to a newer one |
+|---|---|---|---|---|
+| shipped (0.21.1 + routing), no questions | 63 (52.5%) | 87 (72.5%) | 46 (3 same tags) | 11 |
+| + recency term 0.05 / 0.1 / 0.2 (`AWM_BLEND_RECENCY`) | 64 / 64 / 63 | 91 / 91 / 87 | 36 / 31 / 27 | 20 / 25 / 30 |
+| questions indexed, query's own question removed | 61 (50.8%) | 85 (70.8%) | 42 | 17 |
+
+Findings:
+1. **Age is not what keeps a decision from the top.** Favouring newer memories hands first place
+   to a newer non-decision instead; first place moves by at most one.
+2. **Stored questions do not help here either** once the query's own question is excluded — the
+   decision's other generated questions are paraphrases, and every neighbour gains questions too.
+3. **A sixth of all misses are another decision** (20 of 57): sibling decisions restating the
+   same choice. Some of what reads as a miss may be a right answer under another id; the fixture
+   needs an answer-containment check (as `nl-dupcheck.ts` does for the NL fixture) before its
+   first-place rate is read as a ranking ceiling.
+4. **The guard stands:** decay may leave the ranking path only if removing it moves this fixture
+   by nothing beyond noise. The recency experiment stays an off-by-default switch.

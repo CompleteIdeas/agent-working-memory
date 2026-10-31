@@ -1430,8 +1430,15 @@ export class ActivationEngine {
       };
       const byFused = [...finalRanked].sort((a, b) => rrf2(b.engram.id) - rrf2(a.engram.id));
       const fused = new Map(byFused.map((r, i) => [r.engram.id, 1 - i / (byFused.length - 1)]));
+      // EXPERIMENT (AWM_BLEND_RECENCY=<w>): favour the newer of otherwise similar candidates —
+      // the candidate's creation-time rank within the pool (newest 1, oldest 0), weighted w. On the
+      // recent-decisions fixture an older memory took first place from the decision in 46 of 120.
+      const recW = Number(process.env.AWM_BLEND_RECENCY ?? 0);
+      const byAge = recW > 0 ? [...finalRanked].sort((a, b) => +new Date(a.engram.createdAt) - +new Date(b.engram.createdAt)) : [];
+      const recency = new Map(byAge.map((r, i) => [r.engram.id, byAge.length > 1 ? i / (byAge.length - 1) : 1]));
       const key = (r: typeof finalRanked[number]) =>
-        (blendA * r.phaseScores.rerankerScore + (1 - blendA) * fused.get(r.engram.id)!) * (r.phaseScores.stalePenalty ?? 1);
+        (blendA * r.phaseScores.rerankerScore + (1 - blendA) * fused.get(r.engram.id)! + recW * (recency.get(r.engram.id) ?? 0))
+        * (r.phaseScores.stalePenalty ?? 1);
       ordered = [...finalRanked].sort((a, b) => key(b) - key(a));
     } else {
       ordered = rerank2Enabled()
