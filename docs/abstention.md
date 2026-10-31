@@ -117,6 +117,14 @@ adapting to each store.
 
 ## Limits
 
+- **A deleted fact in familiar territory is the hard limit: about 0.83 AUC on natural-language
+  questions.** When the answer is gone but memories about the same thing remain, those neighbours
+  look like answers. Every signal measured stops near the same place — the cross-encoder, vector
+  and keyword ranks, how much of the store matches, the question's shape, the memory's kind, and a
+  small reading model that checks whether the top memory states an answer (0.827 → 0.840, below
+  the 0.88 that would have justified its 86 ms). Never-stored facts are a different story: those
+  are caught at 0.95–1.0. Measurements: [abstention-signals-2026-10-30.md](abstention-signals-2026-10-30.md)
+  §4–5 and §12.
 - **Measured on one store.** It is a real 29,853-memory store, but only one. The public
   synthetic corpus (`npm run bench:public`) is the reproducible check for others.
 - **The question set is keyword-style.** It contains no natural-language questions; that is a
