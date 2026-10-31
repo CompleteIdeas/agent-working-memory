@@ -19,7 +19,7 @@ const FIX = process.env.REALSTORE_FIXTURE ?? 'fixture-nl.json';
 const fx = JSON.parse(readFileSync(join(dir, FIX), 'utf8'));
 const items = fx.items as any[];
 const work = join(tmpdir(), `awm-stagediag-${process.pid}.db`);
-copyFileSync(join(dir, 'snapshot', 'store.db'), work);
+copyFileSync(join(dir, process.env.REALSTORE_SNAPSHOT ?? 'snapshot/store.db'), work);
 // DROP_PATTERNS=1: delete consolidation's pattern-synthesis rows from the copy, to separate
 // their crowding of the shortlist from the shortlist's own size and ordering.
 if (process.env.DROP_PATTERNS === '1') {

@@ -17,7 +17,7 @@ import { saveModel, setGateModelPathForTests } from '../../src/engine/abstention
 
 process.env.AWM_ABSTAIN_GATE = 'calibrated';
 const dir = import.meta.dirname;
-const SNAP = join(dir, 'snapshot', 'store.db');
+const SNAP = join(dir, process.env.REALSTORE_SNAPSHOT ?? 'snapshot/store.db');
 const seeded = <T,>(arr: T[], seed = 1337): T[] => {
   const a = [...arr]; let x = seed;
   for (let i = a.length - 1; i > 0; i--) { x = (x * 1664525 + 1013904223) >>> 0; const j = x % (i + 1); [a[i], a[j]] = [a[j], a[i]]; }
