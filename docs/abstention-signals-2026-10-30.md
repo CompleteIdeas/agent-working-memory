@@ -183,3 +183,87 @@ sum-of-P −0.53, cosine relative to pool +0.49, memories matching any term −0
   "natural = absent" from them. The query-shape test in `signal-fit.ts` therefore uses
   answerable + deleted only, mixed across fixtures.
 - Seven natural-language golds are themselves consolidation pattern rows.
+
+## 8. Building it: the forecast did not survive the first live run (2026-10-30, later)
+
+The v2 features (shipped three + raw BM25 of the best match, whole-store cosine shape, BM25 rank of
+the top result) were built into `abstention-gate.ts` / `activation.ts` (model version 2) and run
+end to end through `gate-eval.ts`, which calibrates with the production code.
+
+| v2 gate, first live run | Correct withheld | Never-stored withheld | Deleted withheld |
+|---|---|---|---|
+| keyword (offline forecast) | 1 of 706 | 61 of 73 | 76 of 200 |
+| **keyword (live)** | 0 of 706 (11 flagged) | **51 of 73** (14 flagged) | **52 of 200** (56 flagged) |
+| natural-language (offline forecast) | 6 of 88 | 61 of 73 | 37 of 97 |
+| **natural-language (live)** | 3 of 88 (5 flagged) | 51 of 73 | **9 of 97** (25 flagged) |
+
+The withhold line landed far lower than the shipped gate's (−2.95 vs −1.64 for `work`), so the
+gate went soft on everything. Two causes identified so far:
+
+1. **A definition gap between the offline features and the live ones.** Offline, the cosine gap
+   was best-minus-10th over the whole store. Live, the vector search drops hits under cosine 0.40,
+   so a query with fewer than ten survivors had no 10th; the code used 0, which gave never-stored
+   queries (few hits) the widest gap of all and made them read as "one clear peak". Fixed: the
+   floor stands in for a missing 10th. Re-measuring.
+2. **Probably, the synthetic no-answer probes.** Fifty of the 150 calibration nulls are random
+   mid-frequency vocabulary. With density features those are trivially rejected (near-zero BM25,
+   few vector hits), which pulls the null median, and with it the withhold line, far below where
+   real absent questions sit. If the gap fix does not restore the never-stored rate, the fix is on
+   the data side again: nulls that look like real absent questions (coherent phrasing about a
+   topic the store knows nothing about), the mirror image of the natural-positive problem.
+
+Lesson for the ledger: an offline feature study forecasts the *ordering* a model can achieve; the
+thresholds a self-calibrating gate chooses depend on the synthetic probes, so only the end-to-end
+run says where the gate will actually sit.
+
+## 9. Vector shape and write-time questions (2026-10-31)
+
+**Vector shape** (`vector-shape-ab.ts`, vector-only, all 8,673 retrievable memories, bge-small).
+s@1 / s@3 / in top 32:
+
+| Shape | natural-language | identifier | topic |
+|---|---|---|---|
+| whole note (shipped) | **42.8 / 64.9 / 92.3** | 90.3 / 96.3 / 99.7 | 60.0 / 72.0 / 88.2 |
+| title only | 18.6 / 32.5 / 57.2 | 91.0 / 97.0 / 98.3 | **71.6 / 82.4 / 94.0** |
+| best ~300-char sentence piece | 38.7 / 55.7 / 90.2 | 90.0 / 96.7 / 98.7 | 66.9 / 81.1 / 93.1 |
+| max(whole, title) | 33.5 / 57.2 / 88.7 | 91.0 / 96.7 / 98.3 | 72.2 / 82.4 / 93.8 |
+| max(whole, best piece) | 38.7 / 59.8 / 91.8 | 90.0 / 96.7 / 98.7 | 67.6 / 81.8 / 93.3 |
+
+Natural questions match the meaning of the whole note better than its title or any one sentence.
+Titles and pieces help topic lookups, where the full pipeline is already at 95.8%. Not adopted.
+
+**Write-time questions** (`wq-generate.ts`, `wq-eval.ts`). Claude Haiku 5.5 wrote 3 natural
+questions for every memory of a fixed 1,994-memory sample (the 194 natural-language golds + 1,800
+random memories of the same agents), from redacted text, without seeing any fixture question.
+Every arm searches the same sample, so the absolute numbers are higher than on the full store and
+only the comparison counts. s@1 / s@3 / in top 32:
+
+| Arm | natural-language (194) | identifier (393) | topic (124) |
+|---|---|---|---|
+| BM25 note (shipped) | 63.4 / 75.3 / 94.8 | 98.5 / 99.7 / 100 | 90.3 / 97.6 / 100 |
+| BM25 note + questions | 70.6 / 83.5 / 96.9 | 98.5 / 99.7 / 100 | 89.5 / 99.2 / 100 |
+| vector note (shipped) | 60.3 / 79.9 / 96.9 | 94.7 / 98.7 / 100 | 68.5 / 79.8 / 93.5 |
+| vector max(note, questions) | 61.9 / 78.9 / 95.9 | 92.4 / 97.2 / 99.5 | 58.9 / 68.5 / 90.3 |
+| fused, note (shipped) | 67.0 / 84.0 / 97.4 | 98.5 / 100 / 100 | 80.6 / 90.3 / 100 |
+| **fused, questions in BM25 only, vector on the note** | **73.2 / 87.1 / 98.5** | **98.5 / 100 / 100** | **82.3 / 90.3 / 100** |
+| fused, questions in both channels | 74.2 / 89.2 / 98.5 | 97.7 / 99.7 / 100 | 74.2 / 87.9 / 100 |
+| fused, questions as a third RRF channel | 72.7 / 90.2 / 99.0 | 84.7 / 92.6 / 100 | 58.9 / 72.6 / 98.4 |
+
+Bias check: word overlap between the gold's generated questions and the fixture question averages
+0.179 (a random memory's: 0.016); none of 194 overlap by more than half. Both were written by a
+model that saw the memory, so some optimism remains; it is not copying.
+
+Findings:
+1. **Questions belong in the keyword index, not in the vector.** In BM25 they add natural phrasings
+   a person would use; in the vector they pull a memory toward its topic's centre and blur topic
+   lookups (−9.6 on topic).
+2. **The adopted shape helps everywhere on the sample:** natural-language +6.2, topic +1.7,
+   identifier unchanged. First change of the day that lifts natural-language retrieval without
+   taking from anything else.
+3. **First generation run lost half its output:** Haiku 5.5 sometimes thinks before answering,
+   and a 200-token reply budget was spent on thinking, leaving 976 of 1,994 memories with no
+   questions. Raised to 1,500 and the resume logic retries empty results.
+
+Next: questions for every retrievable memory (about 6,700 more), then the full pipeline
+(reranker, blend, gate) end to end, with the questions also serving as natural positives for gate
+calibration.
