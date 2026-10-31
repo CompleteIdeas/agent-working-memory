@@ -191,3 +191,23 @@ describe('feature version 2 (0.21.1: match density)', () => {
     }
   });
 });
+
+describe('per-shape models (0.22)', () => {
+  const f = { rerankTop: 0.5, rerankSecond: 0.4, vectorTop: 0.5 }; // logit(rerankTop) = 0
+  const base = { ...model(), answerAt: 1, withholdBelow: -1 }; // main: score 0 -> low
+  const withNatural = { ...base, natural: { mu: base.mu, sd: base.sd, w: base.w, b: 0, answerAt: -0.5, withholdBelow: -2, stats: base.stats } };
+
+  it('a natural-shaped query is judged by the natural model when there is one', () => {
+    expect(classify(withNatural, f, true).band).toBe('answer');   // 0 >= -0.5
+    expect(classify(withNatural, f, true).answerAt).toBe(-0.5);
+  });
+
+  it('a keyword query keeps the main model', () => {
+    expect(classify(withNatural, f, false).band).toBe('low');     // -1 <= 0 < 1
+    expect(classify(withNatural, f, false).answerAt).toBe(1);
+  });
+
+  it('without a natural model, natural queries fall back to the main one', () => {
+    expect(classify(base, f, true).band).toBe('low');
+  });
+});
