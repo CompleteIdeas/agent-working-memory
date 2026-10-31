@@ -99,6 +99,8 @@ import { queryPeerDecisions, formatPeerDecisions } from './coordination/peer-dec
 import { startLoopLagMonitor } from './core/write-telemetry.js';
 import { buildWhoami, formatWhoami } from './core/whoami.js';
 import { renderTaskEndInvitation, validateRecipeWrite, recipeSlug, getRecipe } from './recipes/index.js';
+import { renderQuestionJob, QUESTION_JOB_SIZE } from './core/question-handoff.js';
+import { attachQuestions } from './core/questions.js';
 import { formatRecallResultLine } from './core/format-recall.js';
 import { newestConflicting } from './core/conflicts.js';
 import { missingValueNote } from './core/asked-value.js';
@@ -174,6 +176,19 @@ const consolidationScheduler = new ConsolidationScheduler(store, consolidationEn
 stagingBuffer.start(DEFAULT_AGENT_CONFIG.stagingTtlMs);
 consolidationScheduler.start();
 startLoopLagMonitor();
+
+/** 0.22 capability hand-off: what this session's host declared it can do (memory_restore). */
+const declaredCapabilities = new Set<string>();
+
+/** The question job for this agent, when the host declared "questions" and there is work. */
+async function questionJobText(): Promise<string> {
+  if (!declaredCapabilities.has('questions')) return '';
+  try {
+    const todo = await store.getEngramsMissingQuestions(AGENT_ID, QUESTION_JOB_SIZE);
+    if (todo.length === 0) return '';
+    return renderQuestionJob(todo, await store.questionCoverage(AGENT_ID));
+  } catch { return ''; }
+}
 
 /** 0.22: one line on what happened to the questions a write offered. Empty when none were offered. */
 function describeQuestions(q: import('./core/questions.js').QuestionsOutcome | undefined): string {
@@ -909,8 +924,12 @@ Returns:
 - How long you were idle
 
 Use this at the start of every session or after compaction to pick up where you left off.`,
-  {},
-  async () => {
+  {
+    capabilities: z.array(z.string()).max(20).optional()
+      .describe('What you can do for AWM with your own model, declared once per session. "questions": AWM will hand you a few of your memories that have no questions yet (in this reply and at memory_task_end), and you write them back with memory_set_questions. Questions are how a memory is found when someone asks in their own words.'),
+  },
+  async (params: { capabilities?: string[] }) => {
+    for (const c of params?.capabilities ?? []) declaredCapabilities.add(c.trim().toLowerCase());
     const checkpoint = await store.getCheckpoint(AGENT_ID);
     // 0.20: this session's own checkpoint wins over the agent-level slot, which
     // every parallel session overwrites (on 2026-10-18 a restore here returned
@@ -1065,7 +1084,36 @@ Use this at the start of every session or after compaction to pick up where you 
     return {
       content: [{
         type: 'text' as const,
-        text: parts.join('\n'),
+        text: parts.join('\n') + await questionJobText(),
+      }],
+    };
+  }
+);
+
+server.tool(
+  'memory_set_questions',
+  `Write back questions for memories that have none — the answer to a question job (questions@1) that memory_restore or memory_task_end handed you after you declared the "questions" capability. Each memory keeps up to 5 questions; the same clean-up and redaction apply as to questions written with a memory.`,
+  {
+    items: z.array(z.object({
+      id: z.string(),
+      questions: z.array(z.string()).max(10),
+    })).max(20).describe('One entry per memory: its id and 2-5 natural questions it answers.'),
+  },
+  async (params) => {
+    const lines: string[] = [];
+    let set = 0;
+    for (const item of params.items) {
+      const engram = await store.getEngram(item.id);
+      if (!engram || engram.agentId !== AGENT_ID) { lines.push(`- ${item.id}: not one of your memories, skipped`); continue; }
+      const outcome = await attachQuestions(store, item.id, item.questions, engram.questions);
+      set++;
+      lines.push(`- ${engram.concept}: ${outcome.kept.length} questions indexed${outcome.dropped.length ? ` (${outcome.dropped.length} dropped: ${[...new Set(outcome.dropped.map((d) => d.reason))].join(', ')})` : ''}`);
+    }
+    const cov = await store.questionCoverage(AGENT_ID);
+    return {
+      content: [{
+        type: 'text' as const,
+        text: `Questions set on ${set} of ${params.items.length} memories.\n${lines.join('\n')}\nCoverage now ${cov.withQuestions} of ${cov.total}.`,
       }],
     };
   }
@@ -1442,7 +1490,7 @@ This captures what was accomplished so future sessions can recall it.`,
         // D14 (2026-07-30): task end is the recipe moment — invite the host
         // to distill a skill and/or a failure lesson in separate focused
         // passes. The host owns the gates; AWM validates the write-backs.
-        text: `Completed: "${completedTask}" [${salience.score.toFixed(2)}]${supersededNote}\n${renderTaskEndInvitation()}`,
+        text: `Completed: "${completedTask}" [${salience.score.toFixed(2)}]${supersededNote}\n${renderTaskEndInvitation()}` + await questionJobText(),
       }],
     };
   }

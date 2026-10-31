@@ -554,6 +554,29 @@ export class EngramStore {
     })();
   }
 
+  /**
+   * Current memories of an agent that have no questions yet, most recently used first — the
+   * work list for the question hand-off (0.22, plan §4.12). Session notes are skipped.
+   */
+  getEngramsMissingQuestions(agentId: string, limit: number): Engram[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM engrams
+      WHERE agent_id = ? AND questions IS NULL AND stage = 'active' AND retracted = 0
+        AND superseded_by IS NULL AND memory_class != 'ephemeral'
+      ORDER BY last_accessed DESC LIMIT ?
+    `).all(agentId, limit) as any[];
+    return rows.map(r => this.rowToEngram(r));
+  }
+
+  /** How many current memories of an agent carry questions, out of how many. */
+  questionCoverage(agentId: string): { withQuestions: number; total: number } {
+    const r = this.db.prepare(`
+      SELECT SUM(CASE WHEN questions IS NOT NULL THEN 1 ELSE 0 END) AS q, COUNT(*) AS n FROM engrams
+      WHERE agent_id = ? AND stage = 'active' AND retracted = 0 AND superseded_by IS NULL
+    `).get(agentId) as { q: number | null; n: number };
+    return { withQuestions: r.q ?? 0, total: r.n };
+  }
+
   /** Set (or replace) the questions a memory answers. The FTS trigger re-indexes the row. */
   setQuestions(id: string, questions: string[]): void {
     this.db.prepare('UPDATE engrams SET questions = ? WHERE id = ?')

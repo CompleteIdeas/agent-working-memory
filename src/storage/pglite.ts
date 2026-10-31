@@ -844,6 +844,29 @@ export class PGliteEngramStore {
     return res.rows[0] ? rowToEngram(res.rows[0]) : null;
   }
 
+  /** Current memories of an agent with no questions yet, most recently used first (0.22 hand-off). */
+  async getEngramsMissingQuestions(agentId: string, limit: number): Promise<Engram[]> {
+    await this.readyPromise;
+    const res = await this.db.query<any>(
+      `SELECT * FROM engrams WHERE agent_id = $1 AND questions IS NULL AND stage = 'active'
+         AND retracted = FALSE AND superseded_by IS NULL AND memory_class != 'ephemeral'
+       ORDER BY last_accessed DESC LIMIT $2`,
+      [agentId, limit],
+    );
+    return res.rows.map((r: any) => rowToEngram(r));
+  }
+
+  /** How many current memories of an agent carry questions, out of how many. */
+  async questionCoverage(agentId: string): Promise<{ withQuestions: number; total: number }> {
+    await this.readyPromise;
+    const res = await this.db.query<any>(
+      `SELECT COUNT(*) FILTER (WHERE questions IS NOT NULL) AS q, COUNT(*) AS n FROM engrams
+       WHERE agent_id = $1 AND stage = 'active' AND retracted = FALSE AND superseded_by IS NULL`,
+      [agentId],
+    );
+    return { withQuestions: Number(res.rows[0]?.q ?? 0), total: Number(res.rows[0]?.n ?? 0) };
+  }
+
   /** Set (or replace) the questions a memory answers. The tsvector trigger re-indexes the row. */
   async setQuestions(id: string, questions: string[]): Promise<void> {
     await this.readyPromise;
