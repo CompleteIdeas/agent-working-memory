@@ -17,7 +17,11 @@ const { redactText } = await import('../../src/core/redact.js');
 const dir = import.meta.dirname;
 const MODEL = process.argv[2] ?? 'onnx-community/Qwen2.5-0.5B-Instruct';
 const OUT = join(dir, 'nl-wq-local.json');
-const sample = (JSON.parse(readFileSync(join(dir, 'nl-wq.json'), 'utf8')) as { sample: string[] }).sample;
+// The fair sample is the first 1,994 ids of nl-wq.json's list: the 194 natural-language golds,
+// then 1,800 random memories (wq-generate.ts's seeded order; widening it to the whole store later
+// appended the rest, so the prefix is unchanged). WQ_SAMPLE overrides the size.
+const sample = (JSON.parse(readFileSync(join(dir, 'nl-wq.json'), 'utf8')) as { sample: string[] }).sample
+  .slice(0, Number(process.env.WQ_SAMPLE ?? 1994));
 const db = new Database(join(dir, 'snapshot', 'store.db'), { readonly: true });
 const get = db.prepare('SELECT concept, content FROM engrams WHERE id = ?');
 

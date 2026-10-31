@@ -21,7 +21,8 @@ const dir = import.meta.dirname;
 const WQ = JSON.parse(readFileSync(join(dir, process.env.WQ_FILE ?? 'nl-wq.json'), 'utf8')) as { sample: string[]; questions: Record<string, string[]> };
 const db = new Database(join(dir, 'snapshot', 'store.db'), { readonly: true });
 const get = db.prepare('SELECT id, agent_id, concept, content FROM engrams WHERE id = ?');
-const docs = WQ.sample.filter((id) => WQ.questions[id]?.length).map((id) => get.get(id) as { id: string; agent_id: string; concept: string; content: string });
+// The fair sample: the first WQ_SAMPLE (default 1,994) ids — the same memories for every questions file.
+const docs = WQ.sample.slice(0, Number(process.env.WQ_SAMPLE ?? 1994)).filter((id) => WQ.questions[id]?.length).map((id) => get.get(id) as { id: string; agent_id: string; concept: string; content: string });
 const idx = new Map(docs.map((d, i) => [d.id, i]));
 const seeded = <T,>(arr: T[], seed = 1337): T[] => {
   const a = [...arr]; let s = seed;
