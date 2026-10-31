@@ -39,8 +39,16 @@ import { dirname, join, resolve } from 'node:path';
 
 export type SignalBand = 'answer' | 'low' | 'withhold';
 
+/**
+ * Feature-vector version a model was fitted for. 1 = the three 0.21.0 signals. 2 (0.21.1) adds
+ * match density — the raw BM25 of the best match, the shape of the whole-store cosine
+ * distribution — and the top result's BM25 rank. A model of another version is not scored
+ * (`loadModel` returns null) and is refitted by `awm calibrate` or after consolidation.
+ */
+export const GATE_MODEL_VERSION = 2;
+
 export interface GateModel {
-  version: 1;
+  version: 1 | 2;
   agentId: string;
   fittedAt: string;
   /** Retrievable memories when fitted — used to decide when to refit. */
@@ -55,7 +63,20 @@ export interface GateModel {
   stats: { positives: number; positivesCorrect: number; nulls: number };
 }
 
-export interface GateFeatures { rerankTop: number; rerankSecond: number; vectorTop: number }
+export interface GateFeatures {
+  rerankTop: number;
+  rerankSecond: number;
+  vectorTop: number;
+  /** Raw FTS5 BM25 of the best keyword match (unnormalised, so comparable across queries). */
+  bm25Top?: number;
+  /** Highest cosine over the agent's vectors, and that minus the 10th highest. */
+  cosineTop?: number;
+  cosineGap?: number;
+  /** How many vectors scored ≥ 0.7 (capped at the vector search's 50). */
+  cosineAbove70?: number;
+  /** The top result's rank in the BM25 list, −1 when absent. */
+  bm25RankTop?: number;
+}
 
 export interface SignalReport {
   band: SignalBand;
@@ -74,13 +95,20 @@ const logit = (p: number) => {
   return Math.log(q / (1 - q));
 };
 
-export function featureVector(f: GateFeatures): number[] {
+export function featureVector(f: GateFeatures, version: 1 | 2 = GATE_MODEL_VERSION as 1 | 2): number[] {
   const l1 = logit(f.rerankTop);
-  return [l1, f.vectorTop, l1 - logit(f.rerankSecond)];
+  const v1 = [l1, f.vectorTop, l1 - logit(f.rerankSecond)];
+  if (version === 1) return v1;
+  // Measured 2026-10-30 (docs/abstention-signals-2026-10-30.md): the raw BM25 of the best match
+  // is the best single signal for natural-language questions whose answer was deleted; the
+  // cosine shape (one clear peak, or not) is the best family for never-stored facts.
+  const rank = f.bm25RankTop ?? -1;
+  return [...v1, Math.log1p(Math.max(0, f.bm25Top ?? 0)), f.cosineTop ?? 0, f.cosineGap ?? 0,
+    Math.log1p(Math.min(50, Math.max(0, f.cosineAbove70 ?? 0))), rank < 0 ? 0 : 1 / (1 + rank)];
 }
 
 export function scoreWith(model: GateModel, f: GateFeatures): number {
-  const x = featureVector(f);
+  const x = featureVector(f, model.version);
   let s = model.b;
   for (let j = 0; j < x.length; j++) s += model.w[j]! * (x[j]! - model.mu[j]!) / model.sd[j]!;
   return s;
@@ -158,8 +186,19 @@ function readAll(): Record<string, GateModel> {
   }
 }
 
+const staleVersionReported = new Set<string>();
+
 export function loadModel(agentId: string): GateModel | null {
-  return readAll()[agentId] ?? null;
+  const m = readAll()[agentId] ?? null;
+  if (m && m.version !== GATE_MODEL_VERSION) {
+    // Scoring a v1 model with v2 features would be silent nonsense. Stand aside and say so once.
+    if (!staleVersionReported.has(agentId)) {
+      staleVersionReported.add(agentId);
+      console.error(`[awm] abstention gate for ${agentId} was fitted for feature version ${m.version}, this build uses ${GATE_MODEL_VERSION}; the gate is off until \`awm calibrate\` (or the next consolidation) refits it.`);
+    }
+    return null;
+  }
+  return m;
 }
 
 export function saveModel(model: GateModel): void {

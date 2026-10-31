@@ -46,7 +46,7 @@
  * Logs activation events for eval metrics.
  */
 
-import { classify, gateEnabled, loadModel, type SignalReport } from './abstention-gate.js';
+import { classify, gateEnabled, loadModel, type GateFeatures, type SignalReport } from './abstention-gate.js';
 import { randomUUID } from 'node:crypto';
 import { baseLevelActivation, softplus } from '../core/decay.js';
 import { strengthenAssociation, CoActivationBuffer, ValidationGatedBuffer } from '../core/hebbian.js';
@@ -353,7 +353,10 @@ export class ActivationEngine {
     // Merge: take the best BM25 score per engram from either pass
     const bm25ScoreMap = new Map<string, number>();
     const bm25EngramMap = new Map<string, any>();
+    // excludeIds: calibration's held-out probes recall as if these memories were never stored.
+    const excluded = query.excludeIds?.length ? new Set(query.excludeIds) : null;
     for (const r of [...bm25Keyword, ...bm25Expanded]) {
+      if (excluded?.has(r.engram.id)) continue;
       const existing = bm25ScoreMap.get(r.engram.id) ?? 0;
       if (r.bm25Score > existing) {
         bm25ScoreMap.set(r.engram.id, r.bm25Score);
@@ -418,6 +421,7 @@ export class ActivationEngine {
             // pgvector returns sorted ASC by distance (DESC by sim) — break once
             // we drop below the candidate floor; all subsequent hits will too.
             if (sim < SIM_CANDIDATE_FLOOR) break;
+            if (excluded?.has(h.engram.id)) continue;
             if (!rawCosineSims.has(h.engram.id)) {
               rawCosineSims.set(h.engram.id, sim);
               vectorHits.push(h.engram);
@@ -945,6 +949,7 @@ export class ActivationEngine {
 
     // Phase 4+5: Graph walk — boost engrams connected to high-scoring ones
     // Only walk from engrams that had text relevance (composite > 0 pre-walk)
+    if (excluded) for (let i = scored.length - 1; i >= 0; i--) if (excluded.has(scored[i]!.engram.id)) scored.splice(i, 1);
     const sorted = scored.sort((a, b) => b.score - a.score);
     // Candidate breadth carried into graph-walk + rerank. Default 8×limit (was 3×).
     // WHY 8× (2026-06-16): the pipeline-attribution trace showed ~50% of answerable LoCoMo
@@ -1417,15 +1422,35 @@ export class ActivationEngine {
     // onAbstain, never a silent []; a low signal still returns, flagged. Skipped when the
     // cross-encoder did not run: every reranker feature would read 0 and look like noise.
     let signal: SignalReport | undefined;
-    if (gateEnabled() && !query.skipCalibratedGate && ordered.length > 0
+    let gateFeatures: GateFeatures | undefined;
+    if (ordered.length > 0) {
+      // The same numbers calibration fits on (it reads them off the first result), so the gate
+      // and its training see one definition. Match density comes from work already done: the
+      // BM25 list's top score un-normalised (searchBM25WithRank stores |rank|/(1+|rank|)), and
+      // the vector search's top-50 cosines.
+      const bm25Sorted = [...bm25Ranked].sort((a, b) => b.bm25Score - a.bm25Score);
+      const bm25Norm = bm25Sorted[0]?.bm25Score ?? 0;
+      const sims = [...rawCosineSims.values()].sort((a, b) => b - a);
+      // Hits below the candidate floor were dropped, so a query with under ten of them has no
+      // 10th cosine. Stand in the floor, not 0: with 0 a never-stored query (few hits) showed the
+      // widest gap of all and read as "one clear peak" (first end-to-end run, 2026-10-30).
+      const tenth = sims[9] ?? Math.min(sims[0] ?? SIM_CANDIDATE_FLOOR, SIM_CANDIDATE_FLOOR);
+      gateFeatures = {
+        rerankTop: ordered[0]!.phaseScores.rerankerScore ?? 0,
+        rerankSecond: ordered[1]?.phaseScores.rerankerScore ?? 0,
+        vectorTop: ordered[0]!.phaseScores.vectorMatch ?? 0,
+        bm25Top: bm25Norm >= 1 ? 1e6 : bm25Norm / (1 - bm25Norm),
+        cosineTop: sims[0] ?? 0,
+        cosineGap: (sims[0] ?? 0) - tenth,
+        cosineAbove70: Math.min(50, sims.filter(s => s >= 0.7).length),
+        bm25RankTop: bm25Sorted.findIndex(r => r.engram.id === ordered[0]!.engram.id),
+      };
+    }
+    if (gateEnabled() && !query.skipCalibratedGate && gateFeatures
         && ordered.some((r) => (r.phaseScores.rerankerScore ?? 0) > 0)) {
       const model = loadModel(query.agentId);
       if (model) {
-        signal = classify(model, {
-          rerankTop: ordered[0]!.phaseScores.rerankerScore ?? 0,
-          rerankSecond: ordered[1]?.phaseScores.rerankerScore ?? 0,
-          vectorTop: ordered[0]!.phaseScores.vectorMatch ?? 0,
-        });
+        signal = classify(model, gateFeatures);
         if (signal.band === 'withhold') {
           query.onAbstain?.({
             reason: 'calibrated', candidates: ordered.length, topScore: ordered[0]!.score, confidence, signal,
@@ -1544,6 +1569,7 @@ export class ActivationEngine {
       if (this.recentRecalls.length > RECENT_RECALLS_MAX) this.recentRecalls.splice(0, this.recentRecalls.length - RECENT_RECALLS_MAX);
     }
 
+    if (results[0] && gateFeatures) results[0].gateFeatures = gateFeatures;
     prof.finish({ results: results.length });
     return results;
   }

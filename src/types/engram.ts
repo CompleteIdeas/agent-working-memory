@@ -245,6 +245,8 @@ export interface ActivationResult {
    * Same value on every result in the recall. Absent when the gate is off or uncalibrated.
    */
   signal?: import('../engine/abstention-gate.js').SignalReport;
+  /** On the first result only: the signals the calibrated gate judged (or would judge). */
+  gateFeatures?: import('../engine/abstention-gate.js').GateFeatures;
   /**
    * Id of the activation_events row this recall logged (0.14.3). Same value on
    * every result in the same recall. Hand it back on memory_feedback so the
@@ -348,6 +350,8 @@ export interface ActivationQuery {
   internal?: boolean;          // Skip access count increment, Hebbian update, and event logging (for system calls)
   /** Calibration runs recall with the calibrated gate off, so it measures the raw signals. */
   skipCalibratedGate?: boolean;
+  /** Calibration only: recall as if these memories were not stored (held-out no-answer probes). */
+  excludeIds?: string[];
   /** Diagnostics only: receives the candidate ids at each pipeline stage, in stage order. */
   onStages?: (stages: Record<string, string[]>) => void;
   /** Diagnostics only: every rerank-pool candidate's scores, after the cross-encoder. */

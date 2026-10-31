@@ -12,7 +12,7 @@
 
 import type { EngramStore } from '../storage/store.js';
 import type { ActivationEngine } from './activation.js';
-import { featureVector, fitLogistic, thresholds, gateEnabled, loadModel, saveModel, type GateFeatures, type GateModel } from './abstention-gate.js';
+import { GATE_MODEL_VERSION, featureVector, fitLogistic, thresholds, gateEnabled, loadModel, saveModel, type GateFeatures, type GateModel } from './abstention-gate.js';
 
 const STOP = new Set(('the a an and or of to in on for is are was were be been with what when where which who how did do does have has had '
   + 'at by from as it this that not but all any can will would should could into than then there their they them its also only just more '
@@ -28,7 +28,7 @@ export interface CalibrationOptions {
   seed?: number;
 }
 
-export type CalibrationProbe = { query: string; goldId: string | null };
+export type CalibrationProbe = { query: string; goldId: string | null; excludeIds?: string[] };
 
 /**
  * The synthetic queries calibration fits on, generated from the store alone: positives are a
@@ -73,7 +73,16 @@ export async function buildCalibrationProbes(
       nulls.push({ query: [wa[0], wb[0], wa[1], wb[1]].join(' '), goldId: null });
     }
   }
-  for (let i = 0; i < nRandom; i++) nulls.push({ query: [pick(vocab), pick(vocab), pick(vocab)].join(' '), goldId: null });
+  // EXPERIMENT (AWM_CALIBRATE_RANDOM): how many random-vocabulary nulls. With match-density
+  // features these are trivially rejected and drag the withhold line far below real absent
+  // questions (first v2 live run, 2026-10-30).
+  const nRand = Number(process.env.AWM_CALIBRATE_RANDOM ?? nRandom);
+  for (let i = 0; i < nRand; i++) nulls.push({ query: [pick(vocab), pick(vocab), pick(vocab)].join(' '), goldId: null });
+  // EXPERIMENT (AWM_CALIBRATE_HELDOUT=<n>): held-out nulls — a positive's own query, recalled as
+  // if its memory were never stored. That is the hard "deleted fact" case (familiar vocabulary,
+  // neighbours still present), generated from the store alone.
+  const nHeld = Number(process.env.AWM_CALIBRATE_HELDOUT ?? 0);
+  for (let i = 0; i < Math.min(nHeld, pos.length); i++) nulls.push({ query: pos[i]!.query, goldId: null, excludeIds: [pos[i]!.goldId!] });
   if (pos.length < 30 || nulls.length < 30) return null;
   return { pos, nulls, storeSize: rows.length };
 }
@@ -91,10 +100,10 @@ export async function calibrateGate(
 
   const run = async (p: Probe) => {
     const res: any[] = await activation.activate({
-      agentId, context: p.query, limit: 10, minScore: 0.05, requireConfidence: 0, internal: true, skipCalibratedGate: true,
+      agentId, context: p.query, limit: 10, minScore: 0.05, requireConfidence: 0, internal: true, skipCalibratedGate: true, excludeIds: p.excludeIds,
     } as any);
     if (res.length === 0) return null;
-    const f: GateFeatures = {
+    const f: GateFeatures = res[0].gateFeatures ?? {
       rerankTop: res[0].phaseScores?.rerankerScore ?? 0,
       rerankSecond: res[1]?.phaseScores?.rerankerScore ?? 0,
       vectorTop: res[0].phaseScores?.vectorMatch ?? 0,
@@ -125,7 +134,7 @@ export async function calibrateGate(
   };
   const t = thresholds(correct.map((r) => score(r.f)), nullRuns.map((r) => score(r.f)));
   return {
-    version: 1, agentId, fittedAt: new Date().toISOString(), storeSize: probes.storeSize,
+    version: GATE_MODEL_VERSION as 1 | 2, agentId, fittedAt: new Date().toISOString(), storeSize: probes.storeSize,
     mu: m.mu, sd: m.sd, w: m.w, b: m.b, answerAt: t.answerAt, withholdBelow: t.withholdBelow,
     stats: { positives: posRuns.length, positivesCorrect: correct.length, nulls: nullRuns.length },
   };
