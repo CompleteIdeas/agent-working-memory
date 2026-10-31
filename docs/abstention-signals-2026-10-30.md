@@ -267,3 +267,30 @@ Findings:
 Next: questions for every retrievable memory (about 6,700 more), then the full pipeline
 (reranker, blend, gate) end to end, with the questions also serving as natural positives for gate
 calibration.
+
+## 10. Step 0: write-time questions end to end, and the routed blend (2026-10-31)
+
+Questions generated for all 8,673 retrievable memories and indexed in the keyword index only
+(`wq-index.ts` → `snapshot/store-wq.db`); the 0.21.1 pipeline otherwise unchanged.
+
+| Full pipeline, k = 3 | NL: reaches cross-encoder | NL first | topic first | identifier first |
+|---|---|---|---|---|
+| 0.21.1 | 86.6% | 45.4% | 95.8% | 93.3% |
+| + questions, blend 0.85 | 90.7% | 44.8% | 95.6% | 93.4% |
+| + questions, blend 0.5 (offline replay) | — | 50.0% | 93.6% | 92.2% |
+| **+ questions, blend routed by query shape** (offline replay) | — | **50.0%** | **95.6%** | **93.5%** |
+
+Findings:
+1. **Questions get more right answers to the reranker (86.6 → 90.7%) but the final order did not
+   improve** at the shipped 0.85 weight: the cross-encoder decides 85% of the score and never sees
+   the questions.
+2. **The fused rank now carries the question phrasings, so natural questions want it weighted
+   more; keyword lookups still want the cross-encoder.** One weight cannot serve both.
+3. **Routing the weight by the query's shape** (question word, question mark, or ≥ 30% common
+   words → 0.5; otherwise 0.95), judged from the text alone, meets the 0.22 target of ≥ 50% with
+   topic and identifier unchanged. Natural weights 0.5–0.7 all land at 48.5–50.0%, so the choice is
+   not knife-edge. Without questions the same routing makes NL worse (43.8 vs 45.9): it belongs
+   with the questions, in 0.22.
+4. Still to do before claiming it: the routed blend implemented in `activation.ts` and run end to
+   end (this table's last two rows are replays of saved scores), and the reranker reading the
+   best-matching question (the other way to carry the gain through).

@@ -82,3 +82,26 @@ for (const a of [0.5, 0.6, 0.7, 0.8, 0.9]) {
   console.log(`  a=${a}`.padEnd(9) + sets.map(({ fx, ps }) => `${fx.replace('fixture-', '').replace('fixture', 'ident')} ${pct(at1(ps, (p) => convexRank(p, a)), ps.length)}`).join('   '));
 }
 console.log('  rr alone '.padEnd(9) + sets.map(({ fx, ps }) => `${fx.replace('fixture-', '').replace('fixture', 'ident')} ${pct(at1(ps, (p) => [...p.pool].sort((x, y) => y.rr - x.rr).map((c) => c.id)), ps.length)}`).join('   '));
+
+// Route the blend weight by the QUERY'S SHAPE (Robert, 2026-10-30: "the type of question could be
+// a signal"). The shape comes from the query text only, never from which fixture it is in. Dumps
+// are in fixture order (stage-diagnose.ts does not shuffle), so dump[i] is fixture item i.
+const FX: Record<string, string> = { 'fixture-nl': 'fixture-nl.json', 'fixture-category': 'fixture-category.json', 'fixture': 'fixture.json' };
+const SW = new Set('the a an and or of to in on for is are was were be been with what when where which who how did do does have has had at by from as it this that not but all any can will would should could into than then there their they them its we our i my you why about'.split(' '));
+const natural = (q: string) => {
+  const w = q.toLowerCase().match(/[a-z0-9_.\-/]+/g) ?? [];
+  const qword = /^(what|how|why|when|where|which|who|did|do|does|is|are|was|were|can|should|has|have)\b/i.test(q.trim()) || q.trim().endsWith('?');
+  return qword || w.filter((t) => SW.has(t)).length / Math.max(1, w.length) >= 0.3;
+};
+console.log('\nrouted by query shape: natural -> a_nat, keyword -> a_kw   (share of each fixture routed natural)');
+const queries = Object.fromEntries(sets.map(({ fx }) => [fx, (JSON.parse(readFileSync(join(import.meta.dirname, FX[fx]!), 'utf8')).items as any[]).map((i) => String(i.query))]));
+for (const fx of Object.keys(queries)) {
+  const qs = queries[fx]!; console.log(`  ${fx}: ${(100 * qs.filter(natural).length / qs.length).toFixed(1)}% routed natural`);
+}
+for (const [aNat, aKw] of [[0.5, 0.85], [0.5, 0.9], [0.6, 0.85], [0.7, 0.85], [0.5, 0.95]] as const) {
+  console.log(`  a_nat=${aNat} a_kw=${aKw}  ` + sets.map(({ fx, ps }) => {
+    const qs = queries[fx]!;
+    const hit = ps.filter((p, i) => convex(p, natural(qs[i] ?? '') ? aNat : aKw)[0] === p.goldId).length;
+    return `${fx.replace('fixture-', '').replace('fixture', 'ident')} ${pct(hit, ps.length)}`;
+  }).join('   '));
+}
