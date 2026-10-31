@@ -183,6 +183,14 @@ function describeQuestions(q: import('./core/questions.js').QuestionsOutcome | u
     + (q.dropped.some((d) => d.reason === 'invalid') ? '; some dropped as empty, too short or too long' : '');
 }
 
+/** 0.22: one line on what a slot write did. Empty when no slot was given. */
+function describeSlot(s: import('./core/write-pipeline.js').WriteResult['slot']): string {
+  if (!s) return '';
+  if (s.replaced) return `\nSlot ${s.slot}: replaced "${s.replaced.concept}" (${s.replaced.id}) — it is now superseded by this memory.`;
+  if (s.keptAsHistoryOf) return `\nSlot ${s.slot}: kept as history — ${s.keptAsHistoryOf} holds a newer (or more trusted) value, so it stays current.`;
+  return `\nSlot ${s.slot}: this memory now holds it.`;
+}
+
 // Coordination DB handle — set when AWM_COORDINATION=true, used by memory_write for decision propagation
 let coordDb: import('better-sqlite3').Database | null = null;
 
@@ -320,6 +328,10 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('ISO date when the FACT becomes valid (temporal validity, not ingestion time).'),
     valid_to: z.string().optional()
       .describe('ISO date when the FACT stops being valid (e.g., a deadline or a superseding change).'),
+    slot: z.string().max(200).optional()
+      .describe('The entity + attribute this memory states, e.g. "rosterkeep.deploy-command" or "robert.flight-time". A later write to the same slot (same agent, same memory_class) supersedes this one automatically — you do not need its id. An older fact (earlier valid_from) is kept as history instead of replacing a newer one. Use it for values that change.'),
+    supersedes_slot: z.boolean().optional()
+      .describe('false keeps a deliberate second fact in the same slot instead of superseding the current one.'),
     questions: z.array(z.string()).max(10).optional()
       .describe('Up to 5 natural questions this memory answers, the way someone would ask them later without remembering its wording, file names or IDs (e.g. "How do I ship the club app to production?"). Indexed for keyword search only (never embedded). Measured: lifts recall of naturally phrased questions with no loss on exact lookups.'),
     intent: z.enum(['decision', 'question', 'todo', 'finding', 'context']).optional()
@@ -394,6 +406,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       validFrom: params.valid_from,
       validTo: params.valid_to,
       questions: params.questions,
+      slot: params.slot,
+      supersedesSlot: params.supersedes_slot,
     });
 
     // Auto-checkpoint — covers create/reinforce/supersede uniformly
@@ -453,6 +467,7 @@ The concept should be a short label (3-8 words). The content should be the full 
         text: `Stored (${salience.disposition}) "${engram.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
           + (result.redaction ? `\n${describeFindings(result.redaction)}` : '')
           + describeQuestions(result.questions)
+          + describeSlot(result.slot)
           + correctionNote
           + trustNote
           + (isLowSalience

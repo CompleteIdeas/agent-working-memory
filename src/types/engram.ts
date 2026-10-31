@@ -73,6 +73,8 @@ export interface Engram {
   validTo?: string | null;        // ISO date/datetime — set when a fact expires/superseded by time
   /** 0.22: natural questions this memory answers. Indexed for keyword search only. */
   questions?: string[] | null;
+  /** 0.22: the entity + attribute this memory states; a newer write to the same slot supersedes it. */
+  slot?: string | null;
 
   /**
    * When `stage` last changed, ISO. **Null means it has never transitioned** —
@@ -204,6 +206,8 @@ export interface EngramCreate {
   validTo?: string;
   /** 0.22: natural questions this memory answers (≤ 5), indexed for keyword search only. */
   questions?: string[];
+  /** 0.22: the entity + attribute this memory states, e.g. `rosterkeep.deploy-command`. */
+  slot?: string;
 }
 
 /**

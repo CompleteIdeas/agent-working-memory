@@ -110,6 +110,7 @@ function rowToEngram(row: any): Engram {
     validFrom: (row.valid_from as string | null) ?? null,
     validTo: (row.valid_to as string | null) ?? null,
     questions: row.questions ? JSON.parse(row.questions as string) : null,
+    slot: (row.slot as string | null) ?? null,
     stageChangedAt: (row.stage_changed_at as string | null) ?? null,
   } as Engram;
 }
@@ -268,14 +269,14 @@ export class PGliteEngramStore {
         salience_features, reason_codes, stage, ttl, retracted,
         tags, memory_type, memory_class, supersedes, episode_id,
         task_status, task_priority, blocked_by, sequence, references_json,
-        origin_class, writer_session, recipe_id, valid_from, valid_to, questions
+        origin_class, writer_session, recipe_id, valid_from, valid_to, questions, slot
       ) VALUES (
         $1, $2, $3, $4, $5::vector, $6,
         $7, $8, 0, $9, $10,
         $11, $12, 'active', $13, FALSE,
         $14, $15, $16, $17, $18,
         $19, $20, $21, $22, $23,
-        $24, $25, $26, $27, $28, $29
+        $24, $25, $26, $27, $28, $29, $30
       )`,
       [
         id,
@@ -307,6 +308,7 @@ export class PGliteEngramStore {
         input.validFrom ?? null,
         input.validTo ?? null,
         input.questions && input.questions.length > 0 ? JSON.stringify(input.questions) : null,
+        input.slot ?? null,
       ],
     );
 
@@ -829,6 +831,17 @@ export class PGliteEngramStore {
   async updateMemoryClass(id: string, memoryClass: MemoryClass): Promise<void> {
     await this.readyPromise;
     await this.db.query(`UPDATE engrams SET memory_class = $1 WHERE id = $2`, [memoryClass, id]);
+  }
+
+  /** The active, current holder of a slot for this agent and memory class, or null (newest wins). */
+  async getSlotHolder(agentId: string, memoryClass: string, slot: string): Promise<Engram | null> {
+    await this.readyPromise;
+    const res = await this.db.query<any>(
+      `SELECT * FROM engrams WHERE agent_id = $1 AND slot = $2 AND memory_class = $3 AND stage = 'active'
+         AND retracted = FALSE AND superseded_by IS NULL ORDER BY created_at DESC LIMIT 1`,
+      [agentId, slot, memoryClass],
+    );
+    return res.rows[0] ? rowToEngram(res.rows[0]) : null;
   }
 
   /** Set (or replace) the questions a memory answers. The tsvector trigger re-indexes the row. */

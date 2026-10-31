@@ -162,12 +162,18 @@ export interface WriteInput {
   validTo?: string;
   /** 0.22: natural questions this memory answers (≤ 5), indexed for keyword search only. */
   questions?: string[];
+  /** 0.22: the entity + attribute this memory states; a newer write to it supersedes the holder. */
+  slot?: string;
+  /** 0.22: false keeps a deliberate second fact in the same slot instead of superseding. */
+  supersedesSlot?: boolean;
 }
 
 export interface WriteResult {
   action: WriteAction;
   /** 0.22: what happened to the questions offered with this write. */
   questions?: QuestionsOutcome;
+  /** 0.22: what the slot did — replaced its holder, kept this as history, or neither. */
+  slot?: { slot: string; replaced: { id: string; concept: string } | null; keptAsHistoryOf: string | null };
   /**
    * For action='create' or 'supersede': the newly created engram.
    * For action='reinforce': the EXISTING engram that was reinforced
@@ -260,6 +266,35 @@ async function performWriteRedacted(
   input: WriteInput,
 ): Promise<WriteResult> {
   const { store, connectionEngine } = engines;
+
+  // 0.22 slots: a write naming a slot replaces the slot's current holder for the same agent and
+  // memory class — supersession without the agent knowing the old memory's id. Guards
+  // (docs/plan-0.22-write-time-memory-2026-10-31.md §4.3): scoped by agent + class; only a newer
+  // fact replaces (valid_from when either side has one, else write time), so a late retry is kept
+  // as history, never as the current value; and a slot write never takes the concept-equality
+  // merge below — the slot is the identity, not the closest-content match.
+  let slotHistoryOf: string | null = null;
+  let slotOutcome: WriteResult['slot'];
+  const slot = input.slot?.trim().toLowerCase() || undefined;
+  if (slot) {
+    input = { ...input, slot };
+    const memoryClass = input.memoryClass ?? 'working';
+    const holder = await store.getSlotHolder(input.agentId, memoryClass, slot);
+    if (holder && !input.supersedes && input.supersedesSlot !== false) {
+      const incoming = Date.parse(input.validFrom ?? new Date().toISOString());
+      const current = Date.parse(holder.validFrom ?? new Date(holder.createdAt).toISOString());
+      if (Number.isFinite(incoming) && Number.isFinite(current) && incoming < current) {
+        slotHistoryOf = holder.id;
+        slotOutcome = { slot, replaced: null, keptAsHistoryOf: holder.id };
+      } else {
+        input = { ...input, supersedes: holder.id };
+        slotOutcome = { slot, replaced: { id: holder.id, concept: holder.concept }, keptAsHistoryOf: null };
+      }
+    } else {
+      slotOutcome = { slot, replaced: null, keptAsHistoryOf: null };
+    }
+  }
+
   // An explicit `supersedes` argument outranks every novelty signal: the caller has
   // NAMED the engram this write replaces. Gating reinforcement off it routes the write
   // to createNewEngram, which is the only path that honors meta.supersedesId (see the
@@ -275,7 +310,9 @@ async function performWriteRedacted(
     && !input.correction
     // A session note must never merge into a durable memory: that is how working
     // chatter would end up inside a canonical fact.
-    && input.scope !== 'session';
+    && input.scope !== 'session'
+    // A slot write is identified by its slot, never merged by concept (0.22).
+    && !input.slot;
 
   // Profiling: AWM_PROFILE_WRITE=1 logs ms-per-phase to stderr (v0.8.2).
   // Off by default; zero cost when unset.
@@ -562,6 +599,17 @@ async function performWriteRedacted(
     );
   }
 
+  // 0.22 slots: a write the trust check stopped from retiring the holder must not become the
+  // holder by being newest — it is kept as history, like an older fact.
+  if (slotOutcome?.replaced && result.trustBlocked?.matchedId === slotOutcome.replaced.id) {
+    slotHistoryOf = slotOutcome.replaced.id;
+    slotOutcome = { slot: slotOutcome.slot, replaced: null, keptAsHistoryOf: slotOutcome.replaced.id };
+  }
+  // An older fact for a slot is kept, but as history of the current holder.
+  if (slotHistoryOf && result.engram?.id && result.engram.id !== slotHistoryOf) {
+    try { await store.supersedeEngram(result.engram.id, slotHistoryOf); } catch { /* history link is best-effort */ }
+  }
+  if (slotOutcome) result.slot = slotOutcome;
   return result;
 }
 
@@ -775,6 +823,7 @@ async function createNewEngram(
     recipeId: input.recipeId,
     validFrom: input.validFrom,
     validTo: input.validTo,
+    slot: input.slot,
     embedding: prewriteEmbedding && prewriteEmbedding.length > 0
       ? prewriteEmbedding
       : undefined,

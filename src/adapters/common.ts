@@ -518,6 +518,12 @@ extraction all see most strongly.
   notes are written. Measured on a real store: natural-language recall up
   6 points, no loss on exact lookups. Vary them — what happened or was
   decided, why, and a practical "how do I / where is".
+- **Give a \`slot\` to any value that can change.** A slot names the entity
+  and attribute: \`robert.flight-time\`, \`rosterkeep.deploy-command\`,
+  \`club.fall-fee\`. Writing the same slot again replaces the old value
+  automatically — you do not need its id, and you cannot forget to
+  supersede. An older fact (earlier \`valid_from\`) is kept as history, never
+  as the current value. Same agent and memory class only.
 - **Reserve canonical for stable invariants.** Decisions, requirements,
   hard facts, cross-agent shared context. Working class (default) is correct
   for findings, observations, and progress notes. The canonical floor is

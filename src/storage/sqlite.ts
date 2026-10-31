@@ -464,7 +464,31 @@ export class EngramStore {
     } catch {
       this.db.exec(`ALTER TABLE engrams ADD COLUMN questions TEXT`);
     }
+    // Migration (0.22): slot — the entity + attribute a memory states (e.g.
+    // `rosterkeep.deploy-command`). A write naming a slot supersedes the active holder of the
+    // same slot, agent and memory class (src/core/write-pipeline.ts).
+    try {
+      this.db.prepare('SELECT slot FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN slot TEXT`);
+    }
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_engrams_slot ON engrams(agent_id, slot) WHERE slot IS NOT NULL`);
     this.migrateFtsWithQuestions();
+  }
+
+  /**
+   * The active, current holder of a slot for this agent and memory class, or null. Current
+   * means not superseded and not retracted; when several qualify (written before 0.22 rules),
+   * the newest wins.
+   */
+  getSlotHolder(agentId: string, memoryClass: string, slot: string): Engram | null {
+    const row = this.db.prepare(`
+      SELECT * FROM engrams
+      WHERE agent_id = ? AND slot = ? AND memory_class = ? AND stage = 'active'
+        AND retracted = 0 AND superseded_by IS NULL
+      ORDER BY created_at DESC LIMIT 1
+    `).get(agentId, slot, memoryClass) as any;
+    return row ? this.rowToEngram(row) : null;
   }
 
   /**
@@ -549,8 +573,8 @@ export class EngramStore {
       INSERT INTO engrams (id, agent_id, concept, content, embedding, embedding_model, confidence, salience,
         access_count, last_accessed, created_at, salience_features, reason_codes, stage, tags, episode_id,
         ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type,
-        sequence, references_json, origin_class, writer_session, recipe_id, valid_from, valid_to, questions)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sequence, references_json, origin_class, writer_session, recipe_id, valid_from, valid_to, questions, slot)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.agentId, input.concept, input.content, embeddingBlob,
       // Stamp the model with the vector (2026-10-24). This INSERT never wrote
@@ -582,6 +606,7 @@ export class EngramStore {
       input.validFrom ?? null,
       input.validTo ?? null,
       input.questions && input.questions.length > 0 ? JSON.stringify(input.questions) : null,
+      input.slot ?? null,
     );
 
     // Add to slim cache (skip if not yet populated — first slim fetch will load it)
@@ -1671,6 +1696,7 @@ export class EngramStore {
       validTo: row.valid_to ?? null,
       stageChangedAt: row.stage_changed_at ?? null,
       questions: row.questions ? JSON.parse(row.questions) : null,
+      slot: row.slot ?? null,
     };
   }
 

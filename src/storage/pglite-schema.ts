@@ -74,6 +74,9 @@ export const PGLITE_SCHEMA_DDL = `
   -- lookup never matches a memory through its own questions.
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS questions      TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS fts_q          tsvector;
+  -- 0.22: the entity + attribute a memory states; a newer write to the same slot supersedes it.
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS slot           TEXT;
+  CREATE INDEX IF NOT EXISTS idx_engrams_slot ON engrams(agent_id, slot) WHERE slot IS NOT NULL;
 
   -- Stage-transition timestamp (A-4, 2026-10-12). Nullable with no backfill:
   -- null means the engram has never changed stage, so readers fall back to

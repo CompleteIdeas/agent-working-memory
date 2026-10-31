@@ -131,6 +131,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       correction?: boolean;
       /** 0.22: natural questions this memory answers (≤ 5), indexed for keyword search only. */
       questions?: string[];
+      /** 0.22: entity + attribute; a newer write to the same slot supersedes the holder. */
+      slot?: string;
+      supersedesSlot?: boolean; supersedes_slot?: boolean;
     };
 
     if (!body.agentId || typeof body.agentId !== 'string' ||
@@ -191,6 +194,8 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       validTo: body.validTo ?? body.valid_to,
       correction: body.correction === true,
       questions: Array.isArray(body.questions) ? body.questions : undefined,
+      slot: typeof body.slot === 'string' ? body.slot : undefined,
+      supersedesSlot: body.supersedesSlot ?? body.supersedes_slot,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
@@ -206,6 +211,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         novelty: result.noveltyResult.novelty,
         ...(result.redaction ? { redaction: result.redaction } : {}),
         ...(result.questions ? { questions: result.questions } : {}),
+        ...(result.slot ? { slot: result.slot } : {}),
       });
     }
 
@@ -240,6 +246,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       action: result.action,
       ...(result.redaction ? { redaction: result.redaction } : {}),
       ...(result.questions ? { questions: result.questions } : {}),
+        ...(result.slot ? { slot: result.slot } : {}),
       // disposition: legacy field — 'low-salience' is returned for discard so
       // callers know the engram was kept but marked low-value. The raw inner
       // salience decision is exposed as `salienceDisposition` for callers
