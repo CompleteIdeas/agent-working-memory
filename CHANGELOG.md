@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Behaviour changes — read before upgrading
+
+- **Recall order changes.** The candidates reaching the cross-encoder, and how its score is
+  combined, are new (below). Measured better on every fixture; a recall can still return a
+  different first result than 0.21.0. `AWM_PRESELECT=composite`, `AWM_RERANK_POOL=40` with
+  `AWM_TOPN_MIN=0`, and `AWM_BLEND=off` restore each piece.
+- **Recall is about 21% slower at the median** (32 cross-encoder pairs instead of 24).
+- **Recalibrate the opt-in gate.** It reads cross-encoder scores, and their distribution moved:
+  run `awm calibrate` after upgrading if `AWM_ABSTAIN_GATE=calibrated` is set.
+- **Consolidation no longer rewrites the same pattern synthesis each cycle.** Existing duplicates
+  stay until they fade; nothing is deleted.
+- **A reranker that fails to load is reported** once on stderr, and an `AWM_RERANKER_MODEL`
+  without a quantized file now loads at fp32 instead of failing silently.
+
 ### Recall: a fused shortlist, a 32-candidate pool that is real, and a blended final order
 
 Measured on the frozen real store at k=3, first result correct:
@@ -65,6 +79,35 @@ fixtures, and **18 of 80** (22%) on a new natural-language fixture of 194 questi
 calibration probes are keyword-shaped, so naturally phrased questions score below the floor it
 learns. Never-stored facts are still withheld at the same rate (65 of 73, plus 1 empty). Every
 doc carrying the old figure is corrected.
+
+### The calibrated gate under the new ranking
+
+Re-measured with `tests/realstore-eval/gate-eval.ts` after recalibrating on the 0.21.1 ranking:
+
+| | 0.21.0 ranking | 0.21.1 ranking |
+|---|---|---|
+| keyword: right memory first | 695 / 750 | 706 / 750 |
+| keyword: correct answers withheld | 1 | 2 |
+| never-stored withheld | 65 / 73 (+1 empty) | 65 / 73 (+1 empty) |
+| keyword deleted-fact withheld | 92 / 200 | 98 / 200 |
+| natural-language: right memory first | 80 / 194 | 88 / 194 |
+| natural-language: correct answers withheld | 18 / 80 | 21 / 88 |
+| natural-language deleted-fact withheld | 69 / 97 | 60 / 97 |
+
+The natural-language weakness is unchanged: the gate is calibrated on keyword-shaped probes and has
+never seen a natural question with an answer. `docs/abstention-signals-2026-10-30.md` measures why
+and what would fix it; the fix (calibration on questions stored with each memory) is planned for
+0.22 (`docs/plan-0.22-write-time-memory-2026-10-31.md`).
+
+### Consolidation wrote the same pattern synthesis every cycle
+
+Type B pattern synthesis's only guard was "no cluster member is a synthesis", and the same clusters
+re-formed each cycle without it: the 2026-08-24 snapshot held 18,368 pattern rows of 147 distinct
+concepts (a live store: 347 rows, 103 distinct, still growing). A pattern whose concept is already
+held by an active pattern is now skipped (`tests/engine/pattern-synth-dedup.test.ts`). The copies'
+centroid embeddings took vector #1 on 119 of 194 natural-language questions, yet cost no top-3
+placement end to end — the cross-encoder sends them away — so this is store hygiene, not a ranking
+fix.
 
 ### The model daemon refused a world-writable run dir only in theory
 

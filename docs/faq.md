@@ -83,11 +83,11 @@ goes stale. Each recall is then answered, answered with a `⚠ LOW SIGNAL` flag,
 
 Measured on that one store with keyword-style questions:
 - it withholds 66 of 73 questions about facts never stored;
-- it withholds 1 of 695 correct answers, and flags 4;
+- it withholds 2 of 706 correct answers, and flags 3;
 - of 200 absent questions asked in familiar vocabulary (the answer deleted, its neighbours
-  kept), it withholds 92 and flags 30. That is the hard case.
+  kept), it withholds 98 and flags 28. That is the hard case.
 
-On natural-language questions it is much less careful: it withholds 18 of 80 correct answers,
+On natural-language questions it is much less careful: it withholds 21 of 88 correct answers,
 because its calibration probes are keyword-shaped. It has not been measured on other stores. See
 [abstention.md](abstention.md).
 

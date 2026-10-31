@@ -41,7 +41,7 @@ no external calls. The rest of this page is the plain-language tour of those pie
 5. **Stay bounded** — Automatic eviction, edge pruning, and association decay prevent unbounded memory growth
 6. **Keep secrets out of the store** — Write-time redaction (on by default) masks credentials before a write is stored, indexed, embedded or logged. It is shape-based: a bare random string with no label is not caught. See [`redaction.md`](redaction.md)
 7. **Know a secret without telling it** *(opt-in, `AWM_VAULT=on`)* — Secrets are sealed in an encrypted `vault.db` with the key in the OS credential store; the memory keeps a handle, and `awm vault run` injects the value into commands the user allowed. See [`vault.md`](vault.md)
-8. **Say when it doesn't have something** *(opt-in, `AWM_ABSTAIN_GATE=calibrated`)* — A gate fitted per agent from the store itself answers, flags a low signal, or withholds. Measured on one real store with keyword-style questions: it withholds 66 of 73 never-stored facts and 1 of 695 correct answers (on natural-language questions, 18 of 80). The default gate does not do this (it withheld 0 of 10 absent-fact probes). See [`abstention.md`](abstention.md)
+8. **Say when it doesn't have something** *(opt-in, `AWM_ABSTAIN_GATE=calibrated`)* — A gate fitted per agent from the store itself answers, flags a low signal, or withholds. Measured on one real store with keyword-style questions: it withholds 66 of 73 never-stored facts and 2 of 706 correct answers (on natural-language questions, 21 of 88). The default gate does not do this (it withheld 0 of 10 absent-fact probes). See [`abstention.md`](abstention.md)
 
 ## Glossary
 

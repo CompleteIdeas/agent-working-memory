@@ -76,40 +76,44 @@ the fact *is* stored.
 ## Measured: the shipped code on the real snapshot
 
 `tests/realstore-eval/gate-eval.ts` runs the real `calibrateGate()` per agent from the store
-alone, switches the gate on, and sends every labelled question through ordinary recall.
+alone, switches the gate on, and sends every labelled question through ordinary recall. Figures
+below are for the 0.21.1 ranking (fused shortlist, 32-candidate pool, blended order), recalibrated;
+the 0.21.0 figures are in the CHANGELOG.
 
 | | Answered | ⚠ Low signal | Withheld |
 |---|---|---|---|
-| Correct answers (695) | 690 | 4 | **1** |
-| Absent, new vocabulary (73) | 4 | 3 | **65 (89%)** + 1 empty |
-| Absent, familiar vocabulary (200) | 78 | 30 | **92 (46%)** |
+| Correct answers (706) | 701 | 3 | **2** |
+| Absent, new vocabulary (73) | 5 | 2 | **65 (89%)** + 1 empty |
+| Absent, familiar vocabulary (200) | 74 | 28 | **98 (49%)** |
 
 The same gate on **natural-language questions** (`GATE_FIXTURE=fixture-nl.json`: 194 questions
 written per memory, vetted to use at most one store-rare word and no identifiers):
 
 | | Answered | ⚠ Low signal | Withheld |
 |---|---|---|---|
-| Correct answers (80) | 56 | 6 | **18 (22%)** |
-| Absent, new vocabulary (73) | 4 | 3 | **65 (89%)** + 1 empty |
-| Absent, familiar vocabulary (97) | 19 | 9 | **69 (71%)** |
+| Correct answers (88) | 64 | 3 | **21 (24%)** |
+| Absent, new vocabulary (73) | 5 | 2 | **65 (89%)** + 1 empty |
+| Absent, familiar vocabulary (97) | 28 | 9 | **60 (62%)** |
 
 **Correction (2026-10-30).** 0.21.0 published "0 of 694 correct answers withheld". The harness
 judged correctness from the gated recall, so a withheld answer could never be counted correct;
-the figure was 0 by construction. It now judges correctness from an ungated recall.
+the figure was 0 by construction. It now judges correctness from an ungated recall; on the 0.21.0
+ranking the true figure was 1 of 695.
 
-Calibration took 118 s for the 7,458-memory agent and 92 s for the 1,215-memory one. The two
-agents got different floors (answer at −0.60 and −1.87), which is the gate adapting to each
-store.
+The two agents get different floors (answer at −0.93 and −2.10 on this run), which is the gate
+adapting to each store.
 
 **What this means:**
-- **Never-stored facts:** AWM now withholds 90% of questions about facts that were never stored,
-  up from about 0%.
-- **Correct answers:** on keyword-shaped questions it withholds one and flags four. On
-  natural-language questions it withholds 18 of 80. Calibration generates keyword-shaped probes
-  (title words plus a distinctive term), so a naturally phrased question scores below the floor
-  it learned. Fixing the probes is the next step.
-- **The hard case:** facts whose surroundings are familiar but the answer is gone. It withholds
-  or flags 61% and still answers 39%.
+- **Never-stored facts:** AWM withholds 89% of questions about facts that were never stored, up
+  from about 0% with the default gate.
+- **Correct answers:** on keyword-shaped questions it withholds two of 706 and flags three. On
+  natural-language questions it withholds 21 of 88. Calibration generates keyword-shaped probes
+  (title words plus a distinctive term), so a naturally phrased question scores below the floor it
+  learned. Why, measured, and the fix planned for 0.22:
+  [abstention-signals-2026-10-30.md](abstention-signals-2026-10-30.md).
+- **The hard case:** facts whose surroundings are familiar but the answer is gone. On keyword
+  questions it withholds or flags 63% and still answers 37%; on natural-language questions it
+  withholds or flags 71% and answers 29%.
 
 ## Limits
 
