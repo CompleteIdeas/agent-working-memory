@@ -268,6 +268,49 @@ features are computed).
   latency rises more than 10% without a CHANGELOG line; `benchmarks-current.md` and the README's
   numbers are generated from that output, not typed.
 
+### 4.11 Profiles: the user chooses the trade-off, with the numbers in front of them
+
+(Robert, 2026-10-31: a user may turn on a model if it is fast and the gain is shown — "this could
+increase your natural language, but you would have to turn on this decision model".)
+
+AWM ships as a set of profiles, one setting (`AWM_PROFILE`, also offered by `awm setup`), each a
+named bundle of the switches that already exist or that this plan adds. Every profile is a row on
+the generated benchmark page, so the README can say "turn this on and natural-language recall goes
+from X to Y, at this cost" from measured numbers.
+
+| Profile | Adds | What it buys | What it costs |
+|---|---|---|---|
+| `lean` | embedder + reranker (0.21.1) | keyword and topic recall at full strength | nothing new |
+| `natural` | + embedded question generator in the daemon, off the hot path (§4.4) | natural-language recall (step 0 sample: +6.2 with agent-written questions) | daemon memory; background CPU after writes |
+| `careful` | + answer-check reader on the top 1–3 results (§4.6b) | "does not know" past the 0.82 deleted-fact ceiling, if it passes its bar | recall latency, capped at +15% median |
+| `full` | `natural` + `careful` | both | both |
+
+A profile is only offered once its row exists on the benchmark page; until then it is not listed.
+Individual env switches keep working and override the profile, so nothing an operator has set
+changes underneath them.
+
+### 4.12 Capability hand-off: the host's model does the work
+
+AWM serves agents on any runtime — Claude Code, MWA (an agent runtime with its own decision
+model), other CLIs, other platforms — all sharing one store. A host that already runs a model can
+do AWM's model work with it, instead of AWM embedding one or calling a hosted service (which the
+2026-10-31 rule excludes).
+
+The cognition-recipe hand-off becomes an interface:
+
+- A connecting host declares what it can do, once per session: `capabilities: ["questions",
+  "answer-check", "skill-derivation", ...]` on `memory_restore` (MCP) or a header on the HTTP API.
+- When AWM has such a job — a memory missing questions, a recall whose answer needs checking — and
+  the connected host declared the capability, AWM hands the job to it (the existing recipe shape:
+  a versioned prompt, a strict output contract, written back with provenance). Otherwise the
+  embedded model does it if the profile enables one, otherwise the job waits.
+- Results are validated the same way whoever produced them (the self-retrieval filter for
+  questions, the contract shape for everything).
+
+What this makes possible: the agent's own intelligence improves the shared memory, and the improved
+memory serves every agent connected to it, on any platform — the "LLM supercharging itself with
+memory it can share" framing. MWA is the first host to wire it.
+
 ## 5. What does not change
 
 MCP tool names and existing parameters; the three storage backends; redaction and the vault; memory
@@ -320,6 +363,8 @@ Each step lands with its tests and its benchmark run; nothing proceeds on an unm
 | 5 | Ranking factors: measure removal one by one; retire what does not move a fixture | simpler core | 2 days |
 | 6 | Slots: inference, automatic supersession, history queries; stale-top-1 fixture | lifecycle target | 3 days |
 | 7 | Consolidation scaled back; trace output; bench as release gate; generated claims | observability | 2 days |
+| 7b | Profiles (§4.11): `AWM_PROFILE`, `awm setup` choice, one benchmark row per profile | user choice with numbers | 2 days |
+| 7c | Capability hand-off (§4.12): declaration on restore/HTTP, routing, validation; MWA wired as first host | shared intelligence | 3 days |
 | 8 | Docs, migration guide, CHANGELOG, Linux suite, release | ship | 1 day |
 
 About three weeks of focused work. Steps 0, 1 and 4 can start now; step 0 is blocked only on host
