@@ -28,12 +28,18 @@ export interface CalibrationOptions {
   seed?: number;
 }
 
-export async function calibrateGate(
+export type CalibrationProbe = { query: string; goldId: string | null };
+
+/**
+ * The synthetic queries calibration fits on, generated from the store alone: positives are a
+ * memory's title words plus a term unique to it; nulls mix two memories' title words, or draw
+ * random mid-frequency vocabulary. Exported so experiments fit on exactly what the gate does.
+ */
+export async function buildCalibrationProbes(
   store: EngramStore,
-  activation: ActivationEngine,
   agentId: string,
   opts: CalibrationOptions = {},
-): Promise<GateModel | null> {
+): Promise<{ pos: CalibrationProbe[]; nulls: CalibrationProbe[]; storeSize: number } | null> {
   const nPos = opts.positives ?? 150, nMixed = opts.mixedNulls ?? 100, nRandom = opts.randomNulls ?? 50;
   const rows = ((await store.getEngramsByAgent(agentId, 'active')) as Array<{ id: string; concept: string; content: string; supersededBy?: string | null }>)
     .filter((e) => !e.supersededBy);
@@ -54,7 +60,7 @@ export async function calibrateGate(
   const uniqueTerm = (r: { concept: string; content: string }) =>
     [...new Set(tok(`${r.concept} ${r.content}`))].find((t) => df.get(t) === 1 && !/\d|_/.test(t) && t.length >= 6);
 
-  type Probe = { query: string; goldId: string | null };
+  type Probe = CalibrationProbe;
   const pos: Probe[] = [], nulls: Probe[] = [];
   for (let tries = 0; pos.length < nPos && tries < nPos * 30; tries++) {
     const r = pick(rows); const cw = titleWords(r, 3); const u = uniqueTerm(r);
@@ -69,6 +75,19 @@ export async function calibrateGate(
   }
   for (let i = 0; i < nRandom; i++) nulls.push({ query: [pick(vocab), pick(vocab), pick(vocab)].join(' '), goldId: null });
   if (pos.length < 30 || nulls.length < 30) return null;
+  return { pos, nulls, storeSize: rows.length };
+}
+
+export async function calibrateGate(
+  store: EngramStore,
+  activation: ActivationEngine,
+  agentId: string,
+  opts: CalibrationOptions = {},
+): Promise<GateModel | null> {
+  const probes = await buildCalibrationProbes(store, agentId, opts);
+  if (!probes) return null;
+  const { pos, nulls } = probes;
+  type Probe = CalibrationProbe;
 
   const run = async (p: Probe) => {
     const res: any[] = await activation.activate({
@@ -106,7 +125,7 @@ export async function calibrateGate(
   };
   const t = thresholds(correct.map((r) => score(r.f)), nullRuns.map((r) => score(r.f)));
   return {
-    version: 1, agentId, fittedAt: new Date().toISOString(), storeSize: rows.length,
+    version: 1, agentId, fittedAt: new Date().toISOString(), storeSize: probes.storeSize,
     mu: m.mu, sd: m.sd, w: m.w, b: m.b, answerAt: t.answerAt, withholdBelow: t.withholdBelow,
     stats: { positives: posRuns.length, positivesCorrect: correct.length, nulls: nullRuns.length },
   };
