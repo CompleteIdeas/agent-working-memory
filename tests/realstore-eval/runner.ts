@@ -124,7 +124,7 @@ async function main() {
     'beyond (>400)': [] as boolean[],
   };
   const byClass: Record<string, boolean[]> = {};
-  let s1 = 0, s5 = 0, rr = 0, usefulTok = 0, missTok = 0, n = 0;
+  let s1 = 0, s5 = 0, rr = 0, usefulTok = 0, missTok = 0, n = 0, staleTop = 0;
   // Read-time cost is a campaign guard: warm recall is ~540ms p50 on a quiet
   // machine and 83% cross-encoder (measured, `npm run profile:recall` — this
   // comment said ~900ms and ~90% before either was instrumented), so an arm that
@@ -169,6 +169,9 @@ async function main() {
     const hit5 = idx >= 0 && idx < 5;
     traceLines.push(JSON.stringify({ i: qi++, query: it.query, goldId: it.goldId, rank: idx, top: res[0]?.engram?.id ?? null, topScore: res[0]?.score ?? null }));
     n++;
+    // Lifecycle: is the first result a memory that is no longer current? Plain keyword or vector
+    // search over the same store puts one first 8-32% of the time (baselines.ts, raw store).
+    if (res[0]?.engram && (res[0].engram.supersededBy || res[0].engram.retracted)) staleTop++;
     if (hit1) s1++;
     if (hit5) s5++;
     if (idx >= 0) rr += 1 / (idx + 1);
@@ -219,6 +222,7 @@ async function main() {
 
   const pct = (k: number, d: number) => (d ? `${(100 * k / d).toFixed(1)}%` : '—');
   console.log(`  success@1 ${pct(s1, n)}   success@5 ${pct(s5, n)}   MRR ${(rr / Math.max(n, 1) * 100).toFixed(1)}%`);
+  console.log(`  stale top-1: ${pct(staleTop, n)}   (a superseded or retracted memory ranked first)`);
   console.log(`  adversarial correctly silent: ${pct(abstained, advs.length)}   <- selectivity is rewarded here`);
   const sorted = [...lat].sort((a, b) => a - b);
   const p = (q: number) => (sorted.length ? sorted[Math.floor(sorted.length * q)] : 0);

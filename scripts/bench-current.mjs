@@ -260,6 +260,7 @@ function parseMetrics(out) {
     s1: num(/success@1\s+([\d.]+)%/),
     s5: num(/success@5\s+([\d.]+)%/),
     mrr: num(/MRR\s+([\d.]+)%/),
+    awmStaleTop: num(/stale top-1:\s+([\d.]+)%/),
     adversarialSilent: num(/adversarial correctly silent:\s+([\d.]+)%/),
     p50ms: num(/p50\s+(\d+)ms/),
     p90ms: num(/p90\s+(\d+)ms/),
@@ -338,12 +339,12 @@ function render(meta, results) {
   L.push('');
   L.push('## Retrieval');
   L.push('');
-  L.push('| Suite | probes | s@1 | s@5 | MRR | abstention | p50 | p90 |');
-  L.push('|---|---|---|---|---|---|---|---|');
+  L.push('| Suite | probes | s@1 | s@5 | MRR | abstention | stale top | p50 | p90 |');
+  L.push('|---|---|---|---|---|---|---|---|---|');
   for (const r of results.filter(r => RETRIEVAL_SUITES.some(s => s.id === r.id && !s.baseline) && r.id !== 'temporal')) {
-    if (!r.ok) { L.push(`| ${r.title} | — | _run failed_ | | | | | |`); continue; }
+    if (!r.ok) { L.push(`| ${r.title} | — | _run failed_ | | | | | | |`); continue; }
     const m = r.metrics;
-    L.push(`| ${r.title} | ${m.answerable ?? '—'} | **${pct(m.s1)}** | ${pct(m.s5)} | ${pct(m.mrr)} | ${pct(m.adversarialSilent)} | ${ms(m.p50ms)} | ${ms(m.p90ms)} |`);
+    L.push(`| ${r.title} | ${m.answerable ?? '—'} | **${pct(m.s1)}** | ${pct(m.s5)} | ${pct(m.mrr)} | ${pct(m.adversarialSilent)} | ${pct(m.awmStaleTop)} | ${ms(m.p50ms)} | ${ms(m.p90ms)} |`);
   }
   L.push('');
   for (const r of results.filter(r => r.ok && r.metrics?.sufficiency !== null && r.metrics?.sufficiency !== undefined)) {
