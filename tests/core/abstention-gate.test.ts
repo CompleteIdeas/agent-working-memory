@@ -11,15 +11,18 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  fitLogistic, thresholds, classify, featureVector, saveModel, loadModel, setGateModelPathForTests, type GateModel,
+  fitLogistic, thresholds, classify, featureVector, saveModel, loadModel, setGateModelPathForTests, GATE_MODEL_VERSION, type GateModel,
 } from '../../src/engine/abstention-gate.js';
 import { needsRecalibration } from '../../src/engine/abstention-calibration.js';
 import { EngramStore } from '../../src/storage/sqlite.js';
 import { ActivationEngine } from '../../src/engine/activation.js';
 
 const model = (over: Partial<GateModel> = {}): GateModel => ({
-  version: 2, agentId: 'a', fittedAt: new Date().toISOString(), storeSize: 100,
-  mu: new Array(8).fill(0), sd: new Array(8).fill(1), w: [1, 0, 0, 0, 0, 0, 0, 0], b: 0, answerAt: 1, withholdBelow: -1,
+  // The current feature version, with weight on the reranker logit only, so the band assertions
+  // hold for either version.
+  version: GATE_MODEL_VERSION, agentId: 'a', fittedAt: new Date().toISOString(), storeSize: 100,
+  ...(() => { const d = GATE_MODEL_VERSION === 2 ? 8 : 3; return { mu: new Array(d).fill(0), sd: new Array(d).fill(1), w: [1, ...new Array(d - 1).fill(0)] }; })(),
+  b: 0, answerAt: 1, withholdBelow: -1,
   stats: { positives: 100, positivesCorrect: 90, nulls: 100 }, ...over,
 });
 
@@ -163,7 +166,7 @@ describe('recall with the gate', () => {
 describe('feature version 2 (0.21.1: match density)', () => {
   it('builds eight features, the first three unchanged from version 1', () => {
     const f = { rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6, bm25Top: 12.5, cosineTop: 0.81, cosineGap: 0.2, cosineAbove70: 7, bm25RankTop: 0 };
-    const v2 = featureVector(f), v1 = featureVector(f, 1);
+    const v2 = featureVector(f, 2), v1 = featureVector(f, 1);
     expect(v2).toHaveLength(8);
     expect(v2.slice(0, 3)).toEqual(v1);
     expect(v2[3]).toBeCloseTo(Math.log1p(12.5));
@@ -171,20 +174,21 @@ describe('feature version 2 (0.21.1: match density)', () => {
   });
 
   it('treats missing density fields as zero, and an absent BM25 rank as zero', () => {
-    const v = featureVector({ rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6 });
+    const v = featureVector({ rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6 }, 2);
     expect(v.slice(3)).toEqual([0, 0, 0, 0, 0]);
-    expect(featureVector({ rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6, bm25RankTop: -1 })[7]).toBe(0);
+    expect(featureVector({ rerankTop: 0.9, rerankSecond: 0.4, vectorTop: 0.6, bm25RankTop: -1 }, 2)[7]).toBe(0);
   });
 
   it('does not score a saved model of another feature version', () => {
     const dir = mkdtempSync(join(tmpdir(), 'awm-gate-v-'));
     setGateModelPathForTests(join(dir, 'abstention-model.json'));
     try {
-      saveModel(model({ version: 1 }));
+      const other = GATE_MODEL_VERSION === 1 ? 2 : 1;
+      saveModel(model({ version: other }));
       expect(loadModel('a')).toBeNull();
       expect(needsRecalibration(loadModel('a'), 100)).toBe(true);
-      saveModel({ ...model(), version: 2, mu: new Array(8).fill(0), sd: new Array(8).fill(1), w: [1, 0, 0, 0, 0, 0, 0, 0] });
-      expect(loadModel('a')?.version).toBe(2);
+      saveModel(model());
+      expect(loadModel('a')?.version).toBe(GATE_MODEL_VERSION);
     } finally {
       setGateModelPathForTests(null);
       rmSync(dir, { recursive: true, force: true });

@@ -45,7 +45,11 @@ export type SignalBand = 'answer' | 'low' | 'withhold';
  * distribution — and the top result's BM25 rank. A model of another version is not scored
  * (`loadModel` returns null) and is refitted by `awm calibrate` or after consolidation.
  */
-export const GATE_MODEL_VERSION = 2;
+// Default 1 (measured 2026-10-31): v1's three signals beat the match-density set at the thresholds
+// the gate actually picks — keyword never-stored withheld 58/73 vs 51-55/73 — although the density
+// signals looked better in the offline ceiling (docs/abstention-signals-2026-10-30.md §14).
+// AWM_GATE_FEATURES=2 selects the eight-signal set.
+export const GATE_MODEL_VERSION: 1 | 2 = process.env.AWM_GATE_FEATURES === '2' ? 2 : 1;
 
 export interface GateModel {
   version: 1 | 2;

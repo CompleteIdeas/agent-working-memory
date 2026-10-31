@@ -397,3 +397,31 @@ Findings:
    natural-language recall in general (45–50%), not a recency problem.
 4. **The guard stands:** decay may leave the ranking path only if removing it moves this fixture
    by nothing beyond noise. The recency experiment stays an off-by-default switch.
+
+## 14. Gate calibration on the 0.22 store: every variant is a point on the same curve (2026-10-31)
+
+End to end (`gate-eval.ts`, snapshot with questions, 0.22 ranking). Natural-language "deleted" is
+the 97-question familiar set; never-stored is the 73-question set (keyword-shaped).
+
+| Gate | keyword correct withheld | never-stored withheld | keyword deleted withheld | NL correct withheld | NL deleted withheld |
+|---|---|---|---|---|---|
+| v1, one model (0.21.1, its own store) | 2 / 706 | **65** / 73 | **98** / 200 | 21 / 88 (24%) | **60** / 97 |
+| v2 signals, one model, question positives mixed in | 1 / 712 | 24 | 45 | 0 / 97 | 2 |
+| v2 signals, per shape, word-salad keyword nulls | 0 / 712 | 51 | 53 | 14 / 97 | 43 |
+| v2 signals, per shape, held-out keyword nulls | 1 / 712 | 55 | 79 | 12 / 97 | 44 |
+| **v1 signals, per shape** | 1 / 712 | 58 | 95 | **10 / 97 (10%)** | 23 |
+
+Findings:
+1. **No variant beats v1 on both counts.** Each lowers correct answers withheld by withholding
+   fewer deleted facts — the measured ceiling (§4–5, §12) at work: a gate can only choose where to
+   sit on the curve.
+2. **v1's three signals beat the match-density set at the thresholds the gate picks** on keyword
+   lookups (never-stored 58 vs 51–55), although the density set looked better in the offline
+   ceiling. The gate defaults back to v1 signals (`AWM_GATE_FEATURES=2` keeps the other set); a
+   0.21 gate model stays valid with no forced refit.
+3. **The natural model's thresholds collapse** (answer line = withhold line): with only 44–71
+   correct natural positives per agent, it has no "low" band. More natural practice — more stored
+   questions — is what would sharpen it.
+4. **Choosing the operating point for natural questions is a product decision**: v1 withholds a
+   quarter of correct natural answers and answers 28% of deleted ones; the per-shape model
+   withholds a tenth and answers ~76% of deleted ones.
