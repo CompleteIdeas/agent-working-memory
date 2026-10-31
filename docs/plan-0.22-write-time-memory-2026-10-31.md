@@ -121,31 +121,42 @@ adversarial concept matches) measures below 1%.
 This is the change that addresses "superseding is a tooling problem": an agent writing
 `slot: robert.flight-time` twice gets a correct history without knowing the first memory's id.
 
-### 4.4 Enrichment: questions written by the agent
+### 4.4 Enrichment: questions from the agent, or from an embedded model
 
-**No model inside AWM.** (Decision 1, §7.) Robert's recorded decision of 2026-10-12 — "AWM keeps
-deterministic salience, no LLM in the write path" (AWM memory d6d85d73; tenet at
-`src/adapters/common.ts:747`) — stands. Questions come from the writing agent:
+**The rule (Robert, 2026-10-31, replacing the 2026-10-12 "no LLM in the write path"):** AWM may
+embed a small or large language model, provided it is **embedded, not hosted**, and it **does not
+make the system slow**. (Decision 1, §7; AWM memory 6f3c7c5d.)
 
-- **At write time,** through the new `questions` field, asked for in the installed guidance.
-- **Afterwards,** through the cognition-recipe hand-off that already exists: memories missing
-  questions are handed to the calling agent on its next `memory_task_end` or `memory_restore`, a
-  few at a time, and it writes the questions back. `awm enrich --backfill` prints the count and
-  the recipe for an agent to work through.
+Questions come from, in order of preference:
 
-Two deterministic guards, because agents will comply unevenly and their output will drift:
+1. **The writing agent, at write time,** through the new `questions` field, asked for in the
+   installed guidance. Free, and the agent has the most context.
+2. **An embedded generator, off the hot path.** Memories missing questions go to a background
+   queue in the model daemon, which generates them with a local model (ONNX through
+   transformers.js, like the embedder and reranker). A write never waits for it: the memory is
+   searchable at once, and its questions are indexed when they are ready. The model is chosen by
+   measurement, smallest first (a doc2query T5-small class model, then a small instruction model),
+   against the agent-written questions on `wq-eval.ts`; it ships only if it reaches at least
+   two-thirds of the agent-written gain (NL +4 of the +6.2 on the sample) and keeps the daemon's
+   resident memory within its current budget.
+3. **The cognition-recipe hand-off,** for stores where the embedded generator is switched off:
+   memories missing questions are handed to the calling agent on its next `memory_task_end` or
+   `memory_restore`, a few at a time.
+
+No hosted model is called from AWM.
+
+Two deterministic guards, whichever source wrote the questions:
 
 - **Coverage is measured.** `awm doctor` and `memory_stats` report the share of active memories
   with questions, per agent; gate calibration (§4.6) uses stored questions only where coverage is
   at least 50%, and falls back to the 0.21 probes below that.
 - **A question must find its own memory.** A question is kept only if a keyword search for it
-  ranks its memory in the top 10 (the Doc2Query-- filter, arXiv 2301.03266). Bland or wrong
-  questions are dropped without a model.
+  ranks its memory in the top 10 (the Doc2Query-- filter, arXiv 2301.03266).
 
-An API path (`AWM_ENRICH_MODEL`) is **not** in 0.22. It would be added only if Robert reverses the
-2026-10-12 decision, and then opt-in. For reference: the experiment's generation used Claude Haiku
-5.5 from redacted text and needs a reply budget of at least 1,500 tokens, because the model may
-think first (half the first run came back empty at 200).
+`awm enrich --backfill` fills an existing store through the same queue and prints the count and
+an estimated time first. For reference, the experiment's questions were generated with Claude Haiku
+5.5 (hosted, for measurement only) from redacted text; a reply budget of at least 1,500 tokens was
+needed because the model may think first.
 
 ### 4.5 Recall
 
@@ -193,8 +204,8 @@ the signals (ledger §4–5): the deleted fact's neighbours are still there and 
 
 A question-answering encoder trained on SQuAD 2.0 does exactly the missing check: given a question
 and a passage it returns an answer span or "no answer". It is an encoder of the cross-encoder's
-class, not a generative model, and it runs on the **read** side, on the top 1–3 results only — so
-it does not touch the recorded "no LLM in the write path" decision. Its no-answer score becomes one
+class, not a generative model, and it runs on the **read** side, on the top 1–3 results only. It is embedded and local, which is
+what Robert's 2026-10-31 rule requires; the speed limit below is the other half of that rule. Its no-answer score becomes one
 more gate feature (and, where it finds a span, the span is the memory's quotable answer).
 
 Before it is built:
@@ -284,7 +295,7 @@ challenge accepted or rejected with a reason.
 
 | # | Decision | Recommendation | Why | Challenge taken |
 |---|---|---|---|---|
-| 1 | Enrichment default | **Agent-written questions only; no model inside AWM** | Robert's recorded no-LLM-in-the-write-path decision (2026-10-12) and the local-first tenet; the recipe hand-off already exists | Uneven agent compliance → coverage metric and calibration fallback; quality drift → deterministic self-retrieval filter. Rejected: "phrasing fragments the index" — more phrasings is the gain |
+| 1 | Enrichment default | **Agent-written first; an embedded local generator off the hot path second; recipe hand-off third; never a hosted model** | Robert's rule of 2026-10-31: embedded SLM/LLM allowed, no hosted model, speed maintained (replaces the 2026-10-12 no-LLM decision) | Uneven agent compliance → coverage metric and calibration fallback; quality drift → deterministic self-retrieval filter. Rejected: "phrasing fragments the index" — more phrasings is the gain |
 | 2 | Slot supersession | **Explicit slots supersede by default; inferred slots only suggest** | The agent naming a slot is the claim; inference runs on the trust-blind concept match a probe once exploited (memory 547368bf) | Scope collisions → workspace + agent + class namespacing; out-of-order writes → newer-only rule; merge interaction → slot writes skip concept merge |
 | 3 | Retire ranking factors | **Yes, one at a time, only where inert on every suite** | Boosts never change the real store's top result; composite is the weakest ranker | Top-1 too narrow → s@1/3/5 plus associative, multi-hop and public suites; "related" mode must be taught in guidance; escape hatch two releases, not one. Rejected: production query taxonomy — AWM has no telemetry by design |
 | 4 | Version | **0.22.0** | 0.x minor is the semver signal for behaviour change; the NL target is unmeasured end to end; claiming 1.0 before it is met is the overclaim Robert asked us to avoid | "Behaviour changes" section in the CHANGELOG; check memory-working-agent's pin before release. Rejected: default-off for every behaviour change — the ranking change is a measured improvement on every fixture |
