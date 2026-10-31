@@ -97,25 +97,55 @@ columns; tsvector includes questions.
 
 ### 4.3 Slots: supersession without a tool call
 
-A write that names a slot already held by an active memory of the same agent supersedes it, unless
-the write says it does not (`supersedes: false` for a deliberate second fact). Slot inference when
-the agent gives none, in order: an explicit `supersedes`; `correction: true`'s existing nearest-match
-logic; then the concept-equality match the write pipeline already uses for merges. Inference never
-supersedes across agents or across memory classes, and every automatic supersession is reported in
-the write reply so the agent sees it.
+**An explicit slot supersedes; an inferred one only suggests.** (Decision 2, §7.)
+
+A write that names a slot supersedes the active memory holding that slot, subject to four guards:
+
+1. **Scope.** The slot key is namespaced by workspace, agent and memory class. Two producers
+   writing `deploy-command` in different workspaces, or a working note against a canonical fact,
+   never touch each other.
+2. **Order.** It supersedes only if it is newer: a later `valid_from` when either memory has one,
+   otherwise a later write time. An older write arriving late (retries, clock skew, out-of-order MCP
+   delivery) is stored as history under the slot, never as the current holder.
+3. **Identity.** A slot write skips the concept-equality merge in `write-pipeline.ts:346`. The slot
+   is the identity; the trust-blind closest-content match (AWM memory 547368bf, the rule a probe
+   exploited) must not pick the target.
+4. **Visibility.** Every supersession is reported in the write reply, and `supersedes: false`
+   keeps a deliberate second fact.
+
+When the agent gives no slot, AWM does **not** supersede on inference. It reports a suggestion in
+the reply — "this may replace X (same concept, newer)" — and the agent decides. Inference becomes
+automatic only after a false-supersession fixture (scope collisions, out-of-order writes,
+adversarial concept matches) measures below 1%.
 
 This is the change that addresses "superseding is a tooling problem": an agent writing
 `slot: robert.flight-time` twice gets a correct history without knowing the first memory's id.
 
-### 4.4 Enrichment queue
+### 4.4 Enrichment: questions written by the agent
 
-When a write arrives without questions, a background job generates them. AWM contains no LLM, so
-the queue uses the same pattern as the cognition recipes: it hands the generation prompt to the
-calling agent on its next `memory_task_end` or `memory_restore`, or, when `AWM_ENRICH_MODEL` names
-an API model, calls it directly from the daemon. Questions are generated from redacted text. A
-backfill command (`awm enrich --backfill`) fills existing stores, with a cost estimate printed
-first. Cost with Claude Haiku 5.5 is estimated at about a dollar per 1,000 memories (to be confirmed against the bill for step 0's run); the reply budget must be ≥ 1,500
-tokens because the model may think first (half the first run came back empty at 200).
+**No model inside AWM.** (Decision 1, §7.) Robert's recorded decision of 2026-10-12 — "AWM keeps
+deterministic salience, no LLM in the write path" (AWM memory d6d85d73; tenet at
+`src/adapters/common.ts:747`) — stands. Questions come from the writing agent:
+
+- **At write time,** through the new `questions` field, asked for in the installed guidance.
+- **Afterwards,** through the cognition-recipe hand-off that already exists: memories missing
+  questions are handed to the calling agent on its next `memory_task_end` or `memory_restore`, a
+  few at a time, and it writes the questions back. `awm enrich --backfill` prints the count and
+  the recipe for an agent to work through.
+
+Two deterministic guards, because agents will comply unevenly and their output will drift:
+
+- **Coverage is measured.** `awm doctor` and `memory_stats` report the share of active memories
+  with questions, per agent; gate calibration (§4.6) uses stored questions only where coverage is
+  at least 50%, and falls back to the 0.21 probes below that.
+- **A question must find its own memory.** A question is kept only if a keyword search for it
+  ranks its memory in the top 10 (the Doc2Query-- filter, arXiv 2301.03266). Bland or wrong
+  questions are dropped without a model.
+
+An API path (`AWM_ENRICH_MODEL`) is **not** in 0.22. It would be added only if Robert reverses the
+2026-10-12 decision, and then opt-in. For reference: the experiment's generation used Claude Haiku
+5.5 from redacted text and needs a reply budget of at least 1,500 tokens, because the model may
+think first (half the first run came back empty at 200).
 
 ### 4.5 Recall
 
@@ -155,14 +185,23 @@ Keep: merge near-duplicates, link superseded versions, fade unrecalled content, 
 with its guards. Stop by default: pattern synthesis (it wrote one copy per cycle — 18,368 rows of 147
 patterns — and its rows rarely reach the top; `AWM_SYNTHESIS=on` keeps it). Session synthesis stays.
 
-### 4.8 Ranking factors retired
+### 4.8 Ranking factors: retire only what measures as inert
 
-Decay, Hebbian boosts, the graph walk and the composite score leave the ranking path. Evidence: the
-cross-encoder fully decides the final order today (`rank-diagnose.ts`: zero cases of a boost
-overriding it), and the composite is the weakest ranker measured (NL 9.8% alone). The graph stays,
-as an explicit exploration mode (`mode: "related"`), and decay keeps feeding fade and archive. This
-is measured before it ships (§8, step 5): if removing them moves any fixture by more than its noise,
-they stay.
+(Decision 3, §7.) Decay, Hebbian boosts, the graph walk and the composite score are candidates to
+leave the ranking path. Evidence for: the cross-encoder decides the final top result today
+(`rank-diagnose.ts`: zero cases of a boost overriding it), and the composite is the weakest ranker
+measured (NL 9.8% alone). Evidence against: a synthetic associative suite scored 1.0 and credited
+the graph walk and Hebbian links (AWM memory de5488c3), so the top-1 test alone is too narrow.
+
+Each factor is removed **one at a time** and kept unless its removal moves nothing beyond noise on
+**all** of: the three realstore fixtures at s@1, s@3 and s@5; the associative and multi-hop
+suites; the public synthetic corpus; and recall latency. What is removed:
+
+- the graph stays as `mode: "related"`, and the installed guidance tells agents when to use it
+  ("what else is connected to this"), so the capability does not disappear by going uncalled;
+- decay keeps feeding fade and archive;
+- `AWM_LEGACY_RANKING=1` restores the old path for **two** releases, because a dependent pinned to
+  0.21 may not upgrade within one.
 
 ### 4.9 Scaling
 
@@ -204,20 +243,27 @@ just without questions until enrichment runs.
 | The +6.2 sample gain does not hold on the full store | step 0 measures it before anything is built |
 | Generated questions are bland or wrong and pull wrong memories up | questions only in BM25 (measured safe); per-memory cap of 5; Doc2Query-style filter drops questions that do not retrieve their own memory |
 | Automatic slot supersession hides a fact that was not a replacement | same agent and class only; reported in every write reply; `supersedes: false` override; `memory_supersede` history is reversible |
-| API cost and privacy of enrichment | off unless configured; redaction before sending; cost estimate before backfill; agent-written questions cost nothing |
-| Retiring ranking factors loses something the fixtures do not test | measured per factor, with the public corpus too; `AWM_LEGACY_RANKING=1` escape hatch for one release |
+| Agents skip or botch the questions | coverage reported per agent; calibration falls back below 50% coverage; self-retrieval filter drops questions that do not find their memory |
+| Retiring ranking factors loses something the fixtures do not test | measured per factor, with the public corpus too; `AWM_LEGACY_RANKING=1` escape hatch for two releases |
 | Gate v2 still lands soft | ships only when it meets §2's gate targets end to end; otherwise v1 stays default |
 | Machine memory (OOM history) during benches | one heavy job at a time; orphan check after any reaped run (AWM lesson bdf277c3) |
 
-## 7. Open decisions for Robert
+## 7. Decisions: recommendations, pending Robert's sign-off
 
-1. **Enrichment default:** agent-written questions only (free, depends on the agent), or also an API
-   model when a key is configured?
-2. **Automatic slot supersession on by default,** or opt-in for one release?
-3. **Retire decay / Hebbian / graph from ranking** if step 5 shows no measurable effect — yes, or keep
-   them as a non-default mode?
-4. **Version:** 0.22.0, or call this 1.0 (new write contract, structural lifecycle, evaluated release
-   gate)?
+Evaluated 2026-10-31 with the first-class-delivery decision process: grounded in AWM memory and the
+code, challenged by an outside model (gpt-5.2-codex) for concrete production failures, each
+challenge accepted or rejected with a reason.
+
+| # | Decision | Recommendation | Why | Challenge taken |
+|---|---|---|---|---|
+| 1 | Enrichment default | **Agent-written questions only; no model inside AWM** | Robert's recorded no-LLM-in-the-write-path decision (2026-10-12) and the local-first tenet; the recipe hand-off already exists | Uneven agent compliance → coverage metric and calibration fallback; quality drift → deterministic self-retrieval filter. Rejected: "phrasing fragments the index" — more phrasings is the gain |
+| 2 | Slot supersession | **Explicit slots supersede by default; inferred slots only suggest** | The agent naming a slot is the claim; inference runs on the trust-blind concept match a probe once exploited (memory 547368bf) | Scope collisions → workspace + agent + class namespacing; out-of-order writes → newer-only rule; merge interaction → slot writes skip concept merge |
+| 3 | Retire ranking factors | **Yes, one at a time, only where inert on every suite** | Boosts never change the real store's top result; composite is the weakest ranker | Top-1 too narrow → s@1/3/5 plus associative, multi-hop and public suites; "related" mode must be taught in guidance; escape hatch two releases, not one. Rejected: production query taxonomy — AWM has no telemetry by design |
+| 4 | Version | **0.22.0** | 0.x minor is the semver signal for behaviour change; the NL target is unmeasured end to end; claiming 1.0 before it is met is the overclaim Robert asked us to avoid | "Behaviour changes" section in the CHANGELOG; check memory-working-agent's pin before release. Rejected: default-off for every behaviour change — the ranking change is a measured improvement on every fixture |
+
+**1.0 criteria,** so the version means something when it comes: the write contract unchanged for
+one full release; the NL target met end to end on the real store; the public reproducible benchmark
+running as the release gate; slot inference measured below 1% false supersession.
 
 ## 8. Build order
 
