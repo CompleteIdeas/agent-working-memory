@@ -3,10 +3,10 @@
 /**
  * 0.22: questions a memory answers are stored with it and indexed for KEYWORD search only.
  *
- * Pins: (1) a memory is found by words that appear only in its questions; (2) setQuestions
- * re-indexes an existing memory; (3) a pre-0.22 store with the three-column FTS index is
- * migrated on open — index rebuilt, nothing lost; (4) a secret written into a question is
- * redacted like one written into content.
+ * Pins: (1) a memory is found by words that appear only in its questions — through the
+ * questions index (withQuestions: true), never through the default one; (2) setQuestions
+ * re-indexes; (3) a pre-0.22 store keeps its three-column index untouched and gains the questions
+ * index on open; (4) a secret written into a question is redacted like one written into content.
  *
  * Run: npx vitest run tests/storage/questions-index.test.ts
  */
@@ -21,6 +21,7 @@ import type { IEngramStore } from '../../src/storage/store.js';
 
 const AGENT = 'q-index';
 const ids = (rs: Array<{ engram: { id: string } }>) => rs.map((r) => r.engram.id);
+const Q = { withQuestions: true };
 
 describe('questions in the keyword index', () => {
   let tmp: string; let dbPath: string; let store: EngramStore;
@@ -38,44 +39,62 @@ describe('questions in the keyword index', () => {
     });
     store.createEngram({ agentId: AGENT, concept: 'Unrelated', content: 'The workshop venue is in Ashburn.' });
     expect(store.getEngram(e.id)?.questions).toEqual(['How do I ship the rowing club app to production?']);
-    expect(ids(store.searchBM25WithRank(AGENT, 'ship rowing club production', 5))).toEqual([e.id]);
+    expect(ids(store.searchBM25WithRank(AGENT, 'ship rowing club production', 5, Q))).toEqual([e.id]);
+    expect(store.searchBM25WithRank(AGENT, 'ship rowing club production', 5)).toHaveLength(0); // default index: no questions
+  });
+
+  it('the default index holds concept, content and tags only; the questions index adds questions', () => {
+    const e = store.createEngram({
+      agentId: AGENT, concept: 'RosterKeep deploy', content: 'railway up --service rowos-app --ci',
+      questions: ['How do I ship the rowing club app?'],
+    });
+    expect(ids(store.searchBM25WithRank(AGENT, 'rowing club', 5, Q))).toEqual([e.id]);
+    expect(store.searchBM25WithRank(AGENT, 'rowing club', 5)).toHaveLength(0);
+    expect(ids(store.searchBM25WithRank(AGENT, 'railway rowos', 5))).toEqual([e.id]);
+    expect(ids(store.searchBM25WithRank(AGENT, 'railway rowos', 5, Q))).toEqual([e.id]);
+    expect(ids(store.searchBM25WithRankMultiAgent([AGENT, 'other'], 'rowing club', 5, Q))).toEqual([e.id]);
+    expect(store.searchBM25WithRankMultiAgent([AGENT, 'other'], 'rowing club', 5)).toHaveLength(0);
   });
 
   it('setQuestions re-indexes an existing memory, and clearing them removes it from that search', () => {
     const e = store.createEngram({ agentId: AGENT, concept: 'Gate floor', content: 'answerAt -0.93, withholdBelow -1.64.' });
-    expect(store.searchBM25WithRank(AGENT, 'abstention threshold numbers', 5)).toHaveLength(0);
+    expect(store.searchBM25WithRank(AGENT, 'abstention threshold numbers', 5, Q)).toHaveLength(0);
     store.setQuestions(e.id, ['What are the abstention threshold numbers?']);
-    expect(ids(store.searchBM25WithRank(AGENT, 'abstention threshold numbers', 5))).toEqual([e.id]);
+    expect(ids(store.searchBM25WithRank(AGENT, 'abstention threshold numbers', 5, Q))).toEqual([e.id]);
     store.setQuestions(e.id, []);
     expect(store.getEngram(e.id)?.questions).toBeNull();
-    expect(store.searchBM25WithRank(AGENT, 'abstention threshold numbers', 5)).toHaveLength(0);
+    expect(store.searchBM25WithRank(AGENT, 'abstention threshold numbers', 5, Q)).toHaveLength(0);
   });
 
-  it('migrates a pre-0.22 store: three-column index rebuilt with questions, existing memories still found', () => {
+  it('migrates a pre-0.22 store: its three-column index kept, a questions index added, nothing lost', () => {
     const e = store.createEngram({ agentId: AGENT, concept: 'Settlement lock', content: 'closeRun checks BLOCKED server-side.' });
     store.close();
     // Recreate the 0.21 shape: no questions column in the index, old triggers.
     const db = new Database(dbPath);
     db.exec(`
-      DROP TRIGGER engrams_ai; DROP TRIGGER engrams_ad; DROP TRIGGER engrams_au; DROP TABLE engrams_fts;
+      DROP TRIGGER engrams_ai; DROP TRIGGER engrams_ad; DROP TRIGGER engrams_au; DROP TABLE engrams_fts; DROP TABLE engrams_qfts;
       CREATE VIRTUAL TABLE engrams_fts USING fts5(concept, content, tags, content=engrams, content_rowid=rowid);
       INSERT INTO engrams_fts(engrams_fts) VALUES('rebuild');
       CREATE TRIGGER engrams_ai AFTER INSERT ON engrams BEGIN
         INSERT INTO engrams_fts(rowid, concept, content, tags) VALUES (new.rowid, new.concept, new.content, new.tags);
       END;`);
-    expect((db.prepare(`SELECT name FROM pragma_table_info('engrams_fts')`).all() as any[]).map((r) => r.name)).not.toContain('questions');
     db.close();
 
     store = new EngramStore(dbPath);
-    const cols = (store.getDb().prepare(`SELECT name FROM pragma_table_info('engrams_fts')`).all() as any[]).map((r) => r.name);
-    expect(cols).toEqual(['concept', 'content', 'tags', 'questions']);
+    const colsOf = (t: string) => (store.getDb().prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as any[]).map((r) => r.name);
+    expect(colsOf('engrams_fts')).toEqual(['concept', 'content', 'tags']);
+    expect(colsOf('engrams_qfts')).toEqual(['concept', 'content', 'tags', 'questions']);
     expect(ids(store.searchBM25WithRank(AGENT, 'closeRun BLOCKED', 5))).toEqual([e.id]);
+    expect(ids(store.searchBM25WithRank(AGENT, 'closeRun BLOCKED', 5, Q))).toEqual([e.id]);
     store.setQuestions(e.id, ['Where is the period close enforced?']);
-    expect(ids(store.searchBM25WithRank(AGENT, 'period close enforced', 5))).toEqual([e.id]);
-    // and a second open is a no-op
+    expect(ids(store.searchBM25WithRank(AGENT, 'period close enforced', 5, Q))).toEqual([e.id]);
+    // a second open is a no-op, and new writes reach both indexes through the triggers
     store.close();
     store = new EngramStore(dbPath);
-    expect(ids(store.searchBM25WithRank(AGENT, 'period close enforced', 5))).toEqual([e.id]);
+    expect(ids(store.searchBM25WithRank(AGENT, 'period close enforced', 5, Q))).toEqual([e.id]);
+    const f = store.createEngram({ agentId: AGENT, concept: 'Fresh write', content: 'lanes and buoys', questions: ['Where do the boats line up?'] });
+    expect(ids(store.searchBM25WithRank(AGENT, 'lanes buoys', 5))).toEqual([f.id]);
+    expect(ids(store.searchBM25WithRank(AGENT, 'boats line', 5, Q))).toEqual([f.id]);
   });
 
   it('redacts a secret written into a question, on disk and in the index', () => {

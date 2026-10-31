@@ -1,35 +1,31 @@
 /**
- * Write-time questions, step 3: a copy of the snapshot where ONLY the keyword index sees each
- * memory's questions — the shape that won on the sample (wq-eval.ts). The engrams rows, their
- * vectors and everything the cross-encoder reads are unchanged; the FTS5 row of each memory is
- * re-indexed with its questions appended to the tags column, which is what a `questions` column
- * indexed by FTS would do in production.
+ * Write-time questions on the full store, the way 0.22 stores them: a copy of the snapshot is
+ * opened with the current EngramStore (which migrates it: `questions` column, four-column FTS
+ * index) and every memory's generated questions are set with setQuestions(). Vectors and
+ * everything the cross-encoder reads are unchanged.
  *
  *   npx tsx tests/realstore-eval/wq-index.ts   -> tests/realstore-eval/snapshot/store-wq.db
- * Then: REALSTORE_SNAPSHOT=snapshot/store-wq.db for stage-diagnose.ts / gate-eval.ts.
+ * Then: REALSTORE_SNAPSHOT=snapshot/store-wq.db for stage-diagnose.ts / gate-eval.ts / runner.ts.
  */
-import Database from 'better-sqlite3';
-import { copyFileSync, readFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { EngramStore } from '../../src/storage/sqlite.js';
 
 const dir = import.meta.dirname;
 const out = join(dir, 'snapshot', 'store-wq.db');
+for (const s of ['', '-wal', '-shm']) if (existsSync(out + s)) rmSync(out + s);
 copyFileSync(join(dir, 'snapshot', 'store.db'), out);
 const WQ = JSON.parse(readFileSync(join(dir, 'nl-wq.json'), 'utf8')) as { questions: Record<string, string[]> };
-const db = new Database(out);
-const row = db.prepare('SELECT rowid, concept, content, tags FROM engrams WHERE id = ?');
-const del = db.prepare(`INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags) VALUES('delete', ?, ?, ?, ?)`);
-const ins = db.prepare('INSERT INTO engrams_fts(rowid, concept, content, tags) VALUES (?, ?, ?, ?)');
+const t0 = Date.now();
+const store = new EngramStore(out); // migrates the copy
 let n = 0, missing = 0;
-db.transaction(() => {
+store.transaction(() => {
   for (const [id, qs] of Object.entries(WQ.questions)) {
     if (!qs.length) continue;
-    const r: any = row.get(id);
-    if (!r) { missing++; continue; }
-    del.run(r.rowid, r.concept, r.content, r.tags);
-    ins.run(r.rowid, r.concept, r.content, `${r.tags ?? ''} ${qs.join(' ')}`);
+    if (!store.getEngram(id)) { missing++; continue; }
+    store.setQuestions(id, qs);
     n++;
   }
-})();
-db.close();
-console.log(`re-indexed ${n} memories with their questions (${missing} not found) -> ${out}`);
+});
+store.close();
+console.log(`questions set on ${n} memories (${missing} not found) in ${((Date.now() - t0) / 1000).toFixed(1)} s -> ${out}`);

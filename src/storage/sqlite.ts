@@ -44,6 +44,22 @@ type SlimCacheEntry = {
   retracted: boolean;
 };
 
+/** Options for keyword search. */
+export interface Bm25SearchOptions {
+  /**
+   * 0.22: search the index that also holds each memory's questions (default false). Recall
+   * passes true for natural-language queries only: questions serve natural phrasing, and on
+   * identifier lookups they reordered near-duplicates (3 of 300 lost first place when searched,
+   * 2 of 300 even with the column excluded, because FTS5 term statistics span all columns).
+   */
+  withQuestions?: boolean;
+}
+
+/** The FTS5 table a keyword search reads: with questions only when asked (see migrateFtsWithQuestions). */
+function ftsTable(opts: Bm25SearchOptions): 'engrams_fts' | 'engrams_qfts' {
+  return opts.withQuestions === true ? 'engrams_qfts' : 'engrams_fts';
+}
+
 export class EngramStore {
   private db: Database.Database;
   private walTimer: ReturnType<typeof setInterval> | null = null;
@@ -452,45 +468,65 @@ export class EngramStore {
   }
 
   /**
-   * The FTS5 index over concept, content, tags and (0.22) questions, and the triggers that keep
-   * it in sync. A store from before 0.22 has a three-column index: it is dropped and rebuilt from
-   * the engrams table once (`rebuild` reads the content table, so nothing is lost; a few seconds
-   * on a 30,000-memory store). Idempotent.
+   * Two FTS5 indexes over the engrams table, kept in sync by one set of triggers:
+   *  - engrams_fts  — concept, content, tags: every keyword search except the one below. Kept
+   *    exactly as before 0.22, because questions change FTS5's term statistics for every search
+   *    in an index that holds them, even one restricted to other columns (measured: 2 of 300
+   *    identifier lookups reordered between near-duplicates).
+   *  - engrams_qfts — the same plus questions (0.22): only natural-language recall searches it.
+   * Both are external-content tables, so `rebuild` re-derives them from engrams; nothing is
+   * lost. A store from before 0.22 gains engrams_qfts on first open (a few seconds on a
+   * 30,000-memory store). Idempotent; triggers are recreated on every open.
    */
   private migrateFtsWithQuestions(): void {
-    const cols = (() => {
-      try { return (this.db.prepare(`SELECT name FROM pragma_table_info('engrams_fts')`).all() as Array<{ name: string }>).map(r => r.name); }
+    const colsOf = (t: string) => {
+      try { return (this.db.prepare(`SELECT name FROM pragma_table_info('${t}')`).all() as Array<{ name: string }>).map(r => r.name); }
       catch { return [] as string[]; }
-    })();
-    if (cols.includes('questions')) return;
-    const existed = cols.length > 0;
+    };
+    const hasRows = !!this.db.prepare('SELECT 1 FROM engrams LIMIT 1').get();
     this.db.transaction(() => {
       this.db.exec(`
         DROP TRIGGER IF EXISTS engrams_ai;
         DROP TRIGGER IF EXISTS engrams_ad;
         DROP TRIGGER IF EXISTS engrams_au;
-        DROP TABLE IF EXISTS engrams_fts;
-        CREATE VIRTUAL TABLE engrams_fts USING fts5(
-          concept, content, tags, questions,
-          content=engrams,
-          content_rowid=rowid
-        );
+      `);
+      const fts = colsOf('engrams_fts');
+      if (fts.length === 0 || fts.includes('questions')) {
+        // missing, or a development build's four-column index: back to the three-column one
+        this.db.exec(`
+          DROP TABLE IF EXISTS engrams_fts;
+          CREATE VIRTUAL TABLE engrams_fts USING fts5(concept, content, tags, content=engrams, content_rowid=rowid);
+        `);
+        if (hasRows) this.db.exec(`INSERT INTO engrams_fts(engrams_fts) VALUES('rebuild')`);
+      }
+      if (colsOf('engrams_qfts').length === 0) {
+        this.db.exec(`
+          CREATE VIRTUAL TABLE engrams_qfts USING fts5(concept, content, tags, questions, content=engrams, content_rowid=rowid);
+        `);
+        if (hasRows) this.db.exec(`INSERT INTO engrams_qfts(engrams_qfts) VALUES('rebuild')`);
+      }
+      this.db.exec(`
         CREATE TRIGGER engrams_ai AFTER INSERT ON engrams BEGIN
-          INSERT INTO engrams_fts(rowid, concept, content, tags, questions)
+          INSERT INTO engrams_fts(rowid, concept, content, tags) VALUES (new.rowid, new.concept, new.content, new.tags);
+          INSERT INTO engrams_qfts(rowid, concept, content, tags, questions)
             VALUES (new.rowid, new.concept, new.content, new.tags, new.questions);
         END;
         CREATE TRIGGER engrams_ad AFTER DELETE ON engrams BEGIN
-          INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags, questions)
+          INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags)
+            VALUES('delete', old.rowid, old.concept, old.content, old.tags);
+          INSERT INTO engrams_qfts(engrams_qfts, rowid, concept, content, tags, questions)
             VALUES('delete', old.rowid, old.concept, old.content, old.tags, old.questions);
         END;
         CREATE TRIGGER engrams_au AFTER UPDATE ON engrams BEGIN
-          INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags, questions)
+          INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags)
+            VALUES('delete', old.rowid, old.concept, old.content, old.tags);
+          INSERT INTO engrams_fts(rowid, concept, content, tags) VALUES (new.rowid, new.concept, new.content, new.tags);
+          INSERT INTO engrams_qfts(engrams_qfts, rowid, concept, content, tags, questions)
             VALUES('delete', old.rowid, old.concept, old.content, old.tags, old.questions);
-          INSERT INTO engrams_fts(rowid, concept, content, tags, questions)
+          INSERT INTO engrams_qfts(rowid, concept, content, tags, questions)
             VALUES (new.rowid, new.concept, new.content, new.tags, new.questions);
         END;
       `);
-      if (existed) this.db.exec(`INSERT INTO engrams_fts(engrams_fts) VALUES('rebuild')`);
     })();
   }
 
@@ -762,9 +798,9 @@ export class EngramStore {
   /**
    * BM25 search across multiple agents (workspace-scoped).
    */
-  searchBM25WithRankMultiAgent(agentIds: string[], query: string, limit: number = 10): { engram: Engram; bm25Score: number }[] {
+  searchBM25WithRankMultiAgent(agentIds: string[], query: string, limit: number = 10, opts: Bm25SearchOptions = {}): { engram: Engram; bm25Score: number }[] {
     if (agentIds.length === 0) return [];
-    if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit);
+    if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit, opts);
 
     const sanitized = query
       .replace(/[^\w\s]/g, ' ')   // Split on punctuation so hyphenated IDs (PROJ-1000) match FTS5's separator-split tokens.
@@ -774,6 +810,7 @@ export class EngramStore {
       .join(' OR ');
 
     if (!sanitized) return [];
+    const table = ftsTable(opts);
 
     // CTE prefilter — see searchBM25WithRank for rationale (567× speedup verified).
     try {
@@ -781,7 +818,7 @@ export class EngramStore {
       const innerLimit = Math.max(limit * 5, 50);
       const rows = this.db.prepare(`
         WITH top_fts AS (
-          SELECT rowid, rank FROM engrams_fts WHERE engrams_fts MATCH ? ORDER BY rank LIMIT ?
+          SELECT rowid, rank FROM ${table} WHERE ${table} MATCH ? ORDER BY rank LIMIT ?
         )
         SELECT e.*, top_fts.rank FROM top_fts
         JOIN engrams e ON e.rowid = top_fts.rowid
@@ -987,7 +1024,7 @@ export class EngramStore {
    * FTS5 rank is negative (lower = better match).
    * We normalize to 0-1 where higher = better.
    */
-  searchBM25WithRank(agentId: string, query: string, limit: number = 10): { engram: Engram; bm25Score: number }[] {
+  searchBM25WithRank(agentId: string, query: string, limit: number = 10, opts: Bm25SearchOptions = {}): { engram: Engram; bm25Score: number }[] {
     // Sanitize query for FTS5: quote each word to prevent column name interpretation
     const sanitized = query
       .replace(/[^\w\s]/g, ' ')   // Split on punctuation so hyphenated IDs (PROJ-1000) match FTS5's separator-split tokens.
@@ -997,6 +1034,7 @@ export class EngramStore {
       .join(' OR ');
 
     if (!sanitized) return [];
+    const table = ftsTable(opts);
 
     // CTE prefilter: force FTS5 to apply LIMIT before joining engrams.
     //
@@ -1017,7 +1055,7 @@ export class EngramStore {
       const innerLimit = Math.max(limit * 5, 50);
       const rows = this.db.prepare(`
         WITH top_fts AS (
-          SELECT rowid, rank FROM engrams_fts WHERE engrams_fts MATCH ? ORDER BY rank LIMIT ?
+          SELECT rowid, rank FROM ${table} WHERE ${table} MATCH ? ORDER BY rank LIMIT ?
         )
         SELECT e.*, top_fts.rank FROM top_fts
         JOIN engrams e ON e.rowid = top_fts.rowid

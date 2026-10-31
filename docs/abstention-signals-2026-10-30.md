@@ -294,3 +294,31 @@ Findings:
 4. Still to do before claiming it: the routed blend implemented in `activation.ts` and run end to
    end (this table's last two rows are replays of saved scores), and the reranker reading the
    best-matching question (the other way to carry the gain through).
+
+## 11. Step 4b built: questions + routed blend end to end, and why there are two keyword indexes (2026-10-31)
+
+Built on branch `feat/0.22`: `questions` column, write path, a natural-question blend weight of
+0.5 when at least half the candidate pool carries questions (else 0.85; keyword lookups 0.95).
+Measured on the snapshot with questions set through the real store (`wq-index.ts`), published
+harness for identifier and topic:
+
+| Design | identifier first / top 5 / MRR | topic first / top 5 / MRR | NL first |
+|---|---|---|---|
+| 0.21.1 | 93.3 / 98.7 / 95.8 | 96.0 / 98.7 / 97.3 | 45.4 |
+| one index holding questions, all queries search it | 92.3 / 98.3 / 95.2 | 95.8 / 98.7 / 97.1 | 50.0 |
+| one index, keyword queries exclude the questions column | 92.7 / 98.7 / 95.4 | 96.0 / 98.7 / 97.3 | — |
+| **two indexes: questions only in the one natural queries search** | **93.3 / 98.7 / 95.8** | **96.0 / 98.7 / 97.3** | **50.0** |
+| control: index rebuilt, no questions | 93.3 / 98.7 / 95.8 | — | — |
+
+Findings:
+1. **Questions hurt keyword lookups when they share an index with them.** The losses were exact
+   lookups overtaken by a near-duplicate whose questions mention the same topic (two FIN-05
+   memories; refund questions on one).
+2. **Excluding the column is not enough.** FTS5's term statistics span every column of the index,
+   so questions shift the scores of searches that never read them; near-ties flip (2 of 300).
+   The rebuild control rules out index drift as the cause.
+3. **Two indexes make both paths exactly the measured ones.** Keyword-shaped recall and every
+   other caller read the three-column index, unchanged since 0.21.1; natural-language recall
+   reads the four-column one. Cost: a second FTS index and its trigger writes.
+4. Postgres and PGlite still hold questions in their single tsvector; the same split is a
+   follow-up there.

@@ -45,7 +45,7 @@ describe('questions through performWrite', () => {
     expect(res.questions?.kept).toEqual(['How do I ship the rowing club app to production?']);
     expect(res.questions?.dropped).toEqual([{ question: 'why?', reason: 'invalid' }]);
     expect(store.getEngram(res.engram.id)?.questions).toEqual(['How do I ship the rowing club app to production?']);
-    expect(store.searchBM25WithRank(AGENT, 'ship rowing club production', 5).map((r) => r.engram.id)).toEqual([res.engram.id]);
+    expect(store.searchBM25WithRank(AGENT, 'ship rowing club production', 5, { withQuestions: true }).map((r) => r.engram.id)).toEqual([res.engram.id]);
   });
 
   it('a write that reinforces an existing memory adds its questions to that memory, up to five', async () => {

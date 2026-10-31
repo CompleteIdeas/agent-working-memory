@@ -345,10 +345,14 @@ export class ActivationEngine {
     // Uses queryContext, not query.context: temporal words must not reach BM25.
     prof.begin('bm25');
     const keywordQuery = Array.from(tokenize(queryContext)).join(' ');
+    // 0.22: questions stored with memories serve natural phrasing; a keyword-shaped lookup
+    // searches without them (src/storage/sqlite.ts Bm25SearchOptions).
+    const naturalQuery = isNaturalQuery(query.context ?? '');
+    const bm25Opts = { withQuestions: naturalQuery };
     const bm25Keyword = keywordQuery.length > 2
-      ? await this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3)
+      ? await this.store.searchBM25WithRankMultiAgent(agentIds, keywordQuery, limit * 3, bm25Opts)
       : [];
-    const bm25Expanded = await this.store.searchBM25WithRankMultiAgent(agentIds, searchContext, limit * 3);
+    const bm25Expanded = await this.store.searchBM25WithRankMultiAgent(agentIds, searchContext, limit * 3, bm25Opts);
     prof.end('bm25');
 
     // Merge: take the best BM25 score per engram from either pass
@@ -1396,9 +1400,19 @@ export class ActivationEngine {
     // identifier 93.3 (all 1,316); routed 0.85 natural / 0.95 keyword gave 45.9 / 96.0 / 93.8.
     // AWM_BLEND=<a> sets the natural weight, AWM_BLEND_KEYWORD=<a> the keyword one;
     // AWM_BLEND=off restores the rerank2 sort by cross-encoder score alone.
+    //
+    // 0.22: once memories carry questions (indexed in BM25), the fused rank carries the natural
+    // phrasings too, so a natural question gives it more say: 0.5 when at least half the pool has
+    // questions. Measured on the full store with questions: NL 44.8 -> 50.0, topic and identifier
+    // unchanged (routing keeps them at 0.95). Without questions 0.5 HURTS NL (43.8 vs 45.9), hence
+    // the pool test rather than a fixed switch. AWM_BLEND_QUESTIONS overrides the 0.5.
+    const natural = naturalQuery;
+    const poolHasQuestions = natural && finalRanked.length > 0
+      && finalRanked.filter(r => r.engram.questions?.length).length >= finalRanked.length / 2;
     const blendA = process.env.AWM_BLEND === 'off' ? NaN
-      : isNaturalQuery(query.context ?? '') ? Number(process.env.AWM_BLEND ?? 0.85)
-      : Number(process.env.AWM_BLEND_KEYWORD ?? 0.95);
+      : !natural ? Number(process.env.AWM_BLEND_KEYWORD ?? 0.95)
+      : poolHasQuestions ? Number(process.env.AWM_BLEND_QUESTIONS ?? 0.5)
+      : Number(process.env.AWM_BLEND ?? 0.85);
     let ordered: typeof finalRanked;
     if (rerank2Enabled() && Number.isFinite(blendA) && finalRanked.length > 1
         && finalRanked.every(r => r.phaseScores.rerankerScore > 0)) {
