@@ -504,14 +504,17 @@ describe('daemon processes (real models)', () => {
         });
         expect(out.spawned).toBe(1);
         daemonPid = out.pid;
-        treeKill(p.pid!);
-        await sleep(1000);
-        expect(pidAlive(daemonPid)).toBe(true);
-        // And it still serves: a new client reaches the same daemon without starting one.
+        // Import before the kill: the daemon idles out 1.5 s after its last client, and on a
+        // loaded machine these imports alone outlasted the half second left after the sleep
+        // below, so a fresh daemon answered and the pid check failed (2026-10-30, CPU at 100%).
         const { registeredInferenceConfig } = await import('../../src/core/ml-worker.js');
         await import('../../src/core/embeddings.js');
         await import('../../src/core/reranker.js');
         await import('../../src/core/query-expander.js');
+        treeKill(p.pid!);
+        await sleep(1000);
+        expect(pidAlive(daemonPid)).toBe(true);
+        // And it still serves: a new client reaches the same daemon without starting one.
         const c = new ModelDaemonClient({ fingerprint: modelDaemonFingerprint(registeredInferenceConfig()), startTimeoutMs: 5_000 });
         clients.push(c);
         expect((await c.request<{ pid: number }>('stats')).pid).toBe(daemonPid);

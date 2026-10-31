@@ -15,12 +15,14 @@
 
 import {
   AutoTokenizer,
+  AutoModel,
   AutoModelForSequenceClassification,
   type PreTrainedTokenizer,
   type PreTrainedModel,
 } from '@huggingface/transformers';
 import { dispatchRerank, registerInferenceConfig, registerInProcessHandlers } from './ml-worker.js';
 import { ensureModelCacheDir } from './model-cache.js';
+import { loadStHead, type StHead } from './st-head.js';
 
 const DEFAULT_MODEL = 'Xenova/ms-marco-MiniLM-L-6-v2';
 const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
@@ -62,6 +64,8 @@ const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'q8') as 'fp32' | 'fp16' | 'q8'
 
 let tokenizer: PreTrainedTokenizer | null = null;
 let model: PreTrainedModel | null = null;
+/** Scoring head for a cross-encoder whose ONNX file is only the backbone (see st-head.ts). */
+let head: StHead | null = null;
 let initPromise: Promise<void> | null = null;
 
 async function ensureLoaded(): Promise<void> {
@@ -70,10 +74,39 @@ async function ensureLoaded(): Promise<void> {
   initPromise = (async () => {
     ensureModelCacheDir();
     tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID);
-    model = await AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: DTYPE });
-    console.error(`Re-ranker model loaded in-process: ${MODEL_ID} (${DTYPE})`);
+    // The default model is a plain sequence classifier; only another model is checked for a
+    // sentence-transformers head, so the default path makes no extra request.
+    head = MODEL_ID === DEFAULT_MODEL ? null : await loadStHead(MODEL_ID);
+    const Loader = head ? AutoModel : AutoModelForSequenceClassification;
+    let dtype = DTYPE;
+    try {
+      model = await Loader.from_pretrained(MODEL_ID, { dtype });
+    } catch (err) {
+      // A model that ships only full-precision ONNX (no model_quantized.onnx) cannot load at
+      // the q8 default. Fall back rather than leave recall without a ranker.
+      if (dtype === 'fp32') throw err;
+      console.error(`Re-ranker ${MODEL_ID} has no ${dtype} weights (${(err as Error).message.slice(0, 80)}); loading fp32`);
+      dtype = 'fp32';
+      model = await Loader.from_pretrained(MODEL_ID, { dtype });
+    }
+    console.error(`Re-ranker model loaded in-process: ${MODEL_ID} (${dtype}${head ? `, ${head.pooling}-pooled head` : ''})`);
   })();
   return initPromise;
+}
+
+/** One logit per pair: the classifier's own output, or the head applied to the token states. */
+function pairLogits(output: any, inputs: any, n: number): number[] {
+  if (head) {
+    const h = output.last_hidden_state;
+    const [, seq, dim] = h.dims as number[];
+    const data = h.data as Float32Array;
+    const mask = inputs.attention_mask?.data as ArrayLike<number | bigint> | undefined;
+    return Array.from({ length: n }, (_, i) =>
+      head!.score(data.subarray(i * seq! * dim!, (i + 1) * seq! * dim!), seq!, dim!, mask ? Array.prototype.slice.call(mask, i * seq!, (i + 1) * seq!) : undefined));
+  }
+  const logits = output.logits ?? output.last_hidden_state;
+  const data = logits.data as Float32Array | number[];
+  return Array.from({ length: n }, (_, i) => Number(data[i] ?? 0));
 }
 
 function sigmoid(x: number): number {
@@ -151,17 +184,11 @@ async function scoreChunk(query: string, passages: string[], offset: number): Pr
       return_tensor: true,
     });
     const output = await model!(inputs);
-    const logits = output.logits ?? output.last_hidden_state;
-    const data = logits.data as Float32Array | number[];
-    const results: Array<{ index: number; score: number }> = [];
-    for (let i = 0; i < passages.length; i++) {
-      const rawLogit = Number(data[i] ?? 0);
-      results.push({ index: offset + i, score: sigmoid(rawLogit) });
-    }
-    return results;
+    return pairLogits(output, inputs, passages.length).map((l, i) => ({ index: offset + i, score: sigmoid(l) }));
   } catch {
     // Per-passage fallback (the original 0.7.13 path)
     const results: Array<{ index: number; score: number }> = [];
+    let failures = 0, lastErr: unknown;
     for (let i = 0; i < passages.length; i++) {
       try {
         const inputs = tokenizer!(query, {
@@ -172,13 +199,15 @@ async function scoreChunk(query: string, passages: string[], offset: number): Pr
           return_tensor: true,
         });
         const output = await model!(inputs);
-        const logits = output.logits ?? output.last_hidden_state;
-        const rawLogit = logits.data[0] as number;
-        results.push({ index: offset + i, score: sigmoid(rawLogit) });
-      } catch {
+        results.push({ index: offset + i, score: sigmoid(pairLogits(output, inputs, 1)[0]!) });
+      } catch (err) {
+        failures++; lastErr = err;
         results.push({ index: offset + i, score: 0 });
       }
     }
+    // Every pair failing is a broken ranker, not a batch of irrelevant passages: say so,
+    // instead of returning all-zero scores that look like a working ranker's verdict.
+    if (failures === passages.length) throw lastErr;
     return results;
   }
 }

@@ -2,39 +2,52 @@
 
 ## Unreleased
 
-### Recall: a fused shortlist, a 40-candidate floor, and a blended final order
+### Recall: a fused shortlist, a 32-candidate pool that is real, and a blended final order
 
 Measured on the frozen real store at k=3, first result correct:
 
 | | natural-language (194) | topic (450) | identifier (1,316) |
 |---|---|---|---|
 | 0.21.0 | 41.2% | 92.7% | 91.6% |
-| this release | **45.9%** | **95.8%** | **93.4%** |
+| this release | **45.4%** | **95.8%** | **93.3%** |
 
 Three changes in `src/engine/activation.ts`, each measured separately
 (`tests/realstore-eval/stage-diagnose.ts`, `blend-offline.ts`):
 
-- **The shortlist is never shorter than the rerank pool.** At k=3 the cut before the
-  graph walk was 3×8 = 24, so the documented 40-candidate cross-encoder pool was really 24.
-  On natural-language questions the right memory died there in 41 of 194.
+- **The shortlist is never shorter than the rerank pool, and the pool is now
+  max(k×4, 32).** At k=3 the cut before the graph walk was 3×8 = 24, so the documented
+  40-candidate cross-encoder pool was really 24. On natural-language questions the right
+  memory died there in 41 of 194. Measured at 24 / 32 / 40 candidates: natural-language
+  44.3 / 45.4 / 45.9, topic 95.3 / 95.8 / 95.8, identifier 93.2 / 93.3 / 93.4. 32 it is.
 - **The shortlist is chosen by reciprocal-rank fusion** of the BM25, vector and composite
-  ranks, not the composite alone. With the floor, the right memory reaches the
-  cross-encoder in 90% of natural-language questions (was 71%).
+  ranks, not the composite alone. With 32 candidates, the right memory reaches the
+  cross-encoder in 87% of natural-language questions (was 71%).
 - **The final order blends the cross-encoder with the fused rank** (0.85 / 0.15, a convex
   combination, times the stale penalty). The cross-encoder used to decide alone, and on
   natural-language questions it picked worse than plain fusion (42% vs 45%).
 
-`AWM_PRESELECT=composite`, `AWM_TOPN_MIN`, `AWM_BLEND=<weight>|off` restore or tune each one.
+**It costs recall time:** the cross-encoder scores 32 pairs instead of 24, and a recall takes
+about 21% longer than 0.21.0 (median, interleaved per query; 40 candidates cost 44%).
+
+`AWM_PRESELECT=composite`, `AWM_RERANK_POOL`, `AWM_TOPN_MIN`, `AWM_BLEND=<weight>|off` restore
+or tune each one.
 The calibrated gate reads reranker scores and should be recalibrated (`awm calibrate`).
 
-**What this does and doesn't say.** On natural-language questions AWM now matches plain
+**What this does and doesn't say.** On natural-language questions AWM now ties plain
 BM25+vector fusion over the same current memories (45.4%) rather than trailing it; it does not
 beat it. AWM's lead over a plain vector database comes from knowing what is current: over the
 raw store, with superseded memories still in it, BM25 scores 35.6% and fusion 32.5% on the
 same questions.
 
-Also: a reranker that fails to load is now reported once on stderr instead of silently leaving
-recall unranked. An `AWM_RERANKER_MODEL` without a quantized ONNX file did exactly that.
+Also, for `AWM_RERANKER_MODEL`:
+- a reranker that fails to load is reported once on stderr instead of silently leaving recall
+  unranked, and one that scores every pair as a failure now raises instead of returning zeros;
+- a model with no quantized ONNX file loads at fp32 instead of failing;
+- cross-encoders whose ONNX is only the backbone (the Ettin rerankers) get their
+  sentence-transformers scoring head (`src/core/st-head.ts`). Ettin-17m is better on
+  natural-language questions (up to 51.0% with a rank-based blend) but about 3× slower on CPU
+  even quantized, and its saturated scores need a rank blend this release does not ship, so it
+  stays an experiment, not a default.
 
 Tried and not adopted: the bge query instruction (no gain once the reranker runs),
 the reranker reading each memory's prefix (NL 39.2%), EmbeddingGemma-300m as the embedder (NL

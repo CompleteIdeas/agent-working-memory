@@ -960,7 +960,7 @@ export class ActivationEngine {
     // natural-language fixture the gold died here before the cross-encoder in 41 of 194
     // questions (tests/realstore-eval/stage-diagnose.ts). AWM_TOPN_MIN overrides the floor.
     const topNMult = Number(process.env.AWM_TOPN_MULT ?? 8);
-    const topNFloor = Number(process.env.AWM_TOPN_MIN ?? process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 40));
+    const topNFloor = Number(process.env.AWM_TOPN_MIN ?? process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 32));
     const topNSize = Math.max(limit * topNMult, topNFloor);
     // Shortlist by reciprocal-rank fusion (0.21.1): the BM25 rank, the vector rank and the
     // composite rank, instead of the composite alone. The composite is a poor shortlister for
@@ -1015,7 +1015,13 @@ export class ActivationEngine {
     // recall × precision × latency (pool 40 ≈ 25.1% LoCoMo / 71.0% adv / 77ms; pool 60 adds
     // only +0.6pp for +33ms). The composite is now a CHEAP WIDE PRE-FILTER, not the ranker —
     // the reranker does discrimination on a wide pool. Tunable via AWM_RERANK_POOL.
-    const rerankPoolSize = Number(process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 40));
+    //
+    // 0.21.1: max(limit*4, 32). The 40 above was never what ran at k=3 — the topN cut held
+    // the pool to 24 — so the floor now makes it real, and 32 is where it pays: with the
+    // fused shortlist and the blend, realstore top-1 at 24 / 32 / 40 candidates was
+    // NL 44.3 / 45.4 / 45.9, topic 95.3 / 95.8 / 95.8, identifier 93.2 / 93.3 / 93.4, and 32
+    // costs ~17% less recall time than 40 (interleaved, tests/realstore-eval/latency-ab.ts).
+    const rerankPoolSize = Number(process.env.AWM_RERANK_POOL ?? Math.max(limit * 4, 32));
     const rerankPool = pool.slice(0, rerankPoolSize);
     // D11 guard 3/4: injected entity-index candidates always reach the cross-encoder.
     if (injectedIds.size > 0) {

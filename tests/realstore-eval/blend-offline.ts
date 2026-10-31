@@ -68,3 +68,17 @@ console.log(`\nconvex a·rr + (1−a)·rank-normalised rrf2 — top-1 per fixtur
 for (const a of AS) {
   console.log(`  a=${a}`.padEnd(9) + sets.map(({ fx, ps }) => `${fx.replace('fixture-', '').replace('fixture', 'ident')} ${pct(at1(ps, (p) => convex(p, a)), ps.length)} (${pct(at1(ps, (p) => p.top), ps.length).trim()})`).join('   '));
 }
+
+// Same blend on the cross-encoder's RANK within the pool (rank-normalised 0..1) instead of its
+// sigmoid score: for a model whose scores saturate near 1, the score carries no order at the top.
+function convexRank(p: Probe, a: number): string[] {
+  const rrN = new Map([...p.pool].sort((x, y) => y.rr - x.rr).map((c, i, arr) => [c.id, arr.length > 1 ? 1 - i / (arr.length - 1) : 1]));
+  const f = new Map(order(p, null).map((id, i, arr) => [id, arr.length > 1 ? 1 - i / (arr.length - 1) : 1]));
+  const k = (id: string) => a * rrN.get(id)! + (1 - a) * f.get(id)!;
+  return [...p.pool].sort((x, y) => k(y.id) - k(x.id)).map((c) => c.id);
+}
+console.log(`\nconvex on ranks: a·rank(rr) + (1−a)·rank(rrf2)`);
+for (const a of [0.5, 0.6, 0.7, 0.8, 0.9]) {
+  console.log(`  a=${a}`.padEnd(9) + sets.map(({ fx, ps }) => `${fx.replace('fixture-', '').replace('fixture', 'ident')} ${pct(at1(ps, (p) => convexRank(p, a)), ps.length)}`).join('   '));
+}
+console.log('  rr alone '.padEnd(9) + sets.map(({ fx, ps }) => `${fx.replace('fixture-', '').replace('fixture', 'ident')} ${pct(at1(ps, (p) => [...p.pool].sort((x, y) => y.rr - x.rr).map((c) => c.id)), ps.length)}`).join('   '));
