@@ -71,6 +71,8 @@ export interface Engram {
   // created_at is ingestion time; these bound when the FACT holds. Null = open.
   validFrom?: string | null;      // ISO date/datetime
   validTo?: string | null;        // ISO date/datetime — set when a fact expires/superseded by time
+  /** 0.22: natural questions this memory answers. Indexed for keyword search only. */
+  questions?: string[] | null;
 
   /**
    * When `stage` last changed, ISO. **Null means it has never transitioned** —
@@ -200,6 +202,8 @@ export interface EngramCreate {
   /** Temporal validity (D8): ISO bounds on when the FACT holds (not ingestion time). */
   validFrom?: string;
   validTo?: string;
+  /** 0.22: natural questions this memory answers (≤ 5), indexed for keyword search only. */
+  questions?: string[];
 }
 
 /**

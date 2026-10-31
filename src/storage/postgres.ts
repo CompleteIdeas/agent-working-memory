@@ -133,6 +133,7 @@ function rowToEngram(row: any): Engram {
     recipeId: (row.recipe_id as string | null) ?? null,
     validFrom: (row.valid_from as string | null) ?? null,
     validTo: (row.valid_to as string | null) ?? null,
+    questions: row.questions ? JSON.parse(row.questions as string) : null,
     stageChangedAt: (row.stage_changed_at as string | null) ?? null,
   } as Engram;
 }
@@ -366,14 +367,14 @@ export class PostgresEngramStore {
         salience_features, reason_codes, stage, ttl, retracted,
         tags, memory_type, memory_class, supersedes, episode_id,
         task_status, task_priority, blocked_by, sequence, references_json,
-        origin_class, writer_session, recipe_id, valid_from, valid_to
+        origin_class, writer_session, recipe_id, valid_from, valid_to, questions
       ) VALUES (
         $1, $2, $3, $4, $5::vector, $6,
         $7, $8, 0, $9, $10,
         $11, $12, 'active', $13, FALSE,
         $14, $15, $16, $17, $18,
         $19, $20, $21, $22, $23,
-        $24, $25, $26, $27, $28
+        $24, $25, $26, $27, $28, $29
       )`,
       [
         id,
@@ -404,6 +405,7 @@ export class PostgresEngramStore {
         input.recipeId ?? null,
         input.validFrom ?? null,
         input.validTo ?? null,
+        input.questions && input.questions.length > 0 ? JSON.stringify(input.questions) : null,
       ],
     );
 
@@ -923,6 +925,12 @@ export class PostgresEngramStore {
   async updateMemoryClass(id: string, memoryClass: MemoryClass): Promise<void> {
     await this.readyPromise;
     await this.q(`UPDATE engrams SET memory_class = $1 WHERE id = $2`, [memoryClass, id]);
+  }
+
+  /** Set (or replace) the questions a memory answers. The tsvector trigger re-indexes the row. */
+  async setQuestions(id: string, questions: string[]): Promise<void> {
+    await this.readyPromise;
+    await this.q(`UPDATE engrams SET questions = $1 WHERE id = $2`, [questions.length ? JSON.stringify(questions) : null, id]);
   }
 
   async updateTags(id: string, tags: string[]): Promise<void> {

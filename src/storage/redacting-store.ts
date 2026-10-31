@@ -42,9 +42,12 @@ function redactState(state: ConsciousState): ConsciousState {
  */
 const REWRITE: Record<string, (args: any[]) => any[]> = {
   createEngram: ([input, ...rest]) => [
-    input ? { ...input, concept: seal(input.concept ?? ''), content: seal(input.content ?? ''), tags: sealList(input.tags) } : input,
+    input ? { ...input, concept: seal(input.concept ?? ''), content: seal(input.content ?? ''), tags: sealList(input.tags),
+      ...(input.questions ? { questions: sealList(input.questions) } : {}) } : input,
     ...rest,
   ],
+  // Questions are agent-written text, searchable like content: same redaction.
+  setQuestions: ([id, questions, ...rest]) => [id, sealList(questions) ?? questions, ...rest],
   updateContent: ([id, content, ...rest]) => [id, typeof content === 'string' ? seal(content) : content, ...rest],
   updateTags: ([id, tags, ...rest]) => [id, sealList(tags) ?? tags, ...rest],
   saveCheckpoint: ([agentId, state, ...rest]) => [agentId, redactState(state), ...rest],

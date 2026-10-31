@@ -69,6 +69,8 @@ export const PGLITE_SCHEMA_DDL = `
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS recipe_id      TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_from     TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_to       TEXT;
+  -- 0.22: questions a memory answers (JSON array), in the tsvector only.
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS questions      TEXT;
 
   -- Stage-transition timestamp (A-4, 2026-10-12). Nullable with no backfill:
   -- null means the engram has never changed stage, so readers fall back to
@@ -91,14 +93,15 @@ export const PGLITE_SCHEMA_DDL = `
     NEW.fts := to_tsvector('english',
       COALESCE(NEW.concept, '') || ' ' ||
       COALESCE(NEW.content, '') || ' ' ||
-      COALESCE(NEW.tags, ''));
+      COALESCE(NEW.tags, '') || ' ' ||
+      COALESCE(NEW.questions, ''));
     RETURN NEW;
   END;
   $$ LANGUAGE plpgsql;
 
   DROP TRIGGER IF EXISTS engrams_fts_trigger ON engrams;
   CREATE TRIGGER engrams_fts_trigger
-    BEFORE INSERT OR UPDATE OF concept, content, tags ON engrams
+    BEFORE INSERT OR UPDATE OF concept, content, tags, questions ON engrams
     FOR EACH ROW EXECUTE FUNCTION engrams_fts_update();
 
   CREATE TABLE IF NOT EXISTS associations (

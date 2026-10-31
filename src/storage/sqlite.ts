@@ -257,23 +257,8 @@ export class EngramStore {
       );
 
       -- FTS5 for full-text search (BM25 ranking built in)
-      CREATE VIRTUAL TABLE IF NOT EXISTS engrams_fts USING fts5(
-        concept, content, tags,
-        content=engrams,
-        content_rowid=rowid
-      );
-
-      -- Triggers to keep FTS in sync
-      CREATE TRIGGER IF NOT EXISTS engrams_ai AFTER INSERT ON engrams BEGIN
-        INSERT INTO engrams_fts(rowid, concept, content, tags) VALUES (new.rowid, new.concept, new.content, new.tags);
-      END;
-      CREATE TRIGGER IF NOT EXISTS engrams_ad AFTER DELETE ON engrams BEGIN
-        INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags) VALUES('delete', old.rowid, old.concept, old.content, old.tags);
-      END;
-      CREATE TRIGGER IF NOT EXISTS engrams_au AFTER UPDATE ON engrams BEGIN
-        INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags) VALUES('delete', old.rowid, old.concept, old.content, old.tags);
-        INSERT INTO engrams_fts(rowid, concept, content, tags) VALUES (new.rowid, new.concept, new.content, new.tags);
-      END;
+      -- FTS index and its sync triggers are created by migrateFtsWithQuestions() below, after
+      -- every column of engrams exists (0.22 adds questions as a fourth indexed column).
 
       -- Eval event logs
       CREATE TABLE IF NOT EXISTS activation_events (
@@ -452,6 +437,67 @@ export class EngramStore {
     } catch {
       this.db.exec(`ALTER TABLE engrams ADD COLUMN references_json TEXT`);
     }
+
+    // Migration (0.22): questions a memory answers, as a JSON array of strings. Indexed for
+    // keyword search only — never embedded, never shown to the cross-encoder: measured
+    // 2026-10-31, questions in BM25 lift natural-language recall with no loss on identifier
+    // or topic queries, while questions merged into the vector cost topic 9.6 points
+    // (docs/abstention-signals-2026-10-30.md §9).
+    try {
+      this.db.prepare('SELECT questions FROM engrams LIMIT 0').get();
+    } catch {
+      this.db.exec(`ALTER TABLE engrams ADD COLUMN questions TEXT`);
+    }
+    this.migrateFtsWithQuestions();
+  }
+
+  /**
+   * The FTS5 index over concept, content, tags and (0.22) questions, and the triggers that keep
+   * it in sync. A store from before 0.22 has a three-column index: it is dropped and rebuilt from
+   * the engrams table once (`rebuild` reads the content table, so nothing is lost; a few seconds
+   * on a 30,000-memory store). Idempotent.
+   */
+  private migrateFtsWithQuestions(): void {
+    const cols = (() => {
+      try { return (this.db.prepare(`SELECT name FROM pragma_table_info('engrams_fts')`).all() as Array<{ name: string }>).map(r => r.name); }
+      catch { return [] as string[]; }
+    })();
+    if (cols.includes('questions')) return;
+    const existed = cols.length > 0;
+    this.db.transaction(() => {
+      this.db.exec(`
+        DROP TRIGGER IF EXISTS engrams_ai;
+        DROP TRIGGER IF EXISTS engrams_ad;
+        DROP TRIGGER IF EXISTS engrams_au;
+        DROP TABLE IF EXISTS engrams_fts;
+        CREATE VIRTUAL TABLE engrams_fts USING fts5(
+          concept, content, tags, questions,
+          content=engrams,
+          content_rowid=rowid
+        );
+        CREATE TRIGGER engrams_ai AFTER INSERT ON engrams BEGIN
+          INSERT INTO engrams_fts(rowid, concept, content, tags, questions)
+            VALUES (new.rowid, new.concept, new.content, new.tags, new.questions);
+        END;
+        CREATE TRIGGER engrams_ad AFTER DELETE ON engrams BEGIN
+          INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags, questions)
+            VALUES('delete', old.rowid, old.concept, old.content, old.tags, old.questions);
+        END;
+        CREATE TRIGGER engrams_au AFTER UPDATE ON engrams BEGIN
+          INSERT INTO engrams_fts(engrams_fts, rowid, concept, content, tags, questions)
+            VALUES('delete', old.rowid, old.concept, old.content, old.tags, old.questions);
+          INSERT INTO engrams_fts(rowid, concept, content, tags, questions)
+            VALUES (new.rowid, new.concept, new.content, new.tags, new.questions);
+        END;
+      `);
+      if (existed) this.db.exec(`INSERT INTO engrams_fts(engrams_fts) VALUES('rebuild')`);
+    })();
+  }
+
+  /** Set (or replace) the questions a memory answers. The FTS trigger re-indexes the row. */
+  setQuestions(id: string, questions: string[]): void {
+    this.db.prepare('UPDATE engrams SET questions = ? WHERE id = ?')
+      .run(questions.length ? JSON.stringify(questions) : null, id);
   }
 
   // --- Engram CRUD ---
@@ -467,8 +513,8 @@ export class EngramStore {
       INSERT INTO engrams (id, agent_id, concept, content, embedding, embedding_model, confidence, salience,
         access_count, last_accessed, created_at, salience_features, reason_codes, stage, tags, episode_id,
         ttl, memory_class, supersedes, task_status, task_priority, blocked_by, memory_type,
-        sequence, references_json, origin_class, writer_session, recipe_id, valid_from, valid_to)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sequence, references_json, origin_class, writer_session, recipe_id, valid_from, valid_to, questions)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.agentId, input.concept, input.content, embeddingBlob,
       // Stamp the model with the vector (2026-10-24). This INSERT never wrote
@@ -499,6 +545,7 @@ export class EngramStore {
       input.recipeId ?? null,
       input.validFrom ?? null,
       input.validTo ?? null,
+      input.questions && input.questions.length > 0 ? JSON.stringify(input.questions) : null,
     );
 
     // Add to slim cache (skip if not yet populated — first slim fetch will load it)
@@ -1585,6 +1632,7 @@ export class EngramStore {
       validFrom: row.valid_from ?? null,
       validTo: row.valid_to ?? null,
       stageChangedAt: row.stage_changed_at ?? null,
+      questions: row.questions ? JSON.parse(row.questions) : null,
     };
   }
 

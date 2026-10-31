@@ -82,6 +82,18 @@ describe('PGliteEngramStore — smoke', () => {
     }
   });
 
+  it('0.22: questions are stored and searchable, and setQuestions re-indexes', async () => {
+    const e = await store.createEngram({
+      agentId: 'agent-q', concept: 'Deploy', content: 'railway up --service rowos-app --ci',
+      embedding: new Array(384).fill(0.02), questions: ['How do I ship the rowing club app?'],
+    });
+    expect((await store.getEngram(e.id))?.questions).toEqual(['How do I ship the rowing club app?']);
+    expect((await store.searchBM25WithRank('agent-q', 'rowing club', 5)).map((r) => r.engram.id)).toEqual([e.id]);
+    await store.setQuestions(e.id, ['Where is the production release command?']);
+    expect((await store.searchBM25WithRank('agent-q', 'production release command', 5)).map((r) => r.engram.id)).toEqual([e.id]);
+    expect(await store.searchBM25WithRank('agent-q', 'rowing club', 5)).toHaveLength(0);
+  });
+
   it('searchBM25 returns rows matching a text query', async () => {
     const hits = await store.searchBM25('agent-a', 'pglite postgres wasm', 5);
     expect(hits.length).toBeGreaterThan(0);
