@@ -250,6 +250,19 @@ suites; the public synthetic corpus; and recall latency. What is removed:
 - `AWM_LEGACY_RANKING=1` restores the old path for **two** releases, because a dependent pinned to
   0.21 may not upgrade within one.
 
+**Guard added 2026-10-31 — recency and decisions.** Robert's use of AWM centres on current work:
+"things that I'm working on now or within the last few weeks or as my project's going on could have
+been within the last year, but it's decisions that are made throughout that are important to bring
+back in real time." No fixture measures that: identifier, topic, natural-language and absent
+questions all ignore recency. Since 0.21.1 decay no longer changes the top result, which nobody
+measured as a loss because nothing could. So, before any change to decay:
+- build a **recent-decisions fixture** from the real store — questions where a recent decision
+  (`intent=decision`, or a decision-kind memory) competes with older related memories on the same
+  topic, gold = the recent decision — and score it on the shipped pipeline;
+- if recency is losing there, the fix is a measured recency/decision term in the final blend, not
+  a revival of the old composite;
+- decay leaves the ranking path only if removing it moves this fixture by nothing beyond noise.
+
 ### 4.9 Scaling
 
 | | local, one agent | team / hive | large (1M+) |
