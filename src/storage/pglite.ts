@@ -616,7 +616,9 @@ export class PGliteEngramStore {
     return ranked.map((r) => r.engram);
   }
 
-  async searchBM25WithRank(agentId: string, query: string, limit: number = 10): Promise<Array<{ engram: Engram; bm25Score: number }>> {
+  async searchBM25WithRank(agentId: string, query: string, limit: number = 10, opts: { withQuestions?: boolean } = {}): Promise<Array<{ engram: Engram; bm25Score: number }>> {
+    // 0.22: fts_q also holds the memory's questions; only natural-language recall asks for it.
+    const col = opts.withQuestions === true ? 'fts_q' : 'fts';
     await this.readyPromise;
     // SQLite FTS5 uses OR-by-default; we mirror that with websearch_to_tsquery
     // and explicit OR joining. plainto_tsquery would AND all terms, missing
@@ -627,10 +629,10 @@ export class PGliteEngramStore {
     if (tokens.length === 0) return [];
     const websearchQuery = tokens.join(' OR ');
     const result = await this.db.query<any>(
-      `SELECT *, ts_rank_cd(fts, websearch_to_tsquery('english', $2)) AS rank
+      `SELECT *, ts_rank_cd(${col}, websearch_to_tsquery('english', $2)) AS rank
        FROM engrams
        WHERE agent_id = $1 AND retracted = FALSE
-         AND fts @@ websearch_to_tsquery('english', $2)
+         AND ${col} @@ websearch_to_tsquery('english', $2)
        ORDER BY rank DESC
        LIMIT $3`,
       [agentId, websearchQuery, limit],
@@ -638,18 +640,19 @@ export class PGliteEngramStore {
     return result.rows.map((r) => ({ engram: rowToEngram(r), bm25Score: calibrateBm25(Number(r.rank)) }));
   }
 
-  async searchBM25WithRankMultiAgent(agentIds: string[], query: string, limit: number = 10): Promise<Array<{ engram: Engram; bm25Score: number }>> {
+  async searchBM25WithRankMultiAgent(agentIds: string[], query: string, limit: number = 10, opts: { withQuestions?: boolean } = {}): Promise<Array<{ engram: Engram; bm25Score: number }>> {
+    const col = opts.withQuestions === true ? 'fts_q' : 'fts';
     if (agentIds.length === 0) return [];
-    if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit);
+    if (agentIds.length === 1) return this.searchBM25WithRank(agentIds[0], query, limit, opts);
     await this.readyPromise;
     const tokens = query.replace(/[^\w\s]/g, ' ').trim().split(/\s+/).filter(t => t.length > 1);
     if (tokens.length === 0) return [];
     const websearchQuery = tokens.join(' OR ');
     const result = await this.db.query<any>(
-      `SELECT *, ts_rank_cd(fts, websearch_to_tsquery('english', $2)) AS rank
+      `SELECT *, ts_rank_cd(${col}, websearch_to_tsquery('english', $2)) AS rank
        FROM engrams
        WHERE agent_id = ANY($1::text[]) AND retracted = FALSE
-         AND fts @@ websearch_to_tsquery('english', $2)
+         AND ${col} @@ websearch_to_tsquery('english', $2)
        ORDER BY rank DESC
        LIMIT $3`,
       [agentIds, websearchQuery, limit],

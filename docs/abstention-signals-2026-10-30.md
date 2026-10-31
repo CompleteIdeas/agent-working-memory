@@ -320,5 +320,5 @@ Findings:
 3. **Two indexes make both paths exactly the measured ones.** Keyword-shaped recall and every
    other caller read the three-column index, unchanged since 0.21.1; natural-language recall
    reads the four-column one. Cost: a second FTS index and its trigger writes.
-4. Postgres and PGlite still hold questions in their single tsvector; the same split is a
-   follow-up there.
+4. Postgres and PGlite: split the same way the same day — `fts` (concept, content, tags) and
+   `fts_q` (+ questions), chosen by the same flag.

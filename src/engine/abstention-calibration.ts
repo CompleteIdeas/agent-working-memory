@@ -62,6 +62,17 @@ export async function buildCalibrationProbes(
 
   type Probe = CalibrationProbe;
   const pos: Probe[] = [], nulls: Probe[] = [];
+  // 0.22: natural positives — a memory's stored question, with that memory as the gold. Until
+  // now the gate had never seen a natural question with an answer, and it withheld a quarter of
+  // correct natural-language answers (docs/abstention-signals-2026-10-30.md §4). Default share:
+  // half of the positives when at least half the memories carry questions, else none.
+  const withQ = (rows as Array<{ id: string; questions?: string[] | null }>).filter((r) => r.questions?.length);
+  const qShare = Number(process.env.AWM_CALIBRATE_QUESTION_SHARE ?? (withQ.length >= rows.length / 2 ? 0.5 : 0));
+  const nQ = Math.min(Math.round(nPos * qShare), withQ.length);
+  for (let i = 0; i < nQ; i++) {
+    const r = pick(withQ);
+    pos.push({ query: pick(r.questions!), goldId: r.id });
+  }
   for (let tries = 0; pos.length < nPos && tries < nPos * 30; tries++) {
     const r = pick(rows); const cw = titleWords(r, 3); const u = uniqueTerm(r);
     if (cw.length >= 2 && u) pos.push({ query: [...cw, u].join(' '), goldId: r.id });
@@ -81,8 +92,15 @@ export async function buildCalibrationProbes(
   // EXPERIMENT (AWM_CALIBRATE_HELDOUT=<n>): held-out nulls — a positive's own query, recalled as
   // if its memory were never stored. That is the hard "deleted fact" case (familiar vocabulary,
   // neighbours still present), generated from the store alone.
+  // Drawn alternately from the natural and keyword positives, so the deleted-fact case is
+  // practised in both shapes.
   const nHeld = Number(process.env.AWM_CALIBRATE_HELDOUT ?? 0);
-  for (let i = 0; i < Math.min(nHeld, pos.length); i++) nulls.push({ query: pos[i]!.query, goldId: null, excludeIds: [pos[i]!.goldId!] });
+  const natPos = pos.slice(0, nQ), kwPos = pos.slice(nQ);
+  for (let added = 0; added < nHeld && (natPos.length || kwPos.length); added++) {
+    const from = (added % 2 === 0 && natPos.length) || !kwPos.length ? natPos : kwPos;
+    const p = from.shift()!;
+    nulls.push({ query: p.query, goldId: null, excludeIds: [p.goldId!] });
+  }
   if (pos.length < 30 || nulls.length < 30) return null;
   return { pos, nulls, storeSize: rows.length };
 }

@@ -69,8 +69,11 @@ export const PGLITE_SCHEMA_DDL = `
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS recipe_id      TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_from     TEXT;
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS valid_to       TEXT;
-  -- 0.22: questions a memory answers (JSON array), in the tsvector only.
+  -- 0.22: questions a memory answers (JSON array). Searched only through fts_q, which natural-
+  -- language recall reads; fts (concept, content, tags) serves every other search, so a keyword
+  -- lookup never matches a memory through its own questions.
   ALTER TABLE engrams ADD COLUMN IF NOT EXISTS questions      TEXT;
+  ALTER TABLE engrams ADD COLUMN IF NOT EXISTS fts_q          tsvector;
 
   -- Stage-transition timestamp (A-4, 2026-10-12). Nullable with no backfill:
   -- null means the engram has never changed stage, so readers fall back to
@@ -93,6 +96,10 @@ export const PGLITE_SCHEMA_DDL = `
     NEW.fts := to_tsvector('english',
       COALESCE(NEW.concept, '') || ' ' ||
       COALESCE(NEW.content, '') || ' ' ||
+      COALESCE(NEW.tags, ''));
+    NEW.fts_q := to_tsvector('english',
+      COALESCE(NEW.concept, '') || ' ' ||
+      COALESCE(NEW.content, '') || ' ' ||
       COALESCE(NEW.tags, '') || ' ' ||
       COALESCE(NEW.questions, ''));
     RETURN NEW;
@@ -103,6 +110,13 @@ export const PGLITE_SCHEMA_DDL = `
   CREATE TRIGGER engrams_fts_trigger
     BEFORE INSERT OR UPDATE OF concept, content, tags, questions ON engrams
     FOR EACH ROW EXECUTE FUNCTION engrams_fts_update();
+
+  -- 0.22: index fts_q and fill it once for rows written before it existed.
+  CREATE INDEX IF NOT EXISTS idx_engrams_fts_q ON engrams USING GIN(fts_q);
+  UPDATE engrams SET fts_q = to_tsvector('english',
+      COALESCE(concept, '') || ' ' || COALESCE(content, '') || ' ' ||
+      COALESCE(tags, '') || ' ' || COALESCE(questions, ''))
+    WHERE fts_q IS NULL;
 
   CREATE TABLE IF NOT EXISTS associations (
     id                TEXT PRIMARY KEY,
