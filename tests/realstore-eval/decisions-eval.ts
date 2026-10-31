@@ -61,11 +61,13 @@ const now = Date.parse('2026-08-24T09:27:21.841Z');
 let first = 0, top3 = 0, olderFirst = 0, otherFirst = 0;
 const meta = db.prepare('SELECT created_at, tags FROM engrams WHERE id = ?');
 let otherNewer = 0, otherOlder = 0, otherDecision = 0;
+const misses: Array<{ goldId: string; topId: string; query: string }> = [];
 for (const it of items) {
   const res: any[] = await eng.activate({ agentId: it.agent, context: it.query, limit: 3, internal: true, now, asOf: now } as any);
   const idx = res.findIndex((r) => r.engram.id === it.goldId);
   if (idx === 0) first++;
   if (idx >= 0) top3++;
+  if (idx !== 0 && res[0]) misses.push({ goldId: it.goldId, topId: res[0].engram.id, query: it.query });
   if (idx !== 0 && res[0]) {
     if (it.olderIds.includes(res[0].engram.id)) olderFirst++;
     else {
@@ -76,6 +78,7 @@ for (const it of items) {
   }
 }
 store.close();
+writeFileSync(join(tmpdir(), 'awm-decisions-misses.json'), JSON.stringify(misses));
 const n = items.length, pct = (k: number) => `${k} (${(100 * k / n).toFixed(1)}%)`;
 console.log(`[${SNAP}] recent-decisions fixture: ${n} decisions, each with >= 2 older related memories (median ${[...items.map((i) => i.olderIds.length)].sort((a, b) => a - b)[Math.floor(n / 2)]})`);
 console.log(`  decision first ${pct(first)} · in top 3 ${pct(top3)}`);

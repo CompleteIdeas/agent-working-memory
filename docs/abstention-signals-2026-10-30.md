@@ -390,9 +390,10 @@ Findings:
    to a newer non-decision instead; first place moves by at most one.
 2. **Stored questions do not help here either** once the query's own question is excluded — the
    decision's other generated questions are paraphrases, and every neighbour gains questions too.
-3. **A sixth of all misses are another decision** (20 of 57): sibling decisions restating the
-   same choice. Some of what reads as a miss may be a right answer under another id; the fixture
-   needs an answer-containment check (as `nl-dupcheck.ts` does for the NL fixture) before its
-   first-place rate is read as a ranking ceiling.
+3. **The misses are real.** A sixth of the winners are other decisions, which suggested siblings
+   restating the same choice; checked, they are not: word overlap between the winning memory and
+   the gold decision is under 0.25 for 55 of 57 misses, and only one is a near-duplicate. So a
+   decision asked about in natural words comes first about half the time — the same weakness as
+   natural-language recall in general (45–50%), not a recency problem.
 4. **The guard stands:** decay may leave the ranking path only if removing it moves this fixture
    by nothing beyond noise. The recency experiment stays an off-by-default switch.
