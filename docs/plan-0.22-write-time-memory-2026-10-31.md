@@ -319,6 +319,14 @@ A profile is only offered once its row exists on the benchmark page; until then 
 Individual env switches keep working and override the profile, so nothing an operator has set
 changes underneath them.
 
+**Outcome (2026-11-01): no profiles in 0.22.** The two models a profile would have switched on
+failed their bars: the embedded question generator (§4.4, +1.0 against +4) and the answer-check
+reader (§4.6b, 0.84 against 0.88). What did pass costs nothing, so it is the default rather than
+a profile: natural-shaped queries are re-ranked by Ettin-17m (`AWM_RERANKER_MODEL_NATURAL`, on by
+default, its repo's int8 file), keyword queries keep MiniLM. Measured with questions indexed, as a
+user install: natural 50.0 → 52.6, topic 96.0 → 96.0, identifier 93.3 → 93.8, recall p50
+unchanged. `AWM_PROFILE` returns only if a slower option ever earns a row.
+
 ### 4.12 Capability hand-off: the host's model does the work
 
 AWM serves agents on any runtime — Claude Code, MWA (an agent runtime with its own decision
@@ -393,7 +401,7 @@ Each step lands with its tests and its benchmark run; nothing proceeds on an unm
 | 5 | Ranking factors: measure removal one by one; retire what does not move a fixture | simpler core | 2 days |
 | 6 | Slots: inference, automatic supersession, history queries; stale-top-1 fixture — **explicit slots built 2026-10-31 (scope, newer-only, no concept merge, opt-out, trust); inference and the stale-top-1 fixture still to do** | lifecycle target | 3 days |
 | 7 | Consolidation scaled back; trace output; bench as release gate; generated claims | observability | 2 days |
-| 7b | Profiles (§4.11): `AWM_PROFILE`, `awm setup` choice, one benchmark row per profile | user choice with numbers | 2 days |
+| 7b | Profiles (§4.11) — **dropped 2026-11-01: nothing slower passed; the natural-language re-ranker (Ettin-17m) became the default instead** | user choice with numbers | — |
 | 7c | Capability hand-off (§4.12): declaration on restore/HTTP, routing, validation; MWA wired as first host — **questions@1 built 2026-10-31 over MCP (declare on memory_restore, job at restore and task-end, memory_set_questions), tested end to end; HTTP and MWA wiring still to do** | shared intelligence | 3 days |
 | 8 | Docs, migration guide, CHANGELOG, Linux suite, release | ship | 1 day |
 
