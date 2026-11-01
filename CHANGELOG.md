@@ -76,7 +76,8 @@ files the model's repository ships), k=3:
 No identifier or topic query in these fixtures is natural-shaped, so Ettin never scores them
 (an earlier note of 93.8% identifier compared the full 1,316-query set with the 300-query sample).
 The published benchmark (no questions in its
-store) is unchanged: 93.3% / 96.0% first, recall p50 about 384 ms, with Ettin on or off.
+store) is unchanged: 93.3% / 96.0% first. Identifier recall p50 was 384 ms with Ettin on and off
+in a back-to-back run; the published benchmark run measured 438 / 375 ms (identifier / topic).
 
 A natural model that fails to load falls back to MiniLM, reported once. The model daemon loads
 both.

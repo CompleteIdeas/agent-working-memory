@@ -3,7 +3,7 @@
 
 # Current benchmark results — v0.22.0
 
-Generated 2026-11-01 from commit `b885311`.
+Generated 2026-11-01 from commit `164a1c8`.
 
 Every number on this page came from one run of `npm run bench` against the snapshot and
 flags named below. Nothing here is carried forward from an earlier version; if a row is
@@ -14,7 +14,7 @@ missing, that suite did not run, and the reason is at the bottom.
 | | |
 |---|---|
 | Version | 0.22.0 |
-| Commit | `b885311` |
+| Commit | `164a1c8` |
 | Date | 2026-11-01 |
 | Retrieval flags | `AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1 AWM_MODEL_DAEMON=0` |
 | Snapshot | `tests/realstore-eval/snapshot/store.db` |
@@ -31,8 +31,8 @@ missing, that suite did not run, and the reason is at the bottom.
 
 | Suite | probes | s@1 | s@5 | MRR | abstention | stale top | p50 | p90 |
 |---|---|---|---|---|---|---|---|---|
-| Identifier queries (real store) | 300 | **93.3%** | 98.7% | 95.8% | 0.0% | 0.0% | 573 ms | 1459 ms |
-| Topic queries (real store) | 450 | **96.0%** | 98.7% | 97.3% | 0.0% | 0.0% | 364 ms | 471 ms |
+| Identifier queries (real store) | 300 | **93.3%** | 98.7% | 95.8% | 0.0% | 0.0% | 438 ms | 562 ms |
+| Topic queries (real store) | 450 | **96.0%** | 98.7% | 97.3% | 0.0% | 0.0% | 375 ms | 460 ms |
 
 - **Identifier queries (real store)** — of the golds retrieved, 99.7% actually contain the answer; net token economics +563 per recall.
 
