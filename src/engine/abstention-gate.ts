@@ -36,6 +36,7 @@
 
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { mainRerankerModel, naturalRerankerModel } from '../core/reranker.js';
 
 export type SignalBand = 'answer' | 'low' | 'withhold';
 
@@ -74,6 +75,17 @@ export interface GateModel {
    * the store has too few questions to fit it; natural queries then use the main model.
    */
   natural?: ShapeModel;
+  /**
+   * 0.22: the cross-encoders the model was fitted on, `<main>|<natural or empty>`. Every feature
+   * is a reranker score, so a model fitted on one reranker is noise on another (Ettin's scores
+   * saturate near 1 where MiniLM's spread). Absent on older files = the main model alone.
+   */
+  rerankers?: string;
+}
+
+/** The stamp for the cross-encoders this process scores with. */
+export function currentRerankers(): string {
+  return `${mainRerankerModel()}|${naturalRerankerModel() ?? ''}`;
 }
 
 /** The fitted parameters and thresholds for one query shape. */
@@ -222,6 +234,14 @@ export function loadModel(agentId: string): GateModel | null {
     if (!staleVersionReported.has(agentId)) {
       staleVersionReported.add(agentId);
       console.error(`[awm] abstention gate for ${agentId} was fitted for feature version ${m.version}, this build uses ${GATE_MODEL_VERSION}; the gate is off until \`awm calibrate\` (or the next consolidation) refits it.`);
+    }
+    return null;
+  }
+  const stamp = currentRerankers();
+  if (m && (m.rerankers ?? `${mainRerankerModel()}|`) !== stamp) {
+    if (!staleVersionReported.has(`${agentId}:rr`)) {
+      staleVersionReported.add(`${agentId}:rr`);
+      console.error(`[awm] abstention gate for ${agentId} was fitted on re-rankers ${m.rerankers ?? '(main only)'}, this process uses ${stamp}; the gate is off until \`awm calibrate\` (or the next consolidation) refits it.`);
     }
     return null;
   }

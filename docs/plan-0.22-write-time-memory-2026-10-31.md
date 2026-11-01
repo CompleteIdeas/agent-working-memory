@@ -139,6 +139,15 @@ Questions come from, in order of preference:
    against the agent-written questions on `wq-eval.ts`; it ships only if it reaches at least
    two-thirds of the agent-written gain (NL +4 of the +6.2 on the sample) and keeps the daemon's
    resident memory within its current budget.
+
+   **Result (2026-11-01): not built.** flan-t5-small wrote unusable questions; the doc2query T5
+   export fails on optimum 2.1.0. Qwen2.5-0.5B-Instruct (q4) wrote questions for 1,970 of the
+   1,994 sample memories at a median 2.3 s each, and moved NL first place on "fused: BM25
+   note+q, vector note" by **+1.0** (67.6 → 68.6), against Haiku's +6.2 on the same sample; its
+   questions share a third as many words with real questions (overlap 0.054 vs 0.179). Robert
+   (2026-11-01) dropped the embedded generator for 0.22. Still open, on the back burner: have a
+   frontier model (the session's own) write questions for the sample; if that does not beat
+   Haiku's +6.2 either, generator size does not matter and the question is closed.
 3. **The cognition-recipe hand-off,** for stores where the embedded generator is switched off:
    memories missing questions are handed to the calling agent on its next `memory_task_end` or
    `memory_restore`, a few at a time.

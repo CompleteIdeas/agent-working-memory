@@ -12,7 +12,7 @@
 
 import type { EngramStore } from '../storage/store.js';
 import type { ActivationEngine } from './activation.js';
-import { GATE_MODEL_VERSION, featureVector, fitLogistic, thresholds, gateEnabled, loadModel, saveModel, type GateFeatures, type GateModel, type ShapeModel } from './abstention-gate.js';
+import { GATE_MODEL_VERSION, featureVector, fitLogistic, thresholds, gateEnabled, loadModel, currentRerankers, saveModel, type GateFeatures, type GateModel, type ShapeModel } from './abstention-gate.js';
 
 const STOP = new Set(('the a an and or of to in on for is are was were be been with what when where which who how did do does have has had '
   + 'at by from as it this that not but all any can will would should could into than then there their they them its also only just more '
@@ -167,7 +167,7 @@ export async function calibrateGate(
   }
   return {
     version: GATE_MODEL_VERSION as 1 | 2, agentId, fittedAt: new Date().toISOString(), storeSize: probes.storeSize,
-    ...main, ...(natural ? { natural } : {}),
+    ...main, ...(natural ? { natural } : {}), rerankers: currentRerankers(),
   };
 }
 

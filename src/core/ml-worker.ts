@@ -429,7 +429,7 @@ export async function dispatchEmbed(args: { texts: string[]; pooling: 'cls' | 'm
   return dispatch<number[][]>('embed', args, lane);
 }
 
-export async function dispatchRerank(args: { query: string; passages: string[] }): Promise<Array<{ index: number; score: number }>> {
+export async function dispatchRerank(args: { query: string; passages: string[]; natural?: boolean }): Promise<Array<{ index: number; score: number }>> {
   return dispatch<Array<{ index: number; score: number }>>('rerank', args);
 }
 

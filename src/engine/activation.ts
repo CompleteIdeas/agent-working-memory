@@ -51,7 +51,7 @@ import { randomUUID } from 'node:crypto';
 import { baseLevelActivation, softplus } from '../core/decay.js';
 import { strengthenAssociation, CoActivationBuffer, ValidationGatedBuffer } from '../core/hebbian.js';
 import { embed, cosineSimilarity } from '../core/embeddings.js';
-import { rerank } from '../core/reranker.js';
+import { rerank, naturalRerankerActive } from '../core/reranker.js';
 import { expandQuery } from '../core/query-expander.js';
 import { startRecallProfile } from '../core/recall-telemetry.js';
 import { computeRecallConfidence } from './confidence.js';
@@ -1124,7 +1124,7 @@ export class ActivationEngine {
         let rerankTimer: ReturnType<typeof setTimeout> | undefined;
         prof.begin('rerank');
         const rerankResults = await Promise.race([
-          rerank(queryContext, passages),
+          rerank(queryContext, passages, { natural: naturalQuery }),
           new Promise<never>((_, reject) => { rerankTimer = setTimeout(() => reject(new Error('reranker timeout')), 10000); }),
         ]).finally(() => { if (rerankTimer) clearTimeout(rerankTimer); });
         prof.end('rerank');
@@ -1411,13 +1411,20 @@ export class ActivationEngine {
     // questions. Measured on the full store with questions: NL 44.8 -> 50.0, topic and identifier
     // unchanged (routing keeps them at 0.95). Without questions 0.5 HURTS NL (43.8 vs 45.9), hence
     // the pool test rather than a fixed switch. AWM_BLEND_QUESTIONS overrides the 0.5.
+    //
+    // 0.22: when a natural-language cross-encoder scored this query (AWM_RERANKER_MODEL_NATURAL,
+    // src/core/reranker.ts), the blend uses its RANK in the pool at weight 0.7 (AWM_BLEND_NATURAL_RANK):
+    // its scores saturate near 1. Measured with questions indexed: 0.5 -> 52.6, 0.7 -> 53.6 (MiniLM 50.0).
     const natural = naturalQuery;
+    const naturalModel = natural && naturalRerankerActive();
     const poolHasQuestions = natural && finalRanked.length > 0
       && finalRanked.filter(r => r.engram.questions?.length).length >= finalRanked.length / 2;
     const blendA = process.env.AWM_BLEND === 'off' ? NaN
       : !natural ? Number(process.env.AWM_BLEND_KEYWORD ?? 0.95)
+      : naturalModel ? Number(process.env.AWM_BLEND_NATURAL_RANK ?? 0.7)
       : poolHasQuestions ? Number(process.env.AWM_BLEND_QUESTIONS ?? 0.5)
       : Number(process.env.AWM_BLEND ?? 0.85);
+    const blendByRank = naturalModel || process.env.AWM_BLEND_MODE === 'rank';
     let ordered: typeof finalRanked;
     if (rerank2Enabled() && Number.isFinite(blendA) && finalRanked.length > 1
         && finalRanked.every(r => r.phaseScores.rerankerScore > 0)) {
@@ -1436,8 +1443,17 @@ export class ActivationEngine {
       const recW = Number(process.env.AWM_BLEND_RECENCY ?? 0);
       const byAge = recW > 0 ? [...finalRanked].sort((a, b) => +new Date(a.engram.createdAt) - +new Date(b.engram.createdAt)) : [];
       const recency = new Map(byAge.map((r, i) => [r.engram.id, byAge.length > 1 ? i / (byAge.length - 1) : 1]));
+      // Rank blend: the cross-encoder's RANK within the pool instead of its score. For a model
+      // whose sigmoid scores saturate near 1 (the Ettin rerankers) the score carries no order at
+      // the top and the score blend breaks it (NL 41.2). On by itself for natural queries scored
+      // by the natural model; AWM_BLEND_MODE=rank forces it for every query (experiments).
+      const byRr = blendByRank
+        ? new Map([...finalRanked].sort((a, b) => b.phaseScores.rerankerScore - a.phaseScores.rerankerScore)
+          .map((r, i, arr) => [r.engram.id, 1 - i / (arr.length - 1)]))
+        : null;
+      const rr = (r: typeof finalRanked[number]) => byRr ? byRr.get(r.engram.id)! : r.phaseScores.rerankerScore;
       const key = (r: typeof finalRanked[number]) =>
-        (blendA * r.phaseScores.rerankerScore + (1 - blendA) * fused.get(r.engram.id)! + recW * (recency.get(r.engram.id) ?? 0))
+        (blendA * rr(r) + (1 - blendA) * fused.get(r.engram.id)! + recW * (recency.get(r.engram.id) ?? 0))
         * (r.phaseScores.stalePenalty ?? 1);
       ordered = [...finalRanked].sort((a, b) => key(b) - key(a));
     } else {

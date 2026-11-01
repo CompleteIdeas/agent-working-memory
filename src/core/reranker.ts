@@ -60,49 +60,97 @@ const MODEL_ID = process.env.AWM_RERANKER_MODEL || DEFAULT_MODEL;
 // asserts exactly at fp32 and to 5e-3 at q8.
 const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'q8') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
 
-// --- In-process fallback ---
+/**
+ * 0.22: a second cross-encoder for NATURAL-LANGUAGE queries (src/core/query-shape.ts).
+ * Measured 2026-11-01 on the real-store snapshot with questions indexed (k=3, top-1):
+ *   Ettin-17m q8 on natural questions  53.6% vs MiniLM 50.0%
+ *   Ettin-17m on topic lookups         93.3% vs MiniLM 96.0%  (so keyword queries keep MiniLM)
+ *   recall p50 with Ettin 303 ms vs MiniLM 408 ms
+ * Unset or 'off' = one model for every query (0.21 behaviour). Its scores saturate near 1, so
+ * recall blends its RANK, not its score, with the fused order (activation.ts).
+ */
+const NATURAL_MODEL_RAW = (process.env.AWM_RERANKER_MODEL_NATURAL ?? '').trim();
+const NATURAL_MODEL_ID: string | null =
+  NATURAL_MODEL_RAW && NATURAL_MODEL_RAW !== 'off' && NATURAL_MODEL_RAW !== MODEL_ID ? NATURAL_MODEL_RAW : null;
 
-let tokenizer: PreTrainedTokenizer | null = null;
-let model: PreTrainedModel | null = null;
-/** Scoring head for a cross-encoder whose ONNX file is only the backbone (see st-head.ts). */
-let head: StHead | null = null;
-let initPromise: Promise<void> | null = null;
+/** The natural-language cross-encoder, or null when every query uses the main one. */
+export function naturalRerankerModel(): string | null {
+  return NATURAL_MODEL_ID;
+}
+export function mainRerankerModel(): string {
+  return MODEL_ID;
+}
 
-async function ensureLoaded(): Promise<void> {
-  if (tokenizer && model) return;
-  if (initPromise) return initPromise;
-  initPromise = (async () => {
+// --- In-process inference, one loaded state per model ---
+
+interface LoadedReranker {
+  tokenizer: PreTrainedTokenizer;
+  model: PreTrainedModel;
+  /** Scoring head for a cross-encoder whose ONNX file is only the backbone (see st-head.ts). */
+  head: StHead | null;
+}
+const loaded = new Map<string, Promise<LoadedReranker>>();
+/** A natural model that failed to load: its queries use the main model, reported once. */
+let naturalFailed = false;
+
+function load(modelId: string): Promise<LoadedReranker> {
+  let p = loaded.get(modelId);
+  if (p) return p;
+  p = (async () => {
     ensureModelCacheDir();
-    tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID);
+    const tokenizer = await AutoTokenizer.from_pretrained(modelId);
     // The default model is a plain sequence classifier; only another model is checked for a
     // sentence-transformers head, so the default path makes no extra request.
-    head = MODEL_ID === DEFAULT_MODEL ? null : await loadStHead(MODEL_ID);
+    const head = modelId === DEFAULT_MODEL ? null : await loadStHead(modelId);
     const Loader = head ? AutoModel : AutoModelForSequenceClassification;
     let dtype = DTYPE;
+    let model: PreTrainedModel;
     try {
-      model = await Loader.from_pretrained(MODEL_ID, { dtype });
+      model = await Loader.from_pretrained(modelId, { dtype });
     } catch (err) {
       // A model that ships only full-precision ONNX (no model_quantized.onnx) cannot load at
       // the q8 default. Fall back rather than leave recall without a ranker.
       if (dtype === 'fp32') throw err;
-      console.error(`Re-ranker ${MODEL_ID} has no ${dtype} weights (${(err as Error).message.slice(0, 80)}); loading fp32`);
+      console.error(`Re-ranker ${modelId} has no ${dtype} weights (${(err as Error).message.slice(0, 80)}); loading fp32`);
       dtype = 'fp32';
-      model = await Loader.from_pretrained(MODEL_ID, { dtype });
+      model = await Loader.from_pretrained(modelId, { dtype });
     }
-    console.error(`Re-ranker model loaded in-process: ${MODEL_ID} (${dtype}${head ? `, ${head.pooling}-pooled head` : ''})`);
+    console.error(`Re-ranker model loaded in-process: ${modelId} (${dtype}${head ? `, ${head.pooling}-pooled head` : ''})`);
+    return { tokenizer, model, head };
   })();
-  return initPromise;
+  // A failed load is not cached: the next call retries (the network may be back).
+  p.catch(() => loaded.delete(modelId));
+  loaded.set(modelId, p);
+  return p;
+}
+
+/** The model a call runs on: the natural one when asked for and loadable, else the main one. */
+async function resolveModel(natural: boolean): Promise<LoadedReranker> {
+  if (natural && NATURAL_MODEL_ID && !naturalFailed) {
+    try {
+      return await load(NATURAL_MODEL_ID);
+    } catch (err) {
+      naturalFailed = true;
+      console.error(`Natural-language re-ranker ${NATURAL_MODEL_ID} failed to load (${(err as Error).message.slice(0, 120)}); natural queries use ${MODEL_ID}`);
+    }
+  }
+  return load(MODEL_ID);
+}
+
+/** True when natural queries are actually scored by the natural model (configured and loaded). */
+export function naturalRerankerActive(): boolean {
+  return !!NATURAL_MODEL_ID && !naturalFailed;
 }
 
 /** One logit per pair: the classifier's own output, or the head applied to the token states. */
-function pairLogits(output: any, inputs: any, n: number): number[] {
+function pairLogits(output: any, inputs: any, n: number, head: StHead | null): number[] {
   if (head) {
     const h = output.last_hidden_state;
     const [, seq, dim] = h.dims as number[];
     const data = h.data as Float32Array;
     const mask = inputs.attention_mask?.data as ArrayLike<number | bigint> | undefined;
     return Array.from({ length: n }, (_, i) =>
-      head!.score(data.subarray(i * seq! * dim!, (i + 1) * seq! * dim!), seq!, dim!, mask ? Array.prototype.slice.call(mask, i * seq!, (i + 1) * seq!) : undefined));
+      head.score(data.subarray(i * seq! * dim!, (i + 1) * seq! * dim!), seq!, dim!, mask ? Array.prototype.slice.call(mask, i * seq!, (i + 1) * seq!) : undefined));
   }
   const logits = output.logits ?? output.last_hidden_state;
   const data = logits.data as Float32Array | number[];
@@ -166,11 +214,12 @@ export function capRerankQuery(tok: PreTrainedTokenizer, query: string, maxToken
     : decode(ids.slice(0, head));
 }
 
-async function scoreChunk(query: string, passages: string[], offset: number): Promise<Array<{ index: number; score: number }>> {
+async function scoreChunk(r: LoadedReranker, query: string, passages: string[], offset: number): Promise<Array<{ index: number; score: number }>> {
+  const { tokenizer, model, head } = r;
   // Batch path
   try {
     const queries = passages.map(() => query);
-    const inputs = tokenizer!(queries, {
+    const inputs = tokenizer(queries, {
       text_pair: passages,
       padding: true,
       truncation: true,
@@ -183,23 +232,23 @@ async function scoreChunk(query: string, passages: string[], offset: number): Pr
       // the typo into a type error, which is the only reason it was ever noticed.
       return_tensor: true,
     });
-    const output = await model!(inputs);
-    return pairLogits(output, inputs, passages.length).map((l, i) => ({ index: offset + i, score: sigmoid(l) }));
+    const output = await model(inputs);
+    return pairLogits(output, inputs, passages.length, head).map((l, i) => ({ index: offset + i, score: sigmoid(l) }));
   } catch {
     // Per-passage fallback (the original 0.7.13 path)
     const results: Array<{ index: number; score: number }> = [];
     let failures = 0, lastErr: unknown;
     for (let i = 0; i < passages.length; i++) {
       try {
-        const inputs = tokenizer!(query, {
+        const inputs = tokenizer(query, {
           text_pair: passages[i],
           padding: true,
           truncation: true,
           // Same ignored-key story as the batch path above.
           return_tensor: true,
         });
-        const output = await model!(inputs);
-        results.push({ index: offset + i, score: sigmoid(pairLogits(output, inputs, 1)[0]!) });
+        const output = await model(inputs);
+        results.push({ index: offset + i, score: sigmoid(pairLogits(output, inputs, 1, head)[0]!) });
       } catch (err) {
         failures++; lastErr = err;
         results.push({ index: offset + i, score: 0 });
@@ -214,18 +263,18 @@ async function scoreChunk(query: string, passages: string[], offset: number): Pr
 
 /** Exported with its caps as parameters so tests can compare settings in one process. */
 export async function inProcessRerank(
-  args: { query: string; passages: string[] },
+  args: { query: string; passages: string[]; natural?: boolean },
   caps: { batch?: number; queryTokens?: number } = {},
 ): Promise<Array<{ index: number; score: number }>> {
   const { passages } = args;
   if (passages.length === 0) return [];
-  await ensureLoaded();
-  const query = capRerankQuery(tokenizer!, args.query, caps.queryTokens ?? RERANK_QUERY_TOKENS);
+  const r = await resolveModel(!!args.natural);
+  const query = capRerankQuery(r.tokenizer, args.query, caps.queryTokens ?? RERANK_QUERY_TOKENS);
   const batch = caps.batch ?? RERANK_BATCH;
   const size = batch > 0 ? batch : passages.length;
   const results: Array<{ index: number; score: number }> = [];
   for (let b = 0; b < passages.length; b += size) {
-    results.push(...await scoreChunk(query, passages.slice(b, b + size), b));
+    results.push(...await scoreChunk(r, query, passages.slice(b, b + size), b));
   }
   results.sort((a, b) => b.score - a.score);
   return results;
@@ -233,14 +282,20 @@ export async function inProcessRerank(
 
 // Register the in-process handler with the pool
 registerInProcessHandlers({ rerank: (args) => inProcessRerank(args) });
-registerInferenceConfig({ rerankModel: MODEL_ID, rerankDtype: DTYPE, rerankBatch: RERANK_BATCH, rerankQueryTokens: RERANK_QUERY_TOKENS });
+registerInferenceConfig({
+  rerankModel: MODEL_ID, rerankDtype: DTYPE, rerankBatch: RERANK_BATCH, rerankQueryTokens: RERANK_QUERY_TOKENS,
+  ...(NATURAL_MODEL_ID ? { rerankModelNatural: NATURAL_MODEL_ID } : {}),
+});
 
 // --- Public API ---
 
-/** Kept for backwards compat. */
+/** Warms the cross-encoder(s); returns the main model. Kept for backwards compat. */
 export async function getReranker(): Promise<any> {
-  await ensureLoaded();
-  return model;
+  const main = await load(MODEL_ID);
+  // Warm the natural model too, so the first natural query does not pay its load. A failure
+  // here is reported by resolveModel and leaves natural queries on the main model.
+  if (NATURAL_MODEL_ID) await resolveModel(true);
+  return main.model;
 }
 
 export interface RerankResult {
@@ -253,7 +308,9 @@ export interface RerankResult {
  * Returns results sorted by relevance score (descending).
  * Dispatches to the worker pool (or in-process fallback).
  */
-export async function rerank(query: string, passages: string[]): Promise<RerankResult[]> {
+export async function rerank(query: string, passages: string[], opts: { natural?: boolean } = {}): Promise<RerankResult[]> {
   if (passages.length === 0) return [];
-  return dispatchRerank({ query, passages });
+  // Only flag the call when a natural model exists, so a one-model setup sends exactly the
+  // request it always did (and the model daemon's protocol is unchanged for it).
+  return dispatchRerank(opts.natural && NATURAL_MODEL_ID ? { query, passages, natural: true } : { query, passages });
 }

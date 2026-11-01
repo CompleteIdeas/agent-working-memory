@@ -41,7 +41,7 @@ import { VERSION } from '../version.js';
 
 export interface DaemonHandlers {
   embed(args: { texts: string[]; pooling: 'cls' | 'mean'; dimensions: number }): Promise<number[][]>;
-  rerank(args: { query: string; passages: string[] }): Promise<Array<{ index: number; score: number }>>;
+  rerank(args: { query: string; passages: string[]; natural?: boolean }): Promise<Array<{ index: number; score: number }>>;
   expand(args: { prompt: string; maxNewTokens: number; noRepeatNgramSize: number }): Promise<string>;
   warm(): Promise<void>;
   /** Texts per scheduling step for an embed; 0 = the whole request at once. */

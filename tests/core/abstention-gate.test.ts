@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  fitLogistic, thresholds, classify, featureVector, saveModel, loadModel, setGateModelPathForTests, GATE_MODEL_VERSION, type GateModel,
+  fitLogistic, thresholds, classify, featureVector, saveModel, loadModel, setGateModelPathForTests, GATE_MODEL_VERSION, currentRerankers, type GateModel,
 } from '../../src/engine/abstention-gate.js';
 import { needsRecalibration } from '../../src/engine/abstention-calibration.js';
 import { EngramStore } from '../../src/storage/sqlite.js';
@@ -193,6 +193,27 @@ describe('feature version 2 (0.21.1: match density)', () => {
       setGateModelPathForTests(null);
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('reranker stamp (0.22)', () => {
+  let dir: string;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'awm-gate-rr-')); setGateModelPathForTests(join(dir, 'abstention-model.json')); });
+  afterEach(() => { setGateModelPathForTests(null); rmSync(dir, { recursive: true, force: true }); });
+
+  it('scores a model fitted on the re-rankers this process uses', () => {
+    saveModel(model({ rerankers: currentRerankers() }));
+    expect(loadModel('a')).not.toBeNull();
+  });
+
+  it('treats an unstamped (pre-0.22) model as fitted on the main re-ranker alone', () => {
+    saveModel(model());
+    expect(loadModel('a') !== null).toBe(currentRerankers().endsWith('|'));
+  });
+
+  it('does not score a model fitted on other re-rankers', () => {
+    saveModel(model({ rerankers: 'some/other-cross-encoder|' }));
+    expect(loadModel('a')).toBeNull();
   });
 });
 
