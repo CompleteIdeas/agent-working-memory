@@ -65,11 +65,14 @@ const DTYPE = (process.env.AWM_RERANKER_DTYPE || 'q8') as 'fp32' | 'fp16' | 'q8'
  * Measured 2026-11-01 on the real-store snapshot with questions indexed (k=3, top-1):
  *   Ettin-17m q8 on natural questions  53.6% vs MiniLM 50.0%
  *   Ettin-17m on topic lookups         93.3% vs MiniLM 96.0%  (so keyword queries keep MiniLM)
- *   recall p50 with Ettin 303 ms vs MiniLM 408 ms
- * Unset or 'off' = one model for every query (0.21 behaviour). Its scores saturate near 1, so
+ *   recall p50 unchanged (~300 ms both, measured back to back)
+ * Default Ettin-17m (on since 0.22; its HF repo ships int8 as model_quint8_avx2 / model_qint8_arm64,
+ * loaded by the fallback in load(): natural 52.6 with that file, recall speed unchanged).
+ * 'off' = one model for every query (0.21 behaviour). Its scores saturate near 1, so
  * recall blends its RANK, not its score, with the fused order (activation.ts).
  */
-const NATURAL_MODEL_RAW = (process.env.AWM_RERANKER_MODEL_NATURAL ?? '').trim();
+const DEFAULT_NATURAL_MODEL = 'cross-encoder/ettin-reranker-17m-v1';
+const NATURAL_MODEL_RAW = (process.env.AWM_RERANKER_MODEL_NATURAL ?? DEFAULT_NATURAL_MODEL).trim();
 const NATURAL_MODEL_ID: string | null =
   NATURAL_MODEL_RAW && NATURAL_MODEL_RAW !== 'off' && NATURAL_MODEL_RAW !== MODEL_ID ? NATURAL_MODEL_RAW : null;
 
@@ -108,15 +111,29 @@ function load(modelId: string): Promise<LoadedReranker> {
     try {
       model = await Loader.from_pretrained(modelId, { dtype });
     } catch (err) {
-      // A model that ships only full-precision ONNX (no model_quantized.onnx) cannot load at
-      // the q8 default. Fall back rather than leave recall without a ranker.
+      // A model that ships no model_quantized.onnx cannot load at the q8 default. Many
+      // sentence-transformers exports (the Ettin rerankers among them) ship int8 files under
+      // hardware names instead: model_quint8_avx2.onnx (any x86-64 CPU with AVX2) and
+      // model_qint8_arm64.onnx. Try the one for this CPU, then fp32, rather than leave recall
+      // without a ranker. transformers.js appends no suffix at dtype fp32, so the named file loads as is.
       if (dtype === 'fp32') throw err;
-      console.error(`Re-ranker ${modelId} has no ${dtype} weights (${(err as Error).message.slice(0, 80)}); loading fp32`);
-      dtype = 'fp32';
-      model = await Loader.from_pretrained(modelId, { dtype });
+      const hwFile = process.arch === 'arm64' ? 'model_qint8_arm64' : process.arch === 'x64' ? 'model_quint8_avx2' : null;
+      let hwLoaded = false;
+      if (hwFile && (dtype === 'q8' || dtype === 'int8' || dtype === 'uint8')) {
+        try {
+          model = await Loader.from_pretrained(modelId, { dtype: 'fp32', model_file_name: hwFile } as any);
+          dtype = hwFile as any;
+          hwLoaded = true;
+        } catch { /* not shipped either: full precision below */ }
+      }
+      if (!hwLoaded) {
+        console.error(`Re-ranker ${modelId} has no ${dtype} weights (${(err as Error).message.slice(0, 80)}); loading fp32`);
+        dtype = 'fp32';
+        model = await Loader.from_pretrained(modelId, { dtype });
+      }
     }
     console.error(`Re-ranker model loaded in-process: ${modelId} (${dtype}${head ? `, ${head.pooling}-pooled head` : ''})`);
-    return { tokenizer, model, head };
+    return { tokenizer, model: model!, head };
   })();
   // A failed load is not cached: the next call retries (the network may be back).
   p.catch(() => loaded.delete(modelId));

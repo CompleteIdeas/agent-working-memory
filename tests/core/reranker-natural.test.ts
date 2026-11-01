@@ -1,8 +1,8 @@
 // Copyright 2026 Robert Winter / Complete Ideas
 // SPDX-License-Identifier: Apache-2.0
 /**
- * 0.22 natural-language re-ranker switch (src/core/reranker.ts). The routing must be inert
- * unless AWM_RERANKER_MODEL_NATURAL names a different model, and the daemon must be told
+ * 0.22 natural-language re-ranker switch (src/core/reranker.ts). On by default (Ettin-17m); 'off'
+ * or the main model's own id turns it off, and the daemon must be told
  * about it so a spawned daemon loads the same pair. No model is loaded here.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -18,8 +18,14 @@ async function fresh(env: Record<string, string | undefined>) {
 afterEach(() => { delete process.env.AWM_RERANKER_MODEL_NATURAL; delete process.env.AWM_RERANKER_MODEL; vi.resetModules(); });
 
 describe('natural-language re-ranker switch', () => {
-  it('is off by default: one model, nothing new in the daemon config', async () => {
+  it('defaults to Ettin-17m for natural queries (0.22)', async () => {
     const { r, cfg } = await fresh({ AWM_RERANKER_MODEL_NATURAL: undefined });
+    expect(r.naturalRerankerModel()).toBe('cross-encoder/ettin-reranker-17m-v1');
+    expect(cfg.rerankModelNatural).toBe('cross-encoder/ettin-reranker-17m-v1');
+  });
+
+  it("'off' restores one model, with nothing new in the daemon config", async () => {
+    const { r, cfg } = await fresh({ AWM_RERANKER_MODEL_NATURAL: 'off' });
     expect(r.naturalRerankerModel()).toBeNull();
     expect(r.naturalRerankerActive()).toBe(false);
     expect(cfg.rerankModelNatural).toBeUndefined();

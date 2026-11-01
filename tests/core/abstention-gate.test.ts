@@ -23,7 +23,7 @@ const model = (over: Partial<GateModel> = {}): GateModel => ({
   version: GATE_MODEL_VERSION, agentId: 'a', fittedAt: new Date().toISOString(), storeSize: 100,
   ...(() => { const d = GATE_MODEL_VERSION === 2 ? 8 : 3; return { mu: new Array(d).fill(0), sd: new Array(d).fill(1), w: [1, ...new Array(d - 1).fill(0)] }; })(),
   b: 0, answerAt: 1, withholdBelow: -1,
-  stats: { positives: 100, positivesCorrect: 90, nulls: 100 }, ...over,
+  stats: { positives: 100, positivesCorrect: 90, nulls: 100 }, rerankers: currentRerankers(), ...over,
 });
 
 describe('the math', () => {
@@ -207,7 +207,7 @@ describe('reranker stamp (0.22)', () => {
   });
 
   it('treats an unstamped (pre-0.22) model as fitted on the main re-ranker alone', () => {
-    saveModel(model());
+    saveModel(model({ rerankers: undefined }));
     expect(loadModel('a') !== null).toBe(currentRerankers().endsWith('|'));
   });
 
