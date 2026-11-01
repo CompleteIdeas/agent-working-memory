@@ -18,6 +18,9 @@
   "resolutionEffort": 0.0-1.0,
   "confidence": 0.0-1.0,
   "memory_class": "canonical | working | ephemeral | structural",
+  "questions": ["string"],                                  // 0.22 — up to 5, keyword-indexed only
+  "slot": "entity.attribute",                               // 0.22 — supersedes the slot's holder
+  "supersedes_slot": true,                                  // 0.22 — false keeps a second fact
   "sequence": 5,                                            // 0.8 — optional story-time
   "embed": true,                                            // 0.8 — force embed for structural
   "references": [                                           // 0.8 — typed cross-record links
@@ -604,6 +607,39 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 expansion-only 63%±14 · all-four 74%±10 · entity-index config 74%±5. No single-factor cell
 reproduced the combined wins; all CIs overlap at k=3 — no default flip without a k≥10 run.
 
+### 0.22.0 additions (questions, the natural-language re-ranker, slots, 2026-11-01)
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `AWM_RERANKER_MODEL_NATURAL` | `cross-encoder/ettin-reranker-17m-v1` | Cross-encoder for natural-language questions (as judged by `src/core/query-shape.ts`); keyword lookups keep `AWM_RERANKER_MODEL`. Loads the int8 file the repository ships for this CPU (`model_quint8_avx2` on x64, `model_qint8_arm64` on ARM), else fp32. `off`, or the main model's own id, uses one model for every query. A natural model that fails to load falls back to the main one, reported once. |
+| `AWM_BLEND_NATURAL_RANK` | `0.7` | Weight of the natural model's **rank** in the pool when it is blended with the fused BM25 + vector order. Its scores saturate near 1, so its rank is used, not its score. |
+| `AWM_BLEND` / `AWM_BLEND_KEYWORD` | `0.85` / `0.95` | (0.21.1) Cross-encoder weight in the final blend for natural questions scored by the main model, and for keyword lookups. `AWM_BLEND=off` sorts by the cross-encoder alone, as before 0.21.1. |
+| `AWM_BLEND_QUESTIONS` | `0.5` | Blend weight for a natural question scored by the main model when at least half the candidate pool carries questions. |
+| `AWM_BLEND_MODE` | score | `rank` forces the rank blend for every query (experiments). |
+| `AWM_GATE_FEATURES` | `1` | `2` selects the eight-signal gate feature set (measured, not better: `docs/abstention-signals-2026-10-30.md` §14). |
+
+**`memory_write` / `POST /memory/write` fields:**
+
+| Field | Meaning |
+|---|---|
+| `questions` | Up to 5 natural questions the memory answers. Trimmed, 8–300 characters, de-duplicated, redacted like content, merged onto the memory that ends up holding the fact. Indexed for keyword search only, and searched only by natural-language questions: SQLite keeps a second FTS index (`engrams_qfts`), Postgres/PGlite a second tsvector (`fts_q`). Never embedded, never shown to the cross-encoder. The reply reports `questions: { kept, dropped }`. |
+| `slot` | Entity + attribute, e.g. `rosterkeep.deploy-command` (normalised: trimmed, lower-case). A write to a slot supersedes its current holder for the same agent and memory class; an older fact (earlier `valid_from`) is stored as history; a less-trusted write cannot retire a more-trusted holder. The reply reports `slot: { slot, replaced, keptAsHistoryOf }`. |
+| `supersedes_slot` (`supersedesSlot`) | `false` keeps a deliberate second fact in the slot instead of superseding. |
+
+**Capability hand-off (MCP).** `memory_restore` takes `capabilities` (e.g. `["questions"]`). With
+`questions` declared, `memory_restore` and `memory_task_end` replies carry a `questions@1` job: up
+to 5 of the agent's current memories with no questions. The host answers with
+**`memory_set_questions`** `{ items: [{ id, questions }] }` (at most 20 items; another agent's ids
+are refused) and the reply reports coverage. Library hosts use `getEngramsMissingQuestions(agentId,
+limit, { excludeTags })`, `questionCoverage(agentId, { excludeTags })`, `attachQuestions()` (writes
+through the redacting store whatever store it is given) and `renderQuestionJob()` from
+`src/core/question-handoff.ts`.
+
+**Calibration with questions.** When at least a quarter of an agent's memories carry questions, `awm calibrate` also fits a natural-question model: positives are a memory's own stored question with that memory as the answer; nulls are another memory's question recalled with that memory excluded, and questions other agents of the store have stored.
+
+**Gate models** record the re-rankers they were fitted on (`rerankers`); a model fitted on other
+re-rankers stands aside, reported once per agent, until `awm calibrate` refits it.
+
 ### Unreleased additions (redaction, the vault, calibrated abstention, 2026-10-29)
 
 Write-time redaction is **on by default**. The vault and the calibrated gate are **opt-in**.
@@ -864,6 +900,8 @@ Default half-life: 7 days
 | recipe_id | TEXT | Cognition recipe that produced it, e.g. `skill-derivation@1` (D14) |
 | valid_from | TEXT | Bi-temporal validity start (D8) |
 | valid_to | TEXT | Bi-temporal validity end — shown as `[valid until …]` in recall; past it, the memory is down-ranked like a superseded one and shown as `⚠ EXPIRED` (D8, enforced since 0.18.0) |
+| questions | TEXT | JSON array of up to 5 natural questions the memory answers (0.22); keyword-indexed only |
+| slot | TEXT | Entity + attribute this memory holds (0.22); indexed, see `memory_write` `slot` |
 
 ### associations
 | Column | Type | Notes |
@@ -896,6 +934,10 @@ auto-tagger `entity:` tags). Retrieval reads it only behind `AWM_ENTITY_INDEX_FE
 
 ### engrams_fts (FTS5 virtual table)
 Full-text search index on concept, content, tags. Auto-synced via triggers.
+
+### engrams_qfts (FTS5 virtual table, 0.22)
+The same plus `questions`. Only natural-language recall searches it, so identifier and topic
+lookups keep the three-column statistics they were measured on. Built once on first open.
 
 ### activation_events
 Logs every retrieval query: context, result count, top score, latency.

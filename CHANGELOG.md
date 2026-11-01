@@ -1,5 +1,125 @@
 # Changelog
 
+## 0.22.0 (2026-11-01) — memories carry the questions they answer, and natural questions get their own re-ranker
+
+### Behaviour changes — read before upgrading
+
+- **A second cross-encoder downloads on first use.** Natural-language questions are now re-ranked
+  by Ettin-17m (`cross-encoder/ettin-reranker-17m-v1`, Apache-2.0, a 17 MB int8 file picked for the
+  CPU: `model_quint8_avx2` on x64, `model_qint8_arm64` on ARM); keyword lookups keep MiniLM.
+  `AWM_RERANKER_MODEL_NATURAL=off` goes back to one model for every query.
+- **Recall order changes for natural-language questions** (keyword lookups too, slightly — see
+  the table). Recall time is unchanged: about 300 ms at the median for both, measured back to back.
+- **Recalibrate the opt-in gate** (`awm calibrate`) if `AWM_ABSTAIN_GATE=calibrated` is set. A gate
+  model now records the re-rankers it was fitted on and stands aside (reported once per agent)
+  when they differ, so a 0.21 model is not used until it is refitted.
+- **SQLite stores rebuild their keyword index once** on first open (a new column for questions and
+  a second index; nothing is lost — the rebuild reads the memories table). Postgres and PGlite
+  gain the column and a `fts_q` index, backfilled once.
+- **Re-run `awm setup --global`** (and refresh the plugin) for the new guidance: write
+  `questions` and `slot`, and declare `capabilities: ["questions"]` on `memory_restore`.
+- **Nothing is required of agents.** A store without questions recalls as before, plus the new
+  re-ranker. Questions help only once memories have them — written with the memory, or backfilled
+  through the hand-off below.
+
+### Questions a memory answers
+
+`memory_write` (MCP and HTTP) takes `questions`: up to five natural questions the memory answers,
+the way someone would ask later without remembering its wording, file names or IDs. They are
+trimmed, de-duplicated, capped at five, redacted like content, and merged onto whichever memory
+ends up holding the fact (create, reinforce or supersede). The reply says how many were indexed.
+
+They are indexed **for keyword search only**, and only natural-language questions search them —
+measured on the real-store snapshot with questions written for every memory:
+
+| | identifier: first / top 5 / MRR | topic: first / top 5 / MRR | natural-language: first |
+|---|---|---|---|
+| 0.21.1 | 93.3 / 98.7 / 95.8 | 96.0 / 98.7 / 97.3 | 45.4 |
+| questions, one shared index | 92.3 / 98.3 / 95.2 | 95.8 / 98.7 / 97.1 | 50.0 |
+| **questions, a second index only natural questions search** | **93.3 / 98.7 / 95.8** | **96.0 / 98.7 / 97.3** | **50.0** |
+
+Questions are never embedded (in the vector they cost topic questions 9.6 points) and never shown
+to the cross-encoder. With questions on at least half the candidate pool, a natural question
+blends the cross-encoder at 0.5 instead of 0.85 (`AWM_BLEND_QUESTIONS`). Full measurement:
+`docs/abstention-signals-2026-10-30.md` §9–11.
+
+**Who writes them.** The installed guidance asks agents for 2–5 questions per write. For memories
+that have none, a host with its own model can do the work (below). AWM itself calls no hosted
+model. An embedded generator was measured and not built: Qwen2.5-0.5B's questions lifted
+natural-language recall by 1.0 point where Claude Haiku's lifted it by 6.2.
+
+### The capability hand-off: the host's model backfills questions
+
+A host declares `capabilities: ["questions"]` on `memory_restore`. From then on, the
+`memory_restore` and `memory_task_end` replies carry a `questions@1` job: up to five of the
+agent's own current memories with no questions, most recently used first. The host answers with
+the new **`memory_set_questions`** tool (20 MCP tools now); the same clean-up and redaction apply,
+and the reply reports coverage. Hosts that embed AWM as a library use the same pieces directly:
+`getEngramsMissingQuestions(agentId, limit, { excludeTags })`, `questionCoverage(agentId,
+{ excludeTags })`, `attachQuestions()` (which redacts on any store) and `renderQuestionJob()`.
+MWA is the first such host (opt-in `MWA_QUESTIONS=on`).
+
+### Natural-language questions get their own re-ranker
+
+Ettin-17m scores natural-shaped queries (`src/core/query-shape.ts`); MiniLM still scores keyword
+lookups. Ettin's scores saturate near 1, so its **rank** in the pool is blended with the fused
+BM25 + vector order, at 0.7 (`AWM_BLEND_NATURAL_RANK`). Measured as a normal install (only the
+files the model's repository ships), k=3:
+
+| | natural-language: first | topic: first | identifier: first |
+|---|---|---|---|
+| store with no questions, MiniLM only (0.21.1) | 45.4 | 96.0 | 93.3 |
+| store with no questions, **Ettin for natural questions** | **47.9** | 96.0 | 93.3 |
+| questions on every memory, MiniLM only | 50.0 | 96.0 | 93.3 |
+| questions on every memory, **Ettin for natural questions** | **52.6** | 96.0 | 93.3 |
+
+No identifier or topic query in these fixtures is natural-shaped, so Ettin never scores them
+(an earlier note of 93.8% identifier compared the full 1,316-query set with the 300-query sample).
+The published benchmark (no questions in its
+store) is unchanged: 93.3% / 96.0% first, recall p50 about 384 ms, with Ettin on or off.
+
+A natural model that fails to load falls back to MiniLM, reported once. The model daemon loads
+both.
+
+**Correction.** 0.21.1 said Ettin-17m was "about 3× slower on CPU even quantized". Measured back to
+back on the same machine it is not slower (about 300 ms recall median either way); the earlier
+gap was machine load.
+
+### Slots: a newer value replaces the old one without its id
+
+`memory_write` takes `slot`, an entity and attribute such as `"rosterkeep.deploy-command"`. A
+later write to the same slot (same agent and memory class) supersedes the current holder through
+the existing supersede path, trust check included. An older fact (earlier `valid_from`) is kept as
+history, never as the current value, so a late retry cannot roll a value back; a slot write never
+merges into a memory by concept; `supersedes_slot: false` keeps a deliberate second fact. HTTP
+takes the same fields. Slot inference is not in this release.
+
+### The calibrated gate: a model per query shape
+
+The opt-in gate (`AWM_ABSTAIN_GATE=calibrated`) now fits a separate model for natural-language
+questions, practising on the questions stored with memories, when at least a quarter of the
+agent's memories have them. On natural-language questions it withholds **10 of 97** correct
+answers instead of 21 of 88 (24%), at the cost of withholding 23 instead of 60 of 97 deleted facts
+— Robert's choice: lose fewer answers. Keyword behaviour is unchanged (1 of 712 correct withheld,
+58 of 73 never-stored). An eight-signal feature set was measured and is not the default
+(`AWM_GATE_FEATURES=2`). Ledger: `docs/abstention-signals-2026-10-30.md` §14.
+
+### Measured, not built
+
+- **An answer-check model as a gate signal.** Reading a QA model's no-answer score lifted the
+  natural-language deleted-fact ceiling from 0.827 to 0.840 (MiniLM, 86 ms) and 0.845 (DeBERTa-v3-base,
+  about 655 ms) against a 0.88 bar. The limit is documented in `docs/abstention.md`.
+- **Profiles that trade speed for accuracy.** Nothing slower passed; the Ettin re-ranker became
+  the default instead.
+
+### Also
+
+- `npm run bench` publishes the **stale top-1 rate** — recalls whose first result is a superseded
+  or retracted memory: 0 of 300 identifier and 0 of 450 topic queries, against 8.3% / 14.7% for
+  plain BM25 and 14.3% / 32.4% for plain vector search over the same store.
+- A recent-decisions fixture (120 decisions, `tests/realstore-eval/decisions-eval.ts`) now guards
+  any change to decay or recency: 52.5% first; neither recency nor questions moved it.
+
 ## 0.21.1 (2026-10-31) — recall ranks natural questions as well as plain search, and every published number rises
 
 ### Behaviour changes — read before upgrading

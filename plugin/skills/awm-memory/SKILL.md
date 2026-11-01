@@ -10,7 +10,7 @@ description: >-
 
 # Agent Working Memory
 
-Generated from `src/adapters/common.ts` (AWM v0.21.1) — the same guidance
+Generated from `src/adapters/common.ts` (AWM v0.22.0) — the same guidance
 `awm setup` writes into CLAUDE.md. Do not edit here; edit the source and re-run
 `npm run build:plugin`.
 
@@ -34,6 +34,10 @@ you write them; AWM stays current because every agent reads + writes the same st
    `onboard a new project` skill and follow it — or call `onboard_scan` on the project's
    docs/repo, refine the candidates, run `onboard_questions`, and save the good ones with
    `memory_write` (canonical). A cold store is nearly useless until it's seeded.
+   Pass `capabilities: ["questions"]`: when a reply then carries a `questions@1` job
+   (memories that have no questions yet), do it as a separate short pass and answer with
+   `memory_set_questions` — questions are how a memory is found when someone asks in
+   their own words.
 2. **Starting a task**: call `memory_task_begin` (checkpoints + recalls relevant memories).
 3. **During work**: call `memory_recall` BEFORE stating any fact, BEFORE searching
    the filesystem, BEFORE making architectural decisions. Recall is ~300ms — cheaper
@@ -99,6 +103,20 @@ extraction all see most strongly.
   that exists only as a tag is invisible to the embedding entirely, and
   invisible to the ranker unless it is one of those three prefixes inside that
   budget. Tag it *and* write it.
+- **Add 2–5 `questions` the memory answers.** Write them the way someone
+  would ask later without remembering your wording, file names or IDs:
+  "How do I ship the club app to production?" for a note about
+  `railway up --service rowos-app`. They are indexed for keyword search only
+  (never embedded), so they bridge the gap between how people ask and how
+  notes are written. Measured on a real store: natural-language recall up
+  6 points, no loss on exact lookups. Vary them — what happened or was
+  decided, why, and a practical "how do I / where is".
+- **Give a `slot` to any value that can change.** A slot names the entity
+  and attribute: `robert.flight-time`, `rosterkeep.deploy-command`,
+  `club.fall-fee`. Writing the same slot again replaces the old value
+  automatically — you do not need its id, and you cannot forget to
+  supersede. An older fact (earlier `valid_from`) is kept as history, never
+  as the current value. Same agent and memory class only.
 - **Reserve canonical for stable invariants.** Decisions, requirements,
   hard facts, cross-agent shared context. Working class (default) is correct
   for findings, observations, and progress notes. The canonical floor is
@@ -333,7 +351,8 @@ parallel session saved last. Durable facts still go through a plain `memory_writ
 end of a task, re-write the session notes worth keeping without `scope`.
 
 ### Cognition recipes — YOU do the thinking, AWM keeps the result
-AWM contains no LLM. When memory needs real thinking — distilling a repeatable
+AWM never calls a hosted model, and any model it embeds must not slow recall.
+So when memory needs real thinking — distilling a repeatable
 procedure, reflecting on a failure — AWM hands YOU a versioned recipe (prompt +
 strict output shape) and you run it as a SEPARATE focused pass, then write the
 result back as an ordinary memory with provenance.

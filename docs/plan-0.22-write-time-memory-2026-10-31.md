@@ -402,8 +402,8 @@ Each step lands with its tests and its benchmark run; nothing proceeds on an unm
 | 6 | Slots: inference, automatic supersession, history queries; stale-top-1 fixture — **explicit slots built 2026-10-31 (scope, newer-only, no concept merge, opt-out, trust); inference and the stale-top-1 fixture still to do** | lifecycle target | 3 days |
 | 7 | Consolidation scaled back; trace output; bench as release gate; generated claims | observability | 2 days |
 | 7b | Profiles (§4.11) — **dropped 2026-11-01: nothing slower passed; the natural-language re-ranker (Ettin-17m) became the default instead** | user choice with numbers | — |
-| 7c | Capability hand-off (§4.12): declaration on restore/HTTP, routing, validation; MWA wired as first host — **questions@1 built 2026-10-31 over MCP (declare on memory_restore, job at restore and task-end, memory_set_questions), tested end to end; HTTP and MWA wiring still to do** | shared intelligence | 3 days |
-| 8 | Docs, migration guide, CHANGELOG, Linux suite, release | ship | 1 day |
+| 7c | Capability hand-off (§4.12): declaration on restore/HTTP, routing, validation; MWA wired as first host — **questions@1 built 2026-10-31 over MCP (declare on memory_restore, job at restore and task-end, memory_set_questions), tested end to end; MWA wired 2026-11-01 as a library host (attachQuestions redacts on any store, excludeTags); the HTTP declaration moves to 0.23** | shared intelligence | 3 days |
+| 8 | Docs, migration guide, CHANGELOG, Linux suite, release | ship — **released as 0.22.0 on 2026-11-01. Not in it, moved to 0.23: ranking-factor retirement (5), slot inference and the stale-top-1 fixture (6), consolidation scale-back (7), the HTTP capability declaration (7c)** | 1 day |
 
 About three weeks of focused work. Steps 0, 1 and 4 can start now; step 0 is blocked only on host
 memory.

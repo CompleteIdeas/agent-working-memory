@@ -29,7 +29,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. Done — 19 tools appear automatically (17 memory + 2 onboarding: `onboard_scan`, `onboard_questions`).
+Restart Claude Code. Done — 20 tools appear automatically (18 memory + 2 onboarding: `onboard_scan`, `onboard_questions`).
 
 > First install downloads the ML models — **~600 MB total**, so minutes rather than seconds on a normal connection: 134 MB bge-small embedder + 92 MB ms-marco reranker (fp32) + 377 MB flan-t5-small expander. Nothing is bundled in the package; this is a one-time fetch into `AWM_CACHE_DIR` > `HF_HOME` > `<packageRoot>/data/models`, and it is cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
 
@@ -365,7 +365,7 @@ Zero memory tools are registered — Claude can't see or call any of them, not e
 ## Architecture Quick Reference
 
 ```
-Claude Code ←stdio→ AWM MCP (19 tools)
+Claude Code ←stdio→ AWM MCP (20 tools)
                         ↓
                    AWM Engine
                    ├── Salience filter (write-time)

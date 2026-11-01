@@ -95,7 +95,7 @@ Maps user-facing features to their implementation across the codebase.
 | Hebbian learning | `tests/core/hebbian.test.ts` | `strengthenAssociation()`, `decayAssociation()`, `CoActivationBuffer` |
 | Salience filter | `tests/core/salience.test.ts` | `evaluateSalience()` |
 | Full lifecycle | `tests/integration/memory-lifecycle.test.ts` | Write, activate, feedback, retract, evict, search, isolation |
-| MCP protocol | `tests/mcp-smoke.ts` | The MCP tool surface via JSON-RPC (19 tools) |
+| MCP protocol | `tests/mcp-smoke.ts` | The MCP tool surface via JSON-RPC (20 tools) |
 | Self-test | `tests/self-test/runner.ts` | 31 dimensions across 11 categories |
 | Workday eval | `tests/workday-eval/runner.ts` | 14 coding recall challenges |
 | Real-store retrieval | `tests/realstore-eval/runner.ts` | Identifier + topic hold-out, abstention, token economics |

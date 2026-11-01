@@ -11,7 +11,7 @@ installer uses, and `npm run check:release` fails if the committed output has dr
 
 | | |
 |---|---|
-| MCP server | 1 server, 19 memory tools, via `bin/awm-mcp-launcher.cjs` |
+| MCP server | 1 server, 20 memory tools, via `bin/awm-mcp-launcher.cjs` |
 | Hooks | Stop, PreCompact, SessionEnd, UserPromptSubmit (prime), PostToolUse — hooks v0.20.0 |
 | Skill | `awm-memory` — when to recall, when to write, how to tag |
 
@@ -22,7 +22,7 @@ The launcher defaults `AWM_DB_PATH` to `~/.awm/memory.db` — **the same file
 than quietly starting an empty one. Set `AWM_DB_PATH` yourself to override.
 
 It prefers an installed copy of the package (global, or a local `node_modules`) and falls
-back to `npx -p agent-working-memory@0.21.1`. The npx path rebuilds
+back to `npx -p agent-working-memory@0.22.0`. The npx path rebuilds
 `better-sqlite3` on a cold cache, which is slow enough to look like a hang, so a real
 install is worth having:
 

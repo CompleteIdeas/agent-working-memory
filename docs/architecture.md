@@ -10,7 +10,7 @@ AWM has **two entry points over one SQLite database**, and they are not designed
 │                                                         │
 │  ┌──────────────┐   ┌──────────────┐   ┌────────────┐  │
 │  │  MCP (stdio) │   │  HTTP API    │   │  Hooks     │  │
-│  │  19 tools    │   │  28 routes   │   │  (scripts) │  │
+│  │  20 tools    │   │  28 routes   │   │  (scripts) │  │
 │  └──────┬───────┘   └──────┬───────┘   └─────┬──────┘  │
 │         │                  │                  │         │
 │         └──────────┬───────┘                  │         │
@@ -57,7 +57,7 @@ src/
     sqlite.ts         SQLite + FTS5 persistence (~2,020 lines)
   api/
     routes.ts         HTTP endpoints (memory + task + system)
-  mcp.ts            MCP server (19 tools: 17 memory + 2 onboarding, incognito support)
+  mcp.ts            MCP server (20 tools: 18 memory + 2 onboarding, incognito support)
   cli.ts            CLI (setup, serve, hook config)
   index.ts          HTTP server entry point
 ```

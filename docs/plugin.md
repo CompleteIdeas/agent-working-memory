@@ -123,7 +123,7 @@ to tell what you have.
 
 | Surface | Works? | |
 |---|---|---|
-| **Claude Code** | **Yes** | Everything: 19 tools, all five hooks, the skill |
+| **Claude Code** | **Yes** | Everything: 20 tools, all five hooks, the skill |
 | **Claude Cowork** | **No — do not install it there** | The skill loads and hooks run, but the memory tools do not |
 | **Claude Desktop** | Not yet | Needs an `.mcpb` bundle; Desktop does support local stdio MCP, so this is a packaging job rather than a limitation |
 
@@ -259,6 +259,6 @@ substituted.
 `tests/plugin/plugin-install.test.ts` walks the install path the way Claude Code does:
 resolves the marketplace entry, expands `${CLAUDE_PLUGIN_ROOT}`, checks every referenced file
 exists and parses, asserts the shipped hooks are byte-identical to `HOOK_SCRIPTS`, then starts
-the MCP server over stdio and requires all 19 tools back. It uses a scratch database on
+the MCP server over stdio and requires all 20 tools back. It uses a scratch database on
 purpose — the launcher's job is to default to the user's real store, so a test that forgot to
 override that would write into production memory.

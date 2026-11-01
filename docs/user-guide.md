@@ -144,7 +144,7 @@ Two things matter here. **`AWM_DB_PATH` must point outside the installed package
 `node_modules` is deleted by `npm update`. And **`AWM_AGENT_ID` is the memory pool**:
 only `work` and `personal` are valid.
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with **19 tools** (17 memory + 2 onboarding).
+After restarting Claude Code, check `/mcp` to verify the server is connected with **20 tools** (18 memory + 2 onboarding).
 
 ### MCP Tools
 

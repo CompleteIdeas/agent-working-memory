@@ -445,6 +445,10 @@ you write them; AWM stays current because every agent reads + writes the same st
    \`onboard a new project\` skill and follow it — or call \`onboard_scan\` on the project's
    docs/repo, refine the candidates, run \`onboard_questions\`, and save the good ones with
    \`memory_write\` (canonical). A cold store is nearly useless until it's seeded.
+   Pass \`capabilities: ["questions"]\`: when a reply then carries a \`questions@1\` job
+   (memories that have no questions yet), do it as a separate short pass and answer with
+   \`memory_set_questions\` — questions are how a memory is found when someone asks in
+   their own words.
 2. **Starting a task**: call \`memory_task_begin\` (checkpoints + recalls relevant memories).
 3. **During work**: call \`memory_recall\` BEFORE stating any fact, BEFORE searching
    the filesystem, BEFORE making architectural decisions. Recall is ~300ms — cheaper

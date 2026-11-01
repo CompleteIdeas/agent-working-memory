@@ -162,7 +162,7 @@ installer uses, and \`npm run check:release\` fails if the committed output has 
 
 | | |
 |---|---|
-| MCP server | ${Object.keys({ 'agent-working-memory': 1 }).length} server, 19 memory tools, via \`bin/awm-mcp-launcher.cjs\` |
+| MCP server | ${Object.keys({ 'agent-working-memory': 1 }).length} server, 20 memory tools, via \`bin/awm-mcp-launcher.cjs\` |
 | Hooks | Stop, PreCompact, SessionEnd, UserPromptSubmit (prime), PostToolUse — hooks v${AWM_HOOKS_VERSION} |
 | Skill | \`awm-memory\` — when to recall, when to write, how to tag |
 

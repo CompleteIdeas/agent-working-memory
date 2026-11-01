@@ -34,7 +34,7 @@ that matter, and says **nothing** when nothing fits.
 npm install -g agent-working-memory && awm setup --global
 ```
 
-Restart Claude Code. 19 tools appear. No cloud, no API keys, nothing leaves your machine.
+Restart Claude Code. 20 tools appear. No cloud, no API keys, nothing leaves your machine.
 
 <p align="center">
   <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md"><b>Deciding whether to adopt it? →</b></a> &nbsp;·&nbsp;
@@ -205,10 +205,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.21.1
+## What's new — v0.22.0
 
 | | |
 |---|---|
+| **0.22.0** | **Memories carry the questions they answer, and natural-language questions get their own re-ranker.** `memory_write` takes up to 5 `questions` — how someone would ask later, in their own words. They are indexed for keyword search only, in a second index that only natural-language recall reads: on the real-store snapshot with questions, natural-language first place rose 45.4% → **50.0%** with identifier and topic unchanged. Natural questions are now re-ranked by **Ettin-17m** (Apache-2.0, a 17 MB int8 download on first use), blended by rank: **52.6%** with questions, **47.9%** on a store that has none yet; recall time unchanged. A host with its own model can backfill questions (`capabilities: ["questions"]` on `memory_restore`, then the new `memory_set_questions` tool) — AWM calls no hosted model. A `slot` (`"club.fall-fee"`) makes a newer value replace the old one without its id. The opt-in gate fits a natural-question model: correct natural answers withheld 24% → 10%. **Re-run `awm setup --global`**, and `awm calibrate` if the gate is on. [CHANGELOG](CHANGELOG.md) |
 | **0.21.1** | **Ranking: every published number rises, and natural-language questions catch up with plain search.** The 40-candidate cross-encoder pool was really 24 (an earlier cut held it), and the cross-encoder decided the final order alone. Now 32 candidates chosen by fused BM25 + vector + composite rank, and a final order blending the cross-encoder with that fused rank, weighted by the query's shape. Identifier 92.7% → **93.3%** first, topic 92.7% → **96.0%**, natural-language 41.2% → **45.4%** (tying fused BM25 + vector search). Recall is 12–21% slower at the median. Also: consolidation stopped rewriting the same pattern summary every cycle (18,368 rows of 147 patterns in the test snapshot); a reranker that fails to load is reported instead of silently leaving recall unranked; the opt-in gate's figures corrected and re-measured — it still withholds 21 of 88 correct natural-language answers. **Recalibrate the opt-in gate after upgrading** (`awm calibrate`). [CHANGELOG](CHANGELOG.md) |
 | **0.21.0** | **Knows what it doesn't know** (opt-in, `AWM_ABSTAIN_GATE=calibrated`): a gate fitted per agent on queries the store generates from itself withholds answers the store doesn't hold — **66 of 73** never-stored facts — and **1 of 695** correct answers; uncertain recalls are answered with a ⚠ low-signal flag. `awm calibrate` fits it now; consolidation refits it. **A correction comes with it:** the old "90.0% correct abstention" was measured on a strict non-default gate and 10 probes, and was never true alongside the 92.7% accuracy figure — with the shipped default AWM withheld 0 of 10. **Secrets:** credentials are masked before store, index, embedding or log (on by default, `AWM_REDACT`), and with the opt-in vault (`AWM_VAULT=on`) AWM keeps them sealed in the OS credential store and can use one in a command without ever saying it (`awm vault`). **Baselines** now sit next to the accuracy figures: plain BM25 scores within a few points on these keyword-friendly fixtures, and AWM's measurable edge is knowing what is current. [abstention](docs/abstention.md) · [vault](docs/vault.md) · [redaction](docs/redaction.md) |
 | **0.20.1** | Consolidation stopped archiving distinct facts as duplicates: the redundancy-prune threshold (0.75, calibrated for MiniLM-L6) was below where UNRELATED bge-small pairs sit (p99 0.757), so a sleep cycle straight after a batch write archived 25 minute-old memories as duplicates. Now **0.90** (`AWM_REDUNDANCY_THRESHOLD`), only after the 7-day grace period, never canonical or structural. A `supersedes` write inherits the replaced memory's confidence floor, `embedding_model` is stamped on every vector written (it was NULL everywhere), and `AWM_CONFIDENCE_GATE_K` makes the confidence multiplier tunable — measured, default unchanged. |
@@ -321,7 +322,7 @@ The README points outward; it does not duplicate. Everything below is the author
 
 | | |
 |---|---|
-| **All 19 MCP tools**, most HTTP endpoints with schemas (21 of 28 — the batch-write, checkpoint, export, agent-register and system routes are not yet written up), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
+| **All 20 MCP tools**, most HTTP endpoints with schemas (21 of 28 — the batch-write, checkpoint, export, agent-register and system routes are not yet written up), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
 | Architecture, pipelines, schema, backends (SQLite · PGlite · Postgres) | [`docs/architecture.md`](docs/architecture.md) · [`docs/pglite-feature-parity.md`](docs/pglite-feature-parity.md) |
 | Current benchmark numbers, generated and stamped | [`docs/benchmarks-current.md`](docs/benchmarks-current.md) |
 | What each eval suite measures, and the measurement caveats | [`docs/benchmarks.md`](docs/benchmarks.md) |
@@ -341,7 +342,7 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 1140 tests
+npx vitest run          # 1188 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
@@ -352,7 +353,7 @@ npm run test:linux      # build + full suite on Linux
 
 ## Status
 
-Active development, v0.21.1. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.22.0. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 
