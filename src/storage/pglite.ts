@@ -25,6 +25,7 @@ import type {
   SearchQuery, ActivationEvent, StagingEvent,
   Episode, TaskStatus, TaskPriority, MemoryClass, MemoryType,
   ConsciousState, CheckpointRow,
+  QuestionScope,
 } from '../types/index.js';
 import { PGLITE_SCHEMA_DDL, PGLITE_VECTOR_DIMENSIONS } from './pglite-schema.js';
 
@@ -845,24 +846,26 @@ export class PGliteEngramStore {
   }
 
   /** Current memories of an agent with no questions yet, most recently used first (0.22 hand-off). */
-  async getEngramsMissingQuestions(agentId: string, limit: number): Promise<Engram[]> {
+  async getEngramsMissingQuestions(agentId: string, limit: number, opts: QuestionScope = {}): Promise<Engram[]> {
     await this.readyPromise;
+    const ex = opts.excludeTags ?? [];
     const res = await this.db.query<any>(
       `SELECT * FROM engrams WHERE agent_id = $1 AND questions IS NULL AND stage = 'active'
-         AND retracted = FALSE AND superseded_by IS NULL AND memory_class != 'ephemeral'
+         AND retracted = FALSE AND superseded_by IS NULL AND memory_class != 'ephemeral'${ex.map((_, i) => ` AND tags NOT LIKE $${i + 3}`).join('')}
        ORDER BY last_accessed DESC LIMIT $2`,
-      [agentId, limit],
+      [agentId, limit, ...ex.map(tagLike)],
     );
     return res.rows.map((r: any) => rowToEngram(r));
   }
 
   /** How many current memories of an agent carry questions, out of how many. */
-  async questionCoverage(agentId: string): Promise<{ withQuestions: number; total: number }> {
+  async questionCoverage(agentId: string, opts: QuestionScope = {}): Promise<{ withQuestions: number; total: number }> {
     await this.readyPromise;
+    const ex = opts.excludeTags ?? [];
     const res = await this.db.query<any>(
       `SELECT COUNT(*) FILTER (WHERE questions IS NOT NULL) AS q, COUNT(*) AS n FROM engrams
-       WHERE agent_id = $1 AND stage = 'active' AND retracted = FALSE AND superseded_by IS NULL`,
-      [agentId],
+       WHERE agent_id = $1 AND stage = 'active' AND retracted = FALSE AND superseded_by IS NULL${ex.map((_, i) => ` AND tags NOT LIKE $${i + 2}`).join('')}`,
+      [agentId, ...ex.map(tagLike)],
     );
     return { withQuestions: Number(res.rows[0]?.q ?? 0), total: Number(res.rows[0]?.n ?? 0) };
   }

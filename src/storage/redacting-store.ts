@@ -61,8 +61,17 @@ const REWRITE: Record<string, (args: any[]) => any[]> = {
 /** The method names this wrapper rewrites — exported for the coverage test. */
 export const REDACTED_METHODS = Object.keys(REWRITE);
 
+/** Stores already wrapped, so wrapping twice is a no-op (callers such as attachQuestions wrap defensively). */
+const wrapped = new WeakSet<object>();
+
+/** Whether this store is already the redacting wrapper. */
+export function isRedacting(store: object): boolean {
+  return wrapped.has(store);
+}
+
 export function withRedaction<T extends IEngramStore>(store: T): T {
-  return new Proxy(store, {
+  if (wrapped.has(store as object)) return store;
+  const proxy = new Proxy(store, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (typeof prop !== 'string' || typeof value !== 'function') return value;
@@ -71,4 +80,6 @@ export function withRedaction<T extends IEngramStore>(store: T): T {
       return (...args: any[]) => value.apply(target, rewrite(args));
     },
   });
+  wrapped.add(proxy as object);
+  return proxy;
 }

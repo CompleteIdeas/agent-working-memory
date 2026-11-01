@@ -14,7 +14,8 @@ import { EngramStore } from '../../src/storage/sqlite.js';
 import { ActivationEngine } from '../../src/engine/activation.js';
 import { ConnectionEngine } from '../../src/engine/connections.js';
 import { performWrite } from '../../src/core/write-pipeline.js';
-import { normalizeQuestions } from '../../src/core/questions.js';
+import { normalizeQuestions, attachQuestions } from '../../src/core/questions.js';
+import { withRedaction, isRedacting } from '../../src/storage/redacting-store.js';
 
 const AGENT = 'write-q';
 const MCP = { surprise: 0.3, causalDepth: 0.3, resolutionEffort: 0.3, eventType: 'observation' as const };
@@ -76,4 +77,62 @@ describe('questions through performWrite', () => {
     expect(res.questions).toBeUndefined();
     expect(store.getEngram(res.engram.id)?.questions).toBeNull();
   });
+});
+
+describe('the question hand-off on a store opened directly (embedding hosts such as MWA)', () => {
+  let tmp: string; let store: EngramStore;
+  beforeEach(() => { tmp = mkdtempSync(join(tmpdir(), 'awm-wqh-')); store = new EngramStore(join(tmp, 'm.db')); });
+  afterEach(() => { store.close(); rmSync(tmp, { recursive: true, force: true }); });
+  const mk = (concept: string, tags: string[] = []) => store.createEngram({ agentId: AGENT, concept, content: `${concept} body text`, tags } as any);
+
+  it('attachQuestions redacts even when the store is not the redacting wrapper', async () => {
+    const e = mk('Stripe key rotation');
+    const secret = ['sk', '_live_', '51Hx9Tq2LmN8vB4kP7rS0dWz'].join('');
+    expect(isRedacting(store)).toBe(false);
+    await attachQuestions(store as any, e.id, [`Is ${secret} still the live key?`], null);
+    const q = store.getEngram(e.id)?.questions ?? [];
+    expect(q).toHaveLength(1);
+    expect(q[0]).not.toContain(secret);
+  });
+
+  it('wrapping twice is a no-op', () => {
+    const once = withRedaction(store as any);
+    expect(isRedacting(once)).toBe(true);
+    expect(withRedaction(once)).toBe(once);
+  });
+
+  it('excludeTags keeps bookkeeping out of the work list and out of coverage', async () => {
+    const real = mk('Deploy procedure for the rowing app');
+    mk('Job record 17', ['topic=mwa-jobs']);
+    mk('Action log entry', ['topic=action-log', 'proj=MWA']);
+    expect(store.getEngramsMissingQuestions(AGENT, 10).length).toBe(3);
+    const scope = { excludeTags: ['topic=mwa-jobs', 'topic=action-log'] };
+    expect(store.getEngramsMissingQuestions(AGENT, 10, scope).map((x) => x.id)).toEqual([real.id]);
+    expect(store.questionCoverage(AGENT, scope)).toEqual({ withQuestions: 0, total: 1 });
+    await attachQuestions(store as any, real.id, ['How do I ship the rowing club app?'], null);
+    expect(store.questionCoverage(AGENT, scope)).toEqual({ withQuestions: 1, total: 1 });
+    expect(store.getEngramsMissingQuestions(AGENT, 10, scope)).toEqual([]);
+  });
+});
+
+describe('PGlite: the question work list honours excludeTags (shared SQL with Postgres)', () => {
+  it('leaves tagged bookkeeping out of the list and the coverage', async () => {
+    const { PGliteEngramStore } = await import('../../src/storage/pglite.js');
+    const tmp = mkdtempSync(join(tmpdir(), 'awm-wq-pg-'));
+    const store = new PGliteEngramStore(join(tmp, 'pg'));
+    try {
+      const mk = (concept: string, tags: string[] = []) => store.createEngram({ agentId: AGENT, concept, content: `${concept} body text`, tags } as any);
+      const real = await mk('Deploy procedure for the rowing app');
+      await mk('Job record 17', ['topic=mwa-jobs']);
+      const scope = { excludeTags: ['topic=mwa-jobs'] };
+      expect((await store.getEngramsMissingQuestions(AGENT, 10)).length).toBe(2);
+      expect((await store.getEngramsMissingQuestions(AGENT, 10, scope)).map((x) => x.id)).toEqual([real.id]);
+      expect(await store.questionCoverage(AGENT, scope)).toEqual({ withQuestions: 0, total: 1 });
+      await attachQuestions(store as any, real.id, ['How do I ship the rowing club app?'], null);
+      expect(await store.questionCoverage(AGENT, scope)).toEqual({ withQuestions: 1, total: 1 });
+    } finally {
+      await store.close();
+      try { rmSync(tmp, { recursive: true, force: true }); } catch { /* noop */ }
+    }
+  }, 60_000);
 });

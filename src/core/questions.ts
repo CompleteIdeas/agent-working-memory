@@ -21,6 +21,7 @@
  */
 
 import type { IEngramStore } from '../storage/store.js';
+import { withRedaction } from '../storage/redacting-store.js';
 
 export const MAX_QUESTIONS = 5;
 const MIN_LEN = 8;
@@ -56,6 +57,10 @@ export interface QuestionsOutcome {
 /**
  * Merge new questions into a memory's existing ones and store them. Existing questions keep
  * their place; new ones fill up to the cap. Returns what was kept and why anything was dropped.
+ *
+ * The write always goes through the redacting store wrapper, so a host that embeds AWM and opened
+ * its store directly (MWA) gets the same redaction as the MCP and HTTP paths. Wrapping an
+ * already-wrapped store is a no-op.
  */
 export async function attachQuestions(
   store: IEngramStore,
@@ -77,6 +82,6 @@ export async function attachQuestions(
     if (merged.length >= MAX_QUESTIONS) { dropped.push({ question: q, reason: 'over-limit' }); continue; }
     merged.push(q);
   }
-  if (merged.length !== prior.length) await store.setQuestions(engramId, merged);
+  if (merged.length !== prior.length) await withRedaction(store).setQuestions(engramId, merged);
   return { kept: merged, dropped };
 }

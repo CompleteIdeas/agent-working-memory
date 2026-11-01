@@ -476,3 +476,13 @@ export interface EpisodeCreate {
   label: string;
   embedding?: number[];
 }
+
+/**
+ * Which memories the question hand-off covers (0.22, plan §4.12). A host can leave out its own
+ * bookkeeping memories (job records, action logs) by tag, so they neither appear in the work
+ * list nor hold coverage down.
+ */
+export interface QuestionScope {
+  /** Memories carrying any of these exact tags are left out. */
+  excludeTags?: string[];
+}
