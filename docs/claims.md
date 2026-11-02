@@ -95,7 +95,7 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 5. Halves the digging
 
-> Four real support tickets: 2× the specific facts, half the database queries (49 vs 100)
+> Four real support tickets: 2× the specific facts (16 vs 7 of 28), half the file and database lookups (49 vs 100), 41% fewer database queries (47 vs 79), 26% fewer output tokens (73.7k vs 99.0k). Excluding the ticket where the memoryless arm exhausted its budget: −40% lookups, −20% queries, −16% output tokens, +22 points of facts found.
 
 - **Recorded in:** `docs/for-decision-makers.md`.
 - **Reproducibility:** **Not reproducible.** A one-off A/B on live tickets. `tests/realworld-eval/runner.ts` is a different experiment (codebase crawl) and does not produce this figure; no harness for this one was kept.

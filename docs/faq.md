@@ -27,7 +27,26 @@ Active memories persist indefinitely but their retrieval priority decays over ti
 
 ### Are there any external API calls?
 
-No. All three ML models (embeddings, reranker, query expander) run locally via ONNX. No data leaves your machine.
+No calls with your data. Every model runs locally via ONNX: the embedder, the MiniLM cross-encoder
+for keyword-shaped queries, Ettin-17m for natural-language questions (0.22) and the query expander.
+The models are downloaded once, on first use (Ettin is a 17 MB int8 file); after that nothing
+leaves your machine. `AWM_RERANKER_MODEL_NATURAL=off` skips Ettin and uses MiniLM for everything.
+
+AWM never calls a hosted model. When a host *has* its own model, it can offer to write the
+questions memories answer (see below); that runs in the host, not in AWM.
+
+### What are memory "questions"? (0.22)
+
+`memory_write` takes up to five `questions`: how someone would ask for this memory later, in their
+own words ("when does the fall fee go up?"). They go into a second keyword index that only
+natural-language recall reads, so they can't disturb identifier or topic lookups. On the real-store
+benchmark, natural-language first place rose from 47.9% to 52.6% when memories carried questions;
+identifier and topic were unchanged.
+
+Older memories have none. A host with a model can fill them in: pass `capabilities: ["questions"]`
+on `memory_restore`, and AWM hands back a small batch of memories that lack questions; the host
+answers with `memory_set_questions`. Re-running `awm setup --global` installs guidance that tells
+Claude Code to do this.
 
 ### Will AWM store my API keys?
 
@@ -81,22 +100,31 @@ itself: about 300 synthetic queries the store generates (answerable ones, and fa
 nonsense), with no labels. Fit it with `awm calibrate`; it is refitted after consolidation when it
 goes stale. Each recall is then answered, answered with a `⚠ LOW SIGNAL` flag, or withheld.
 
-Measured on that one store with keyword-style questions:
-- it withholds 66 of 73 questions about facts never stored;
-- it withholds 2 of 706 correct answers, and flags 3;
+Measured on that one store with keyword-style questions (0.22):
+- it withholds 58 of 73 questions about facts never stored;
+- it withholds 1 of 712 correct answers;
 - of 200 absent questions asked in familiar vocabulary (the answer deleted, its neighbours
-  kept), it withholds 98 and flags 28. That is the hard case.
+  kept), it withholds 95. That is the hard case.
 
-On natural-language questions it is much less careful: it withholds 21 of 88 correct answers,
-because its calibration probes are keyword-shaped. It has not been measured on other stores. See
-[abstention.md](abstention.md).
+Natural-language questions get a model of their own once at least a quarter of the store's
+memories carry questions, because it practises on them. It withholds 10 of 97 correct natural
+answers (24% in 0.21, 10% now), and in exchange answers about three in four natural questions
+whose fact was deleted — a deliberate choice to lose fewer real answers. Below that quarter, one
+keyword-shaped model judges everything, as in 0.21. It has not been measured on other stores. See
+[abstention.md](abstention.md) and
+[abstention-signals-2026-10-30.md §14](abstention-signals-2026-10-30.md).
 
 ### Is AWM's ranking better than keyword search?
 
-Not on its own benchmark. On the real-store fixtures, plain BM25 puts the right memory first for
-95.7% of identifier queries and 91.6% of topic queries, against AWM's 93.3% and 96.0%. The
-fixtures are keyword-friendly by construction: each question is built around an identifier that
-appears in exactly one memory, which is the case BM25 is best at.
+It depends on how the question is asked. On the real-store keyword fixtures, plain BM25 puts the
+right memory first for 95.7% of identifier queries and 91.6% of topic queries, against AWM's 93.3%
+and 96.0%. Those fixtures are keyword-friendly by construction: each question is built around an
+identifier that appears in exactly one memory, which is the case BM25 is best at.
+
+On natural-language questions — 194 of them, written the way a person asks and vetted so they
+can't lean on rare words in the store — AWM puts the right memory first for 47.9%, against 42.8%
+for BM25 and 45.4% for fused BM25 + vector search. With questions stored on the memories (0.22)
+AWM reaches 52.6%. Those are the hard questions, and the gap to the keyword fixtures is real.
 
 Where AWM measurably differs is its lifecycle: supersession and retraction. The BM25 figures above
 were measured on the pool AWM's lifecycle leaves retrievable. Run over the raw store, with
@@ -124,10 +152,36 @@ Example: `composite=0.820 | text=0.75 | vector=0.68 | decay=1.20 | hebbian=0.15 
 
 ### How fast is activation?
 
-With all ML models enabled (reranker + expansion): ~200-300ms per query.
-With ML disabled (`useReranker: false, useExpansion: false`): ~5-20ms per query.
+On the 30,000-memory benchmark store, with every model on, a warm recall takes 375–438 ms at the
+median and under 0.6 s at p90 ([benchmarks-current.md](benchmarks-current.md)). Smaller stores
+are faster. With ML disabled (`useReranker: false, useExpansion: false`): ~5-20 ms per query.
 
-The first query after server start is slower while models warm up.
+The first query after server start is slower while models load, and the very first
+natural-language question on a new install downloads Ettin (about 2 s once).
+
+### Does AWM actually save tokens?
+
+Measured on real work, yes — with a caveat about sample size. The same agent, model and tools
+worked four real support tickets with and without AWM:
+
+| | with AWM | without |
+|---|---|---|
+| File and database lookups | 49 | 100 |
+| Database queries | 47 | 79 |
+| Output tokens | 73.7k | 99.0k |
+| Facts the real answer needed, found (of 28) | 16 | 7 |
+
+So 26% fewer output tokens while finding more than twice as many of the facts. On one ticket the
+memoryless arm ran out of budget and answered nothing; leaving it out, AWM still meant 16% fewer
+tokens, 40% fewer lookups and 22 points more of the facts found. Four tickets is directional, not
+a rate ([claims.md §5](claims.md)).
+
+AWM does cost tokens of its own: recall results, primed context and the rules in your
+instructions file all ride along in context. A usage study of one heavy user put that at roughly
+3–5% of Claude Code spend. Counting how often the agent still searched after a recall made it look
+like a net cost — but that measures a level, not a difference; it says nothing about how much more
+the agent would have searched without memory. Only the with/without comparison answers that, and
+it came out in AWM's favour.
 
 ### How much disk space does the database use?
 

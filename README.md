@@ -23,8 +23,9 @@ that matter, and says **nothing** when nothing fits.
 |---|---|---|
 | **One thread, any number of topics** | Context comes from memory each turn, so a single long-running agent can switch topics, lose detail to compaction, and get it back | Early: in a measured multi-task run, compaction **+ AWM** was fully right **4 of 5** times — above the full-history ceiling (3/5) and every memory-less arm. AWM's own share is not yet isolated; [what would settle it](docs/claims.md) |
 | **Knows what's current** | A corrected fact supersedes the old one, and recall serves the new version — the old one surfaces only with a warning | Measured: plain keyword search over a raw store returns a **superseded** memory first **8–15%** of the time; AWM's lifecycle is why it doesn't |
-| **Knows what it doesn't know** | A gate calibrated on the store itself withholds answers it doesn't have, and flags the ones it isn't sure of | Measured, one store: withholds **66 of 73** never-stored facts and **2 of 706** correct answers on keyword-shaped questions; on natural-language questions it withholds **21 of 88** correct answers (opt-in, [details](docs/abstention.md)) |
+| **Knows what it doesn't know** | A gate calibrated on the store itself withholds answers it doesn't have, and flags the ones it isn't sure of | Measured, one store: withholds **58 of 73** never-stored facts and **1 of 712** correct answers on keyword-shaped questions; on natural-language questions it withholds **10 of 97** correct answers once memories carry questions (opt-in, [details](docs/abstention.md)) |
 | **Selective, not a sponge** | It keeps what is worth keeping and returns the two or three memories that matter, not the top-K of everything | By design; the salience filter and its audit are in [`docs/cognitive-model.md`](docs/cognitive-model.md) |
+| **Less digging, fewer tokens** | The agent recalls where the answer is instead of searching for it again | One controlled test, four real support tickets with and without AWM: **half the lookups** (49 vs 100), **26% fewer output tokens**, and **2×** the facts the answer needed — n = 4, directional ([claims §5](docs/claims.md)) |
 | **Costs the same at any scale** | A scoped recall costs about the same whether the store holds a hundred memories or thirty thousand | Measured as flat; the size is disputed — published as ~630 tokens, the harness measures ~1,518. Either way against ~1.3M to carry the store ([claims §3](docs/claims.md)) |
 | **Lets a cheap model punch up** | A small model with the right memory beats a frontier model without it on domain work | One experiment: **14/15 vs 7/15** on a 15-task workload, at ~1/40th the cost — n = 15, not reproducible ([claims §4](docs/claims.md)) |
 | **Keeps secrets out — or keeps them safely** | Credentials are masked before anything is stored; with the vault on, AWM *keeps* them sealed and can use one in a command without ever saying it | Measured: 0 of 40 sealed values left anywhere in a migrated real store ([redaction](docs/redaction.md), [vault](docs/vault.md)) |
@@ -61,24 +62,35 @@ including the ones we think are weakest.
 
 | | |
 |---|---|
-| **Finds the right memory** | In the top five for **98.7%** of identifier queries and **98.7%** of topic queries — and **first** for **93.3%** and **96.0%**. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to. **Baselines on the same questions:** plain keyword search (BM25) puts the right memory first for 95.7% / 91.6% — ahead of AWM on identifier lookups, behind it on topic questions. These fixtures are keyword-friendly by construction. On natural-language questions AWM puts the right memory first for 45.4%, tying fused BM25 + vector search (45.4%). Over the raw store BM25 falls to 87.7% / 79.8% and returns a superseded memory first 8–15% of the time; AWM's lifecycle is what it adds there |
-| **Stays silent when it should** | With the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`), withholds **66 of 73** questions about facts never stored, while withholding **2 of 706** correct answers to keyword-shaped questions. On natural-language questions it is far less careful with correct answers: it withholds **21 of 88** (24%), because its calibration probes are keyword-shaped. The gate learns its noise floor from the store itself; [how it works and what it costs](docs/abstention.md). Off (the default), AWM answers almost every question with its nearest match. |
+| **Finds the right memory** | In the top five for **98.7%** of identifier queries and **98.7%** of topic queries — and **first** for **93.3%** and **96.0%**. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to. **Baselines on the same questions:** plain keyword search (BM25) puts the right memory first for 95.7% / 91.6% — ahead of AWM on identifier lookups, behind it on topic questions. These fixtures are keyword-friendly by construction. **On natural-language questions** (194, phrased the way a person asks) AWM puts the right memory first for **47.9%**, ahead of fused BM25 + vector search (45.4%) and plain BM25 (42.8%) on the same questions — and **52.6%** once memories carry the questions they answer (new in 0.22). Over the raw store, with superseded and retracted memories still in it, BM25 falls to 87.7% / 79.8% on the keyword fixtures and returns an outdated memory first 8–15% of the time; AWM's lifecycle is what it adds there |
+| **Stays silent when it should** | With the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`), withholds **58 of 73** questions about facts never stored, while withholding **1 of 712** correct answers to keyword-shaped questions. Natural-language questions get their own model once a quarter of the store's memories carry questions: it withholds **10 of 97** correct natural answers (was 21 of 88 in 0.21), at the price of answering more questions whose fact was deleted. The gate learns its noise floor from the store itself; [how it works and what it costs](docs/abstention.md). Off (the default), AWM answers almost every question with its nearest match. |
 | **Costs the same at any scale** | Scoped recall stays flat as the store grows — published as **~630 tokens**, measured by the harness at ~1,518 ([claims §3](docs/claims.md) explains the gap). Carrying the store instead: ~1.3M tokens |
 | **Keeps secrets out** | On by default: credentials are masked before store, index, embedding or log. A read-only scan of the real store found them in ~70 memories written before this existed — exactly what it now stops. With the opt-in vault, a migration of a copy of that store sealed 40 distinct values and left **0** anywhere in the file, with recall unchanged (same first result for 8 of 8 test questions) |
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
 
-Two independently built fixtures agree within a point. A warm recall takes about a quarter of a
-second (p50 256 ms). Those figures are for memories written the way
+Two independently built fixtures agree within a point. A warm recall takes under half a second
+on the 30k-memory store (p50 375–438 ms, [benchmarks](docs/benchmarks-current.md)); smaller stores
+are faster. Those figures are for memories written the way
 [`docs/writing-memories.md`](docs/writing-memories.md) says to — the rules hold for any model
 that writes to the store, and the write is where recall quality is decided.
 
 <details>
 <summary>Two more, from real work rather than fixtures</summary>
 
-**Halves the digging.** Same agent, same tools, four real support tickets: with memory, 2× the
-specific facts the real answer needed and half the database queries (49 vs 100). On one ticket
-the memoryless arm ran 25 queries, exhausted its budget and answered nothing; the memory arm
-answered in 4.
+**Halves the digging, and spends fewer tokens doing it.** Same agent, same model, same tools,
+four real support tickets, with and without memory:
+
+| | with AWM | without | |
+|---|---|---|---|
+| File and database lookups | 49 | 100 | −51% |
+| Database queries | 47 | 79 | −41% |
+| Output tokens | 73.7k | 99.0k | −26% |
+| Facts the real answer needed, found (of 28, listed before the run) | 16 | 7 | 57% vs 25% |
+
+On one ticket the memoryless arm exhausted its budget and answered nothing. Leaving that ticket
+out, memory still meant 40% fewer lookups, 20% fewer database queries, 16% fewer output tokens
+and 22 points more of the facts found. Four tickets is a small sample — directional, not a rate
+([claims §5](docs/claims.md)).
 
 **Holds decisions for months.** On a six-month application project, recorded decisions were
 recalled a median of 30 days after being written — some after 167. 41% of the technical
