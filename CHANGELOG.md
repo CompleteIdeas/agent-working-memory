@@ -19,6 +19,11 @@
   echoed the query, 357 ms; LaMini-Flan-T5-248M q8 (275 MB) wrote sentences about the query,
   480 ms. The queries are project jargon that a general model has no synonyms for.
   `AWM_EXPANDER_MODEL` and `AWM_EXPANDER_DTYPE` are new, for measurement.
+- **Larger quantized rerankers measured, defaults unchanged.** Natural-language top-1 on the store
+  with questions (n = 194): Ettin-17m 52.6% at ~340 ms p50, Ettin-32m 54.1% at ~730 ms, Ettin-68m
+  58.2% at ~1.6-1.9 s; re-ranking only 16 candidates with 68m gives 53.1% at ~1.1 s. Topic stays
+  96.0% with every one. MiniLM-L-12 (keyword) scored 93.8% on identifiers, one query below L-6, and
+  ran slower. Ettin-68m is available today with `AWM_RERANKER_MODEL_NATURAL=cross-encoder/ettin-reranker-68m-v1`.
 - **Fix:** with expansion on, the expanded query replaced the search string and dropped the
   alias terms added just before it (`src/engine/activation.ts`).
 
