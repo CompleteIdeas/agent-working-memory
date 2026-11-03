@@ -99,7 +99,8 @@ describe('fingerprint and framing', () => {
 
   it('passes the captured config to a spawned daemon as env', () => {
     expect(configEnv({ embedModel: 'm', embedDims: 768, rerankDtype: 'q8', expandModel: 'x' }))
-      .toEqual({ AWM_EMBED_MODEL: 'm', AWM_EMBED_DIMS: '768', AWM_RERANKER_DTYPE: 'q8' });
+      // expandModel is passed since 0.22.1, when AWM_EXPANDER_MODEL made it configurable.
+      .toEqual({ AWM_EMBED_MODEL: 'm', AWM_EMBED_DIMS: '768', AWM_RERANKER_DTYPE: 'q8', AWM_EXPANDER_MODEL: 'x' });
   });
 
   it('a pipe name or socket path is derived from the fingerprint', () => {

@@ -72,6 +72,7 @@ const CONFIG_ENV: Record<string, string> = {
   embedModel: 'AWM_EMBED_MODEL', embedDims: 'AWM_EMBED_DIMS', embedPooling: 'AWM_EMBED_POOLING',
   embedBatch: 'AWM_EMBED_BATCH', rerankModel: 'AWM_RERANKER_MODEL', rerankDtype: 'AWM_RERANKER_DTYPE',
   rerankBatch: 'AWM_RERANK_BATCH', rerankQueryTokens: 'AWM_RERANK_QUERY_TOKENS', rerankModelNatural: 'AWM_RERANKER_MODEL_NATURAL',
+  expandModel: 'AWM_EXPANDER_MODEL', expandDtype: 'AWM_EXPANDER_DTYPE',
 };
 
 export function configEnv(config: InferenceConfig): Record<string, string> {

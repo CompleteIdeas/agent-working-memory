@@ -15,7 +15,7 @@ AWM_PORT=8500 npx tsx src/index.ts
 Run `npm install` to ensure all dependencies are installed.
 
 ### Models fail to download
-The three ML models (**~600 MB** total: 134 MB embedder + 92 MB reranker + 377 MB expander) download from Hugging Face on first run. If behind a proxy or firewall:
+The ML models (**~175 MB** total: 134 MB embedder + 23 MB MiniLM reranker + 17 MB Ettin reranker, both int8; the 377 MB expander only when expansion is on) download from Hugging Face on first run. If behind a proxy or firewall:
 1. Check internet connectivity
 2. Models cache in `~/.cache/huggingface/` — if corrupt, delete and restart
 3. The server starts even if models fail (embedding, reranker, expansion degrade gracefully)
@@ -39,7 +39,7 @@ Check the `phaseScores` breakdown:
 
 ### Very slow activation queries
 - Normal on AWM 0.7.14+: floor ~300ms, typical 400-700ms on 10K-engram corpora
-- First recall after process start is slower (~2-3s) — that's the cold cost of loading 3 ML models (embedder, reranker, expander) and populating the slim cache. AWM warms the cache eagerly at startup; the first user-visible recall is fast in production.
+- First recall after process start is slower (~2-3s) — that's the cold cost of loading the ML models (embedder and rerankers) and populating the slim cache. AWM warms the cache eagerly at startup; the first user-visible recall is fast in production.
 - Disable model phases for speed: `"useReranker": false, "useExpansion": false` (~5-20ms recall, but degraded ranking)
 - **If warm recall is already healthy and you simply need it faster**: there is a supported latency mode rather than a flag to disable. `AWM_RERANKER_DTYPE=q8` cuts total recall p50 26–33%. It is *not* a free speedup — it changes ranking outcomes — so read [deployment.md → Operating modes](deployment.md#operating-modes-quality-first-and-latency-first) before setting it.
 - **If recall feels >1s warm on 0.7.14+**: one of the optimization paths may be silently disabled. Check the AWM coordinator process env for any of `AWM_DISABLE_POOL_FILTER`, `AWM_DISABLE_SLIM_CACHE`, `AWM_DISABLE_EXPANSION_CACHE` — none should be set to `1` in production. (`AWM_DISABLE_RERANK_SKIP` was also on this list until 2026-10-09; the branch it disabled has been removed, so the variable is now accepted and ignored.)

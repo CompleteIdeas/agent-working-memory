@@ -409,8 +409,8 @@ withheld 0 of 10. Do not quote it as a current property.
    `package.json`.
 6. **Cold start is ~1.5s; warm recall is ~480ms** (measured, k=3, 11k-engram
    store, `npm run profile:recall`) — and on a genuinely fresh install, after a
-   one-time **~600 MB** model download, because **nothing is bundled**: no ONNX
-   ships in the npm tarball or the MCPB bundle, and all three models fetch lazily
+   one-time **~175 MB** model download, because **nothing is bundled**: no ONNX
+   ships in the npm tarball or the MCPB bundle, and the models fetch lazily
    into `AWM_CACHE_DIR` > `HF_HOME` > `<packageRoot>/data/models`. The
    cross-encoder is **83%** of the warm figure, and its first inference is
    450-670ms of the cold one — so cold start is model load, not a slow store, and

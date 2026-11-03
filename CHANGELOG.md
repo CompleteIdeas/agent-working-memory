@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.22.1 (unreleased) — query expansion off everywhere, and a smaller first download
+
+- **Query expansion is off on every path.** The engine default was already off, but MCP
+  `memory_recall` defaulted `use_expansion` to `true`, and `memory_task_begin`, the restore path
+  and the HTTP context route forced it on, so the published benchmarks did not measure what MCP
+  callers got. Measured 2026-11-02 on the three realstore suites (store with questions, k=3),
+  expansion on vs off: top-1 identical (natural-language 52.6%, topic 96.0%, identifier 93.8%,
+  n = 194 / 450 / 1,316), and the topic suite ran 268 s vs 168 s, about 220 ms more per short
+  query. On a sample of 120 topic queries flan-t5-small returned the query itself, plus a full
+  stop, every time. `AWM_DEFAULT_EXPANSION=1` or a per-call `use_expansion: true` turns it back on.
+- **The expander no longer downloads or loads unless expansion is on.** A fresh install now
+  fetches ~175 MB (134 MB embedder + 23 MB MiniLM + 17 MB Ettin, both int8) instead of ~550 MB,
+  and each process holds one model fewer. The docs also claimed ~600 MB with a 92 MB fp32
+  MiniLM; the int8 file has been the default since 0.19. Corrected throughout.
+- **Larger expanders tried quantized, none adopted:** flan-t5-small q8 (95 MB) produced
+  unrelated text ("architecture pull-based beats" → "a symphony"); flan-t5-base q8 (275 MB)
+  echoed the query, 357 ms; LaMini-Flan-T5-248M q8 (275 MB) wrote sentences about the query,
+  480 ms. The queries are project jargon that a general model has no synonyms for.
+  `AWM_EXPANDER_MODEL` and `AWM_EXPANDER_DTYPE` are new, for measurement.
+- **Fix:** with expansion on, the expanded query replaced the search string and dropped the
+  alias terms added just before it (`src/engine/activation.ts`).
+
 ## 0.22.0 (2026-11-01) — memories carry the questions they answer, and natural questions get their own re-ranker
 
 ### Behaviour changes — read before upgrading

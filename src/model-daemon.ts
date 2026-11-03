@@ -34,7 +34,7 @@ startModelDaemon({
     embed: args => inProcessEmbed(args),
     rerank: args => inProcessRerank(args),
     expand: args => inProcessExpand(args),
-    warm: async () => { await Promise.all([getEmbedder(), getReranker(), getExpander()]); },
+    warm: async () => { await Promise.all([getEmbedder(), getReranker(), ...(process.env.AWM_DEFAULT_EXPANSION === '1' ? [getExpander()] : [])]); },
     embedChunk: EMBED_BATCH_SIZE,
   },
 }).then(() => {

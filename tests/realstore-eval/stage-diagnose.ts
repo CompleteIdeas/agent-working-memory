@@ -41,7 +41,7 @@ const dump: any[] = [];
 for (const it of items) {
   let st: Record<string, string[]> = {};
   let rp: any[] = [];
-  const res: any[] = await eng.activate({ agentId: it.agent ?? 'work', context: it.query, limit: 3, minScore: 0.05,
+  const res: any[] = await eng.activate({ agentId: it.agent ?? 'work', context: it.query, limit: 3, minScore: 0.05, useExpansion: process.env.EXPANSION === '1',
     requireConfidence: 0.05, internal: true, now, asOf: now, skipCalibratedGate: true, onStages: (s: any) => { st = s; }, onRerankScores: (p: any) => { rp = p; } } as any);
   const g = it.goldId;
   if (process.env.DUMP) dump.push({ goldId: g, top: res.map((r) => r.engram.id), bm25: st.bm25?.slice(0, 200), vector: st.vector?.slice(0, 200), pool: rp });

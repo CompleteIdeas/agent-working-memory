@@ -512,7 +512,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
     min_score: z.number().optional().default(0.05).describe('Minimum relevance score (default 0.05)'),
     include_staging: z.boolean().optional().default(false).describe('Include weak/unconfirmed memories?'),
     use_reranker: z.boolean().optional().default(true).describe('Use cross-encoder re-ranking for better relevance (default true)'),
-    use_expansion: z.boolean().optional().default(true).describe('Expand query with synonyms for better recall (default true)'),
+    use_expansion: z.boolean().optional().describe('Expand the query with flan-t5-small (default off; AWM_DEFAULT_EXPANSION=1 turns it on). Measured 2026-11-02: no accuracy change on any suite, ~150-220 ms per short query, and the model mostly echoes the query back.'),
     memory_type: z.enum(['episodic', 'semantic', 'procedural']).optional().describe('Filter by memory type (omit to search all types)'),
     workspace: z.string().optional().describe('Search across all agents in this workspace (hive mode). Omit for agent-scoped recall only.'),
     require_confidence: z.number().optional().default(0.05).describe('Abstain (return nothing) when recall confidence is below this threshold. Defaults to 0.05 — a LIGHT filter. On a small synthetic seed set it halved off-topic answers at zero cost to hit rate; on a real 29,853-memory store it withheld 0 of 73 questions about facts never stored, so do not read an answer as proof the fact exists. For real abstention the operator can enable the store-calibrated gate (AWM_ABSTAIN_GATE=calibrated); passing require_confidence: 0 also opens that gate. Raise it only for push-style use where nobody asked (the prime hook uses 0.10 — it was 0.25 until 0.14.6, when 0.25 was measured silencing prompts with a clear winner). Do NOT raise it for ordinary recall: a miss is expensive, because the agent then reads the codebase instead (~2,106 tokens), so aggressive thresholds measurably destroy value — 0.20+ cut net tokens saved by 25% in tests/abstention-eval. Pass 0 to disable. NOTE: this is NOT min_score — it gates on the SHAPE of the score distribution across the whole result set, not per-result relevance, so memories that pass min_score can still be withheld. When that happens the reply says RECALL ABSTAINED and reports how many were withheld; an empty result is only absence when it does not.'),
@@ -982,7 +982,6 @@ Use this at the start of every session or after compaction to pick up where you 
           limit: 3,
           minScore: 0.05,
           useReranker: true,
-          useExpansion: true,
           workspace: process.env.AWM_WORKSPACE ?? undefined,
         });
         recalledMemories = results.map(r => ({
@@ -1371,7 +1370,6 @@ This ensures your state is saved before you start, and primes recall with releva
         limit: 3,
         minScore: 0.05,
         useReranker: true,
-        useExpansion: true,
         workspace: process.env.AWM_WORKSPACE ?? undefined,
       });
 
@@ -1619,7 +1617,9 @@ async function main() {
     } else {
       getEmbedder().catch(err => console.error('Embedding model unavailable:', err.message));
       getReranker().catch(err => console.error('Reranker model unavailable:', err.message));
-      getExpander().catch(err => console.error('Query expander model unavailable:', err.message));
+      // The expander (377 MB) is only warmed when expansion is on by default; otherwise it loads
+      // on the first recall that asks for it (0.22.1).
+      if (process.env.AWM_DEFAULT_EXPANSION === '1') getExpander().catch(err => console.error('Query expander model unavailable:', err.message));
     }
     if (BACKEND === 'sqlite') {
       setImmediate(() => {

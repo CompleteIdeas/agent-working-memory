@@ -811,7 +811,6 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
           limit: 5,
           minScore: 0.05,
           useReranker: true,
-          useExpansion: true,
         });
         recalledMemories = results.map(r => ({
           id: r.engram.id,

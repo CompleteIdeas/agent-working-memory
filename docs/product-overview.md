@@ -68,8 +68,8 @@ no external calls. The rest of this page is the plain-language tour of those pie
 | HTTP Server | Fastify 5 | REST API for agents |
 | MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (20 tools via stdio: 18 memory + 2 onboarding) |
 | Embeddings | Xenova/bge-small-en-v1.5 (134 MB download at fp32, BAAI retrieval-optimized) | 384-dim semantic vectors |
-| Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (92 MB download at fp32; ~24 MB at `AWM_RERANKER_DTYPE=q8`) | Cross-encoder passage relevance |
-| Query Expander | Xenova/flan-t5-small (377 MB download at fp32) | Synonym/related term expansion |
+| Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (23 MB int8, the default) for keyword queries; cross-encoder/ettin-reranker-17m-v1 (17 MB int8) for natural-language questions | Cross-encoder passage relevance |
+| Query Expander | Xenova/flan-t5-small (377 MB at fp32; off by default and not downloaded unless turned on) | Synonym/related term expansion |
 | ML Runtime | @huggingface/transformers | Local ONNX inference (no API calls) |
 | Vault key store | @napi-rs/keyring (optional dependency) | Holds the vault key in the OS credential store when `AWM_VAULT=on`; a key-file fallback where none exists |
 | Test Framework | Vitest 4 | Unit and integration tests |

@@ -112,14 +112,14 @@ The AWM process a Claude Code session spawns keeps whatever code it loaded at st
 Upgrading the package on disk changes nothing in a live session; only a new session (or a
 process restart) picks up the new version. `memory_whoami` reports the *running* version.
 
-### Cold start is a few seconds — and the first ever run downloads ~600 MB
+### Cold start is a few seconds — and the first ever run downloads ~175 MB
 The first recall in a fresh process pays for loading the embedding and reranker models
 (~1.2 s) and warming an in-memory index over the store (~0.5 s at 30k memories). After
 that, warm recall is ~0.5 s median. Concurrent sessions each pay their own cold start.
 
 On a genuinely fresh install the *first* run also has to fetch the models, because **no
-ONNX is bundled** in the npm tarball or the MCPB bundle — that is ~600 MB and minutes, not
-seconds. It is paid once per cache, not once per process.
+ONNX is bundled** in the npm tarball or the MCPB bundle — that is ~175 MB (~550 MB with query
+expansion on). It is paid once per cache, not once per process.
 - **Evidence:** `AWM-ColdLoad-Measurements-2026-08-21.md`; benchmark p50 474–500 ms.
 
 ### One writer at a time on SQLite, but that is handled

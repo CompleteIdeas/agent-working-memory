@@ -71,7 +71,7 @@ the top of that file is the other copy of this list.
 | Phase | Name | What it does |
 |-------|------|-------------|
 | −1 | Coreference expansion | Conditional: only when the query contains pronouns. |
-| 0 | Query expansion | flan-t5-small adds related terms. The **engine** default is off (`AWM_DEFAULT_EXPANSION=1` flips it), but MCP `memory_recall` defaults `use_expansion` to **true**, so it runs on the path most callers use. |
+| 0 | Query expansion | flan-t5-small adds related terms. **Off on every path since 0.22.1** (MCP `memory_recall` defaulted `use_expansion` to true until then); `AWM_DEFAULT_EXPANSION=1` or a per-call `use_expansion: true` turns it on. Measured 2026-11-02: no change in top-1 on any suite, ~150-220 ms per short query, and the model mostly echoes the query back. |
 | 1 | Vector embedding | Embed the query, bge-small 384d. |
 | 2 | Parallel retrieval | Dual FTS5/BM25 + native vector top-K, concurrently. |
 | 3a | Candidate fetch | Hydrate candidates. Entity-index injection splices in here when `AWM_ENTITY_INDEX_FETCH=1` (default off) — *before* scoring, not after it. |
@@ -210,11 +210,12 @@ All models run locally via ONNX Runtime (no API calls):
 | Model | Size | Purpose |
 |-------|------|---------|
 | `Xenova/bge-small-en-v1.5` | 134 MB | Sentence embeddings (384d) |
-| `Xenova/ms-marco-MiniLM-L-6-v2` | 92 MB | Cross-encoder reranking (23 MB at `AWM_RERANKER_DTYPE=q8`) |
-| `Xenova/flan-t5-small` | 377 MB | Query expansion (a 141 MB encoder + a 233 MB merged decoder + a 2.4 MB tokenizer) |
+| `Xenova/ms-marco-MiniLM-L-6-v2` | 23 MB | Cross-encoder reranking for keyword-shaped queries (int8, the default since 0.19; 92 MB at `AWM_RERANKER_DTYPE=fp32`) |
+| `cross-encoder/ettin-reranker-17m-v1` | 17 MB | Cross-encoder reranking for natural-language questions (0.22; the int8 file for the CPU) |
+| `Xenova/flan-t5-small` | 377 MB | Query expansion, **downloaded only when expansion is on** (0.22.1; a 141 MB encoder + a 233 MB merged decoder + a 2.4 MB tokenizer) |
 
-Sizes are the per-model **download** at the fp32 precision AWM loads, measured against the
-Hugging Face hub file listing — **~600 MB in total**. This table named `all-MiniLM-L6-v2` and
+Sizes are the per-model **download** at the precision AWM loads, measured against the
+Hugging Face hub file listing — **~175 MB** by default, ~550 MB with expansion on. This table named `all-MiniLM-L6-v2` and
 quantized-file sizes until 2026-10-09; the embedder is `bge-small-en-v1.5` and the loaded
 weights are full precision.
 

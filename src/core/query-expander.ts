@@ -21,7 +21,10 @@ import { pipeline, type Text2TextGenerationPipeline } from '@huggingface/transfo
 import { dispatchExpand, registerInferenceConfig, registerInProcessHandlers } from './ml-worker.js';
 import { ensureModelCacheDir } from './model-cache.js';
 
-const MODEL_ID = 'Xenova/flan-t5-small';
+// AWM_EXPANDER_MODEL / AWM_EXPANDER_DTYPE exist for measurement (0.22.1): a larger seq2seq model
+// may only be affordable quantized. Defaults are unchanged.
+const MODEL_ID = process.env.AWM_EXPANDER_MODEL || 'Xenova/flan-t5-small';
+const DTYPE = (process.env.AWM_EXPANDER_DTYPE || 'fp32') as 'fp32' | 'fp16' | 'q8' | 'int8' | 'uint8' | 'q4';
 
 // --- In-process fallback ---
 
@@ -32,9 +35,9 @@ async function loadInProcess(): Promise<Text2TextGenerationPipeline> {
   if (inProcessInstance) return inProcessInstance;
   if (inProcessInitPromise) return inProcessInitPromise;
   ensureModelCacheDir();
-  inProcessInitPromise = pipeline('text2text-generation', MODEL_ID, { dtype: 'fp32' }).then(pipe => {
+  inProcessInitPromise = pipeline('text2text-generation', MODEL_ID, { dtype: DTYPE }).then(pipe => {
     inProcessInstance = pipe as Text2TextGenerationPipeline;
-    console.error(`Query expander loaded in-process: ${MODEL_ID}`);
+    console.error(`Query expander loaded in-process: ${MODEL_ID} (${DTYPE})`);
     return inProcessInstance;
   });
   return inProcessInitPromise;
@@ -51,7 +54,7 @@ export async function inProcessExpand(args: { prompt: string; maxNewTokens: numb
 }
 
 registerInProcessHandlers({ expand: inProcessExpand });
-registerInferenceConfig({ expandModel: MODEL_ID });
+registerInferenceConfig({ expandModel: MODEL_ID, expandDtype: DTYPE });
 
 // --- Public API ---
 

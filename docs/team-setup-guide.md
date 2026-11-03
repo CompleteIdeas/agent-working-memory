@@ -54,7 +54,7 @@ That's it. This does three things:
 
 **Restart Claude Code** after setup.
 
-The first conversation will take minutes longer while it downloads three ML models (**~600 MB**: 134 MB embedder + 92 MB reranker + 377 MB expander). These are cached locally — only happens once.
+The first conversation will take minutes longer while it downloads three ML models (**~175 MB**: 134 MB embedder + 23 MB MiniLM reranker + 17 MB Ettin reranker, both int8). These are cached locally — only happens once.
 
 ---
 
@@ -302,7 +302,7 @@ To start fresh, delete `~/.awm/memory.db` and Claude starts with a blank slate.
 - Run `awm setup --global` again — safe to re-run
 
 **First conversation is slow:**
-- Normal — ML models are downloading (**~600 MB**, so minutes not seconds). Only happens once.
+- Normal — ML models are downloading (**~175 MB**). Only happens once.
 
 **Not seeing writes in the log:**
 - The Stop hook reminder helps but Claude may still skip writes

@@ -9,7 +9,7 @@
 
 - **Node.js** >= 22.0.0 (Node 20 reached EOL on 2026-04-30; v0.8.6+ requires Node 22 LTS)
 - **npm** (bundled with Node)
-- **~600 MB** disk space for ML models (downloaded automatically on first run — see the table below for the per-model split)
+- **~175 MB** disk space for ML models (downloaded automatically on first run — see the table below for the per-model split)
 
 ## Quick Start
 
@@ -25,13 +25,14 @@ npm install
 npx tsx src/index.ts
 ```
 
-The server starts on port 8400 (configurable via `AWM_PORT` env var). On first run, three ML models download automatically — **~600 MB in total**, so allow minutes rather than seconds, once per cache:
+The server starts on port 8400 (configurable via `AWM_PORT` env var). On first run, three ML models download automatically — **~175 MB in total**, once per cache (the 377 MB query expander only if expansion is turned on):
 
 | Model | Size | Purpose |
 |-------|------|---------|
 | bge-small-en-v1.5 | 134 MB | Vector embeddings (384 dimensions) — BAAI, retrieval-optimized |
-| ms-marco-MiniLM-L-6-v2 | 92 MB | Cross-encoder reranking (`AWM_RERANKER_DTYPE=q8` loads a 23 MB file instead) |
-| flan-t5-small | 377 MB | Query expansion (a 141 MB encoder + a 233 MB merged decoder + a 2.4 MB tokenizer) |
+| ms-marco-MiniLM-L-6-v2 | 23 MB | Cross-encoder reranking for keyword-shaped queries (int8 by default; 92 MB at `AWM_RERANKER_DTYPE=fp32`) |
+| ettin-reranker-17m-v1 | 17 MB | Cross-encoder reranking for natural-language questions (int8) |
+| flan-t5-small | 377 MB | Query expansion, downloaded only when expansion is on (`AWM_DEFAULT_EXPANSION=1`) |
 
 > These are per-model **downloads** at the **fp32** precision AWM actually loads — the ONNX
 > weight files alone are 133 / 91 / 374 MB, the rest being each model's tokenizer and config

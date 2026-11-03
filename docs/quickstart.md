@@ -80,7 +80,7 @@ Start a new Claude Code conversation and ask:
 
 Claude should list 20 tools including `memory_write`, `memory_recall`, `memory_restore`, `memory_whoami`, etc. (18 memory tools + 2 onboarding tools, `onboard_scan`/`onboard_questions`).
 
-> **First conversation will be slower** — the first call downloads ML models (**~600 MB** total: 134 MB embedder + 92 MB reranker + 377 MB expander, nothing bundled, so allow minutes) and is also when the in-memory slim cache populates. After that, recall is fast: ~300-700ms typical on a 10K-engram corpus (AWM 0.7.14+).
+> **First conversation will be slower** — the first call downloads ML models (**~175 MB** total: 134 MB embedder + 23 MB MiniLM reranker + 17 MB Ettin reranker, both int8, nothing bundled) and is also when the in-memory slim cache populates. After that, recall is fast: ~300-700ms typical on a 10K-engram corpus (AWM 0.7.14+).
 
 ---
 

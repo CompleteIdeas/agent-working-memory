@@ -30,8 +30,8 @@ A small local program that runs alongside the AI assistant. It has two jobs:
    closest matches it has. With an opt-in gate switched on, it can instead say "this store
    most likely does not hold that" (see below).
 
-Everything runs on the user's machine. One SQLite database file and three ML models
-(about 600 MB total, downloaded once on first use — none of it is bundled in the package).
+Everything runs on the user's machine. One SQLite database file and three small ML models
+(about 175 MB total, downloaded once on first use — none of it is bundled in the package).
 No cloud service, no API key, nothing leaves the box.
 It plugs into Claude Code through the standard MCP protocol, and can also be used by any
 agent over a local HTTP interface.
@@ -139,8 +139,8 @@ remembered, it is silently re-decided.
 
 | | |
 |---|---|
-| **Install** | `npm install -g agent-working-memory && awm setup --global`, then restart Claude Code. About two minutes, plus a one-time ~600 MB model download that dominates it. |
-| **Footprint** | One database file (a mature store is ~250 MB), three cached models (~600 MB), one lightweight background process per assistant session. |
+| **Install** | `npm install -g agent-working-memory && awm setup --global`, then restart Claude Code. About two minutes, plus a one-time ~175 MB model download. |
+| **Footprint** | One database file (a mature store is ~250 MB), three cached models (~175 MB), one lightweight background process per assistant session. |
 | **Latency** | A recall takes under half a second once warm on a 30,000-memory store (p50 375–438 ms); the first one in a session can take a few seconds while models load. Not disruptive. |
 | **Data** | Stays local. Separate memory pools per project or per person are supported. |
 | **Lock-in** | The store is a plain SQLite file with a documented schema and an export command. |

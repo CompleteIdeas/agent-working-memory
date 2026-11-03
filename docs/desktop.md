@@ -91,7 +91,7 @@ of the package, checking an explicit `AWM_PACKAGE_ROOT`, then an AWM checkout, t
 
 The trade is one prerequisite instead of a 335–400 MB per-platform bundle — and the ML models
 download lazily on first use either way, so bundling the code would never have avoided that
-~600 MB fetch. It is stated in the
+~175 MB fetch. It is stated in the
 description Desktop shows at install time rather than discovered afterwards.
 
 **If you want the fat bundle**, nothing here prevents it — it is a release-infrastructure job

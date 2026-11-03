@@ -28,7 +28,8 @@ Active memories persist indefinitely but their retrieval priority decays over ti
 ### Are there any external API calls?
 
 No calls with your data. Every model runs locally via ONNX: the embedder, the MiniLM cross-encoder
-for keyword-shaped queries, Ettin-17m for natural-language questions (0.22) and the query expander.
+for keyword-shaped queries, Ettin-17m for natural-language questions (0.22) and, only when expansion is turned on, the query
+expander.
 The models are downloaded once, on first use (Ettin is a 17 MB int8 file); after that nothing
 leaves your machine. `AWM_RERANKER_MODEL_NATURAL=off` skips Ettin and uses MiniLM for everything.
 

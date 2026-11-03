@@ -318,10 +318,13 @@ export class ActivationEngine {
     if (useExpansion) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        searchContext = await Promise.race([
+        // Expand the query, then put the alias terms back: assigning the expansion straight to
+        // searchContext dropped them (fixed 0.22.1).
+        const expanded = await Promise.race([
           expandQuery(queryContext),
           new Promise<string>((_, reject) => { timer = setTimeout(() => reject(new Error('expansion timeout')), 5000); }),
         ]);
+        searchContext = aliasAdded.length > 0 ? `${expanded} ${aliasAdded.join(' ')}` : expanded;
       } catch {
         // Expansion unavailable or timed out — use original query
       } finally {

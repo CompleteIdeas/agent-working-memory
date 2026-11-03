@@ -578,7 +578,7 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 | `AWM_SIM_FLOOR_EXPLORATORY` | `0.35` | Same, for exploratory-mode queries. |
 | `AWM_SIM_CANDIDATE_FLOOR_TARGETED` | `0.40` | Min cosine for a vector hit to *enter* the candidate pool (targeted). |
 | `AWM_SIM_CANDIDATE_FLOOR_EXPLORATORY` | `0.30` | Same, exploratory. |
-| `AWM_DEFAULT_EXPANSION` | `0` | `1` makes phase-0 query expansion the **engine** default. Note the per-path difference: MCP `memory_recall` sets `use_expansion` to `true` by default (`src/mcp.ts`), so expansion already runs on the path most callers use; the HTTP `/memory/activate` route and the prime hook pass nothing, so they get the engine default. *(This row named `AWM_RECALL_EXPAND` until 2026-10-09 — a variable nothing in `src/` has ever read.)* |
+| `AWM_DEFAULT_EXPANSION` | `0` | `1` turns phase-0 query expansion on by default and warms the expander at startup. Since 0.22.1 every path follows it: MCP `memory_recall` no longer defaults `use_expansion` to `true`, and `memory_task_begin`, the restore path and the HTTP context route no longer force it. Measured 2026-11-02 on the three realstore suites: identical top-1 with it on (52.6 / 96.0 / 93.8), ~150-220 ms slower per short query. *(This row named `AWM_RECALL_EXPAND` until 2026-10-09 — a variable nothing in `src/` has ever read.)* |
 | `AWM_DATABASE_URL` | — | Connection string for the networked **Postgres** backend. The only way to point AWM at a Postgres server (`src/storage/factory.ts`); undocumented until 2026-10-09. |
 | `AWM_DISABLE_ENTITY_BRIDGE` | unset | Skips the default-ON phase-3.7 entity-bridge boost. **Footgun:** the code tests presence, not value, so `=0` *also* disables it. Unset the variable to re-enable. |
 

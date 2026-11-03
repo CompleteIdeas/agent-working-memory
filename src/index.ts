@@ -218,7 +218,7 @@ async function main() {
   } else {
     getEmbedder().catch(err => console.warn('Embedding model unavailable:', err.message));
     getReranker().catch(err => console.warn('Reranker model unavailable:', err.message));
-    getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));
+    if (process.env.AWM_DEFAULT_EXPANSION === '1') getExpander().catch(err => console.warn('Query expander model unavailable:', err.message));
   }
 
   if (BACKEND === 'sqlite') {
