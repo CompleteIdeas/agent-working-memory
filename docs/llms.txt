@@ -130,7 +130,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. **19 tools** appear. `awm setup` also writes agent
+Restart Claude Code. **20 tools** appear. `awm setup` also writes agent
 instructions into your global `CLAUDE.md` and installs hooks that checkpoint on
 compaction and session end.
 
@@ -220,12 +220,13 @@ a file is SQLite.
 
 ---
 
-## 5. The 19 tools
+## 5. The 20 tools
 
 **Lifecycle** — `memory_restore` (session start), `memory_task_begin`,
 `memory_task_end`, `memory_checkpoint`.
 
-**Core** — `memory_write`, `memory_recall`.
+**Core** — `memory_write`, `memory_recall`, `memory_set_questions` (attach the
+natural questions a memory answers, when the host has a model to write them).
 
 **Correction** — `memory_supersede` (replace a stale fact; the new version
 inherits the old one's associations), `memory_retract` (it was wrong),
@@ -238,7 +239,13 @@ inherits the old one's associations), `memory_retract` (it was wrong),
 agent spaces — call this *first* whenever anything about AWM's own state is in
 question), `memory_stats`.
 
-**Onboarding** — `onboard_scan`, `onboard_questions`.
+**Onboarding** — `onboard_scan`, `onboard_questions`. To learn a whole repo or
+folder, use the `awm-learn` skill instead (`/awm-learn` in Claude Code; installed
+by `awm setup` and shipped in the plugin): it prices the run, writes map memories
+first, then 0-8 memories per unit from a resumable ledger in
+`~/.awm/learn/<project>/`, and tests its own recall. Confirm its token estimate
+with the owner, and treat it as a floor: the first measured run used about 2.5x
+the plan. `docs/awm-learn.md` has the measured run.
 
 **Output control** — `compress_output`, `retrieve_original`.
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.22.2 (2026-11-04) — setup installs awm-learn and tells the agent when to use it
+
+- **`awm setup` installs the `awm-learn` skill** into `~/.claude/skills/awm-learn/` (a project
+  setup: `.claude/skills/`), copied from the copy the plugin ships. Before this only plugin
+  users had it. A re-run upgrades a copy setup wrote and leaves alone one you edited: a
+  `.awm-skill.json` record of what it wrote tells the two apart. `--no-instructions` skips it.
+- **The installed guidance names the skill.** Lifecycle step 1 now says to use `/awm-learn`
+  to learn a whole repo or folder (a new project, or one whose recall keeps missing), to
+  confirm its token estimate with the owner first, and to run it again to refresh what
+  changed. **Re-run `awm setup --global`** to get both.
+- **Docs.** New page, [`docs/awm-learn.md`](docs/awm-learn.md): what the skill does, the first measured run
+  (374 files, about 10 minutes, 344 memories, 12 of 20 self-test questions in the top 3, tokens
+  2.5 times the estimate) and its limits. The README opening, the docs site, the decision-maker
+  brief, the FAQ, the how-to, the quickstart, the plugin guide and `llms.txt` all cover it. The
+  README and the plugin guide said 19 memory tools in three places; the server has 20.
+
 ## 0.22.1 (2026-11-04) — query expansion off everywhere, and a smaller first download
 
 - **Query expansion is off on every path.** The engine default was already off, but MCP

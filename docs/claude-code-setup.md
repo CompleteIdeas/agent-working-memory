@@ -51,6 +51,7 @@ Restart Claude Code. Done — 20 tools appear automatically (18 memory + 2 onboa
 | `~/.claude/hooks/awm-prime.cjs` | `UserPromptSubmit` — primes relevant memory into context. `--no-prime` skips it; an empty `~/.claude/hooks/awm-prime.disabled` turns it off without uninstalling |
 | `~/.claude/hooks/awm-used.cjs` | `Stop` (0.20) — prints the write / recall reminder and posts the transcript path to `/hooks/used`, so the recalls the reply drew on are credited without a `memory_feedback` call |
 | `~/.claude/hooks/awm-hooks.json` | Records what setup installed, so the hooks can find the server even with no project config |
+| `~/.claude/skills/awm-learn/` | The `awm-learn` skill (0.22.2): `/awm-learn` learns a whole repo or folder into memory. Upgraded on each run, unless you edited it (a `.awm-skill.json` record tells the two apart); `--no-instructions` skips it. A project setup puts it in `.claude/skills/` |
 
 The bearer secret lives in the MCP config and is read at run time, so regenerating it does
 not leave the hooks silently 401-ing. It is deliberately **not** written into

@@ -10,7 +10,7 @@ description: >-
 
 # Agent Working Memory
 
-Generated from `src/adapters/common.ts` (AWM v0.22.1) — the same guidance
+Generated from `src/adapters/common.ts` (AWM v0.22.2) — the same guidance
 `awm setup` writes into CLAUDE.md. Do not edit here; edit the source and re-run
 `npm run build:plugin`.
 
@@ -34,6 +34,12 @@ you write them; AWM stays current because every agent reads + writes the same st
    `onboard a new project` skill and follow it — or call `onboard_scan` on the project's
    docs/repo, refine the candidates, run `onboard_questions`, and save the good ones with
    `memory_write` (canonical). A cold store is nearly useless until it's seeded.
+   **To learn a whole repo or folder** (code, a manuscript, a docs tree) — a new project,
+   or one whose recall keeps missing — use the `awm-learn` skill (`/awm-learn`, installed
+   by `awm setup` and shipped in the plugin). It plans the work in a resumable ledger,
+   writes map memories first, then a few memories per unit, and tests its own recall.
+   Confirm its token estimate with the owner first; `/awm-learn` again later refreshes
+   only what changed.
    Pass `capabilities: ["questions"]`: when a reply then carries a `questions@1` job
    (memories that have no questions yet), do it as a separate short pass and answer with
    `memory_set_questions` — questions are how a memory is found when someone asks in

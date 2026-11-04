@@ -1,21 +1,23 @@
 # AgentWorkingMemory (AWM)
 
-**One agent thread, any number of topics. AWM gives your AI agent a memory it draws fresh context
-from at every turn — so it can switch topics, survive compaction, come back — and know what it
-doesn't know.**
+**Your AI agent forgets. AWM gives it a memory that finds the right fact, knows which version
+is current, and says when it doesn't know. It runs entirely on your machine, and one command
+teaches it a whole project.**
 
-Every session with an AI assistant starts blank, and every long session decays: the context
-window fills, compaction summarises away the detail, and switching from one job to another means
-the first job's facts are gone by the time you return. So the agent re-derives everything —
-reading files, running searches, asking you — and on a large project it will confidently rebuild
-something that was already decided against.
+Every session with an AI assistant starts blank, and every long one decays: the context window
+fills, compaction summarises the detail away, and by the time you come back to a job its facts
+are gone. So the agent re-derives everything. It reads files again, re-runs searches and asks you
+again, and on a large project it confidently rebuilds something that was already decided
+against. That is where your time and your tokens go.
 
-AWM changes the model. The agent's working context is not carried forward and patched; it is
-**drawn fresh from memory every time** — a recall primed on each prompt, per step, and after every
-compaction. That is what lets one continuous thread move from RosterKeep to a workshop deck to a
-security fix and back without losing its place. One local process, one SQLite file: the agent
-writes short notes as it learns, AWM decides which are worth keeping, hands back the two or three
-that matter, and says **nothing** when nothing fits.
+AWM fixes that at the source. The agent's context is **drawn fresh from memory at every turn**:
+a recall primed on each prompt and after every compaction, which returns the two or three
+memories that matter and **nothing** when nothing fits. On a real 30,000-memory work store it
+puts the right memory first for **96%** of topic questions and **93%** of identifier lookups. A
+corrected fact replaces the old one instead of competing with it. And with **`/awm-learn`** the
+agent reads an entire repo, manuscript or docs folder into memory, so recall is useful on day
+one, not day ten. One local process, one SQLite file, no cloud, no API keys, no telemetry, and
+every number above is published with how to check it.
 
 ## Why use it
 
@@ -24,6 +26,7 @@ that matter, and says **nothing** when nothing fits.
 | **One thread, any number of topics** | Context comes from memory each turn, so a single long-running agent can switch topics, lose detail to compaction, and get it back | Early: in a measured multi-task run, compaction **+ AWM** was fully right **4 of 5** times — above the full-history ceiling (3/5) and every memory-less arm. AWM's own share is not yet isolated; [what would settle it](docs/claims.md) |
 | **Knows what's current** | A corrected fact supersedes the old one, and recall serves the new version — the old one surfaces only with a warning | Measured: plain keyword search over a raw store returns a **superseded** memory first **8–15%** of the time; AWM's lifecycle is why it doesn't |
 | **Knows what it doesn't know** | A gate calibrated on the store itself withholds answers it doesn't have, and flags the ones it isn't sure of | Measured, one store: withholds **58 of 73** never-stored facts and **1 of 712** correct answers on keyword-shaped questions; on natural-language questions it withholds **10 of 97** correct answers once memories carry questions (opt-in, [details](docs/abstention.md)) |
+| **Learns a project in one command** | `/awm-learn` reads a repo or folder into memory, map first, then every part, and resumes where it stopped. Refresh re-learns only what changed | One run, measured: a 374-file production API learned by 5 agents in **about 10 minutes**, **344 memories**, 12 of 20 newcomer questions answered in the top 3 — short of its own 80% target, and its token estimate ran 2.5× low ([details](docs/awm-learn.md)) |
 | **Selective, not a sponge** | It keeps what is worth keeping and returns the two or three memories that matter, not the top-K of everything | By design; the salience filter and its audit are in [`docs/cognitive-model.md`](docs/cognitive-model.md) |
 | **Less digging, fewer tokens** | The agent recalls where the answer is instead of searching for it again | One controlled test, four real support tickets with and without AWM: **half the lookups** (49 vs 100), **26% fewer output tokens**, and **2×** the facts the answer needed — n = 4, directional ([claims §5](docs/claims.md)) |
 | **Costs the same at any scale** | A scoped recall costs about the same whether the store holds a hundred memories or thirty thousand | Measured as flat; the size is disputed — published as ~630 tokens, the harness measures ~1,518. Either way against ~1.3M to carry the store ([claims §3](docs/claims.md)) |
@@ -144,12 +147,14 @@ Requires **Node.js 22+**. Restart Claude Code.
 
 **What to expect.** The first conversation takes minutes rather than seconds while the ONNX
 models download — **~175 MB** once, into a local cache (134 MB embedder + 23 MB keyword reranker + 17 MB
-natural-language reranker; nothing is bundled in the package, and the 377 MB query expander downloads only if you turn expansion on). After that the agent has 19 memory tools, and the hooks save state on compaction
+natural-language reranker; nothing is bundled in the package, and the 377 MB query expander downloads only if you turn expansion on). After that the agent has 20 memory tools, and the hooks save state on compaction
 and session end without you doing anything. For the first day or two recall will be thin — it only
 knows what has been written. That is the normal shape of it, not a fault.
 
-**Starting on an existing project?** Warm-start the store from its own docs so recall is useful on
-day one:
+**Starting on an existing project?** Ask the agent to learn it: type `/awm-learn` in Claude Code.
+It prices the run, asks what to leave out, and reads the project into memory; run it again later to
+refresh what changed ([how it works](docs/awm-learn.md)). Or warm-start the store from its docs
+without an agent:
 
 ```bash
 awm onboard ./docs --repo . --project <name>    # review the pack, then
@@ -217,10 +222,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.22.1
+## What's new — v0.22.2
 
 | | |
 |---|---|
+| **0.22.2** | **`awm setup` installs `awm-learn`, and the agent knows when to use it.** The skill that learns a whole repo or folder into memory used to reach plugin users only; setup now installs it into `~/.claude/skills/` too, upgrading its own copy on each run and leaving an edited one alone. The installed guidance tells the agent to reach for `/awm-learn` on a new project or when recall keeps missing. New page: [docs/awm-learn.md](docs/awm-learn.md). **Re-run `awm setup --global`.** [CHANGELOG](CHANGELOG.md) |
 | **0.22.1** | **Query expansion is off on every path, and the first download is smaller.** MCP recall, task begin, restore and the HTTP context route had been forcing expansion on while every benchmark ran with it off. Measured on the three real-store suites, first place is identical either way, and expansion cost about 220 ms per short query, so it is off everywhere and its model is no longer downloaded (`AWM_DEFAULT_EXPANSION=1` turns it back on). **New skill: `awm-learn`** learns a whole repo or folder into memory with a resumable ledger; its first full run, on a 374-file API, wrote 344 memories. [CHANGELOG](CHANGELOG.md) |
 | **0.22.0** | **Memories carry the questions they answer, and natural-language questions get their own re-ranker.** `memory_write` takes up to 5 `questions` — how someone would ask later, in their own words. They are indexed for keyword search only, in a second index that only natural-language recall reads: on the real-store snapshot with questions, natural-language first place rose 45.4% → **50.0%** with identifier and topic unchanged. Natural questions are now re-ranked by **Ettin-17m** (Apache-2.0, a 17 MB int8 download on first use), blended by rank: **52.6%** with questions, **47.9%** on a store that has none yet; recall time unchanged. A host with its own model can backfill questions (`capabilities: ["questions"]` on `memory_restore`, then the new `memory_set_questions` tool) — AWM calls no hosted model. A `slot` (`"club.fall-fee"`) makes a newer value replace the old one without its id. The opt-in gate fits a natural-question model: correct natural answers withheld 24% → 10%. **Re-run `awm setup --global`**, and `awm calibrate` if the gate is on. [CHANGELOG](CHANGELOG.md) |
 | **0.21.1** | **Ranking: every published number rises, and natural-language questions catch up with plain search.** The 40-candidate cross-encoder pool was really 24 (an earlier cut held it), and the cross-encoder decided the final order alone. Now 32 candidates chosen by fused BM25 + vector + composite rank, and a final order blending the cross-encoder with that fused rank, weighted by the query's shape. Identifier 92.7% → **93.3%** first, topic 92.7% → **96.0%**, natural-language 41.2% → **45.4%** (tying fused BM25 + vector search). Recall is 12–21% slower at the median. Also: consolidation stopped rewriting the same pattern summary every cycle (18,368 rows of 147 patterns in the test snapshot); a reranker that fails to load is reported instead of silently leaving recall unranked; the opt-in gate's figures corrected and re-measured — it still withholds 21 of 88 correct natural-language answers. **Recalibrate the opt-in gate after upgrading** (`awm calibrate`). [CHANGELOG](CHANGELOG.md) |
@@ -355,7 +361,7 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 1188 tests
+npx vitest run          # 1193 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball
@@ -366,7 +372,7 @@ npm run test:linux      # build + full suite on Linux
 
 ## Status
 
-Active development, v0.22.1. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.22.2. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

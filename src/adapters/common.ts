@@ -8,9 +8,9 @@
  * environment variables, MCP command building, and the AWM instruction snippet.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, realpathSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, realpathSync, readdirSync } from 'node:fs';
 import { resolve, join, dirname, basename } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { homedir as osHomedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { SetupContext } from './types.js';
@@ -445,6 +445,12 @@ you write them; AWM stays current because every agent reads + writes the same st
    \`onboard a new project\` skill and follow it — or call \`onboard_scan\` on the project's
    docs/repo, refine the candidates, run \`onboard_questions\`, and save the good ones with
    \`memory_write\` (canonical). A cold store is nearly useless until it's seeded.
+   **To learn a whole repo or folder** (code, a manuscript, a docs tree) — a new project,
+   or one whose recall keeps missing — use the \`awm-learn\` skill (\`/awm-learn\`, installed
+   by \`awm setup\` and shipped in the plugin). It plans the work in a resumable ledger,
+   writes map memories first, then a few memories per unit, and tests its own recall.
+   Confirm its token estimate with the owner first; \`/awm-learn\` again later refreshes
+   only what changed.
    Pass \`capabilities: ["questions"]\`: when a reply then carries a \`questions@1\` job
    (memories that have no questions yet), do it as a separate short pass and answer with
    \`memory_set_questions\` — questions are how a memory is found when someone asks in
@@ -928,3 +934,71 @@ PGlite backend:
 In production, leave these all unset. Use only when diagnosing a suspected
 recall-quality regression.
 `.trimStart();
+
+/**
+ * Skills `awm setup` installs for clients that read a skills folder (Claude Code).
+ * The source is the copy the plugin ships (plugin/skills/<name>/), which build:plugin
+ * keeps byte-identical to skills/<name>/, so the npm tarball carries it already.
+ */
+export const BUNDLED_SKILLS = ['awm-learn'];
+
+const SKILL_RECORD = '.awm-skill.json';
+
+function listFiles(dir: string, rel = ''): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(join(dir, rel), { withFileTypes: true })) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) out.push(...listFiles(dir, r));
+    else if (e.name !== SKILL_RECORD) out.push(r);
+  }
+  return out;
+}
+
+const sha = (buf: Buffer) => createHash('sha256').update(buf).digest('hex');
+const fwd = (p: string) => p.split('\\').join('/');
+
+/**
+ * Install (or upgrade) one bundled skill into `skillsDir/<name>/`.
+ *
+ * A skill folder is the user's to edit, so this never overwrites a change it did not make:
+ * a record of what it wrote last time (`.awm-skill.json`, file → sha256) tells "we wrote it
+ * and it is now stale" (replace) apart from "the owner edited it" (leave it, say so). A
+ * folder with no record whose files already match is adopted; one that differs is left.
+ */
+export function installBundledSkill(skillsDir: string, name: string, version: string, sourceRoot = join(resolvePackageRoot(), 'plugin', 'skills')): string {
+  const src = join(sourceRoot, name);
+  if (!existsSync(join(src, 'SKILL.md'))) return `${name}: not in this package (${fwd(src)})`;
+  const dest = join(skillsDir, name);
+  const files = listFiles(src);
+  const recordPath = join(dest, SKILL_RECORD);
+  let record: { version?: string; files?: Record<string, string> } | null = null;
+  try { record = JSON.parse(readFileSync(recordPath, 'utf-8')); } catch { record = null; }
+
+  const edited: string[] = [];
+  for (const f of files) {
+    const p = join(dest, f);
+    if (!existsSync(p)) continue;
+    const have = sha(readFileSync(p));
+    const ours = record?.files?.[f];
+    const shipped = sha(readFileSync(join(src, f)));
+    if (have === shipped) continue;
+    if (!ours || have !== ours) edited.push(f);
+  }
+  if (edited.length) {
+    return `${name}: left as it is — ${edited.join(', ')} changed locally (delete ${fwd(dest)} to reinstall)`;
+  }
+
+  const hashes: Record<string, string> = {};
+  let changed = 0;
+  for (const f of files) {
+    const buf = readFileSync(join(src, f));
+    hashes[f] = sha(buf);
+    const p = join(dest, f);
+    if (existsSync(p) && sha(readFileSync(p)) === hashes[f]) continue;
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, buf);
+    changed++;
+  }
+  writeFileSync(recordPath, JSON.stringify({ version, installedBy: 'awm setup', files: hashes }, null, 2) + '\n');
+  return `${name}: ${changed ? `${changed} file(s) written` : 'up to date'} in ${fwd(dest)}`;
+}

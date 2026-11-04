@@ -30,7 +30,7 @@ If you have a checkout, or would rather track the repository than the npm releas
 That route needs GitHub access. The npm route above does not.
 </details>
 
-Restart Claude Code. You get the 19 memory tools, the session hooks, and the usage guidance —
+Restart Claude Code. You get the 20 memory tools, the session hooks, the usage guidance and the `awm-learn` skill —
 the same things `awm setup --global` installs, but as one versioned artifact that updates
 with two commands instead of by re-running a script.
 
@@ -66,13 +66,14 @@ tell you which store and agent the running process actually has.
 
 | | |
 |---|---|
-| **MCP server** | 19 memory tools, started through `bin/awm-mcp-launcher.cjs` |
+| **MCP server** | 20 memory tools, started through `bin/awm-mcp-launcher.cjs` |
 | **`Stop` hook** | Reminds Claude to write what it learned |
 | **`PreCompact` hook** | Checkpoints state before the context window is compressed |
 | **`SessionEnd` hook** | Final checkpoint, and triggers consolidation |
 | **`UserPromptSubmit` hook** | **Prime** — puts relevant memory into context before Claude sees your prompt |
 | **`PostToolUse` hook** | Reminds you that a production data change is not done until it is written to memory |
 | **`awm-memory` skill** | When to recall, when to write, how to tag so it can be found again |
+| **`awm-learn` skill** | `/awm-learn` learns a whole repo or folder into memory with a resumable ledger — see [awm-learn.md](awm-learn.md) |
 
 ---
 
@@ -123,7 +124,7 @@ to tell what you have.
 
 | Surface | Works? | |
 |---|---|---|
-| **Claude Code** | **Yes** | Everything: 20 tools, all five hooks, the skill |
+| **Claude Code** | **Yes** | Everything: 20 tools, all five hooks, both skills |
 | **Claude Cowork** | **No — do not install it there** | The skill loads and hooks run, but the memory tools do not |
 | **Claude Desktop** | Not yet | Needs an `.mcpb` bundle; Desktop does support local stdio MCP, so this is a packaging job rather than a limitation |
 

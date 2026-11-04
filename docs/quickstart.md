@@ -114,6 +114,7 @@ You can also explicitly ask:
 - *"Save this to memory"*
 - *"What do you remember about [topic]?"*
 - *"Call memory_stats"* — shows how many memories, writes this session, etc.
+- *`/awm-learn`* — reads the whole project you are in into memory, so recall is useful from day one ([awm-learn.md](awm-learn.md))
 
 ---
 

@@ -14,6 +14,7 @@ covers everything else.
 | [product-overview.md](product-overview.md) | What the system is, in one page — for someone who will build on or operate it |
 | [user-guide.md](user-guide.md) | Day-to-day use: when to write, when to recall |
 | **[writing-memories.md](writing-memories.md)** | **How to write a memory so recall can find it** — the rules behind the 97% top-five figure, what each pipeline stage sees, harness-neutral, with a block to paste into any agent's instructions |
+| **[awm-learn.md](awm-learn.md)** | **Teach the agent a whole project in one command** — what `/awm-learn` does, the first measured run, what it costs, how to keep it current. Hand-written |
 | [how-to.md](how-to.md) | Task-shaped recipes |
 | [faq.md](faq.md) | Common questions |
 | [onboarding-vocabulary.md](onboarding-vocabulary.md) | The terms AWM uses and what they mean |

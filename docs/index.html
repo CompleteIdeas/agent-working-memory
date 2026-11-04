@@ -52,9 +52,11 @@
   <div class="wrap">
     <div class="kicker">AgentWorkingMemory · AWM</div>
     <h1>Persistent working memory for AI agents</h1>
-    <p class="lede">A local-first cognitive memory substrate — salience-filtered storage, a
-      multi-phase recall pipeline, associative consolidation, and adaptive forgetting. Runs entirely
-      on your machine (SQLite + local ONNX models). This is the documentation home.</p>
+    <p class="lede">Your AI agent forgets. AWM gives it a memory that finds the right fact (first
+      for 96% of topic questions on a real 30,000-memory store), knows which version is current, and
+      says when it doesn't know. One command, <code>/awm-learn</code>, teaches it a whole project.
+      Runs entirely on your machine: SQLite and local ONNX models, no cloud, no API keys. This is the
+      documentation home.</p>
     <div class="install">npm install -g agent-working-memory &amp;&amp; awm setup --global</div>
   </div>
 </header>
@@ -74,6 +76,12 @@
       <h3>How it works, walked through →</h3>
       <p>One memory followed from write to recall to correction, each piece introduced by what it does
       before it is named. Thirty minutes; every number sourced.</p>
+    </a>
+    <a class="card" href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/awm-learn.md">
+      <div class="tag">Starting on a project</div>
+      <h3>Teach it a whole project →</h3>
+      <p><code>/awm-learn</code> reads a repo or folder into memory, map first, and refreshes only what
+      changed. The first measured run: 374 files in about ten minutes, 344 memories.</p>
     </a>
   </div>
 
@@ -109,6 +117,8 @@
       <span>Opt-in: keep a secret sealed and use it without telling it</span></li>
     <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">Calibrated abstention</a>
       <span>Opt-in: say when the store most likely does not hold the answer</span></li>
+    <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/awm-learn.md">awm-learn</a>
+      <span>Learn a whole repo or folder into memory, resumably, and keep it current</span></li>
     <li><a href="llms.txt">llms.txt</a>
       <span>The whole project in one file, written to be read by a model</span></li>
     <li><a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/patterns/awm-native-harness.md">AWM-Native Harness pattern</a>

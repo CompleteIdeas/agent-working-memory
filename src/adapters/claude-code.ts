@@ -11,7 +11,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import type { CLIAdapter, SetupContext, DiagnosticResult } from './types.js';
-import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection, isInsidePackage } from './common.js';
+import { resolveMcpCommand, homedir, AWM_INSTRUCTION_CONTENT, upsertAwmSection, isInsidePackage, BUNDLED_SKILLS, installBundledSkill } from './common.js';
+import { VERSION } from '../version.js';
 import { HOOK_SCRIPTS, AWM_HOOKS_VERSION, PRIME_DISABLE_FILE, type HooksRecord } from './hook-scripts.js';
 import { request as httpRequest } from 'node:http';
 
@@ -155,7 +156,16 @@ const adapter: CLIAdapter = {
     if (skip) return 'CLAUDE.md: skipped (--no-instructions)';
 
     const title = ctx.isGlobal ? '# Global Instructions' : `# ${basename(ctx.cwd)}`;
-    return upsertAwmSection(claudeMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title, force: ctx.forceInstructions });
+    const msg = upsertAwmSection(claudeMdPath, AWM_INSTRUCTION_CONTENT, { titleIfNew: title, force: ctx.forceInstructions });
+
+    // The guidance names the awm-learn skill, so install it alongside (0.22.2). Skipped with
+    // the instructions: --no-instructions means "leave my agent's prompt surface alone".
+    const skillsDir = ctx.isGlobal ? join(homedir(), '.claude', 'skills') : join(ctx.cwd, '.claude', 'skills');
+    const skills = BUNDLED_SKILLS.map(name => {
+      try { return installBundledSkill(skillsDir, name, VERSION); }
+      catch (e: any) { return `${name}: not installed (${e?.message ?? e})`; }
+    });
+    return `${msg}\n               Skills: ${skills.join('; ')}`;
   },
 
   writeHooks(ctx: SetupContext, skip: boolean): string {

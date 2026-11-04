@@ -49,6 +49,15 @@ on `memory_restore`, and AWM hands back a small batch of memories that lack ques
 answers with `memory_set_questions`. Re-running `awm setup --global` installs guidance that tells
 Claude Code to do this.
 
+### Can AWM learn a project I already have? (0.22.2)
+
+Yes: type `/awm-learn` in Claude Code. The skill plans the run with a model-free ledger, shows the
+token price before reading anything, and asks what to leave out. It then writes map memories
+first, then up to eight memories per part of the project, and tests its own recall at the end. It
+works on code, manuscripts, docs trees and data folders. Running it again refreshes only what
+changed. `awm setup` installs it, and the plugin ships it. The first measured run and its limits
+are in [awm-learn.md](awm-learn.md).
+
 ### Will AWM store my API keys?
 
 Not by default. Write-time redaction is on: provider keys with a known shape, private keys, JWTs,

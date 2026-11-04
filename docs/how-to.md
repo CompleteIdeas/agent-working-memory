@@ -255,3 +255,17 @@ open the gate for that call.
 
 Measured on one real store with keyword-style questions, it withheld 66 of 73 questions about
 facts never stored and none of 694 correct answers. See [abstention.md](abstention.md).
+
+## 16. Teach the agent a whole project
+
+In Claude Code, type:
+
+```
+/awm-learn
+```
+
+It asks what the folder is and what memory should get good at, what to leave out, and how much
+to spend. It prices the run before reading anything, writes map memories first, then learns the
+project unit by unit, and tests its own recall at the end. Run it again later to refresh only
+what changed. Several sessions can work through one large repo together, since they share the
+ledger in `~/.awm/learn/<project>/`. See [awm-learn.md](awm-learn.md).
