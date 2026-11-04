@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.1 (unreleased) — query expansion off everywhere, and a smaller first download
+## 0.22.1 (2026-11-04) — query expansion off everywhere, and a smaller first download
 
 - **Query expansion is off on every path.** The engine default was already off, but MCP
   `memory_recall` defaulted `use_expansion` to `true`, and `memory_task_begin`, the restore path

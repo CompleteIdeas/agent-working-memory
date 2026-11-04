@@ -10,7 +10,7 @@ description: >-
 
 # Agent Working Memory
 
-Generated from `src/adapters/common.ts` (AWM v0.22.0) — the same guidance
+Generated from `src/adapters/common.ts` (AWM v0.22.1) — the same guidance
 `awm setup` writes into CLAUDE.md. Do not edit here; edit the source and re-run
 `npm run build:plugin`.
 
@@ -253,8 +253,8 @@ resolving the question requires a fact you would have to *derive*, recall the fa
 instead.
 
 ### Recall strategy (when one query isn't enough)
-AWM's adaptive retrieval handles most query variations natively — synonym
-expansion, multi-channel scoring, embedding + BM25 + reranker agreement.
+AWM's adaptive retrieval handles most query variations natively — alias
+terms, multi-channel scoring, embedding + BM25 + reranker agreement.
 A single recall is usually enough.
 
 When it isn't:
@@ -486,7 +486,8 @@ Recall pipeline:
   suite with recall headroom left — it is inert per query, not just in aggregate:
   0 of 200 queries differ in rank, top-1 or score.
 - `AWM_DISABLE_EXPANSION_CACHE=1` — disables the query expansion skip
-  heuristic + LRU cache. Forces every recall through flan-t5-small.
+  heuristic + LRU cache. Forces every recall through flan-t5-small. Only matters
+  with `AWM_DEFAULT_EXPANSION=1`: query expansion is off by default since 0.22.1.
 
 Write pipeline + lifecycle:
 - `AWM_SLOW_WRITE_MS=250` — any write slower than this logs one stderr
