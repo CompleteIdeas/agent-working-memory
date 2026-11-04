@@ -13,7 +13,7 @@ installer uses, and `npm run check:release` fails if the committed output has dr
 |---|---|
 | MCP server | 1 server, 20 memory tools, via `bin/awm-mcp-launcher.cjs` |
 | Hooks | Stop, PreCompact, SessionEnd, UserPromptSubmit (prime), PostToolUse — hooks v0.20.0 |
-| Skill | `awm-memory` — when to recall, when to write, how to tag |
+| Skills | `awm-memory` — when to recall, when to write, how to tag; `awm-learn` — learn a whole repo or folder into memory |
 
 ## The store
 

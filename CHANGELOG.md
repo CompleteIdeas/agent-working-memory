@@ -26,6 +26,24 @@
   ran slower. Ettin-68m is available today with `AWM_RERANKER_MODEL_NATURAL=cross-encoder/ettin-reranker-68m-v1`.
 - **Fix:** with expansion on, the expanded query replaced the search string and dropped the
   alias terms added just before it (`src/engine/activation.ts`).
+- **New skill: `awm-learn`.** Point it at a repo or folder (code, a manuscript, a docs tree, a
+  data folder) and it learns the whole thing into memory, resumably. It plans the work with a
+  model-free ledger (`skills/awm-learn/scripts/ledger.mjs`). The ledger lists the files through
+  `git ls-files`, skips dependencies, build output, binaries and secrets, and groups the files
+  into units. It reads the most important units in full and skims the rest within a token
+  budget, prices the run before reading anything, and lets several agents claim units in
+  parallel. `refresh` re-hashes the files and queues only what changed. The skill writes map
+  memories first, then 0-8 memories per unit, each with natural questions, then cross-cutting
+  flows. It tests its own recall and interviews the owner only on what the files can't answer.
+  It ships in the Claude Code plugin; the plugin build now copies hand-written skills from
+  `skills/`. First full run (a 374-file API, 97 units, 5 parallel agents, about 10 minutes):
+  344 memories, 12 of 20 newcomer questions answered in the top 3. It used about 2.5 times the
+  planned tokens, so treat the estimate as a floor. The run added slicing of very large files
+  at their section headings, grouping of flat folders by file-name family, and a lock so
+  parallel agents can't overwrite the ledger.
+  Planning takes about a second: the AWM repo plans as 493 files in 146 units, about 713k tokens
+  at the default depth (1.48M to read everything); NovelForge as 416 files in 114 units.
+  The ledger lives outside the target, in `~/.awm/learn/<project>/`.
 
 ## 0.22.0 (2026-11-01) — memories carry the questions they answer, and natural questions get their own re-ranker
 

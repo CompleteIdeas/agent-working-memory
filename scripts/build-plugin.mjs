@@ -25,8 +25,8 @@
  * Requires `npm run build` first — it imports from dist/.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -149,6 +149,19 @@ written.push(write(join('.claude-plugin', 'plugin.json'), JSON.stringify({
   },
 }, null, 2)));
 
+// ── hand-written skills (skills/<name>/), copied in as they are ───────────────
+// The generated tree is wiped on every build, so a skill that is not generated lives in the
+// repo's skills/ folder and is copied here byte for byte.
+const SKILLS_SRC = join(ROOT, 'skills');
+const copyTree = (dir) => {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) copyTree(p);
+    else if (e.isFile()) written.push(write(join('skills', relative(SKILLS_SRC, p)), readFileSync(p, 'utf-8')));
+  }
+};
+if (existsSync(SKILLS_SRC)) copyTree(SKILLS_SRC);
+
 written.push(write('README.md', `# AWM — Claude Code plugin
 
 Installs Agent Working Memory as a plugin: the MCP server, the session hooks, and the usage
@@ -164,7 +177,7 @@ installer uses, and \`npm run check:release\` fails if the committed output has 
 |---|---|
 | MCP server | ${Object.keys({ 'agent-working-memory': 1 }).length} server, 20 memory tools, via \`bin/awm-mcp-launcher.cjs\` |
 | Hooks | Stop, PreCompact, SessionEnd, UserPromptSubmit (prime), PostToolUse — hooks v${AWM_HOOKS_VERSION} |
-| Skill | \`awm-memory\` — when to recall, when to write, how to tag |
+| Skills | \`awm-memory\` — when to recall, when to write, how to tag; \`awm-learn\` — learn a whole repo or folder into memory |
 
 ## The store
 
