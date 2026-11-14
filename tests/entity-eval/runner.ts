@@ -137,6 +137,15 @@ const MEMS: Mem[] = [
   { key: 'd6', concept: 'Photo policy', content: 'We photograph every arrangement before delivery for the portfolio.', tags: [] },
   { key: 'd7', concept: 'Insurance renewal', content: 'Business insurance renews in March; premium was $1,200.', tags: [] },
   { key: 'd8', concept: 'Lease basics', content: 'The shop lease runs to June with a two-year renewal option.', tags: [] },
+  // Distractors for the broad questions: their generic wording, no entity.
+  { key: 'g1', concept: 'Weekly update', content: "What's new this week: nothing going on beyond the usual orders.", tags: [] },
+  { key: 'g2', concept: 'Where are we on things', content: 'Where we are on open items: see the whiteboard; the latest is posted Mondays.', tags: [] },
+  { key: 'g3', concept: 'Remind me list', content: 'Remind me to water the window boxes and to update the price board.', tags: [] },
+  { key: 'g4', concept: 'Notes on new customers', content: 'Notes on what to know about new customers: ask how they heard about us.', tags: [] },
+  { key: 'g5', concept: 'Anything from the inbox', content: 'Check the inbox every morning for anything new from customers lately.', tags: [] },
+  { key: 'g6', concept: 'What is happening this month', content: "What's happening this month: two weddings and the school fundraiser.", tags: [] },
+  { key: 'g7', concept: 'Latest news', content: 'Latest news from the street association: the farmers market moves to Sundays next year.', tags: [] },
+  { key: 'g8', concept: 'Any update on the van', content: 'Any update on the van service: booked for next Tuesday.', tags: [] },
 ];
 
 // Questions. `lower` = refers to the entity only by a lowercase name or role.
@@ -186,6 +195,19 @@ const QS: Q[] = [
   { q: 'when does payroll run?', gold: ['d5'], entities: [], lower: false },
 ];
 
+// Broad questions: they name only the entity, the rest is generic. Any memory about the
+// entity is a hit. This is MWA's failure shape: "anything new from jenna?" where her
+// memories say "events manager" and "she", never "jenna".
+const ofEntity = (e: string) => MEMS.filter(m => m.tags.includes(t(e)[0])).map(m => m.key);
+const BROAD: Q[] = [
+  ['anything new from jenna?', HOTEL_JENNA], ["what's the latest with the events manager?", HOTEL_JENNA],
+  ["what's going on with jenna liu?", PHOTO_JENNA], ['anything from the photographer lately?', PHOTO_JENNA],
+  ['remind me about leo', LEO], ['what do i know about priya?', PRIYA], ['what should i know about the florist?', PRIYA],
+  ['any update from the lawyer?', TOM], ['notes on tom', TOM], ["what's happening with the bank?", DANA], ['what about dana?', DANA],
+  ["what's going on with the hotel?", HOTEL], ['remind me about greenstem', GREENSTEM], ['anything about the wholesaler?', GREENSTEM],
+  ['where are we on the gala?', GALA], ['update me on the market', MARKET],
+].map(([q, e]) => ({ q, gold: ofEntity(e), entities: [e], lower: true }));
+
 function pct(xs: number[], p: number): number {
   const s = [...xs].sort((a, b) => a - b);
   return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0;
@@ -210,30 +232,42 @@ async function main() {
       if (!r.ok) throw new Error(`alias ${a}: ${r.error}`);
     }
 
-    const arms = { off: { s1: 0, s5: 0, lat: [] as number[] }, on: { s1: 0, s5: 0, lat: [] as number[] } };
-    const lowerArms = { off: { s1: 0, s5: 0 }, on: { s1: 0, s5: 0 } };
+    type Arm = 'off' | 'on' | 'hint';
+    const ARMS: Arm[] = ['off', 'on', 'hint'];
+    const mk = () => ({ s1: 0, s5: 0, lat: [] as number[] });
+    const arms: Record<Arm, ReturnType<typeof mk>> = { off: mk(), on: mk(), hint: mk() };
+    const lowerArms: Record<Arm, ReturnType<typeof mk>> = { off: mk(), on: mk(), hint: mk() };
     let wrongInjected = 0, injectedTotal = 0, fakeInjected = 0;
     const trace: any[] = [];
 
     // Warm the models once so neither arm pays the cold load.
     await activation.activate({ agentId: AGENT, context: 'warm up', limit: 3, internal: true } as any);
 
-    for (const [qi, item] of QS.entries()) {
+    const broadArms: Record<Arm, ReturnType<typeof mk>> = { off: mk(), on: mk(), hint: mk() };
+    const ALL = [...QS.map(x => ({ ...x, broad: false })), ...BROAD.map(x => ({ ...x, broad: true }))];
+    for (const [qi, item] of ALL.entries()) {
       const golds = item.gold.map(k => idOf[k]);
-      const row: any = { q: item.q, lower: item.lower };
+      const row: any = { q: item.q, lower: item.lower, broad: item.broad };
       // Interleave: alternate which arm goes first.
-      const order: Array<'off' | 'on'> = qi % 2 === 0 ? ['off', 'on'] : ['on', 'off'];
+      const order = ARMS.map((_, i) => ARMS[(i + qi) % ARMS.length]); // rotate which arm goes first
       for (const arm of order) {
-        if (arm === 'on') process.env.AWM_ENTITY_ALIAS_MATCH = '1'; else delete process.env.AWM_ENTITY_ALIAS_MATCH;
+        if (arm === 'off') delete process.env.AWM_ENTITY_ALIAS_MATCH; else process.env.AWM_ENTITY_ALIAS_MATCH = '1';
+        if (arm === 'hint') process.env.AWM_ENTITY_ALIAS_PASSAGE = '1'; else delete process.env.AWM_ENTITY_ALIAS_PASSAGE;
         const t0 = process.hrtime.bigint();
         const res: any[] = await activation.activate({ agentId: AGENT, context: item.q, limit: 5, internal: true } as any);
         arms[arm].lat.push(Number(process.hrtime.bigint() - t0) / 1e6);
         const rank = res.findIndex(r => golds.includes(r.engram.id));
-        if (rank === 0) { arms[arm].s1++; if (item.lower) lowerArms[arm].s1++; }
-        if (rank >= 0 && rank < 5) { arms[arm].s5++; if (item.lower) lowerArms[arm].s5++; }
+        if (item.broad) {
+          if (rank === 0) broadArms[arm].s1++;
+          if (rank >= 0 && rank < 5) broadArms[arm].s5++;
+        } else {
+          if (rank === 0) { arms[arm].s1++; if (item.lower) lowerArms[arm].s1++; }
+          if (rank >= 0 && rank < 5) { arms[arm].s5++; if (item.lower) lowerArms[arm].s5++; }
+        }
         row[arm] = rank;
       }
       delete process.env.AWM_ENTITY_ALIAS_MATCH;
+      delete process.env.AWM_ENTITY_ALIAS_PASSAGE;
       // What the flag injects for this question (the same computation activation.ts runs).
       const injected = selectEntityHits(await store.matchEntityTerms(entityQueryGrams(item.q), [AGENT]));
       injectedTotal += injected.length;
@@ -245,13 +279,18 @@ async function main() {
       trace.push(row);
     }
 
-    const n = QS.length, nl = QS.filter(q => q.lower).length;
+    const n = QS.length, nl = QS.filter(q => q.lower).length, nb = BROAD.length;
     const r1 = (x: number, d: number) => Math.round((1000 * x) / d) / 10;
     const out = {
       date: new Date().toISOString(),
       memories: MEMS.length, aliases: ALIASES.length, questions: n, lowercaseQuestions: nl,
+      broadQuestions: nb,
+      broadOff: { success1: r1(broadArms.off.s1, nb), success5: r1(broadArms.off.s5, nb) },
+      broadOn: { success1: r1(broadArms.on.s1, nb), success5: r1(broadArms.on.s5, nb) },
+      broadHint: { success1: r1(broadArms.hint.s1, nb), success5: r1(broadArms.hint.s5, nb) },
       off: { success1: r1(arms.off.s1, n), success5: r1(arms.off.s5, n), lower1: r1(lowerArms.off.s1, nl), lower5: r1(lowerArms.off.s5, nl), p50ms: Math.round(pct(arms.off.lat, 0.5)), p95ms: Math.round(pct(arms.off.lat, 0.95)) },
       on: { success1: r1(arms.on.s1, n), success5: r1(arms.on.s5, n), lower1: r1(lowerArms.on.s1, nl), lower5: r1(lowerArms.on.s5, nl), p50ms: Math.round(pct(arms.on.lat, 0.5)), p95ms: Math.round(pct(arms.on.lat, 0.95)) },
+      hint: { success1: r1(arms.hint.s1, n), success5: r1(arms.hint.s5, n), lower1: r1(lowerArms.hint.s1, nl), lower5: r1(lowerArms.hint.s5, nl), p50ms: Math.round(pct(arms.hint.lat, 0.5)), p95ms: Math.round(pct(arms.hint.lat, 0.95)) },
       injection: { entitiesInjected: injectedTotal, wrongEntities: wrongInjected, wrongRate: injectedTotal ? r1(wrongInjected, injectedTotal) : 0, lookalikeInjected: fakeInjected },
       trace,
     };
@@ -259,7 +298,7 @@ async function main() {
     writeFileSync(join(here, 'results.json'), JSON.stringify(out, null, 2));
     const { trace: _t, ...summary } = out;
     console.log(JSON.stringify(summary, null, 2));
-    for (const r of trace) if (r.off !== r.on || r.wrong) console.log(`  off=${r.off} on=${r.on}${r.wrong ? ' WRONG=' + r.wrong.join(',') : ''}  ${r.q}`);
+    for (const r of trace) if (r.off !== r.on || r.off !== r.hint || r.wrong) console.log(`  off=${r.off} on=${r.on} hint=${r.hint}${r.wrong ? ' WRONG=' + r.wrong.join(',') : ''}  ${r.broad ? '[broad] ' : ''}${r.q}`);
   } finally {
     store.close();
     try { rmSync(dir, { recursive: true, force: true }); } catch { /* noop */ }

@@ -298,7 +298,7 @@ async function attachAliases(
         entity: null, registered: [], replaced: [],
         error: named.length === 0
           ? 'aliases not registered: the write has no person=/contact=/org=/entity:/event=/horse=/member= tag for them to belong to'
-          : `aliases not registered: the write names ${named.length} entities (${named.join(', ')}); pass aliasFor to say which`,
+          : `aliases not registered: the write names ${named.length} entities (${named.join(', ')}); pass alias_for (aliasFor over HTTP) to say which`,
       };
     }
     entity = named[0];

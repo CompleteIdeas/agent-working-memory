@@ -15,7 +15,7 @@ import Database from 'better-sqlite3';
 import { EngramStore } from '../src/storage/sqlite.js';
 import { PGliteEngramStore } from '../src/storage/pglite.js';
 import { memoryAbout, registerAlias } from '../src/engine/entity-about.js';
-import { extractEntitiesFromTags, normalizeEntityKey, entityQueryGrams, selectEntityHits } from '../src/core/entity-extract.js';
+import { extractEntitiesFromTags, normalizeEntityKey, entityQueryGrams, selectEntityHits, selectEntityHitTerms } from '../src/core/entity-extract.js';
 import { formatAboutResult } from '../src/core/format-about.js';
 import { performWrite } from '../src/core/write-pipeline.js';
 import { ActivationEngine } from '../src/engine/activation.js';
@@ -55,6 +55,11 @@ describe('entity key helpers', () => {
     ])).toEqual(['contact:jenna@lensandlight.example', 'event:gala']);
     // "jenna" alone still resolves when nothing longer matched.
     expect(selectEntityHits([{ term: 'jenna', entity: 'contact:x', via: 'alias' }])).toEqual(['contact:x']);
+    // The phrase that named each entity is kept, for the rerank-passage hint.
+    expect(Array.from(selectEntityHitTerms([
+      { term: 'the gala', entity: 'event:gala', via: 'alias' },
+      { term: 'gala', entity: 'event:gala', via: 'alias' },
+    ]))).toEqual([['event:gala', ['the gala']]]);
   });
 });
 

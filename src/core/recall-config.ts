@@ -75,6 +75,7 @@ export const RECALL_FLAGS = [
   'AWM_ENTITY_INDEX_FETCH',
   'AWM_ENTITY_INDEX_CAP',
   'AWM_ENTITY_ALIAS_MATCH',
+  'AWM_ENTITY_ALIAS_PASSAGE',
   'AWM_QUERY_BRIDGE',
   'AWM_AUTOTAG',
   // Diagnostic escape hatches that alter ranking

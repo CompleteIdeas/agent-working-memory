@@ -95,13 +95,24 @@ export function entityQueryGrams(text: string, maxGrams = 150): string[] {
  * Returns entity keys, longest phrase first.
  */
 export function selectEntityHits(hits: Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value' }>): string[] {
+  return Array.from(selectEntityHitTerms(hits).keys());
+}
+
+/** As selectEntityHits, keeping which question phrases named each entity (longest first). */
+export function selectEntityHitTerms(hits: Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value' }>): Map<string, string[]> {
   const named = hits.filter(h => h.via !== 'value' || ALIASABLE_KEYS.has(h.entity.slice(0, h.entity.indexOf(':'))));
   const terms = Array.from(new Set(named.map(h => h.term)));
   const inside = (a: string, b: string) => a !== b && ` ${b} `.includes(` ${a} `);
   const kept = named
     .filter(h => !terms.some(longer => inside(h.term, longer)))
     .sort((a, b) => b.term.length - a.term.length);
-  return Array.from(new Set(kept.map(h => h.entity)));
+  const out = new Map<string, string[]>();
+  for (const h of kept) {
+    const ts = out.get(h.entity) ?? [];
+    if (!ts.includes(h.term)) ts.push(h.term);
+    out.set(h.entity, ts);
+  }
+  return out;
 }
 
 /** The part of an entity key after `key:` ("person:jenna park" → "jenna park"). */

@@ -94,7 +94,7 @@ export function confidenceGateFor(confidence: number): number {
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
-import { entityQueryGrams, selectEntityHits } from '../core/entity-extract.js';
+import { entityQueryGrams, selectEntityHitTerms } from '../core/entity-extract.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -525,6 +525,10 @@ export class ActivationEngine {
     // injected gold entered the pool but was cut before the reranker ever scored it. Bounded
     // (AWM_ENTITY_INDEX_CAP, default 12) so the audition costs at most one extra rerank batch.
     const injectedIds = new Set<string>();
+    // AWM_ENTITY_ALIAS_PASSAGE (with AWM_ENTITY_ALIAS_MATCH): the question phrase that named each
+    // memory's entity, appended to that memory's rerank passage. The cross-encoder reads only the
+    // passage, so without it "jenna" cannot connect to a memory that says "the events manager".
+    const nameTermsById = new Map<string, string[]>();
     const entityIndexFetch = process.env.AWM_ENTITY_INDEX_FETCH === '1';
     // 0.23 (AWM_ENTITY_ALIAS_MATCH=1, default OFF): lowercase names. The capitalised-word path
     // below never produces a term for "the gala", "the hotel" or "jenna", which is why the
@@ -538,13 +542,15 @@ export class ActivationEngine {
       try {
         const IDX_CAP = Number(process.env.AWM_ENTITY_INDEX_CAP ?? 12);
         const exactEntities: string[] = [];
+        let exactTerms = new Map<string, string[]>();
         if (entityAliasMatch) {
           prof.begin('entityAliasMatch');
           const grams = entityQueryGrams(query.context);
           const hits = grams.length > 0 ? await this.store.matchEntityTerms(grams, agentIds) : [];
           prof.end('entityAliasMatch');
           // Name-like keys only for bare values, longest name wins (see selectEntityHits).
-          exactEntities.push(...selectEntityHits(hits));
+          exactTerms = selectEntityHitTerms(hits);
+          exactEntities.push(...exactTerms.keys());
         }
         const IDX_QSTOP = new Set(['what', 'who', 'when', 'where', 'why', 'how', 'which', 'whose',
           'the', 'this', 'that', 'and', 'but', 'for', 'did', 'does', 'is', 'are', 'was', 'were',
@@ -584,8 +590,12 @@ export class ActivationEngine {
                 // cuts unguarded. The audition guarantee is about the index match, not
                 // about how the candidate entered the pool.
                 const inPool = candidateMap.get(id);
+                const named = exactTerms.get(entity);
                 if (inPool) {
-                  if (inPool.stage === 'active' && !(inPool as any).retracted && !inPool.supersededBy) { injectedIds.add(id); added++; }
+                  if (inPool.stage === 'active' && !(inPool as any).retracted && !inPool.supersededBy) {
+                    injectedIds.add(id); added++;
+                    if (named && !nameTermsById.has(id)) nameTermsById.set(id, named);
+                  }
                   continue;
                 }
                 prof.begin('entityFetch');
@@ -596,6 +606,7 @@ export class ActivationEngine {
                 candidateMap.set(id, n);
                 injectedIds.add(id);
                 added++;
+                if (named && !nameTermsById.has(id)) nameTermsById.set(id, named);
               }
             }
           }
@@ -1149,8 +1160,12 @@ export class ActivationEngine {
         prof.begin('passages');
         const rrBudget = rerankTruncation();
         const rrMode = rerankWindowMode();
-        const passages = rerankPool.map(r =>
-          buildRerankPassage(r.engram.concept, r.engram.content, queryContext, rrBudget, rrMode, r.engram.tags));
+        const aliasPassage = process.env.AWM_ENTITY_ALIAS_PASSAGE === '1';
+        const passages = rerankPool.map(r => {
+          const p = buildRerankPassage(r.engram.concept, r.engram.content, queryContext, rrBudget, rrMode, r.engram.tags);
+          const named = aliasPassage ? nameTermsById.get(r.engram.id) : undefined;
+          return named ? `${p} [about ${named.join(', ')}]` : p;
+        });
         prof.end('passages');
         prof.note('passageChars', passages.reduce((s, p) => s + p.length, 0));
         prof.note('passageMaxChars', passages.reduce((m, p) => Math.max(m, p.length), 0));
