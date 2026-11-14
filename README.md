@@ -222,10 +222,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.22.2
+## What's new — v0.22.3
 
 | | |
 |---|---|
+| **0.22.3** | **Everything about a name.** New `memory_about` returns every memory about one person, organisation or thing, oldest first (recall returns only the few best matches, so the ninth memory about someone never showed); a name that could mean two people comes back as both, never merged. New `memory_alias` records other names ("Jenna", "Jenna Park" → `contact:events@harborhotel.example`), now kept per agent. Opt-in `AWM_ENTITY_ALIAS_MATCH` + `AWM_ENTITY_ALIAS_PASSAGE` let ordinary questions reach those memories from lowercase names: on a new synthetic eval, questions that name only the person went 68.8% → **100%** in the top 5; the real-store benchmark is unchanged; off by default until a real workload confirms it. **`awm-learn` now surveys a folder before reading it** (each file's role, authority, dates and decision lines). Fixes: a memory could supersede itself and vanish; a merged write lost its entity tags. 22 tools. [CHANGELOG](CHANGELOG.md) |
 | **0.22.2** | **`awm setup` installs `awm-learn`, and the agent knows when to use it.** The skill that learns a whole repo or folder into memory used to reach plugin users only; setup now installs it into `~/.claude/skills/` too, upgrading its own copy on each run and leaving an edited one alone. The installed guidance tells the agent to reach for `/awm-learn` on a new project or when recall keeps missing. New page: [docs/awm-learn.md](docs/awm-learn.md). **Re-run `awm setup --global`.** [CHANGELOG](CHANGELOG.md) |
 | **0.22.1** | **Query expansion is off on every path, and the first download is smaller.** MCP recall, task begin, restore and the HTTP context route had been forcing expansion on while every benchmark ran with it off. Measured on the three real-store suites, first place is identical either way, and expansion cost about 220 ms per short query, so it is off everywhere and its model is no longer downloaded (`AWM_DEFAULT_EXPANSION=1` turns it back on). **New skill: `awm-learn`** learns a whole repo or folder into memory with a resumable ledger; its first full run, on a 374-file API, wrote 344 memories. [CHANGELOG](CHANGELOG.md) |
 | **0.22.0** | **Memories carry the questions they answer, and natural-language questions get their own re-ranker.** `memory_write` takes up to 5 `questions` — how someone would ask later, in their own words. They are indexed for keyword search only, in a second index that only natural-language recall reads: on the real-store snapshot with questions, natural-language first place rose 45.4% → **50.0%** with identifier and topic unchanged. Natural questions are now re-ranked by **Ettin-17m** (Apache-2.0, a 17 MB int8 download on first use), blended by rank: **52.6%** with questions, **47.9%** on a store that has none yet; recall time unchanged. A host with its own model can backfill questions (`capabilities: ["questions"]` on `memory_restore`, then the new `memory_set_questions` tool) — AWM calls no hosted model. A `slot` (`"club.fall-fee"`) makes a newer value replace the old one without its id. The opt-in gate fits a natural-question model: correct natural answers withheld 24% → 10%. **Re-run `awm setup --global`**, and `awm calibrate` if the gate is on. [CHANGELOG](CHANGELOG.md) |
@@ -372,7 +373,7 @@ npm run test:linux      # build + full suite on Linux
 
 ## Status
 
-Active development, v0.22.2. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.22.3. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

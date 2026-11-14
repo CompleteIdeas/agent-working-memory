@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.3 (unreleased) — awm-learn surveys before it reads; everything about a name
+## 0.22.3 (2026-11-13) — awm-learn surveys before it reads; everything about a name
 
 - **`awm-learn` starts with a survey.** `ledger.mjs survey <path>` works out, in about a second and
   without a model, what kind of corpus this is and what each file is:
