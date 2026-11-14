@@ -375,6 +375,34 @@ export class EngramStore {
       );
     `);
 
+    // Migration (0.23 entity lookup): aliases become per-agent. The D9 table keyed aliases
+    // globally, so one agent's "jenna" would redirect another agent's lookup in a shared
+    // store. New primary key (agent_id, alias); rows written before this get agent_id ''
+    // and stay a shared fallback, so existing stores resolve exactly as before.
+    {
+      const cols = this.db.prepare('PRAGMA table_info(entity_aliases)').all() as Array<{ name: string }>;
+      if (!cols.some(c => c.name === 'agent_id')) {
+        this.db.transaction(() => {
+          this.db.exec(`
+            ALTER TABLE entity_aliases RENAME TO entity_aliases_d9;
+            CREATE TABLE entity_aliases (
+              agent_id TEXT NOT NULL DEFAULT '',
+              alias    TEXT NOT NULL,
+              entity   TEXT NOT NULL,
+              PRIMARY KEY (agent_id, alias)
+            );
+            INSERT OR IGNORE INTO entity_aliases (agent_id, alias, entity)
+              SELECT '', alias, entity FROM entity_aliases_d9;
+            DROP TABLE entity_aliases_d9;
+          `);
+        })();
+      }
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(agent_id, entity)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_entity_aliases_alias ON entity_aliases(alias)');
+      // Exact lookup by the value after `key:` ("jenna park" → person:jenna park) without a scan.
+      this.db.exec(`CREATE INDEX IF NOT EXISTS idx_entity_mentions_value ON entity_mentions(substr(entity, instr(entity, ':') + 1), agent_id)`);
+    }
+
     // Migration: memory-spine provenance + temporal validity (D5/D8, 2026-07-30)
     try {
       this.db.prepare('SELECT origin_class FROM engrams LIMIT 0').get();
@@ -1908,9 +1936,20 @@ export class EngramStore {
 
   /** Indexed entities whose normalized key:value — or a registered alias — contains the term
    *  (D11 query-side lookup). Alias matches resolve to their target entity. */
-  searchEntities(term: string, limit: number = 8): string[] {
+  searchEntities(term: string, limit: number = 8, agentIds?: string[]): string[] {
     const t = term.toLowerCase().replace(/[%_]/g, '');
     if (!t) return [];
+    // 0.23: scoped to the given agents when supplied — their mentions, and their own aliases
+    // plus the shared ('') ones. Unscoped callers see everything, as before.
+    if (agentIds && agentIds.length > 0) {
+      const ph = agentIds.map(() => '?').join(',');
+      const rows = this.db.prepare(`
+        SELECT DISTINCT entity FROM (
+          SELECT entity FROM entity_mentions WHERE entity LIKE ? AND agent_id IN (${ph})
+          UNION SELECT entity FROM entity_aliases WHERE alias LIKE ? AND agent_id IN (${ph}, '')
+        ) LIMIT ?`).all(`%${t}%`, ...agentIds, `%${t}%`, ...agentIds, limit) as Array<{ entity: string }>;
+      return rows.map(r => r.entity);
+    }
     const rows = this.db.prepare(`
       SELECT DISTINCT entity FROM (
         SELECT entity FROM entity_mentions WHERE entity LIKE ?
@@ -1919,14 +1958,73 @@ export class EngramStore {
     return rows.map(r => r.entity);
   }
 
-  /** Engram ids mentioning an entity (alias-resolved), optionally agent-scoped. */
+  /** Engram ids mentioning an entity (alias-resolved), optionally agent-scoped. An agent's own
+   *  alias wins over a shared ('') one; with no agent only shared aliases apply. */
   getEngramIdsByEntity(entity: string, agentId?: string): string[] {
-    const resolved = (this.db.prepare('SELECT entity FROM entity_aliases WHERE alias = ?')
-      .get(entity.toLowerCase()) as { entity: string } | undefined)?.entity ?? entity.toLowerCase();
+    const key = entity.toLowerCase();
+    const alias = (agentId
+      ? this.db.prepare(`SELECT entity FROM entity_aliases WHERE alias = ? AND agent_id IN (?, '') ORDER BY (agent_id = '') LIMIT 1`).get(key, agentId)
+      : this.db.prepare(`SELECT entity FROM entity_aliases WHERE alias = ? AND agent_id = '' LIMIT 1`).get(key)) as { entity: string } | undefined;
+    const resolved = alias?.entity ?? key;
     const rows = agentId
       ? this.db.prepare('SELECT engram_id FROM entity_mentions WHERE entity = ? AND agent_id = ?').all(resolved, agentId)
       : this.db.prepare('SELECT engram_id FROM entity_mentions WHERE entity = ?').all(resolved);
     return (rows as Array<{ engram_id: string }>).map(r => r.engram_id);
+  }
+
+  /** 0.23: register `alias → entity` for one agent. Returns the entity it pointed at before
+   *  (null when new), so a caller can say what was replaced. */
+  setEntityAlias(agentId: string, alias: string, entity: string): { previous: string | null } {
+    const prev = this.db.prepare('SELECT entity FROM entity_aliases WHERE agent_id = ? AND alias = ?')
+      .get(agentId, alias) as { entity: string } | undefined;
+    this.db.prepare(`INSERT INTO entity_aliases (agent_id, alias, entity) VALUES (?, ?, ?)
+      ON CONFLICT(agent_id, alias) DO UPDATE SET entity = excluded.entity`).run(agentId, alias, entity);
+    return { previous: prev && prev.entity !== entity ? prev.entity : null };
+  }
+
+  /** 0.23: remove one agent's alias. True when a row was deleted. */
+  removeEntityAlias(agentId: string, alias: string): boolean {
+    return this.db.prepare('DELETE FROM entity_aliases WHERE agent_id = ? AND alias = ?').run(agentId, alias).changes > 0;
+  }
+
+  /** 0.23: aliases visible to these agents (their own plus shared ''), optionally for one entity. */
+  listEntityAliases(agentIds: string[], entity?: string): Array<{ agentId: string; alias: string; entity: string }> {
+    if (agentIds.length === 0) return [];
+    const ph = agentIds.map(() => '?').join(',');
+    const rows = (entity
+      ? this.db.prepare(`SELECT agent_id, alias, entity FROM entity_aliases WHERE agent_id IN (${ph}, '') AND entity = ? ORDER BY entity, alias`).all(...agentIds, entity)
+      : this.db.prepare(`SELECT agent_id, alias, entity FROM entity_aliases WHERE agent_id IN (${ph}, '') ORDER BY entity, alias`).all(...agentIds)) as Array<{ agent_id: string; alias: string; entity: string }>;
+    return rows.map(r => ({ agentId: r.agent_id, alias: r.alias, entity: r.entity }));
+  }
+
+  /**
+   * 0.23: exact matches for already-normalised terms, scoped to these agents. Three routes:
+   *  - `key`: the term IS an indexed entity key (`person:jenna park`);
+   *  - `alias`: a registered alias (the agent's own, or a shared '' one);
+   *  - `value`: the part of an indexed key after `key:` ("jenna park").
+   * Exact equality only. Substring matching floods: "park" would reach "jenna park",
+   * "park street" and "parking". Used by memory_about and by the opt-in lowercase name
+   * matching in recall (AWM_ENTITY_ALIAS_MATCH).
+   */
+  matchEntityTerms(terms: string[], agentIds: string[]): Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value'; agentId: string }> {
+    const uniq = Array.from(new Set(terms.filter(t => t && t.length <= 160)));
+    if (uniq.length === 0 || agentIds.length === 0) return [];
+    const out: Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value'; agentId: string }> = [];
+    const aph = agentIds.map(() => '?').join(',');
+    for (let i = 0; i < uniq.length; i += 400) {
+      const chunk = uniq.slice(i, i + 400);
+      const tph = chunk.map(() => '?').join(',');
+      const keys = this.db.prepare(`SELECT DISTINCT agent_id, entity FROM entity_mentions
+        WHERE entity IN (${tph}) AND agent_id IN (${aph})`).all(...chunk, ...agentIds) as Array<{ agent_id: string; entity: string }>;
+      for (const r of keys) out.push({ term: r.entity, entity: r.entity, via: 'key', agentId: r.agent_id });
+      const aliases = this.db.prepare(`SELECT agent_id, alias, entity FROM entity_aliases
+        WHERE alias IN (${tph}) AND agent_id IN (${aph}, '')`).all(...chunk, ...agentIds) as Array<{ agent_id: string; alias: string; entity: string }>;
+      for (const r of aliases) out.push({ term: r.alias, entity: r.entity, via: 'alias', agentId: r.agent_id });
+      const values = this.db.prepare(`SELECT DISTINCT agent_id, entity, substr(entity, instr(entity, ':') + 1) AS v FROM entity_mentions
+        WHERE substr(entity, instr(entity, ':') + 1) IN (${tph}) AND agent_id IN (${aph})`).all(...chunk, ...agentIds) as Array<{ agent_id: string; entity: string; v: string }>;
+      for (const r of values) out.push({ term: r.v, entity: r.entity, via: 'value', agentId: r.agent_id });
+    }
+    return out;
   }
 
   /** Distinct agent ids present in this store (D3 whoami; includes all stages). */

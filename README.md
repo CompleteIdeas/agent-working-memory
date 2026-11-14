@@ -38,7 +38,7 @@ every number above is published with how to check it.
 npm install -g agent-working-memory && awm setup --global
 ```
 
-Restart Claude Code. 20 tools appear. No cloud, no API keys, nothing leaves your machine.
+Restart Claude Code. 22 tools appear. No cloud, no API keys, nothing leaves your machine.
 
 <p align="center">
   <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md"><b>Deciding whether to adopt it? →</b></a> &nbsp;·&nbsp;
@@ -341,7 +341,7 @@ The README points outward; it does not duplicate. Everything below is the author
 
 | | |
 |---|---|
-| **All 20 MCP tools**, most HTTP endpoints with schemas (21 of 28 — the batch-write, checkpoint, export, agent-register and system routes are not yet written up), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
+| **All 22 MCP tools**, most HTTP endpoints with schemas (25 of 32 — the batch-write, checkpoint, export, agent-register and system routes are not yet written up), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
 | Architecture, pipelines, schema, backends (SQLite · PGlite · Postgres) | [`docs/architecture.md`](docs/architecture.md) · [`docs/pglite-feature-parity.md`](docs/pglite-feature-parity.md) |
 | Current benchmark numbers, generated and stamped | [`docs/benchmarks-current.md`](docs/benchmarks-current.md) |
 | What each eval suite measures, and the measurement caveats | [`docs/benchmarks.md`](docs/benchmarks.md) |

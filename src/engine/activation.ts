@@ -94,6 +94,7 @@ export function confidenceGateFor(confidence: number): number {
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
+import { entityQueryGrams, ALIASABLE_KEYS } from '../core/entity-extract.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -524,24 +525,57 @@ export class ActivationEngine {
     // injected gold entered the pool but was cut before the reranker ever scored it. Bounded
     // (AWM_ENTITY_INDEX_CAP, default 12) so the audition costs at most one extra rerank batch.
     const injectedIds = new Set<string>();
-    if (process.env.AWM_ENTITY_INDEX_FETCH === '1') {
+    const entityIndexFetch = process.env.AWM_ENTITY_INDEX_FETCH === '1';
+    // 0.23 (AWM_ENTITY_ALIAS_MATCH=1, default OFF): lowercase names. The capitalised-word path
+    // below never produces a term for "the gala", "the hotel" or "jenna", which is why the
+    // 2026-10-03 NovelForge measurement saw no change with the index on. This path takes
+    // lowercase 1-3 word n-grams from the question and matches them EXACTLY against the
+    // agent's aliases and indexed entity values, then feeds the entities into the same
+    // guaranteed-audition path (no score boost, same cap). Exact, not substring: "park"
+    // must not reach "jenna park", "park street" and "parking".
+    const entityAliasMatch = process.env.AWM_ENTITY_ALIAS_MATCH === '1';
+    if (entityIndexFetch || entityAliasMatch) {
       try {
         const IDX_CAP = Number(process.env.AWM_ENTITY_INDEX_CAP ?? 12);
+        const exactEntities: string[] = [];
+        if (entityAliasMatch) {
+          prof.begin('entityAliasMatch');
+          const grams = entityQueryGrams(query.context);
+          const hits = (grams.length > 0 ? await this.store.matchEntityTerms(grams, agentIds) : [])
+            // A bare value matches only for name-like keys. proj=/version=/file= ride on almost
+            // every write, so "awm" matching proj:awm would audition the whole project.
+            .filter(h => h.via !== 'value' || ALIASABLE_KEYS.has(h.entity.slice(0, h.entity.indexOf(':'))));
+          prof.end('entityAliasMatch');
+          // Longest matching phrase first, so "harbor hotel gala" outranks "gala".
+          hits.sort((a, b) => b.term.length - a.term.length);
+          for (const h of hits) if (!exactEntities.includes(h.entity)) exactEntities.push(h.entity);
+        }
         const IDX_QSTOP = new Set(['what', 'who', 'when', 'where', 'why', 'how', 'which', 'whose',
           'the', 'this', 'that', 'and', 'but', 'for', 'did', 'does', 'is', 'are', 'was', 'were',
           'tell', 'about', 'they', 'them', 'write', 'reply', 'list', 'please', 'remember', 'confirm']);
         const terms = new Set<string>();
-        for (const m of query.context.matchAll(/\b[A-Z][A-Za-z]{2,}\b/g)) {
-          const w = m[0].toLowerCase();
-          if (!IDX_QSTOP.has(w)) terms.add(w);
+        if (entityIndexFetch) {
+          for (const m of query.context.matchAll(/\b[A-Z][A-Za-z]{2,}\b/g)) {
+            const w = m[0].toLowerCase();
+            if (!IDX_QSTOP.has(w)) terms.add(w);
+          }
+          for (const m of query.context.matchAll(/\b\d{4,}\b/g)) terms.add(m[0]); // bare ids: tickets, members, events
         }
-        for (const m of query.context.matchAll(/\b\d{4,}\b/g)) terms.add(m[0]); // bare ids: tickets, members, events
-        let added = 0;
+        // The exact lowercase matches go first, as one group; the substring path follows.
+        const entityGroups: Array<() => Promise<string[]>> = [];
+        if (exactEntities.length > 0) entityGroups.push(async () => exactEntities);
         for (const term of Array.from(terms).slice(0, 4)) {
+          entityGroups.push(async () => {
+            prof.begin('entitySearch');
+            const found = await this.store.searchEntities(term, 6, agentIds);
+            prof.end('entitySearch');
+            return found;
+          });
+        }
+        let added = 0;
+        for (const group of entityGroups) {
           if (added >= IDX_CAP) break;
-          prof.begin('entitySearch');
-          const entities = await this.store.searchEntities(term, 6);
-          prof.end('entitySearch');
+          const entities = await group();
           for (const entity of entities) {
             if (added >= IDX_CAP) break;
             for (const agentId of agentIds) {

@@ -66,7 +66,7 @@ no external calls. The rest of this page is the plain-language tour of those pie
 | Language | TypeScript (ES2022, strict mode) | Type-safe cognitive engine |
 | Database | SQLite via better-sqlite3 + FTS5 | Persistence, BM25 full-text search |
 | HTTP Server | Fastify 5 | REST API for agents |
-| MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (20 tools via stdio: 18 memory + 2 onboarding) |
+| MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (22 tools via stdio: 20 memory + 2 onboarding) |
 | Embeddings | Xenova/bge-small-en-v1.5 (134 MB download at fp32, BAAI retrieval-optimized) | 384-dim semantic vectors |
 | Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (23 MB int8, the default) for keyword queries; cross-encoder/ettin-reranker-17m-v1 (17 MB int8) for natural-language questions | Cross-encoder passage relevance |
 | Query Expander | Xenova/flan-t5-small (377 MB at fp32; off by default and not downloaded unless turned on) | Synonym/related term expansion |

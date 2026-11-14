@@ -29,7 +29,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. Done — 20 tools appear automatically (18 memory + 2 onboarding: `onboard_scan`, `onboard_questions`).
+Restart Claude Code. Done — 22 tools appear automatically (20 memory + 2 onboarding: `onboard_scan`, `onboard_questions`).
 
 > First install downloads the ML models — **~175 MB total**: 134 MB bge-small embedder + 23 MB ms-marco reranker (int8) + 17 MB Ettin reranker (int8). The 377 MB flan-t5-small expander downloads only if expansion is turned on. Nothing is bundled in the package; this is a one-time fetch into `AWM_CACHE_DIR` > `HF_HOME` > `<packageRoot>/data/models`, and it is cached after that. As of 0.12.2, a Claude Code MCP session also **eager-warms** those models at startup (fire-and-forget), so the old "first recall in a session is slow" penalty is absorbed into session start instead of your first message — no action needed; disable with `AWM_NO_EAGER_WARM=1` if you'd rather defer the cost.
 
@@ -66,7 +66,7 @@ Start a new conversation:
 
 > "What memory tools do you have?"
 
-Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_whoami`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `compress_output`, `retrieve_original`, `onboard_scan`, `onboard_questions`.
+Claude should list: `memory_write`, `memory_recall`, `memory_feedback`, `memory_retract`, `memory_supersede`, `memory_stats`, `memory_whoami`, `memory_checkpoint`, `memory_restore`, `memory_task_add`, `memory_task_update`, `memory_task_list`, `memory_task_next`, `memory_task_begin`, `memory_task_end`, `memory_about`, `memory_alias`, `compress_output`, `retrieve_original`, `onboard_scan`, `onboard_questions`.
 
 ---
 
@@ -366,7 +366,7 @@ Zero memory tools are registered — Claude can't see or call any of them, not e
 ## Architecture Quick Reference
 
 ```
-Claude Code ←stdio→ AWM MCP (20 tools)
+Claude Code ←stdio→ AWM MCP (22 tools)
                         ↓
                    AWM Engine
                    ├── Salience filter (write-time)

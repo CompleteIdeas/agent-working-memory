@@ -57,6 +57,8 @@ import { VERSION } from '../version.js';
 import { activeRecallConfig, recallConfigFingerprint } from '../core/recall-config.js';
 import { isLiveStorePath } from '../adapters/common.js';
 import { getConfiguredPath } from '../storage/factory.js';
+import { memoryAbout, registerAlias } from '../engine/entity-about.js';
+import { normalizeAlias, normalizeEntityKey } from '../core/entity-extract.js';
 
 export interface MemoryDeps {
   store: EngramStore;
@@ -134,6 +136,9 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       /** 0.22: entity + attribute; a newer write to the same slot supersedes the holder. */
       slot?: string;
       supersedesSlot?: boolean; supersedes_slot?: boolean;
+      /** 0.23: other names for the write's one name-like entity tag (or `aliasFor`). */
+      aliases?: string[];
+      aliasFor?: string; alias_for?: string;
     };
 
     if (!body.agentId || typeof body.agentId !== 'string' ||
@@ -196,6 +201,8 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       questions: Array.isArray(body.questions) ? body.questions : undefined,
       slot: typeof body.slot === 'string' ? body.slot : undefined,
       supersedesSlot: body.supersedesSlot ?? body.supersedes_slot,
+      aliases: Array.isArray(body.aliases) ? body.aliases.filter((a): a is string => typeof a === 'string') : undefined,
+      aliasFor: body.aliasFor ?? body.alias_for,
     });
 
     // Auto-checkpoint always (covers create, reinforce, and supersede).
@@ -212,6 +219,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
         ...(result.redaction ? { redaction: result.redaction } : {}),
         ...(result.questions ? { questions: result.questions } : {}),
         ...(result.slot ? { slot: result.slot } : {}),
+        ...(result.aliases ? { aliases: result.aliases } : {}),
       });
     }
 
@@ -579,6 +587,83 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
    * engram. Used by NovelForge for "latest emotional state per character",
    * "latest motif phase per motif", etc.
    */
+  /**
+   * 0.23: every memory about one entity, oldest first (see src/engine/entity-about.ts).
+   * GET /memory/about?agentId=…&entity=…[&workspace=…&limit=…&includeSuperseded=false&includeStaging=true]
+   * Returns status found | ambiguous | candidates | not_found; ambiguous and candidates carry
+   * `candidates` and no memories.
+   */
+  app.get('/memory/about', async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    const agentId = q.agentId ?? q.agent_id;
+    const entity = q.entity;
+    if (!agentId || !entity) return reply.code(400).send({ error: 'agentId and entity are required' });
+    const workspace = q.workspace;
+    const agentIds = workspace ? await store.getWorkspaceAgentIds(agentId, workspace) : [agentId];
+    const flag = (v: string | undefined, dflt: boolean) => (v === undefined ? dflt : v === 'true' || v === '1');
+    const limit = q.limit !== undefined && Number.isFinite(Number(q.limit)) ? Number(q.limit) : undefined;
+    const res = await memoryAbout(store, {
+      entity, agentIds, limit,
+      includeSuperseded: flag(q.includeSuperseded ?? q.include_superseded, true),
+      includeStaging: flag(q.includeStaging ?? q.include_staging, false),
+    });
+    return reply.send({
+      status: res.status,
+      query: res.query,
+      entity: res.entity ?? null,
+      matchedBy: res.matchedBy ?? null,
+      matchedTerm: res.matchedTerm ?? null,
+      candidates: res.candidates,
+      aliases: res.aliases,
+      total: res.total,
+      omitted: res.omitted,
+      memories: res.memories.map(m => ({
+        id: m.engram.id,
+        concept: m.engram.concept,
+        content: m.engram.content,
+        date: m.date,
+        createdAt: m.engram.createdAt,
+        validFrom: m.engram.validFrom ?? null,
+        validTo: m.engram.validTo ?? null,
+        superseded: m.superseded,
+        supersededBy: m.engram.supersededBy ?? null,
+        stage: m.engram.stage,
+        confidence: m.engram.confidence,
+        memoryClass: m.engram.memoryClass,
+        tags: m.engram.tags,
+        agentId: m.engram.agentId,
+      })),
+    });
+  });
+
+  /**
+   * 0.23: alternative names. POST adds (or moves) one, DELETE removes one, GET lists.
+   * POST /memory/alias { agentId, alias, entity } → { alias, entity, previous }
+   */
+  app.post('/memory/alias', async (req, reply) => {
+    const b = (req.body ?? {}) as { agentId?: string; alias?: string; entity?: string };
+    if (!b.agentId || !b.alias || !b.entity) return reply.code(400).send({ error: 'agentId, alias and entity are required' });
+    const r = await registerAlias(store, b.agentId, b.alias, b.entity);
+    if (!r.ok) return reply.code(400).send({ error: r.error });
+    return reply.send({ alias: r.alias, entity: r.entity, previous: r.previous });
+  });
+
+  app.delete('/memory/alias', async (req, reply) => {
+    const b = { ...((req.query ?? {}) as Record<string, string>), ...((req.body ?? {}) as Record<string, string>) };
+    if (!b.agentId || !b.alias) return reply.code(400).send({ error: 'agentId and alias are required' });
+    const removed = await store.removeEntityAlias(b.agentId, normalizeAlias(b.alias));
+    return reply.send({ removed });
+  });
+
+  app.get('/memory/aliases', async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>;
+    if (!q.agentId) return reply.code(400).send({ error: 'agentId is required' });
+    const key = q.entity ? normalizeEntityKey(q.entity) : undefined;
+    if (q.entity && !key) return reply.code(400).send({ error: `"${q.entity}" is not an entity key (use key:value)` });
+    const aliases = await store.listEntityAliases([q.agentId], key ?? undefined);
+    return reply.send({ aliases, count: aliases.length });
+  });
+
   app.post('/memory/latest-by-tag', async (req, reply) => {
     const body = req.body as {
       agentId: string;

@@ -50,7 +50,8 @@ import {
 } from './salience.js';
 import { embed } from './embeddings.js';
 import { extractMetaTags } from './auto-tagger.js';
-import { extractEntitiesFromTags } from './entity-extract.js';
+import { extractEntitiesFromTags, normalizeEntityKey, ALIASABLE_KEYS } from './entity-extract.js';
+import { registerAlias } from '../engine/entity-about.js';
 import { reportWrite } from './write-telemetry.js';
 import { DEFAULT_AGENT_CONFIG } from '../types/agent.js';
 import { buildRetrievalText } from './retrieval-text.js';
@@ -166,10 +167,20 @@ export interface WriteInput {
   slot?: string;
   /** 0.22: false keeps a deliberate second fact in the same slot instead of superseding. */
   supersedesSlot?: boolean;
+  /**
+   * 0.23: other names for the entity this write is about ("Jenna", "Jenna Park"). They are
+   * registered as aliases of the write's one person/contact/org/entity/event/horse/member tag,
+   * or of `aliasFor` when the write carries several.
+   */
+  aliases?: string[];
+  /** 0.23: the entity key the `aliases` belong to, when the write has more than one name tag. */
+  aliasFor?: string;
 }
 
 export interface WriteResult {
   action: WriteAction;
+  /** 0.23: what happened to the `aliases` offered with this write. */
+  aliases?: { entity: string | null; registered: string[]; replaced: Array<{ alias: string; previous: string }>; error?: string };
   /** 0.22: what happened to the questions offered with this write. */
   questions?: QuestionsOutcome;
   /** 0.22: what the slot did — replaced its holder, kept this as history, or neither. */
@@ -258,7 +269,49 @@ export async function performWrite(
       result.questions = await attachQuestions(engines.store, result.engram.id, fields.questions, result.engram.questions);
     } catch { /* questions are an index aid; a failure must not fail the write */ }
   }
+  // 0.23: a write merged into an existing memory used to leave its entity tags unindexed, so
+  // "everything about Jenna" missed the merged fact. Index them onto the memory that now holds
+  // it (same agent only; the merge path never crosses agents). Create/supersede index in the
+  // create path already; INSERT OR IGNORE makes a repeat harmless.
+  const entities = extractEntitiesFromTags(fields.tags ?? []);
+  if (result.action === 'reinforce' && result.engram?.id && result.engram.agentId === input.agentId && entities.length > 0) {
+    try { await engines.store.recordEntityMentions(result.engram.id, input.agentId, entities); } catch { /* index aid */ }
+  }
+  if (input.aliases?.length) {
+    result.aliases = await attachAliases(engines.store, input.agentId, entities, input.aliases, input.aliasFor);
+  }
   return result;
+}
+
+/** 0.23: register a write's `aliases` against its one name-like entity (or `aliasFor`). */
+async function attachAliases(
+  store: EngramStore, agentId: string, entities: string[], aliases: string[], aliasFor?: string,
+): Promise<NonNullable<WriteResult['aliases']>> {
+  let entity: string | null = null;
+  if (aliasFor) {
+    entity = normalizeEntityKey(aliasFor);
+    if (!entity) return { entity: null, registered: [], replaced: [], error: `aliasFor "${aliasFor}" is not an entity key (use key:value, e.g. contact:events@harborhotel.example)` };
+  } else {
+    const named = entities.filter(e => ALIASABLE_KEYS.has(e.slice(0, e.indexOf(':'))));
+    if (named.length !== 1) {
+      return {
+        entity: null, registered: [], replaced: [],
+        error: named.length === 0
+          ? 'aliases not registered: the write has no person=/contact=/org=/entity:/event=/horse=/member= tag for them to belong to'
+          : `aliases not registered: the write names ${named.length} entities (${named.join(', ')}); pass aliasFor to say which`,
+      };
+    }
+    entity = named[0];
+  }
+  const registered: string[] = [];
+  const replaced: Array<{ alias: string; previous: string }> = [];
+  for (const a of aliases.slice(0, 20)) {
+    try {
+      const r = await registerAlias(store, agentId, a, entity);
+      if (r.ok) { registered.push(r.alias); if (r.previous) replaced.push({ alias: r.alias, previous: r.previous }); }
+    } catch { /* an alias is an index aid; never fail the write */ }
+  }
+  return { entity, registered, replaced };
 }
 
 async function performWriteRedacted(

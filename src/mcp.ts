@@ -80,6 +80,9 @@ import { ConsolidationScheduler } from './engine/consolidation-scheduler.js';
 import { evaluateSalience, computeNovelty, computeNoveltyWithMatch } from './core/salience.js';
 import { performWrite } from './core/write-pipeline.js';
 import { describeFindings } from './core/redact.js';
+import { memoryAbout, registerAlias } from './engine/entity-about.js';
+import { formatAboutResult } from './core/format-about.js';
+import { normalizeAlias, normalizeEntityKey } from './core/entity-extract.js';
 import type { ConsciousState } from './types/checkpoint.js';
 import type { SalienceEventType } from './core/salience.js';
 import type { TaskStatus, TaskPriority, AbstentionInfo } from './types/engram.js';
@@ -196,6 +199,14 @@ function describeQuestions(q: import('./core/questions.js').QuestionsOutcome | u
   return `\nQuestions: ${q.kept.length} indexed`
     + (q.dropped.some((d) => d.reason === 'over-limit') ? '; some dropped over the limit of 5' : '')
     + (q.dropped.some((d) => d.reason === 'invalid') ? '; some dropped as empty, too short or too long' : '');
+}
+
+/** 0.23: one line on what happened to the aliases a write offered. Empty when none were offered. */
+function describeAliases(a: import('./core/write-pipeline.js').WriteResult['aliases']): string {
+  if (!a) return '';
+  if (a.error) return `\nAliases: ${a.error}. Use memory_alias to add them.`;
+  return `\nAliases: ${a.registered.length} registered for ${a.entity}`
+    + (a.replaced.length ? `; moved from another entity: ${a.replaced.map(r => `"${r.alias}" (was ${r.previous})`).join(', ')}` : '');
 }
 
 /** 0.22: one line on what a slot write did. Empty when no slot was given. */
@@ -343,6 +354,10 @@ The concept should be a short label (3-8 words). The content should be the full 
       .describe('ISO date when the FACT becomes valid (temporal validity, not ingestion time).'),
     valid_to: z.string().optional()
       .describe('ISO date when the FACT stops being valid (e.g., a deadline or a superseding change).'),
+    aliases: z.array(z.string()).max(20).optional()
+      .describe('Other names for the person, organisation or thing this memory is about ("Jenna", "Jenna Park", "the gala"). Registered as aliases of the write\'s one person=/contact=/org=/event=/horse=/member= or entity: tag, so memory_about finds it by any of them. When the write carries several such tags, say which with alias_for.'),
+    alias_for: z.string().optional()
+      .describe('The entity key the aliases belong to (e.g. contact:events@harborhotel.example), when the write names more than one.'),
     slot: z.string().max(200).optional()
       .describe('The entity + attribute this memory states, e.g. "rosterkeep.deploy-command" or "robert.flight-time". A later write to the same slot (same agent, same memory_class) supersedes this one automatically — you do not need its id. An older fact (earlier valid_from) is kept as history instead of replacing a newer one. Use it for values that change.'),
     supersedes_slot: z.boolean().optional()
@@ -423,6 +438,8 @@ The concept should be a short label (3-8 words). The content should be the full 
       questions: params.questions,
       slot: params.slot,
       supersedesSlot: params.supersedes_slot,
+      aliases: params.aliases,
+      aliasFor: params.alias_for,
     });
 
     // Auto-checkpoint — covers create/reinforce/supersede uniformly
@@ -437,7 +454,8 @@ The concept should be a short label (3-8 words). The content should be the full 
           type: 'text' as const,
           text: `Reinforced existing memory "${result.engram.concept}" (confidence ${result.reinforce!.previousConfidence.toFixed(2)} → ${result.reinforce!.newConfidence.toFixed(2)})`
             + (result.redaction ? `\n${describeFindings(result.redaction)}` : '')
-            + describeQuestions(result.questions),
+            + describeQuestions(result.questions)
+            + describeAliases(result.aliases),
         }],
       };
     }
@@ -482,6 +500,7 @@ The concept should be a short label (3-8 words). The content should be the full 
         text: `Stored (${salience.disposition}) "${engram.concept}" [${salience.score.toFixed(2)}]\nID: ${engram.id}`
           + (result.redaction ? `\n${describeFindings(result.redaction)}` : '')
           + describeQuestions(result.questions)
+          + describeAliases(result.aliases)
           + describeSlot(result.slot)
           + correctionNote
           + trustNote
@@ -678,6 +697,76 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
         text: packed.lines.join('\n') + peerSuffix + conflictFooter + missingFooter + signalFooter + vaultFooter + formatTokenFooter(packed, params.max_tokens) + confidenceFooter + evFooter,
       }],
     };
+  }
+);
+
+server.tool(
+  'memory_about',
+  `Every memory about one person, organisation or thing, oldest first: a timeline, not a ranked search.
+
+Use it when you need EVERYTHING about a name ("who is Jenna?", "what's going on with the Harbor Hotel gala?", "everything on ticket 19881"). memory_recall returns the few memories that best match a question's wording, so it misses the ninth memory about someone; this returns all of them.
+
+It finds memories by their name tags (person=, contact=, org=, event=, ticket=, member=, entity:…) and by the aliases registered with memory_alias. A memory written without such a tag can't be found this way. When a name could mean two different entities (two Jennas), it lists them and returns no memories: ask again with the full key.`,
+  {
+    entity: z.string().describe('A name, alias or key: "Jenna Park", "jenna", "person:jenna park", "contact=events@harborhotel.example", "ticket=19881".'),
+    workspace: z.string().optional().describe('Include every agent in this workspace (hive mode). Omit for this agent only.'),
+    limit: z.number().optional().default(50).describe('At most this many memories (default 50). When there are more, the NEWEST are kept and the reply says how many older ones were left out.'),
+    include_superseded: z.boolean().optional().default(true).describe('Show replaced memories, labelled as history (default true).'),
+    include_staging: z.boolean().optional().default(false).describe('Include weak, unconfirmed memories (default false, as in recall).'),
+    scope: z.enum(['session', 'all']).optional().describe('"session": only memories this session wrote. Default "all".'),
+    granularity: z.enum(['compact', 'full']).optional().default('compact').describe('"compact" (default): a short summary of each memory. "full": the whole content.'),
+    max_tokens: z.number().optional().describe('Token budget for the reply. The newest memories are kept first when it binds; the reply says how many were left out.'),
+  },
+  async (params) => {
+    const workspace = params.workspace ?? process.env.AWM_WORKSPACE ?? undefined;
+    const agentIds = workspace ? await store.getWorkspaceAgentIds(AGENT_ID, workspace) : [AGENT_ID];
+    const res = await memoryAbout(store, {
+      entity: params.entity,
+      agentIds,
+      limit: params.limit,
+      includeSuperseded: params.include_superseded,
+      includeStaging: params.include_staging,
+      sessionOnly: params.scope === 'session',
+      sessionId: SESSION_ID,
+    });
+    log(AGENT_ID, 'about', `"${params.entity.slice(0, 80)}" → ${res.status} ${res.entity ?? ''} (${res.memories.length}/${res.total})`);
+    try { await store.updateAutoCheckpointRecall(AGENT_ID, `about: ${params.entity}`, res.memories.map(m => m.engram.id)); } catch { /* non-fatal */ }
+    const text = formatAboutResult(res, { full: params.granularity === 'full', maxTokens: params.max_tokens });
+    return { content: [{ type: 'text' as const, text }] };
+  }
+);
+
+server.tool(
+  'memory_alias',
+  `Record that a name is another name for a person, organisation or thing, so memory_about (and recall, when AWM_ENTITY_ALIAS_MATCH is on) finds it by that name.
+
+Examples: "Jenna" and "Jenna Park" → contact:events@harborhotel.example; "the gala" → event:harbor hotel gala; "Starbox" → horse:thunder.
+Aliases belong to this agent. Re-adding an alias to a different entity moves it, and the reply says where it pointed before.`,
+  {
+    action: z.enum(['add', 'remove', 'list']).default('add').describe('add (default), remove, or list'),
+    alias: z.string().optional().describe('The other name ("Jenna", "the gala"). Required for add and remove.'),
+    entity: z.string().optional().describe('The entity key, key:value (person:jenna park, contact:events@harborhotel.example, org:harbor hotel, event:…, entity:…). Required for add; filters list.'),
+  },
+  async (params) => {
+    if (params.action === 'list') {
+      const key = params.entity ? normalizeEntityKey(params.entity) : undefined;
+      if (params.entity && !key) return { content: [{ type: 'text' as const, text: `"${params.entity}" is not an entity key (use key:value, e.g. person:jenna park).` }] };
+      const rows = await store.listEntityAliases([AGENT_ID], key ?? undefined);
+      if (rows.length === 0) return { content: [{ type: 'text' as const, text: key ? `No aliases for ${key}.` : 'No aliases registered.' }] };
+      const byEntity = new Map<string, string[]>();
+      for (const r of rows) byEntity.set(r.entity, [...(byEntity.get(r.entity) ?? []), r.alias + (r.agentId === '' ? ' (shared)' : '')]);
+      return { content: [{ type: 'text' as const, text: Array.from(byEntity, ([e, as]) => `${e}: ${as.join(', ')}`).join('\n') }] };
+    }
+    if (!params.alias) return { content: [{ type: 'text' as const, text: `alias is required for ${params.action}.` }] };
+    if (params.action === 'remove') {
+      const removed = await store.removeEntityAlias(AGENT_ID, normalizeAlias(params.alias));
+      return { content: [{ type: 'text' as const, text: removed ? `Removed alias "${normalizeAlias(params.alias)}".` : `No alias "${normalizeAlias(params.alias)}" for this agent.` }] };
+    }
+    if (!params.entity) return { content: [{ type: 'text' as const, text: 'entity is required for add.' }] };
+    const r = await registerAlias(store, AGENT_ID, params.alias, params.entity);
+    if (!r.ok) return { content: [{ type: 'text' as const, text: `Alias not added: ${r.error}` }] };
+    log(AGENT_ID, 'alias', `"${r.alias}" → ${r.entity}${r.previous ? ` (was ${r.previous})` : ''}`);
+    return { content: [{ type: 'text' as const, text: `Alias "${r.alias}" → ${r.entity}` + (r.previous ? `\nIt pointed at ${r.previous} before; that link is replaced.` : '') }] };
   }
 );
 

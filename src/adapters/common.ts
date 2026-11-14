@@ -588,6 +588,22 @@ guaranteed a reranker audition instead, so the cross-encoder alone decides wheth
 surface. Worth trialing on identifier-heavy workloads (ticket/event numbers, named
 people/things you refer to by name often); not yet the default pending evaluation.
 
+### Everything about one name — \`memory_about\` and \`memory_alias\`
+\`memory_recall\` returns the few memories that best match a question's wording, so it
+misses the ninth memory about someone. \`memory_about\` returns EVERY memory indexed
+under one person, organisation or thing, oldest first: a timeline, not a ranked search
+("who is Jenna?", "everything on ticket 19881"). It finds memories by their name tags
+(\`person=\`, \`contact=\` for third parties, \`org=\`, \`event=\`, \`ticket=\`, \`entity:…\`)
+and by registered aliases. When a name could mean two entities (two Jennas) it lists them
+and returns nothing until you give the full key; it never merges two people.
+
+Record other names with \`memory_alias\` ("Jenna", "Jenna Park" →
+\`contact:events@harborhotel.example\`), or pass \`aliases\` on \`memory_write\`. Aliases
+belong to your agent. A memory without a name tag can't be found this way, so tag the
+person or thing a memory is about. \`AWM_ENTITY_ALIAS_MATCH=1\` (off by default) also lets
+ordinary recall reach those memories from lowercase names in a question ("the gala",
+"jenna").
+
 ### Temporal validity — memories that expire or start in the future
 \`memory_write\` accepts \`valid_from\` / \`valid_to\` (ISO dates). Use \`valid_to\` on
 **operational** facts with a real shelf life — a deploy state, "waiting on X's reply",

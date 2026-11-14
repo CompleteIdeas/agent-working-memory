@@ -207,6 +207,33 @@ found: write new anyway, return `{ superseded: null }`.
 Form discrimination: presence of `oldEngramId+newEngramId` → Form A;
 presence of `agentId+matchConcept+newEngram` → Form B; both → 400.
 
+### GET /memory/about *(unreleased)*
+
+Every memory indexed under one entity, oldest first (by `valid_from` when set, else write
+time). Query: `agentId`, `entity` (a name, alias or key), optional `workspace`, `limit`
+(default 50; the newest are kept), `includeSuperseded` (default true), `includeStaging`
+(default false). Resolution: exact key → the agent's alias (then a shared one) → exact value
+after `key:` → otherwise substring candidates. A name naming two entities is `ambiguous`.
+
+```
+GET /memory/about?agentId=maya&entity=jenna
+→ { "status": "found", "entity": "contact:events@harborhotel.example", "matchedBy": "alias",
+    "matchedTerm": "jenna", "candidates": [], "aliases": ["jenna", "jenna park"], "total": 4,
+    "omitted": 0, "memories": [{ "id": "…", "concept": "Deposit invoice 1043", "date": "2026-10-28T00:00:00.000Z",
+    "superseded": false, … }, …] }
+GET /memory/about?agentId=maya&entity=Jenna%20Park
+→ { "status": "ambiguous", "candidates": ["contact:jenna park", "person:jenna park"], "memories": [], … }
+```
+
+### POST /memory/alias, DELETE /memory/alias, GET /memory/aliases *(unreleased)*
+
+`POST { agentId, alias, entity }` registers `alias → entity` for that agent and returns
+`{ alias, entity, previous }` (`previous` is the entity it pointed at before, else null).
+`entity` must be `key:value` (`person:…`, `contact:…`, `org:…`, `event:…`, `entity:…`).
+`DELETE { agentId, alias }` → `{ removed }`. `GET /memory/aliases?agentId=…[&entity=…]` lists
+the agent's aliases plus shared ones. `POST /memory/write` also accepts `aliases: string[]`
+(and `aliasFor` when the write names more than one person/contact/org/event/entity tag).
+
 ### POST /memory/latest-by-tag *(new in 0.8)*
 
 For each distinct value of `tagKey`, return the most recent active engram.
@@ -589,6 +616,7 @@ recall ~35→77ms. These env vars expose the knobs; the **defaults are the valid
 | `AWM_QUERY_BRIDGE` | Query-named entities boost in-pool candidates tagged with them (relevance-modulated). Lifts **attribution** ("what does X think") strongly; small adversarial cost. | Validated, opt-in |
 | `AWM_AUTOTAG` | Write-time `entity:`/`cat:` meta-tags (feeds the entity-bridge, BM25, and the D9 entity index). | Neutral on recall alone; **required to populate the entity index** for free-text writes; opt-in |
 | `AWM_BROAD_EDGES` | Form entity-co-occurrence edges (not just high-cosine) at write time. | Enabler; opt-in |
+| `AWM_ENTITY_ALIAS_MATCH` | **Unreleased:** lowercase names in ordinary questions. Lowercase 1–3 word phrases from the question are matched EXACTLY (no substring) against the agent's aliases and the values of name-like entity keys (`person`, `contact`, `org`, `event`, `entity`, `horse`, `member`), and the matched entities go through the same guaranteed-audition path as `AWM_ENTITY_INDEX_FETCH` (no boost, same cap). Works with or without that flag. | Off by default; see the measurement in the entity-lookup report |
 | `AWM_ENTITY_INDEX_FETCH` | **D11 (2026-07-30):** query-named entities (proper nouns, bare numeric ids) resolve through the `entity_mentions`/`entity_aliases` inverted index; matched engrams get NO score boost but a **guaranteed cross-encoder audition** (exempt from the topN cut, minScore floor and rerank-pool slice; the fourth exemption, from the clear-winner rerank skip, became moot when that branch was removed on 2026-10-09). The alias table lets a query reach facts no lexical/vector channel can ("Starbox" → `horse:thunder`). Cap: `AWM_ENTITY_INDEX_CAP` (12). | Gauntlet-accepted (74%±5pp, best floor of 6 configs); opt-in pending k≥10 confirmation |
 | `AWM_FEEDBACK_BM25` | **(2026-10-09):** Rocchio pseudo-relevance feedback (phase 3.5) — take the top 3 scored results, harvest five novel content tokens, re-search BM25 with the query plus those terms. Shipped ON since 0.5.x; flipped to opt-in the first time anyone measured it. The terms are the first five in DOCUMENT ORDER rather than the top five by weight, which is a plausible reason it underperforms — a weighted selection is a different experiment. | **Rejected as a default — 6.7–7.0% of every recall for nothing measurable.** 3 gold ranks move in 950 queries across three suites, two of them the WRONG way. On the public corpus — the only suite with real recall headroom (s@5 61.5%) — it is inert PER QUERY: 0 of 200 differ in rank, top-1 or score, with an ON-vs-ON determinism check also at 0 |
 | `AWM_SPREAD` / `AWM_SPREAD_INJECT` | Iterative PPR/SYNAPSE-style spreading activation over the graph. | **PARKED PERMANENTLY (2026-08-26).** Re-test ran: best-guarded arm fixes **0** queries and breaks 4; injection tested separately and also fixed 0. Superseded for its goal by `AWM_RERANK_TAGS` (+7.4pp). Reopen only if D9/D10 broad entity edges ship. Code kept, default-OFF |
@@ -924,13 +952,19 @@ Default half-life: 7 days
 | agent_id | TEXT | Agent scope (indexed with entity) |
 
 Populated best-effort on every write from structured sources only (prefix tags,
-auto-tagger `entity:` tags). Retrieval reads it only behind `AWM_ENTITY_INDEX_FETCH`.
+auto-tagger `entity:` tags), including a write merged into an existing memory (its tags are
+indexed onto that memory, unreleased). Read by `memory_about` / `GET /memory/about`, and by
+recall behind `AWM_ENTITY_INDEX_FETCH` and `AWM_ENTITY_ALIAS_MATCH`.
 
-### entity_aliases (D9)
+### entity_aliases (D9; per-agent since the unreleased entity-lookup change)
 | Column | Type | Notes |
 |--------|------|-------|
-| alias | TEXT PK | Alternate name, normalized lowercase |
-| entity | TEXT | Target entity in entity_mentions |
+| agent_id | TEXT | Owning agent; `''` = shared (rows written before the migration). PK with alias |
+| alias | TEXT | Alternate name, normalized lowercase |
+| entity | TEXT | Target entity key in entity_mentions |
+
+An agent's own alias wins over a shared one. The migration from the global D9 table is
+idempotent on all three backends.
 
 ### engrams_fts (FTS5 virtual table)
 Full-text search index on concept, content, tags. Auto-synced via triggers.

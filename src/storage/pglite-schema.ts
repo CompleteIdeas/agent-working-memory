@@ -216,4 +216,23 @@ export const PGLITE_SCHEMA_DDL = `
     alias  TEXT PRIMARY KEY,
     entity TEXT NOT NULL
   );
+
+  -- 0.23 entity lookup: aliases become per-agent, primary key (agent_id, alias). Rows written
+  -- before this keep agent_id '' and stay a shared fallback. Idempotent.
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'entity_aliases' AND column_name = 'agent_id'
+    ) THEN
+      ALTER TABLE entity_aliases ADD COLUMN agent_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE entity_aliases DROP CONSTRAINT IF EXISTS entity_aliases_pkey;
+      ALTER TABLE entity_aliases ADD PRIMARY KEY (agent_id, alias);
+    END IF;
+  END $$;
+
+  CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(agent_id, entity);
+  CREATE INDEX IF NOT EXISTS idx_entity_aliases_alias ON entity_aliases(alias);
+  CREATE INDEX IF NOT EXISTS idx_entity_mentions_value
+    ON entity_mentions ((substring(entity from position(':' in entity) + 1)), agent_id);
 `;

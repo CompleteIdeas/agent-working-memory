@@ -30,7 +30,7 @@ If you have a checkout, or would rather track the repository than the npm releas
 That route needs GitHub access. The npm route above does not.
 </details>
 
-Restart Claude Code. You get the 20 memory tools, the session hooks, the usage guidance and the `awm-learn` skill —
+Restart Claude Code. You get the 22 memory tools, the session hooks, the usage guidance and the `awm-learn` skill —
 the same things `awm setup --global` installs, but as one versioned artifact that updates
 with two commands instead of by re-running a script.
 
@@ -66,7 +66,7 @@ tell you which store and agent the running process actually has.
 
 | | |
 |---|---|
-| **MCP server** | 20 memory tools, started through `bin/awm-mcp-launcher.cjs` |
+| **MCP server** | 22 memory tools, started through `bin/awm-mcp-launcher.cjs` |
 | **`Stop` hook** | Reminds Claude to write what it learned |
 | **`PreCompact` hook** | Checkpoints state before the context window is compressed |
 | **`SessionEnd` hook** | Final checkpoint, and triggers consolidation |
@@ -124,7 +124,7 @@ to tell what you have.
 
 | Surface | Works? | |
 |---|---|---|
-| **Claude Code** | **Yes** | Everything: 20 tools, all five hooks, both skills |
+| **Claude Code** | **Yes** | Everything: 22 tools, all five hooks, both skills |
 | **Claude Cowork** | **No — do not install it there** | The skill loads and hooks run, but the memory tools do not |
 | **Claude Desktop** | Not yet | Needs an `.mcpb` bundle; Desktop does support local stdio MCP, so this is a packaging job rather than a limitation |
 
@@ -260,6 +260,6 @@ substituted.
 `tests/plugin/plugin-install.test.ts` walks the install path the way Claude Code does:
 resolves the marketplace entry, expands `${CLAUDE_PLUGIN_ROOT}`, checks every referenced file
 exists and parses, asserts the shipped hooks are byte-identical to `HOOK_SCRIPTS`, then starts
-the MCP server over stdio and requires all 20 tools back. It uses a scratch database on
+the MCP server over stdio and requires all 22 tools back. It uses a scratch database on
 purpose — the launcher's job is to default to the user's real store, so a test that forgot to
 override that would write into production memory.

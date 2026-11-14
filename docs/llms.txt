@@ -130,7 +130,7 @@ npm install -g agent-working-memory
 awm setup --global
 ```
 
-Restart Claude Code. **20 tools** appear. `awm setup` also writes agent
+Restart Claude Code. **22 tools** appear. `awm setup` also writes agent
 instructions into your global `CLAUDE.md` and installs hooks that checkpoint on
 compaction and session end.
 
@@ -220,7 +220,7 @@ a file is SQLite.
 
 ---
 
-## 5. The 20 tools
+## 5. The 22 tools
 
 **Lifecycle** — `memory_restore` (session start), `memory_task_begin`,
 `memory_task_end`, `memory_checkpoint`.
@@ -234,6 +234,11 @@ inherits the old one's associations), `memory_retract` (it was wrong),
 
 **Tasks** — `memory_task_add`, `memory_task_update`, `memory_task_list`,
 `memory_task_next`.
+
+**Everything about a name** — `memory_about` (every memory about one person,
+organisation or thing, oldest first; ambiguous names come back as candidates),
+`memory_alias` (record "Jenna" and "Jenna Park" as names for
+`contact:events@harborhotel.example`; `memory_write` also takes `aliases`).
 
 **Introspection** — `memory_whoami` (identity, store, backend, ports, sibling
 agent spaces — call this *first* whenever anything about AWM's own state is in

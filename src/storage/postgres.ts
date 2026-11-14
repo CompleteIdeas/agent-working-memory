@@ -1460,10 +1460,20 @@ export class PostgresEngramStore {
     }
   }
 
-  async searchEntities(term: string, limit: number = 8): Promise<string[]> {
+  async searchEntities(term: string, limit: number = 8, agentIds?: string[]): Promise<string[]> {
     const t = term.toLowerCase().replace(/[%_]/g, '');
     if (!t) return [];
-    const res = await this.pool.query(
+    // 0.23: scoped to the given agents when supplied (their mentions, their own aliases plus
+    // the shared '' ones). Unscoped callers see everything, as before.
+    if (agentIds && agentIds.length > 0) {
+      const res = await this.q(
+        `SELECT DISTINCT entity FROM (
+           SELECT entity FROM entity_mentions WHERE entity LIKE $1 AND agent_id = ANY($2::text[])
+           UNION SELECT entity FROM entity_aliases WHERE alias LIKE $1 AND agent_id = ANY($3::text[])
+         ) u LIMIT $4`, [`%${t}%`, agentIds, [...agentIds, ''], limit]);
+      return (res.rows as Array<{ entity: string }>).map(r => r.entity);
+    }
+    const res = await this.q(
       `SELECT DISTINCT entity FROM (
          SELECT entity FROM entity_mentions WHERE entity LIKE $1
          UNION SELECT entity FROM entity_aliases WHERE alias LIKE $1
@@ -1471,13 +1481,59 @@ export class PostgresEngramStore {
     return (res.rows as Array<{ entity: string }>).map(r => r.entity);
   }
 
+  /** Engram ids mentioning an entity (alias-resolved), optionally agent-scoped. An agent's own
+   *  alias wins over a shared ('') one; with no agent only shared aliases apply. */
   async getEngramIdsByEntity(entity: string, agentId?: string): Promise<string[]> {
-    const alias = await this.pool.query('SELECT entity FROM entity_aliases WHERE alias = $1', [entity.toLowerCase()]);
-    const resolved = (alias.rows as Array<{ entity: string }>)[0]?.entity ?? entity.toLowerCase();
+    const key = entity.toLowerCase();
+    const alias = agentId
+      ? await this.q(`SELECT entity FROM entity_aliases WHERE alias = $1 AND agent_id IN ($2, '') ORDER BY (agent_id = '') LIMIT 1`, [key, agentId])
+      : await this.q(`SELECT entity FROM entity_aliases WHERE alias = $1 AND agent_id = '' LIMIT 1`, [key]);
+    const resolved = (alias.rows as Array<{ entity: string }>)[0]?.entity ?? key;
     const res = agentId
-      ? await this.pool.query('SELECT engram_id FROM entity_mentions WHERE entity = $1 AND agent_id = $2', [resolved, agentId])
-      : await this.pool.query('SELECT engram_id FROM entity_mentions WHERE entity = $1', [resolved]);
+      ? await this.q('SELECT engram_id FROM entity_mentions WHERE entity = $1 AND agent_id = $2', [resolved, agentId])
+      : await this.q('SELECT engram_id FROM entity_mentions WHERE entity = $1', [resolved]);
     return (res.rows as Array<{ engram_id: string }>).map(r => r.engram_id);
+  }
+
+  /** 0.23: register `alias → entity` for one agent; returns what it pointed at before. */
+  async setEntityAlias(agentId: string, alias: string, entity: string): Promise<{ previous: string | null }> {
+    const prev = await this.q('SELECT entity FROM entity_aliases WHERE agent_id = $1 AND alias = $2', [agentId, alias]);
+    await this.q(`INSERT INTO entity_aliases (agent_id, alias, entity) VALUES ($1, $2, $3)
+      ON CONFLICT (agent_id, alias) DO UPDATE SET entity = EXCLUDED.entity`, [agentId, alias, entity]);
+    const p = (prev.rows as Array<{ entity: string }>)[0]?.entity;
+    return { previous: p && p !== entity ? p : null };
+  }
+
+  /** 0.23: remove one agent's alias. True when a row was deleted. */
+  async removeEntityAlias(agentId: string, alias: string): Promise<boolean> {
+    const res = await this.q('DELETE FROM entity_aliases WHERE agent_id = $1 AND alias = $2 RETURNING alias', [agentId, alias]);
+    return res.rows.length > 0;
+  }
+
+  /** 0.23: aliases visible to these agents (their own plus shared ''), optionally for one entity. */
+  async listEntityAliases(agentIds: string[], entity?: string): Promise<Array<{ agentId: string; alias: string; entity: string }>> {
+    if (agentIds.length === 0) return [];
+    const res = entity
+      ? await this.q(`SELECT agent_id, alias, entity FROM entity_aliases WHERE agent_id = ANY($1::text[]) AND entity = $2 ORDER BY entity, alias`, [[...agentIds, ''], entity])
+      : await this.q(`SELECT agent_id, alias, entity FROM entity_aliases WHERE agent_id = ANY($1::text[]) ORDER BY entity, alias`, [[...agentIds, '']]);
+    return (res.rows as Array<{ agent_id: string; alias: string; entity: string }>).map(r => ({ agentId: r.agent_id, alias: r.alias, entity: r.entity }));
+  }
+
+  /** 0.23: exact key / alias / value matches for normalised terms (see the SQLite store). */
+  async matchEntityTerms(terms: string[], agentIds: string[]): Promise<Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value'; agentId: string }>> {
+    const uniq = Array.from(new Set(terms.filter(t => t && t.length <= 160)));
+    if (uniq.length === 0 || agentIds.length === 0) return [];
+    const out: Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value'; agentId: string }> = [];
+    const keys = await this.q(`SELECT DISTINCT agent_id, entity FROM entity_mentions
+      WHERE entity = ANY($1::text[]) AND agent_id = ANY($2::text[])`, [uniq, agentIds]);
+    for (const r of keys.rows as Array<{ agent_id: string; entity: string }>) out.push({ term: r.entity, entity: r.entity, via: 'key', agentId: r.agent_id });
+    const aliases = await this.q(`SELECT agent_id, alias, entity FROM entity_aliases
+      WHERE alias = ANY($1::text[]) AND agent_id = ANY($2::text[])`, [uniq, [...agentIds, '']]);
+    for (const r of aliases.rows as Array<{ agent_id: string; alias: string; entity: string }>) out.push({ term: r.alias, entity: r.entity, via: 'alias', agentId: r.agent_id });
+    const values = await this.q(`SELECT DISTINCT agent_id, entity, substring(entity from position(':' in entity) + 1) AS v FROM entity_mentions
+      WHERE substring(entity from position(':' in entity) + 1) = ANY($1::text[]) AND agent_id = ANY($2::text[])`, [uniq, agentIds]);
+    for (const r of values.rows as Array<{ agent_id: string; entity: string; v: string }>) out.push({ term: r.v, entity: r.entity, via: 'value', agentId: r.agent_id });
+    return out;
   }
 
   async getCheckpoint(agentId: string): Promise<CheckpointRow | null> {

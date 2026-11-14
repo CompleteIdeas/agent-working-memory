@@ -56,6 +56,9 @@ const REWRITE: Record<string, (args: any[]) => any[]> = {
   logRetrievalFeedback: ([aid, eid, useful, context, ...rest]) => [aid, eid, useful, typeof context === 'string' ? r(context) : context, ...rest],
   updateAutoCheckpointRecall: ([agentId, context, ...rest]) => [agentId, typeof context === 'string' ? r(context) : context, ...rest],
   createEpisode: ([input, ...rest]) => [input ? { ...input, label: r(input.label ?? '') } : input, ...rest],
+  // 0.23: an alias is agent-written text stored for lookup; mask like a recall context (not
+  // sealed: a sealed handle differs per write, so the same alias would never match itself).
+  setEntityAlias: ([agentId, alias, entity, ...rest]) => [agentId, typeof alias === 'string' ? r(alias) : alias, typeof entity === 'string' ? r(entity) : entity, ...rest],
 };
 
 /** The method names this wrapper rewrites — exported for the coverage test. */
