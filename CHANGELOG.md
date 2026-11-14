@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.22.3 (unreleased) — awm-learn surveys before it reads
+## 0.22.3 (unreleased) — awm-learn surveys before it reads; everything about a name
 
 - **`awm-learn` starts with a survey.** `ledger.mjs survey <path>` works out, in about a second and
   without a model, what kind of corpus this is and what each file is:
@@ -49,7 +49,43 @@
 - **Fix: slices of a large file are named after the section they start in.** The name used to
   come from the first heading inside the slice. Slice unit ids change, so a ledger made before
   0.22.3 re-learns those slices once on its next refresh.
-- Tests: `tests/skills/awm-learn-ledger.test.ts` (8), `tests/core/supersede-self.test.ts` (2).
+- **`memory_about`: every memory about one person, organisation or thing, oldest first.**
+  `memory_recall` returns the few memories that best match a question's wording, so the ninth
+  memory about someone never shows. `memory_about` (MCP) and `GET /memory/about` (HTTP) return
+  all of them from the entity index, ordered by `valid_from` when set, else write time:
+  - a name resolves by exact key (`person:jenna park`), then the agent's alias, then the exact
+    value after `key:` ("jenna park"); otherwise close names come back as candidates;
+  - a name that could mean two entities (two Jennas) comes back as candidates, never merged;
+  - superseded memories are shown as history; retracted, staged and evicted ones are left out;
+  - `limit` keeps the newest, and the reply says how many older ones were left out.
+
+  `contact=` joins the indexed keys, for the people an agent's user deals with, apart from
+  `person=`.
+- **`memory_alias`: other names for an entity.** Add, move, list and remove "Jenna", "Jenna Park"
+  → `contact:events@harborhotel.example`; also `POST`/`DELETE /memory/alias` and
+  `GET /memory/aliases`, and `memory_write` takes `aliases` (with `alias_for` when the write
+  names more than one entity). Aliases are now **per agent**: the D9 table keyed them globally,
+  so one agent's "jenna" redirected another's lookup. Existing rows become shared aliases
+  (agent `''`); the migration is idempotent on SQLite, PGlite and Postgres. Tool count 20 → 22.
+- **Lowercase names in ordinary questions, opt-in.** `AWM_ENTITY_ALIAS_MATCH=1` matches
+  lowercase 1–3 word phrases ("the gala", "jenna") exactly against aliases and name-like entity
+  values (longest name wins, so "jenna liu" does not also pull in whoever "jenna" is) and feeds
+  them to the existing guaranteed-audition path. **Alone it changed nothing** on the new eval:
+  the cross-encoder reads only the passage, so it cannot connect "jenna" to a memory that says
+  "the events manager". `AWM_ENTITY_ALIAS_PASSAGE=1` adds the matched name to that memory's
+  rerank passage (`[about jenna]`), with no score boost. Measured on `tests/entity-eval`
+  (68 synthetic memories, 56 questions): questions that name only the entity, success@5
+  68.8 → 100 and success@1 31.3 → 68.8; specific questions success@1 87.5 → 92.5; 0 of 52
+  matched entities wrong; a look-alike sender never matched. `npm run bench`: identifier,
+  category and temporal accuracy unchanged, but the flags fired on only 25 of 1,316 and 2 of
+  450 probes (the snapshot has no aliases). **Both stay off by default** until a real workload
+  (MWA's mailboxes) confirms the gain.
+- **Fix: a write merged into an existing memory lost its entity tags,** so the entity index
+  missed the merged fact. They are now indexed onto the memory that holds it.
+- **Fix: PGlite entity-index calls could run before the store finished opening.**
+- Tests: `tests/skills/awm-learn-ledger.test.ts` (8), `tests/core/supersede-self.test.ts` (2),
+  `tests/entity-about.test.ts` (22), `tests/entity-index-recall.test.ts` (+3); eval
+  `tests/entity-eval/runner.ts`.
 
 ## 0.22.2 (2026-11-04) — setup installs awm-learn and tells the agent when to use it
 
