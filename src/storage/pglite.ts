@@ -787,6 +787,7 @@ export class PGliteEngramStore {
   // ============================================================
 
   async supersedeEngram(oldId: string, newId: string): Promise<void> {
+    if (oldId === newId) return; // a memory never supersedes itself (it would vanish from recall)
     await this.readyPromise;
     await this.db.query(`UPDATE engrams SET superseded_by = $1 WHERE id = $2`, [newId, oldId]);
     await this.db.query(`UPDATE engrams SET supersedes = $1 WHERE id = $2`, [oldId, newId]);

@@ -301,7 +301,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       });
 
       // Handle supersession inline — archive superseded memory to remove from active pool
-      if (mem.supersedes) {
+      if (mem.supersedes && mem.supersedes !== engram.id) {
         await store.supersedeEngram(mem.supersedes, engram.id);
         await store.updateConfidence(mem.supersedes, 0.1);
         await store.updateStage(mem.supersedes, 'archived'); // Remove from active search pool
@@ -471,6 +471,11 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       const newEngram = await store.getEngram(body.newEngramId!);
       if (!oldEngram) return reply.code(404).send({ error: `Old engram ${body.oldEngramId} not found` });
       if (!newEngram) return reply.code(404).send({ error: `New engram ${body.newEngramId} not found` });
+      if (body.oldEngramId === body.newEngramId) {
+        // A write close to an existing memory merges into it and returns its id; superseding a
+        // memory with itself would hide it from recall.
+        return reply.code(409).send({ error: 'oldEngramId and newEngramId are the same memory: the write was merged into it (reinforced), so nothing needs superseding.' });
+      }
 
       await store.upsertAssociation(body.newEngramId!, body.oldEngramId!, 0.8, 'causal', 1.0);
       await store.updateConfidence(body.oldEngramId!, oldEngram.confidence * 0.2);

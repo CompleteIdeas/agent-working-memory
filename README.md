@@ -26,7 +26,7 @@ every number above is published with how to check it.
 | **One thread, any number of topics** | Context comes from memory each turn, so a single long-running agent can switch topics, lose detail to compaction, and get it back | Early: in a measured multi-task run, compaction **+ AWM** was fully right **4 of 5** times — above the full-history ceiling (3/5) and every memory-less arm. AWM's own share is not yet isolated; [what would settle it](docs/claims.md) |
 | **Knows what's current** | A corrected fact supersedes the old one, and recall serves the new version — the old one surfaces only with a warning | Measured: plain keyword search over a raw store returns a **superseded** memory first **8–15%** of the time; AWM's lifecycle is why it doesn't |
 | **Knows what it doesn't know** | A gate calibrated on the store itself withholds answers it doesn't have, and flags the ones it isn't sure of | Measured, one store: withholds **58 of 73** never-stored facts and **1 of 712** correct answers on keyword-shaped questions; on natural-language questions it withholds **10 of 97** correct answers once memories carry questions (opt-in, [details](docs/abstention.md)) |
-| **Learns a project in one command** | `/awm-learn` reads a repo or folder into memory, map first, then every part, and resumes where it stopped. Refresh re-learns only what changed | One run, measured: a 374-file production API learned by 5 agents in **about 10 minutes**, **344 memories**, 12 of 20 newcomer questions answered in the top 3 — short of its own 80% target, and its token estimate ran 2.5× low ([details](docs/awm-learn.md)) |
+| **Learns a project in one command** | `/awm-learn` reads a repo or folder into memory, map first, then every part, and resumes where it stopped. Refresh re-learns only what changed | One run, measured: a 374-file production API learned by 5 agents in **about 10 minutes**, **344 memories**, **17 of 20** newcomer questions answered correctly in the top 3. Re-learned from scratch with the 0.22.3 skill: **22 of 30** fresh questions answered against 20, with the right answer first 19 times against 15, within judge noise. Its token estimate now runs 1.37× low, not 2.5× ([details](docs/awm-learn.md)) |
 | **Selective, not a sponge** | It keeps what is worth keeping and returns the two or three memories that matter, not the top-K of everything | By design; the salience filter and its audit are in [`docs/cognitive-model.md`](docs/cognitive-model.md) |
 | **Less digging, fewer tokens** | The agent recalls where the answer is instead of searching for it again | One controlled test, four real support tickets with and without AWM: **half the lookups** (49 vs 100), **26% fewer output tokens**, and **2×** the facts the answer needed — n = 4, directional ([claims §5](docs/claims.md)) |
 | **Costs the same at any scale** | A scoped recall costs about the same whether the store holds a hundred memories or thirty thousand | Measured as flat; the size is disputed — published as ~630 tokens, the harness measures ~1,518. Either way against ~1.3M to carry the store ([claims §3](docs/claims.md)) |
@@ -361,7 +361,7 @@ local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-
 flan-t5-small expansion. Node 22+.
 
 ```bash
-npx vitest run          # 1193 tests
+npx vitest run          # 1203 tests
 npm run bench           # benchmark suites
 npm run build:plugin    # regenerate the Claude Code plugin from src/
 npm run test:docker     # clean-room install of the packed tarball

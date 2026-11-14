@@ -783,6 +783,11 @@ The old memory stays in the database (searchable for history) but is heavily dow
     if (!newEngram) {
       return { content: [{ type: 'text' as const, text: `New memory not found: ${params.new_engram_id}` }] };
     }
+    if (params.old_engram_id === params.new_engram_id) {
+      // A write close enough to an existing memory is merged into it (reinforced) and returns
+      // that memory's id; superseding it with itself would hide the merged memory.
+      return { content: [{ type: 'text' as const, text: `Nothing superseded: the old and new ids are the same memory (${params.old_engram_id}). Your write was merged into it, so it already holds the new content.` }] };
+    }
 
     await store.supersedeEngram(params.old_engram_id, params.new_engram_id);
 

@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.22.3 (unreleased) — awm-learn surveys before it reads
+
+- **`awm-learn` starts with a survey.** `ledger.mjs survey <path>` works out, in about a second and
+  without a model, what kind of corpus this is and what each file is:
+  - a **role**: source, test, migration, decision record, requirement, minutes, policy, plan,
+    changelog, reference, guide or chapter;
+  - an **authority** score;
+  - **dates** from git and from the document itself;
+  - the line numbers of **decision markers**: why-comments, TODO/HACK, ticket ids, and
+    "Decision:", "Action:" and "Status:" lines.
+
+  PDFs and Word files count as documents to read. Likely-sensitive material (a `medical/` or
+  `backups/` folder, an export) is held back unless `--allow-sensitive`. Status flags are taken
+  only from where authors state them, never from code that mentions them.
+- **The plan uses it.** Units are ranked by what records decisions, with superseded, archived
+  and draft material last. `--order chronological` learns dated minutes and decisions oldest
+  first. `next` hands each unit out with its role, authority, date, marker lines and recent
+  commit subjects (merges excluded).
+- **The cost estimate counts overhead.** About 9.5k tokens a unit, calibrated on the first full
+  run, which used 2.5 times the old estimate. `done --tokens N` records the real cost, and
+  `status` compares it to the estimate.
+- **The skill reads each role with its own playbook,** reconciles with the whole project's
+  memories before writing, ranks conflicting sources by the owner's word, then authority, then
+  date, folds tests into their module, pairs the words on screen with the code's words in the
+  glossary, and gives workers their own areas. Its self-test now scores "answered" (any correct
+  memory in the top 3) as well as "target found". Re-scored this way, the first run answered 17
+  of 20, not 12.
+- **Three rules from re-learning the same repo.** The new skill learned the pilot repo again, three
+  times, each time on a copy of the store with the first run's memories set aside:
+  - **Every memory title starts with the product's name.** The first re-run's titles mostly left
+    it out, and with the name in the question it answered 14 of 30 fresh questions, against the
+    first run's 24.
+  - **Only this run's memories count as coverage.** Older notes are not.
+  - **Each memory states one fact,** in about 500–1,000 characters. When told to reconcile, the
+    second re-run grew one memory per area instead (median 1,181 characters).
+
+  The third re-run matches the first run and puts the right answer first more often. On 30
+  fresh questions written from the code, the third re-run answered 22 without the product's
+  name and 24 with it. The first run answered 20 and 24. The right answer came first 19 times
+  without the name, against 15. Its token estimate ran 1.37× low, against 2.5×. The gaps are
+  within judge noise (about ±2). [Details](docs/awm-learn.md).
+- **Fix: a memory could supersede itself and vanish.** A write close to an existing memory is
+  merged into it and returns that memory's id. A supersede from the old id to that id then marked
+  the memory superseded by itself, which hid it from recall. Each storage backend
+  (`supersedeEngram`) now ignores it. `POST /memory/supersede` returns 409, `memory_supersede`
+  says nothing was superseded, and a batch write skips its `supersedes` link.
+- **Fix: slices of a large file are named after the section they start in.** The name used to
+  come from the first heading inside the slice. Slice unit ids change, so a ledger made before
+  0.22.3 re-learns those slices once on its next refresh.
+- Tests: `tests/skills/awm-learn-ledger.test.ts` (8), `tests/core/supersede-self.test.ts` (2).
+
 ## 0.22.2 (2026-11-04) — setup installs awm-learn and tells the agent when to use it
 
 - **`awm setup` installs the `awm-learn` skill** into `~/.claude/skills/awm-learn/` (a project

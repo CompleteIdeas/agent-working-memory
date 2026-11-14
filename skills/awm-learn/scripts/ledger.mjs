@@ -4,9 +4,10 @@
 /**
  * awm learn — the work ledger. Deterministic and model-free: it never reads meaning, only files.
  *
- *   node ledger.mjs plan    <path> [--project NAME] [--budget 400000] [--exclude "glob,glob"] [--unit-kb 48] [--include-generated] [--force]
+ *   node ledger.mjs survey  <path> [--exclude "glob,glob"] [--json]  read-only: what is this corpus? roles, dates, authority, decision markers
+ *   node ledger.mjs plan    <path> [--project NAME] [--budget 400000] [--exclude "glob,glob"] [--unit-kb 48] [--order importance|chronological] [--include-generated] [--force]
  *   node ledger.mjs next    [--project NAME] [--n 1] [--agent ID]   claim the next unit(s), most important first
- *   node ledger.mjs done    <unitId> [--project NAME] [--memories N] [--note "..."]
+ *   node ledger.mjs done    <unitId> [--project NAME] [--memories N] [--tokens N] [--note "..."]
  *   node ledger.mjs skip    <unitId> [--project NAME] --note "why"
  *   node ledger.mjs release <unitId> [--project NAME]              hand a claimed unit back to the queue
  *   node ledger.mjs deepen  <unitId> [--project NAME]              promote a skimmed unit to a full read
@@ -19,6 +20,15 @@
  *   skim   - read each file's head (~3 KB: imports, exports, signatures, headings, opening pages)
  *   sample - data files: the first lines only, for their shape
  * Exclusions: a .awmlearnignore file in the target (one glob per line, # comments) and --exclude.
+ * Possibly sensitive files (medical/, payroll, backups/, exports...) are held back unless
+ * --allow-sensitive; the survey lists them so the owner can decide.
+ *
+ * Every file also gets a ROLE (source, test, migration, decision record, requirement, minutes,
+ * policy, plan, changelog, guide, chapter...), an AUTHORITY score (how far its statements
+ * should be trusted against another file's), DATES (git first/last change, and a date written
+ * in the name or the text), and the line numbers of DECISION MARKERS (comments that say why,
+ * TODO/FIXME/HACK, ticket ids; in documents, "Decision:", "Action:", status lines). These are
+ * guesses from names and text patterns, never from meaning; the agent confirms them.
  *
  * The ledger lives OUTSIDE the target, in $AWM_LEARN_DIR (default ~/.awm/learn/<project>/ledger.json),
  * so learning never writes into the repo or manuscript being learned.
@@ -31,7 +41,7 @@ import { execFileSync } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
-const BOOL_FLAGS = new Set(['json', 'include-generated', 'force']);
+const BOOL_FLAGS = new Set(['json', 'include-generated', 'force', 'allow-sensitive']);
 const flag = (name, dflt) => { const i = args.indexOf('--' + name); if (i < 0) return dflt; if (BOOL_FLAGS.has(name)) return true; return args[i + 1] ?? dflt; };
 const positional = [];
 for (let i = 1; i < args.length; i++) {
@@ -55,10 +65,15 @@ const NOISE_DIRS = new Set(['node_modules', '.git', '.hg', '.svn', 'dist', 'buil
 const NOISE_FILES = [/\.min\.(js|css)$/i, /\.map$/i, /^package-lock\.json$/i, /^yarn\.lock$/i, /^pnpm-lock\.yaml$/i, /^Cargo\.lock$/i, /^poetry\.lock$/i, /^composer\.lock$/i, /^Gemfile\.lock$/i, /\.lock$/i, /\.snap$/i, /\.generated\./i, /_pb2\.py$/i, /\.d\.ts$/i];
 const ENTRY = [/^readme/i, /^package\.json$/i, /^pyproject\.toml$/i, /^cargo\.toml$/i, /^go\.mod$/i, /^(index|main|app|server|cli)\.[a-z]+$/i, /^dockerfile$/i, /^makefile$/i, /^claude\.md$/i, /^agents\.md$/i, /^contributing/i, /^architecture/i, /^outline/i, /^synopsis/i, /^bible/i];
 
+// Documents the agent can read with a document tool (PDF reading, a Word/PowerPoint skill), but
+// that this script cannot parse: surveyed by name, sized by a rough text estimate.
+const DOCUMENT = new Set('.pdf .docx .doc .odt .pptx'.split(' '));
+const DOC_TEXT_RATIO = { '.pdf': 0.15, '.docx': 0.5, '.doc': 0.4, '.odt': 0.5, '.pptx': 0.1 };
 function kindOf(name) {
   const lower = name.toLowerCase();
   if (SECRET.some(r => r.test(name)) && !ALLOWED_ENV.test(name)) return 'secret';
   const ext = lower.endsWith('.env.example') ? '.env.example' : extname(lower);
+  if (DOCUMENT.has(ext)) return 'document';
   if (BINARY.has(ext)) return 'binary';
   if (CODE.has(ext)) return 'code';
   if (PROSE.has(ext)) return 'prose';
@@ -66,6 +81,93 @@ function kindOf(name) {
   if (MARKUP.has(ext)) return 'markup';
   if (DATA.has(ext)) return 'data';
   return ext ? 'other' : 'config';
+}
+
+// ---------- roles, authority, dates, markers ----------
+// What a file IS, guessed from its path and its first few KB. Order matters: the first match wins.
+const ROLE_RULES = [
+  ['test',        (p) => /(^|\/)(tests?|__tests__|spec|e2e)\/|\.(test|spec|e2e)\.[a-z]+$/i.test(p)],
+  ['migration',   (p) => /(^|\/)(migrations?|migrate|db\/schema|schema)\/|(^|\/)\d{3,}[-_][^/]*\.sql$/i.test(p)],
+  ['decision',    (p, h) => /(^|\/)(adrs?|decisions?|decision-log)\/|(^|\/)adr[-_]?\d+/i.test(p) || /^#+\s*(context|decision)\b[\s\S]{0,4000}^#+\s*(decision|consequences)\b/im.test(h)],
+  ['changelog',   (p) => /(^|\/)(changelog|changes|history|release[-_ ]?notes)[^/]*$/i.test(p)],
+  ['minutes',     (p, h) => /minutes|meeting|standup|retro|1[-_]on[-_]1|(^|\/)notes?\//i.test(p) || /^\s*(attendees|present|apologies|agenda|action items?)\s*[:\-]/im.test(h)],
+  ['requirement', (p, h) => /requirement|(^|\/|[-_])(spec|prd|brd|srs|frd)s?([-_.]|\/|$)|user[-_ ]?stor|acceptance/i.test(p) || (h.match(/\b(shall|must)\b/gi) || []).length >= 6 || /^\s*(REQ|FR|NFR|BR|UR)[-_ ]?\d+/m.test(h)],
+  ['policy',      (p) => /polic(y|ies)|procedure|(^|[-_\/])sop([-_.]|$)|guideline|handbook|standard|bylaws?|constitution/i.test(p)],
+  ['plan',        (p) => /plan|proposal|roadmap|(^|[-_\/])rfc|design|strategy|brief/i.test(p)],
+  ['chapter',     (p, h, k) => (k === 'prose' || k === 'document') && (/chapter|(^|\/)ch[-_]?\d+|scene|(^|\/)act[-_]?\d+|manuscript/i.test(p) || /^\s*(chapter|scene)\s+[\divx]+/im.test(h))],
+  ['reference',   (p, h, k) => (k === 'prose' || k === 'document') && /reference|glossary|catalog(ue)?|directory|index|faq|manual|rules?([-_.]|$)/i.test(basename(p))],
+  ['guide',       (p, h, k) => k === 'prose' || k === 'document'],
+  ['script',      (p) => /(^|\/)(scripts?|bin|tools)\//i.test(p)],
+  ['config',      (p, h, k) => k === 'config'],
+  ['source',      (p, h, k) => k === 'code' || k === 'markup'],
+  ['data',        (p, h, k) => k === 'data'],
+];
+// How much a statement from this role should weigh against a statement from another. Code is
+// the truth about what the system DOES today; a decision record or a requirement is the truth
+// about what was MEANT; minutes record a moment and are overtaken by what came after.
+const ROLE_AUTHORITY = { decision: 90, requirement: 85, policy: 80, source: 75, migration: 70, reference: 70, changelog: 65, guide: 60, chapter: 60, test: 55, config: 55, script: 50, plan: 50, minutes: 45, data: 30, other: 40 };
+// Status comes from where authors actually state it: a folder (drafts/, archive/), a name suffix
+// ("plan-old.md", "spec copy.docx"), or a status line or notice at the TOP of a document. Code is
+// never flagged from its text: code that handles supersession says "superseded by" all over.
+const STATUS_LINE = (words) => new RegExp(`^\\s*[>*-]?\\s*(\\*\\*)?(status|state)(\\*\\*)?\\s*[:\\-|]\\s*(\\*\\*)?(${words})\\b`, 'im');
+function flagsOf(p, h, kind) {
+  const f = [];
+  const doc = kind === 'prose' || kind === 'document';
+  const top = h.slice(0, 1500);
+  const base = basename(p);
+  if (/(^|\/)(drafts?|wip|scratch)\//i.test(p) || (doc && (/(^|[-_ .])(draft|wip)([-_ .]|$)/i.test(base) || STATUS_LINE('draft|proposed|wip|in review').test(top)))) f.push('draft');
+  if (/(^|\/)(archive[ds]?|old|deprecated|obsolete|attic)\//i.test(p) || /[-_ .(](old|copy|bak|orig)\)?(\.[a-z0-9]+)?$/i.test(base)) f.push('archived');
+  if (doc && (STATUS_LINE('superseded|deprecated|rejected|withdrawn|obsolete|replaced').test(top) || /^\s*>?\s*(\*\*)?(this (document|page|plan|spec|record) (is|has been) )?(superseded|replaced|obsoleted) by\b/im.test(top))) f.push('superseded');
+  if (doc && STATUS_LINE('accepted|approved|final|adopted|ratified|current|signed off').test(top)) f.push('approved');
+  // Likely personal or confidential material: held back until the owner says otherwise. A folder
+  // name counts for every file; a file name counts only for data and documents, because code
+  // ABOUT medical records or backups (crypto/medical.ts, backup-prod.sh) is what you want learned.
+  const SENSITIVE = /(^|[\/_\-. ])(medical|patients?|payroll|salar(y|ies)|ssn|passports?|personnel|pii|confidential|private|backups?|exports?|dumps?)([\/_\-. ]|$)/i;
+  const dirs = p.includes('/') ? p.slice(0, p.lastIndexOf('/') + 1) : '';
+  if (SENSITIVE.test(dirs) || ((kind === 'data' || kind === 'document' || kind === 'prose') && SENSITIVE.test(base))) f.push('sensitive');
+  return f;
+}
+function authorityOf(role, flags) {
+  let a = ROLE_AUTHORITY[role] ?? 40;
+  if (flags.includes('approved')) a += 10;
+  if (flags.includes('draft')) a -= 30;
+  if (flags.includes('archived')) a -= 40;
+  if (flags.includes('superseded')) a -= 45;
+  return Math.max(0, Math.min(100, a));
+}
+/** A date the author wrote down: in the file name, front matter, or an early "Date:" line. */
+function docDateOf(p, h) {
+  const m = basename(p).match(/(20\d\d|19\d\d)[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const fm = h.slice(0, 3000).match(/^\s*(date|created|updated|last[-_ ]updated|meeting date)\s*[:\-]\s*["']?(\d{4})-(\d\d)-(\d\d)/im);
+  if (fm) return `${fm[2]}-${fm[3]}-${fm[4]}`;
+  const any = h.slice(0, 600).match(/\b(20\d\d)-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b/);
+  return any ? `${any[1]}-${any[2]}-${any[3]}` : null;
+}
+// Where the WHY lives. In code: comments that explain a choice, flag a trap or cite a ticket.
+// In documents: decisions, action items, status and supersession lines.
+const COMMENT = /^\s*(\/\/|#(?!include|define|!)|\*|\/\*|--|;|<!--)/;
+const CODE_MARK = /\b(TODO|FIXME|HACK|XXX|NOTE|WHY|DECISION|IMPORTANT|WARNING|SECURITY|DEPRECATED|WORKAROUND|INVARIANT)\b|\b(because|we chose|decided|on purpose|deliberately|intentionally|do not|don't|never|must not|must always|so that|otherwise|careful|gotcha|trade-?off)\b|\b[A-Z][A-Z0-9]{1,7}-\d{1,5}\b/i;
+const DOC_MARK = /^\s*[-*]?\s*(\*\*)?(decision|decided|resolved|agreed|action( item)?|owner|status|supersedes|superseded by|replaces|approved|rejected|open question)(\*\*)?\s*[:\-]/i;
+function markersOf(text, kind) {
+  const lines = text.split('\n'); const at = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (kind === 'code' ? (COMMENT.test(l) && CODE_MARK.test(l)) : DOC_MARK.test(l)) at.push(i + 1);
+  }
+  return { count: at.length, lines: at.slice(0, 40) };
+}
+function surveyFile(rel, kind, buf) {
+  // A PDF or Word file is surveyed by its name only: its text is not readable without a parser.
+  const text = kind === 'document' ? '' : buf.toString('utf8');
+  const head = text.slice(0, 6000);
+  const role = (ROLE_RULES.find(([, t]) => t(rel, head, kind)) || ['other'])[0];
+  const flags = flagsOf(rel, head, kind);
+  const out = { role, flags, authority: authorityOf(role, flags) };
+  // A date written inside a document is the author's date. Inside code it is usually test data.
+  const d = docDateOf(rel, kind === 'code' || kind === 'config' || kind === 'data' ? '' : head); if (d) out.docDate = d;
+  if (kind === 'code' || kind === 'prose') { const m = markersOf(text, kind); if (m.count) out.markers = m; }
+  return out;
 }
 
 // ---------- file discovery ----------
@@ -98,6 +200,26 @@ function churn(root) {
     return m;
   } catch { return new Map(); }
 }
+/** First and last commit date per path, from one pass over the history (newest first). */
+function fileDates(root) {
+  try {
+    const out = execFileSync('git', ['-C', root, 'log', '-n', '20000', '--format=%x01%ad', '--date=short', '--name-only', '--relative'], { encoding: 'utf8', maxBuffer: 1 << 29, stdio: ['ignore', 'pipe', 'ignore'] });
+    const m = new Map(); let d = null;
+    for (const raw of out.split('\n')) {
+      const l = raw.trim(); if (!l) continue;
+      if (l.startsWith('\x01')) { d = l.slice(1); continue; }
+      const e = m.get(l); if (e) e.first = d; else m.set(l, { first: d, last: d });
+    }
+    return m;
+  } catch { return new Map(); }
+}
+/** The last few commit subjects touching these files: often the clearest statement of why. */
+function recentCommits(root, files, n = 6) {
+  try {
+    const out = execFileSync('git', ['-C', root, 'log', '--no-merges', '-n', String(n), '--format=%ad %s', '--date=short', '--', ...files.slice(0, 50)], { encoding: 'utf8', maxBuffer: 1 << 24, stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.split('\n').map(s => s.trim()).filter(Boolean);
+  } catch { return []; }
+}
 function headCommit(root) {
   try { return execFileSync('git', ['-C', root, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
 }
@@ -117,7 +239,11 @@ function ignoreMatcher(root, extra = []) {
   const res = pats.map(globToRe);
   return (rel) => res.some(re => re.test(rel));
 }
-// Reading cost by tier: ~4 characters per token in, plus ~1.5k tokens of writing per unit.
+// Cost by tier: ~4 characters per token read, ~1.5k tokens of writing per unit, plus a fixed
+// per-unit overhead for everything that is not the file itself: the agent's running context,
+// recall-before-write, the ledger and memory tool round-trips. Calibrated on the first full run
+// (2026-11-04): reading plus writing predicted 630k for 97 units and the run used ~1.55M, a gap
+// of ~9.5k per unit. `done --tokens N` records actual cost so a later run can re-calibrate.
 const SKIM_BYTES = 3000, SAMPLE_BYTES = 2000;
 function readBytes(u, tier) {
   if (tier === 'deep') return u.bytes;
@@ -125,7 +251,8 @@ function readBytes(u, tier) {
   return (u.fileBytes || [u.bytes]).reduce((s, b) => s + Math.min(b, cap), 0);
 }
 const WRITE_TOKENS = { deep: 1500, skim: 600, sample: 300 };
-const unitTokens = (u, tier = u.tier) => Math.round(readBytes(u, tier) / 4 + WRITE_TOKENS[tier]);
+const UNIT_OVERHEAD = { deep: 9500, skim: 7000, sample: 3000 };
+const unitTokens = (u, tier = u.tier) => Math.round(readBytes(u, tier) / 4 + WRITE_TOKENS[tier] + UNIT_OVERHEAD[tier]);
 function assignTiers(units, budget) {
   let spent = 0;
   for (const u of units) if (u.kind === 'data') { u.tier = 'sample'; spent += unitTokens(u, 'sample'); }
@@ -141,10 +268,11 @@ function assignTiers(units, budget) {
 /** The least a plan can cost: every unit skimmed, data sampled. */
 const floorTokens = (units) => units.reduce((s, u) => s + unitTokens(u, u.kind === 'data' ? 'sample' : 'skim'), 0);
 
-function inventory(root, includeGenerated, exclude = [], sliceAt = 48000) {
+function inventory(root, includeGenerated, exclude = [], sliceAt = 48000, allowSensitive = false) {
   const rels = (gitFiles(root) ?? walk(root)).map(r => r.split('/').join(sep));
+  const dates = fileDates(root);
   const files = [];
-  const skipped = { secret: 0, binary: 0, noise: 0, large: 0, missing: 0, ignored: 0 };
+  const skipped = { secret: 0, binary: 0, noise: 0, large: 0, missing: 0, ignored: 0, sensitive: 0 };
   const ignored = ignoreMatcher(root, exclude);
   for (const rel of rels) {
     const parts = rel.split(sep);
@@ -154,15 +282,19 @@ function inventory(root, includeGenerated, exclude = [], sliceAt = 48000) {
     if (kind === 'secret') { skipped.secret++; continue; }
     if (kind === 'binary') { skipped.binary++; continue; }
     let st; try { st = statSync(join(root, rel)); } catch { skipped.missing++; continue; }
-    if (st.size > 2_000_000) { skipped.large++; continue; } // generated dumps, data exports
-    let buf; try { buf = readFileSync(join(root, rel)); } catch { skipped.missing++; continue; }
-    if (buf.subarray(0, 8000).includes(0)) { skipped.binary++; continue; }
+    if (st.size > (kind === 'document' ? 40_000_000 : 2_000_000)) { skipped.large++; continue; } // generated dumps, data exports
+    let buf; try { buf = kind === 'document' ? Buffer.alloc(0) : readFileSync(join(root, rel)); } catch { skipped.missing++; continue; }
+    if (kind !== 'document' && buf.subarray(0, 8000).includes(0)) { skipped.binary++; continue; }
     const posix = rel.split(sep).join('/');
     if (resolve(root, rel).toLowerCase().startsWith(resolve(ROOT_DIR).toLowerCase() + sep)) { skipped.ignored++; continue; } // the ledgers themselves
     if (ignored(posix)) { skipped.ignored++; continue; }
     // A big JSON/YAML file is data (fixtures, exports), not configuration.
     const fk = kind === 'config' && st.size > 60_000 ? 'data' : kind;
-    const rec = { path: posix, kind: fk, bytes: st.size, hash: sha(buf) };
+    // A document's size is the TEXT it likely holds, so units and token estimates stay honest.
+    const bytes = fk === 'document' ? Math.round(st.size * (DOC_TEXT_RATIO[extname(name).toLowerCase()] ?? 0.2)) : st.size;
+    const rec = { path: posix, kind: fk, bytes, hash: fk === 'document' ? sha(`${st.size}:${st.mtimeMs}`) : sha(buf), ...surveyFile(posix, fk, buf) };
+    if (rec.flags.includes('sensitive') && !allowSensitive) { skipped.sensitive++; (skipped.sensitivePaths ||= []).push(posix); continue; }
+    const gd = dates.get(posix); if (gd) { rec.firstDate = gd.first; rec.lastDate = gd.last; }
     if (st.size > sliceAt && (fk === 'code' || fk === 'prose')) rec.slices = sliceFile(buf.toString('utf8'), sliceAt, fk);
     files.push(rec);
   }
@@ -181,9 +313,14 @@ function sliceFile(text, target, kind) {
   const isBound = (l) => BANNER.test(l) || (kind === 'prose' ? PROSE_HEAD.test(l) : CODE_DECL.test(l));
   const isHeading = (l) => BANNER.test(l) || (kind === 'prose' && PROSE_HEAD.test(l));
   const out = []; let start = 0, acc = 0, lastBound = -1;
+  // A slice is named after the section it STARTS in: the nearest heading at or above its first
+  // line. Naming it after the first heading inside it mislabelled a slice that began mid-section
+  // with the next section's name (a seasons/programs slice was called "item-2-public-self").
+  let enclosing = -1;                   // index of the last heading seen at or before `start`
   const cut = (end) => {               // [start, end) in 0-based lines
     const body = lines.slice(start, end).join('\n');
-    const head = lines.slice(start, end).find(isHeading);
+    for (let k = Math.max(0, enclosing + 1); k <= start && k < lines.length; k++) if (isHeading(lines[k])) enclosing = k;
+    const head = enclosing >= 0 ? lines[enclosing] : lines.slice(start, end).find(isHeading);
     const slug = head ? head.replace(/[\/#*=\-─━~;]+/g, ' ').replace(/\(.*$/, '').trim().toLowerCase().split(/\s+/).slice(0, 4).join('-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '') : '';
     out.push({ start: start + 1, end, bytes: Buffer.byteLength(body), hash: sha(body), label: slug || `L${start + 1}` });
     start = end; acc = 0; lastBound = -1;
@@ -264,7 +401,8 @@ function familyKey(name) {
 function bigFileUnits(dir, f, ch) {
   if (!f.slices) return [mkUnit(dir, [f], 0, ch, basename(f.path))];
   return f.slices.map(s => {
-    const u = mkUnit(dir, [{ ...f, bytes: s.bytes, hash: s.hash }], 0, ch, `${basename(f.path)}§${s.label}`);
+    const mk = f.markers ? f.markers.lines.filter(l => l >= s.start && l <= s.end) : [];
+    const u = mkUnit(dir, [{ ...f, bytes: s.bytes, hash: s.hash, markers: mk.length ? { count: mk.length, lines: mk } : undefined }], 0, ch, `${basename(f.path)}§${s.label}`);
     u.ranges = [{ path: f.path, start: s.start, end: s.end }];
     if (u.entry && s.start !== 1) { u.entry = false; u.priority -= 1000; }  // only the top of an entry file is the entry
     return u;
@@ -280,10 +418,24 @@ function mkUnit(dir, fs, part, ch, single, family) {
   const entry = names.some(n => ENTRY.some(r => r.test(n)));
   const changes = fs.reduce((s, f) => s + (ch.get(f.path) || 0), 0);
   const depth = dir === '.' ? 0 : dir.split('/').length;
-  // Priority: entry points and the top of the tree first, then what changes most, then size.
-  const priority = Math.round((entry ? 1000 : 0) + Math.max(0, 300 - depth * 60) + Math.min(400, changes * 8) + Math.min(200, bytes / 1000) + (kind === 'prose' ? 50 : 0) - (kind === 'data' ? 150 : 0));
+  // The unit's role is its largest role by bytes; its authority is its most authoritative file.
+  const roles = {}; for (const f of fs) roles[f.role || 'other'] = (roles[f.role || 'other'] || 0) + f.bytes;
+  const role = Object.entries(roles).sort((a, b) => b[1] - a[1])[0][0];
+  const authority = Math.max(...fs.map(f => f.authority ?? 40));
+  const flags = [...new Set(fs.flatMap(f => f.flags || []))];
+  const markerCount = fs.reduce((s, f) => s + (f.markers?.count || 0), 0);
+  const dated = fs.map(f => f.docDate || f.firstDate).filter(Boolean).sort();
+  const lastDates = fs.map(f => f.lastDate).filter(Boolean).sort();
+  // Priority: entry points and the top of the tree first; then what records decisions (decision
+  // records, requirements, files dense with why-comments); then what changes most; then size.
+  // Superseded, archived and draft material goes last.
+  const roleBonus = { decision: 300, requirement: 250, policy: 200, changelog: 120, minutes: 100, migration: 60, test: -120 }[role] || 0;
+  const flagPenalty = (flags.includes('superseded') || flags.includes('archived') ? 400 : 0) + (flags.includes('draft') ? 150 : 0);
+  const priority = Math.round((entry ? 1000 : 0) + Math.max(0, 300 - depth * 60) + Math.min(400, changes * 8) + Math.min(200, bytes / 1000) + (kind === 'prose' ? 50 : 0) - (kind === 'data' ? 150 : 0) + roleBonus + Math.min(200, markerCount * 8) - flagPenalty);
   return {
-    id: part > 1 ? `${base}#${part}` : base, base, kind, tier: 'deep', files: fs.map(f => f.path), fileBytes: fs.map(f => f.bytes), bytes,
+    id: part > 1 ? `${base}#${part}` : base, base, kind, role, authority, flags, tier: 'deep', files: fs.map(f => f.path), fileBytes: fs.map(f => f.bytes), bytes,
+    date: dated[0] || null, lastChanged: lastDates[lastDates.length - 1] || null,
+    markers: fs.filter(f => f.markers?.count).map(f => `${f.path}:${f.markers.lines.slice(0, 15).join(',')}`),
     hash: sha(fs.map(f => f.path + ':' + f.hash).join('\n')), priority, entry, changes,
     status: 'pending', claimedBy: null, claimedAt: null, memories: 0, note: null, learnedAt: null, learnedCommit: null,
   };
@@ -316,7 +468,8 @@ function summary(L) {
     coverage: L.units.length ? Math.round(100 * done.length / L.units.length) : 0,
     memories: done.reduce((s, u) => s + (u.memories || 0), 0),
     tiers, budget: L.budget, fullReadTokens: live.reduce((s, u) => s + unitTokens(u, 'deep'), 0),
-    remaining: { units: left.length, bytes: leftBytes, estTokens: left.reduce((s, u) => s + unitTokens(u), 0) }, skipped: L.skipped };
+    remaining: { units: left.length, bytes: leftBytes, estTokens: left.reduce((s, u) => s + unitTokens(u), 0) }, skipped: L.skipped,
+    measured: (() => { const m = done.filter(u => u.tokens); return m.length ? { units: m.length, actual: m.reduce((s, u) => s + u.tokens, 0), estimated: m.reduce((s, u) => s + unitTokens(u), 0) } : null; })() };
 }
 function printSummary(s) {
   console.log(`awm learn · ${s.project} · ${s.root}${s.commit ? ' @ ' + s.commit : ''}`);
@@ -324,7 +477,54 @@ function printSummary(s) {
   console.log(`status: ${Object.entries(s.byStatus).map(([k, v]) => `${k} ${v}`).join(' · ')}`);
   console.log(`depth: ${Object.entries(s.tiers).map(([k, v]) => `${v} ${k}`).join(' · ')} · budget ${(s.budget / 1000).toFixed(0)}k tokens (reading everything in full: ~${(s.fullReadTokens / 1000).toFixed(0)}k)`);
   console.log(`remaining: ${s.remaining.units} units, ${kb(s.remaining.bytes)} on disk, ~${(s.remaining.estTokens / 1000).toFixed(0)}k tokens at the planned depth`);
-  console.log(`not read: ${Object.entries(s.skipped).filter(([, v]) => v).map(([k, v]) => `${v} ${k}`).join(', ') || 'nothing'}`);
+  console.log(`not read: ${Object.entries(s.skipped).filter(([, v]) => typeof v === 'number' && v).map(([k, v]) => `${v} ${k}`).join(', ') || 'nothing'}`);
+  if (s.measured) console.log(`measured cost: ${s.measured.units} units used ${(s.measured.actual / 1000).toFixed(0)}k tokens against ${(s.measured.estimated / 1000).toFixed(0)}k estimated (x${(s.measured.actual / s.measured.estimated).toFixed(2)})`);
+}
+
+// ---------- survey ----------
+/** What kind of corpus this is, and what that means for how to learn it. Read-only. */
+function surveyReport(root, files, skipped) {
+  const count = (key) => { const m = {}; for (const f of files) { const k = f[key] || 'other'; m[k] = (m[k] || 0) + 1; } return Object.fromEntries(Object.entries(m).sort((a, b) => b[1] - a[1])); };
+  const kinds = count('kind'), roles = count('role');
+  const n = files.length || 1;
+  const share = (pred) => files.filter(pred).length / n;
+  const codeShare = share(f => f.kind === 'code'), proseShare = share(f => f.kind === 'prose'), dataShare = share(f => f.kind === 'data');
+  const profile = share(f => f.role === 'chapter') > 0.3 ? 'manuscript' : codeShare > 0.5 ? 'code' : proseShare > 0.5 ? 'docs' : dataShare > 0.5 ? 'data' : 'mixed';
+  const dates = files.map(f => f.docDate || f.firstDate).filter(Boolean).sort();
+  const docDated = files.filter(f => f.kind === 'prose' && f.docDate).length;
+  const recordRoles = ['decision', 'requirement', 'minutes', 'policy', 'plan', 'changelog'];
+  const records = files.filter(f => recordRoles.includes(f.role));
+  const flagged = (fl) => files.filter(f => (f.flags || []).includes(fl)).map(f => f.path);
+  const whyDense = files.filter(f => f.markers?.count).sort((a, b) => b.markers.count - a.markers.count).slice(0, 12).map(f => `${f.path} (${f.markers.count})`);
+  const chronological = records.filter(f => f.role === 'minutes' || f.role === 'decision').length >= 5 && docDated >= 5;
+  const tests = roles.test || 0;
+  const advice = [];
+  if (profile === 'code' || codeShare > 0.3) advice.push(`Code: read the why-dense files and their marked comment lines first, and take the reasons for decisions from comments, decision records, changelogs and commit subjects.${tests ? ` ${tests} test files: fold what they pin down into the memory of the module they test, not separate test memories.` : ''}`);
+  if (records.length) advice.push(`${records.length} record documents (${recordRoles.filter(r => roles[r]).map(r => `${roles[r]} ${r}`).join(', ')}): weigh them by authority; where two disagree, the newer authoritative one supersedes the older.`);
+  if (chronological) advice.push('Dated minutes or decision records: plan with --order chronological, so a later decision supersedes an earlier one when the run reaches it.');
+  if (flagged('superseded').length || flagged('archived').length) advice.push('Superseded or archived files are ranked last: learn them as history (valid_to), never as current fact.');
+  if (profile === 'manuscript') advice.push('Manuscript: learn chapters in order; keep character facts and the timeline consistent across chapters.');
+  if (profile === 'data') advice.push('Data: sample the shapes; learn what produces each file and what reads it.');
+  return {
+    root, files: files.length, profile, kinds, roles,
+    dateRange: dates.length ? { from: dates[0], to: dates[dates.length - 1] } : null,
+    datedDocuments: docDated, records: records.length,
+    superseded: flagged('superseded').slice(0, 20), archived: flagged('archived').slice(0, 20), drafts: flagged('draft').slice(0, 20), approved: flagged('approved').slice(0, 20),
+    whyDense, suggestedOrder: chronological ? 'chronological' : 'importance', advice, skipped,
+  };
+}
+function printSurvey(r) {
+  console.log(`awm learn survey · ${r.root}`);
+  console.log(`${r.files} files · looks like: ${r.profile.toUpperCase()}`);
+  console.log(`kinds: ${Object.entries(r.kinds).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+  console.log(`roles: ${Object.entries(r.roles).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+  if (r.dateRange) console.log(`dates: ${r.dateRange.from} → ${r.dateRange.to} · ${r.datedDocuments} documents carry their own date`);
+  for (const [label, list] of [['superseded', r.superseded], ['archived', r.archived], ['drafts', r.drafts], ['approved', r.approved]]) if (list.length) console.log(`${label}: ${list.slice(0, 6).join(', ')}${list.length > 6 ? ` (+${list.length - 6})` : ''}`);
+  if (r.whyDense.length) console.log(`most decision markers: ${r.whyDense.slice(0, 8).join(', ')}`);
+  if (r.skipped.sensitivePaths?.length) console.log(`held back as possibly sensitive (ask the owner; --allow-sensitive to include): ${r.skipped.sensitivePaths.slice(0, 8).join(', ')}${r.skipped.sensitivePaths.length > 8 ? ` (+${r.skipped.sensitivePaths.length - 8})` : ''}`);
+  console.log(`suggested order: ${r.suggestedOrder}`);
+  for (const a of r.advice) console.log(`- ${a}`);
+  console.log(`not read: ${Object.entries(r.skipped).filter(([, v]) => typeof v === 'number' && v).map(([k, v]) => `${v} ${k}`).join(', ') || 'nothing'}`);
 }
 
 // ---------- commands ----------
@@ -346,6 +546,15 @@ if (['plan', 'next', 'done', 'skip', 'release', 'deepen', 'refresh'].includes(cm
 }
 
 switch (cmd) {
+  case 'survey': {
+    const target = positional[0]; if (!target) die('Usage: survey <path>');
+    const root = resolve(target); if (!existsSync(root)) die('No such path: ' + root);
+    const excl = typeof flag('exclude') === 'string' ? flag('exclude').split(',').map(s => s.trim()).filter(Boolean) : [];
+    const { files, skipped } = inventory(root, !!flag('include-generated'), excl, Number(flag('unit-kb', 48)) * 1000, !!flag('allow-sensitive'));
+    const r = surveyReport(root, files, skipped);
+    if (flag('json')) console.log(JSON.stringify(r, null, 1)); else printSurvey(r);
+    break;
+  }
   case 'plan': {
     const target = positional[0]; if (!target) die('Usage: plan <path> [--project NAME]');
     const root = resolve(target); if (!existsSync(root)) die('No such path: ' + root);
@@ -353,19 +562,22 @@ switch (cmd) {
     if (existsSync(ledgerPath(project)) && !flag('force')) die(`A ledger for "${project}" exists. Use refresh, or plan --force to start over.`);
     const budget = Number(flag('unit-kb', 48)) * 1000;
     const excl0 = typeof flag('exclude') === 'string' ? flag('exclude').split(',').map(s => s.trim()).filter(Boolean) : [];
-    const { files, skipped } = inventory(root, !!flag('include-generated'), excl0, budget);
+    const { files, skipped } = inventory(root, !!flag('include-generated'), excl0, budget, !!flag('allow-sensitive'));
     const units = buildUnits(files, budget, churn(root));
     const exclude = typeof flag('exclude') === 'string' ? flag('exclude').split(',').map(s => s.trim()).filter(Boolean) : [];
     const floor = floorTokens(units);
     const tokenBudget = flag('budget') !== undefined ? Number(flag('budget')) : floor + 300000;
     if (tokenBudget < floor) console.error(`note: --budget ${tokenBudget} is below the ~${Math.round(floor / 1000)}k it takes to skim everything; every unit stays at skim depth. Narrow the scope with --exclude or a sub-folder, or raise --budget.`);
     assignTiers(units, tokenBudget);
+    const order = flag('order', 'importance') === 'chronological' ? 'chronological' : 'importance';
     const kinds = {}; for (const f of files) kinds[f.kind] = (kinds[f.kind] || 0) + 1;
-    const L = { version: 1, project, root, commit: headCommit(root), plannedAt: now(), unitBudget: budget, budget: tokenBudget, exclude, includeGenerated: !!flag('include-generated'), fileCount: files.length, kinds, skipped, units };
+    const survey = surveyReport(root, files, skipped);
+    const L = { version: 2, project, root, commit: headCommit(root), plannedAt: now(), unitBudget: budget, budget: tokenBudget, order, profile: survey.profile, roles: survey.roles, exclude, includeGenerated: !!flag('include-generated'), allowSensitive: !!flag('allow-sensitive'), fileCount: files.length, kinds, skipped, units };
     save(L);
     const s = summary(L);
     printSummary(s);
     console.log(`file kinds: ${Object.entries(kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${v} ${k}`).join(', ')}`);
+    console.log(`looks like: ${survey.profile} · roles: ${Object.entries(survey.roles).slice(0, 8).map(([k, v]) => `${v} ${k}`).join(', ')} · order: ${order}${survey.suggestedOrder !== order ? ` (the survey suggests ${survey.suggestedOrder})` : ''}`);
     console.log(`top units: ${[...units].sort((a, b) => b.priority - a.priority).slice(0, 8).map(u => u.id).join(' | ')}`);
     console.log(`ledger: ${ledgerPath(project)}`);
     break;
@@ -374,12 +586,23 @@ switch (cmd) {
     const L = load(findProject()); const n = Number(flag('n', 1)); const agent = typeof flag('agent') === 'string' ? flag('agent') : 'agent';
     // A claim older than 2 hours is treated as abandoned.
     const stale = Date.now() - 2 * 3600e3;
+    // Importance order: most important first. Chronological order: entry units first (the map),
+    // then the oldest dated material, so a later decision supersedes an earlier one when the run
+    // reaches it; undated units follow by importance.
+    const chrono = L.order === 'chronological';
+    const byOrder = (a, b) => {
+      if (!chrono) return b.priority - a.priority;
+      if (a.entry !== b.entry) return a.entry ? -1 : 1;
+      if (a.date && b.date && a.date !== b.date) return a.date < b.date ? -1 : 1;
+      if (!!a.date !== !!b.date) return a.date ? -1 : 1;
+      return b.priority - a.priority;
+    };
     const open = L.units.filter(u => u.status === 'stale' || u.status === 'pending' || (u.status === 'claimed' && Date.parse(u.claimedAt) < stale))
-      .sort((a, b) => (a.status === 'stale' ? -1 : 0) - (b.status === 'stale' ? -1 : 0) || b.priority - a.priority);
+      .sort((a, b) => (a.status === 'stale' ? -1 : 0) - (b.status === 'stale' ? -1 : 0) || byOrder(a, b));
     const picked = open.slice(0, n);
     for (const u of picked) { u.prevStatus = u.status === 'claimed' ? 'pending' : u.status; u.status = 'claimed'; u.claimedBy = agent; u.claimedAt = now(); }
     save(L);
-    console.log(JSON.stringify(picked.map(u => ({ id: u.id, kind: u.kind, tier: u.tier, readBytesPerFile: u.tier === 'deep' ? 'all' : (u.tier === 'sample' ? SAMPLE_BYTES : SKIM_BYTES), files: u.files, ...(u.ranges ? { lines: u.ranges.map(r => `${r.path}:${r.start}-${r.end}`) } : {}), bytes: u.bytes, hash: u.hash, refresh: u.prevStatus === 'stale', previousMemories: u.memories || 0 })), null, 1));
+    console.log(JSON.stringify(picked.map(u => ({ id: u.id, kind: u.kind, role: u.role, authority: u.authority, flags: u.flags?.length ? u.flags : undefined, date: u.date || undefined, lastChanged: u.lastChanged || undefined, tier: u.tier, readBytesPerFile: u.tier === 'deep' ? 'all' : (u.tier === 'sample' ? SAMPLE_BYTES : SKIM_BYTES), files: u.files, ...(u.ranges ? { lines: u.ranges.map(r => `${r.path}:${r.start}-${r.end}`) } : {}), markers: u.markers?.length ? u.markers : undefined, recentCommits: recentCommits(L.root, u.files), bytes: u.bytes, estTokens: unitTokens(u), hash: u.hash, refresh: u.prevStatus === 'stale', previousMemories: u.memories || 0 })), null, 1));
     if (!picked.length) console.error('Nothing left: every unit is done or skipped. Run refresh to pick up changes.');
     break;
   }
@@ -395,7 +618,7 @@ switch (cmd) {
     const L = load(findProject()); const u = L.units.find(x => x.id === id); if (!u) die('No unit ' + id);
     if (cmd === 'release') { u.status = u.prevStatus || 'pending'; u.claimedBy = null; u.claimedAt = null; }
     else if (cmd === 'skip') { u.status = 'skipped'; u.note = typeof flag('note') === 'string' ? flag('note') : null; }
-    else { u.status = 'done'; u.memories = Number(flag('memories', 0)); u.note = typeof flag('note') === 'string' ? flag('note') : u.note; u.learnedAt = now(); u.learnedCommit = headCommit(L.root); u.learnedHash = u.hash; }
+    else { u.status = 'done'; u.memories = Number(flag('memories', 0)); u.note = typeof flag('note') === 'string' ? flag('note') : u.note; u.learnedAt = now(); u.learnedCommit = headCommit(L.root); u.learnedHash = u.hash; if (flag('tokens') !== undefined) u.tokens = Number(flag('tokens')); }
     save(L); console.log(`${id}: ${u.status}`); break;
   }
   case 'status': {
@@ -405,7 +628,7 @@ switch (cmd) {
   }
   case 'refresh': {
     const L = load(findProject());
-    const { files, skipped } = inventory(L.root, !!L.includeGenerated, L.exclude || [], L.unitBudget);
+    const { files, skipped } = inventory(L.root, !!L.includeGenerated, L.exclude || [], L.unitBudget, !!L.allowSensitive);
     const fresh = buildUnits(files, L.unitBudget, churn(L.root));
     assignTiers(fresh, L.budget ?? 400000);
     const old = new Map(L.units.map(u => [u.id, u]));
@@ -414,7 +637,7 @@ switch (cmd) {
       const o = old.get(f.id);
       if (!o) { changes.added.push(f.id); return f; }
       old.delete(f.id);
-      if (o.hash === f.hash) return { ...o, files: f.files, fileBytes: f.fileBytes, bytes: f.bytes, priority: f.priority, ranges: f.ranges };
+      if (o.hash === f.hash) return { ...o, files: f.files, fileBytes: f.fileBytes, bytes: f.bytes, priority: f.priority, ranges: f.ranges, role: f.role, authority: f.authority, flags: f.flags, date: f.date, lastChanged: f.lastChanged, markers: f.markers };
       const wasLearned = o.status === 'done' || o.status === 'stale';
       if (wasLearned) changes.stale.push(f.id);
       return { ...f, tier: o.tier ?? f.tier, status: wasLearned ? 'stale' : o.status === 'skipped' ? 'skipped' : 'pending', memories: o.memories, learnedAt: o.learnedAt, learnedCommit: o.learnedCommit, note: o.note };
@@ -432,5 +655,5 @@ switch (cmd) {
     break;
   }
   default:
-    console.log(readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(3, 25).map(l => l.replace(/^ \* ?/, '')).join('\n'));
+    console.log(readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(3, 34).map(l => l.replace(/^ \* ?/, '')).join('\n'));
 }

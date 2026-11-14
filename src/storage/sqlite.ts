@@ -1283,6 +1283,7 @@ export class EngramStore {
    * The old memory stays in the DB (historical) but gets down-ranked in recall.
    */
   supersedeEngram(oldId: string, newId: string): void {
+    if (oldId === newId) return; // a memory never supersedes itself (it would vanish from recall)
     this.db.prepare('UPDATE engrams SET superseded_by = ? WHERE id = ?').run(newId, oldId);
     this.db.prepare('UPDATE engrams SET supersedes = ? WHERE id = ?').run(oldId, newId);
   }
