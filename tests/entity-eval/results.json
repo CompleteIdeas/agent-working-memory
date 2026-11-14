@@ -1,0 +1,660 @@
+{
+  "date": "2026-11-14T02:00:09.909Z",
+  "memories": 68,
+  "aliases": 21,
+  "questions": 40,
+  "lowercaseQuestions": 24,
+  "broadQuestions": 16,
+  "broadOff": {
+    "success1": 31.3,
+    "success5": 68.8
+  },
+  "broadOn": {
+    "success1": 31.3,
+    "success5": 68.8
+  },
+  "broadHint": {
+    "success1": 68.8,
+    "success5": 100
+  },
+  "off": {
+    "success1": 87.5,
+    "success5": 100,
+    "lower1": 83.3,
+    "lower5": 100,
+    "p50ms": 128,
+    "p95ms": 180
+  },
+  "on": {
+    "success1": 87.5,
+    "success5": 100,
+    "lower1": 83.3,
+    "lower5": 100,
+    "p50ms": 120,
+    "p95ms": 186
+  },
+  "hint": {
+    "success1": 92.5,
+    "success5": 100,
+    "lower1": 91.7,
+    "lower5": 100,
+    "p50ms": 137,
+    "p95ms": 176
+  },
+  "injection": {
+    "entitiesInjected": 52,
+    "wrongEntities": 0,
+    "wrongRate": 0,
+    "lookalikeInjected": 0
+  },
+  "trace": [
+    {
+      "q": "what did jenna want us to confirm?",
+      "lower": true,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "anything new from jenna about tables?",
+      "lower": true,
+      "broad": false,
+      "on": 4,
+      "hint": 1,
+      "off": 4,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "how does jenna like to be contacted?",
+      "lower": true,
+      "broad": false,
+      "hint": 1,
+      "off": 2,
+      "on": 2,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "where do the parking passes from the events manager get picked up?",
+      "lower": true,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "what did jenna liu quote for photos?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "contact:jenna@lensandlight.example"
+      ]
+    },
+    {
+      "q": "what does the photographer need by monday?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:jenna@lensandlight.example"
+      ]
+    },
+    {
+      "q": "what if it rains for the photographer?",
+      "lower": true,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:jenna@lensandlight.example"
+      ]
+    },
+    {
+      "q": "why is leo prepping on thursday?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "person:leo martinez"
+      ]
+    },
+    {
+      "q": "what is leo allergic to?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "person:leo martinez"
+      ]
+    },
+    {
+      "q": "what hours does leo work?",
+      "lower": true,
+      "broad": false,
+      "off": 1,
+      "on": 1,
+      "hint": 0,
+      "injected": [
+        "person:leo martinez"
+      ]
+    },
+    {
+      "q": "what is the usual order from priya?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "contact:priya@greenstem.example"
+      ]
+    },
+    {
+      "q": "what did the florist suggest instead of peonies?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:priya@greenstem.example"
+      ]
+    },
+    {
+      "q": "when is the signing with the lawyer?",
+      "lower": true,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:tom@beckerlaw.example"
+      ]
+    },
+    {
+      "q": "what did tom flag in the lease?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "contact:tom@beckerlaw.example"
+      ]
+    },
+    {
+      "q": "what rate did the bank quote?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:dana@sunrisebank.example"
+      ]
+    },
+    {
+      "q": "what papers does dana need?",
+      "lower": true,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:dana@sunrisebank.example"
+      ]
+    },
+    {
+      "q": "what does the hotel require from vendors?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "org:harbor hotel"
+      ]
+    },
+    {
+      "q": "can we use real candles at the hotel?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "org:harbor hotel"
+      ]
+    },
+    {
+      "q": "when is the gala?",
+      "lower": true,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "event:harbor hotel gala"
+      ]
+    },
+    {
+      "q": "what's still open for the gala?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "event:harbor hotel gala"
+      ]
+    },
+    {
+      "q": "what is the theme of the gala?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "event:harbor hotel gala"
+      ]
+    },
+    {
+      "q": "which stall did we get at the market?",
+      "lower": true,
+      "broad": false,
+      "off": 1,
+      "on": 1,
+      "hint": 0,
+      "injected": [
+        "event:spring market"
+      ]
+    },
+    {
+      "q": "how much do tent weights need to be at the spring market?",
+      "lower": true,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "event:spring market"
+      ]
+    },
+    {
+      "q": "when does greenstem close for thanksgiving?",
+      "lower": true,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "org:greenstem wholesale"
+      ]
+    },
+    {
+      "q": "What is the deposit on invoice 1043 for the Harbor Hotel?",
+      "lower": false,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "org:harbor hotel"
+      ]
+    },
+    {
+      "q": "What did Jenna Park say about load-in?",
+      "lower": false,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "What is the Harbor Hotel address?",
+      "lower": false,
+      "broad": false,
+      "hint": 0,
+      "off": 1,
+      "on": 1,
+      "injected": [
+        "org:harbor hotel"
+      ]
+    },
+    {
+      "q": "What deposit did we pay Jenna Liu?",
+      "lower": false,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:jenna@lensandlight.example"
+      ]
+    },
+    {
+      "q": "Does Leo drive the van?",
+      "lower": false,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "person:leo martinez"
+      ]
+    },
+    {
+      "q": "What did Priya say about the ranunculus price?",
+      "lower": false,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:priya@greenstem.example"
+      ]
+    },
+    {
+      "q": "What is the Greenstem trade account?",
+      "lower": false,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "org:greenstem wholesale"
+      ]
+    },
+    {
+      "q": "What did Tom Becker estimate for fees?",
+      "lower": false,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "contact:tom@beckerlaw.example"
+      ]
+    },
+    {
+      "q": "What did Dana warn about payment changes?",
+      "lower": false,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:dana@sunrisebank.example"
+      ]
+    },
+    {
+      "q": "What is the décor budget for the Harbor Hotel gala?",
+      "lower": false,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 1,
+      "injected": [
+        "event:harbor hotel gala"
+      ]
+    },
+    {
+      "q": "When is the Spring Market stall fee due?",
+      "lower": false,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": [
+        "event:spring market"
+      ]
+    },
+    {
+      "q": "Did events@harborhotel.example ask about the centerpieces?",
+      "lower": false,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "what is our deposit policy?",
+      "lower": false,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": []
+    },
+    {
+      "q": "how much is a tall centerpiece?",
+      "lower": false,
+      "broad": false,
+      "on": 0,
+      "hint": 0,
+      "off": 0,
+      "injected": []
+    },
+    {
+      "q": "when does business insurance renew?",
+      "lower": false,
+      "broad": false,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": []
+    },
+    {
+      "q": "when does payroll run?",
+      "lower": false,
+      "broad": false,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": []
+    },
+    {
+      "q": "anything new from jenna?",
+      "lower": true,
+      "broad": true,
+      "on": 3,
+      "hint": 0,
+      "off": 3,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "what's the latest with the events manager?",
+      "lower": true,
+      "broad": true,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:events@harborhotel.example"
+      ]
+    },
+    {
+      "q": "what's going on with jenna liu?",
+      "lower": true,
+      "broad": true,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:jenna@lensandlight.example"
+      ]
+    },
+    {
+      "q": "anything from the photographer lately?",
+      "lower": true,
+      "broad": true,
+      "on": 2,
+      "hint": 1,
+      "off": 2,
+      "injected": [
+        "contact:jenna@lensandlight.example"
+      ]
+    },
+    {
+      "q": "remind me about leo",
+      "lower": true,
+      "broad": true,
+      "hint": 0,
+      "off": 1,
+      "on": 1,
+      "injected": [
+        "person:leo martinez"
+      ]
+    },
+    {
+      "q": "what do i know about priya?",
+      "lower": true,
+      "broad": true,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "contact:priya@greenstem.example"
+      ]
+    },
+    {
+      "q": "what should i know about the florist?",
+      "lower": true,
+      "broad": true,
+      "on": -1,
+      "hint": 0,
+      "off": -1,
+      "injected": [
+        "contact:priya@greenstem.example"
+      ]
+    },
+    {
+      "q": "any update from the lawyer?",
+      "lower": true,
+      "broad": true,
+      "hint": 1,
+      "off": -1,
+      "on": -1,
+      "injected": [
+        "contact:tom@beckerlaw.example"
+      ]
+    },
+    {
+      "q": "notes on tom",
+      "lower": true,
+      "broad": true,
+      "off": 4,
+      "on": 4,
+      "hint": 1,
+      "injected": [
+        "contact:tom@beckerlaw.example"
+      ]
+    },
+    {
+      "q": "what's happening with the bank?",
+      "lower": true,
+      "broad": true,
+      "on": -1,
+      "hint": 1,
+      "off": -1,
+      "injected": [
+        "contact:dana@sunrisebank.example"
+      ]
+    },
+    {
+      "q": "what about dana?",
+      "lower": true,
+      "broad": true,
+      "hint": 0,
+      "off": 0,
+      "on": 0,
+      "injected": [
+        "contact:dana@sunrisebank.example"
+      ]
+    },
+    {
+      "q": "what's going on with the hotel?",
+      "lower": true,
+      "broad": true,
+      "off": 0,
+      "on": 0,
+      "hint": 0,
+      "injected": [
+        "org:harbor hotel"
+      ]
+    },
+    {
+      "q": "remind me about greenstem",
+      "lower": true,
+      "broad": true,
+      "on": 1,
+      "hint": 0,
+      "off": 1,
+      "injected": [
+        "org:greenstem wholesale"
+      ]
+    },
+    {
+      "q": "anything about the wholesaler?",
+      "lower": true,
+      "broad": true,
+      "hint": 0,
+      "off": -1,
+      "on": -1,
+      "injected": [
+        "org:greenstem wholesale"
+      ]
+    },
+    {
+      "q": "where are we on the gala?",
+      "lower": true,
+      "broad": true,
+      "off": 3,
+      "on": 3,
+      "hint": 0,
+      "injected": [
+        "event:harbor hotel gala"
+      ]
+    },
+    {
+      "q": "update me on the market",
+      "lower": true,
+      "broad": true,
+      "on": -1,
+      "hint": 3,
+      "off": -1,
+      "injected": [
+        "event:spring market"
+      ]
+    }
+  ]
+}

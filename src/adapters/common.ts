@@ -600,9 +600,9 @@ and returns nothing until you give the full key; it never merges two people.
 Record other names with \`memory_alias\` ("Jenna", "Jenna Park" →
 \`contact:events@harborhotel.example\`), or pass \`aliases\` on \`memory_write\`. Aliases
 belong to your agent. A memory without a name tag can't be found this way, so tag the
-person or thing a memory is about. \`AWM_ENTITY_ALIAS_MATCH=1\` (off by default) also lets
-ordinary recall reach those memories from lowercase names in a question ("the gala",
-"jenna").
+person or thing a memory is about. \`AWM_ENTITY_ALIAS_MATCH=1\` with
+\`AWM_ENTITY_ALIAS_PASSAGE=1\` (both off by default) also lets ordinary recall reach those
+memories from lowercase names in a question ("the gala", "jenna").
 
 ### Temporal validity — memories that expire or start in the future
 \`memory_write\` accepts \`valid_from\` / \`valid_to\` (ISO dates). Use \`valid_to\` on
