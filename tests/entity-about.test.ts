@@ -15,7 +15,7 @@ import Database from 'better-sqlite3';
 import { EngramStore } from '../src/storage/sqlite.js';
 import { PGliteEngramStore } from '../src/storage/pglite.js';
 import { memoryAbout, registerAlias } from '../src/engine/entity-about.js';
-import { extractEntitiesFromTags, normalizeEntityKey, entityQueryGrams } from '../src/core/entity-extract.js';
+import { extractEntitiesFromTags, normalizeEntityKey, entityQueryGrams, selectEntityHits } from '../src/core/entity-extract.js';
 import { formatAboutResult } from '../src/core/format-about.js';
 import { performWrite } from '../src/core/write-pipeline.js';
 import { ActivationEngine } from '../src/engine/activation.js';
@@ -44,6 +44,17 @@ describe('entity key helpers', () => {
     expect(g).not.toContain('what');
     expect(g).not.toContain('the');
     expect(entityQueryGrams('anything from events@harborhotel.example?')).toContain('events@harborhotel.example');
+  });
+
+  it('picks named entities: longest name wins, bare values only for name-like keys', () => {
+    expect(selectEntityHits([
+      { term: 'jenna', entity: 'contact:events@harborhotel.example', via: 'alias' },
+      { term: 'jenna liu', entity: 'contact:jenna@lensandlight.example', via: 'alias' },
+      { term: 'awm', entity: 'proj:awm', via: 'value' },
+      { term: 'gala', entity: 'event:gala', via: 'value' },
+    ])).toEqual(['contact:jenna@lensandlight.example', 'event:gala']);
+    // "jenna" alone still resolves when nothing longer matched.
+    expect(selectEntityHits([{ term: 'jenna', entity: 'contact:x', via: 'alias' }])).toEqual(['contact:x']);
   });
 });
 

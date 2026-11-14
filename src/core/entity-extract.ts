@@ -86,6 +86,24 @@ export function entityQueryGrams(text: string, maxGrams = 150): string[] {
   return Array.from(out);
 }
 
+/**
+ * Choose the entities a question names from exact phrase matches (0.23). Two rules:
+ *  - a bare value counts only for name-like keys: `proj=`, `version=`, `file=` ride on
+ *    almost every write, so "awm" matching proj:awm would pull in the whole project;
+ *  - the longest name wins: a match whose words sit inside a longer matched phrase is
+ *    dropped, so "jenna liu" does not also pull in whoever "jenna" is.
+ * Returns entity keys, longest phrase first.
+ */
+export function selectEntityHits(hits: Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value' }>): string[] {
+  const named = hits.filter(h => h.via !== 'value' || ALIASABLE_KEYS.has(h.entity.slice(0, h.entity.indexOf(':'))));
+  const terms = Array.from(new Set(named.map(h => h.term)));
+  const inside = (a: string, b: string) => a !== b && ` ${b} `.includes(` ${a} `);
+  const kept = named
+    .filter(h => !terms.some(longer => inside(h.term, longer)))
+    .sort((a, b) => b.term.length - a.term.length);
+  return Array.from(new Set(kept.map(h => h.entity)));
+}
+
 /** The part of an entity key after `key:` ("person:jenna park" → "jenna park"). */
 export function entityValue(entity: string): string {
   const i = entity.indexOf(':');

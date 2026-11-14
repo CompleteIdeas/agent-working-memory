@@ -94,7 +94,7 @@ export function confidenceGateFor(confidence: number): number {
 import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/rerank-window.js';
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
-import { entityQueryGrams, ALIASABLE_KEYS } from '../core/entity-extract.js';
+import { entityQueryGrams, selectEntityHits } from '../core/entity-extract.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -541,14 +541,10 @@ export class ActivationEngine {
         if (entityAliasMatch) {
           prof.begin('entityAliasMatch');
           const grams = entityQueryGrams(query.context);
-          const hits = (grams.length > 0 ? await this.store.matchEntityTerms(grams, agentIds) : [])
-            // A bare value matches only for name-like keys. proj=/version=/file= ride on almost
-            // every write, so "awm" matching proj:awm would audition the whole project.
-            .filter(h => h.via !== 'value' || ALIASABLE_KEYS.has(h.entity.slice(0, h.entity.indexOf(':'))));
+          const hits = grams.length > 0 ? await this.store.matchEntityTerms(grams, agentIds) : [];
           prof.end('entityAliasMatch');
-          // Longest matching phrase first, so "harbor hotel gala" outranks "gala".
-          hits.sort((a, b) => b.term.length - a.term.length);
-          for (const h of hits) if (!exactEntities.includes(h.entity)) exactEntities.push(h.entity);
+          // Name-like keys only for bare values, longest name wins (see selectEntityHits).
+          exactEntities.push(...selectEntityHits(hits));
         }
         const IDX_QSTOP = new Set(['what', 'who', 'when', 'where', 'why', 'how', 'which', 'whose',
           'the', 'this', 'that', 'and', 'but', 'for', 'did', 'does', 'is', 'are', 'was', 'were',
