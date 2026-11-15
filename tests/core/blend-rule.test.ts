@@ -8,7 +8,7 @@
  * Run: npx vitest run tests/core/blend-rule.test.ts
  */
 import { describe, it, expect } from 'vitest';
-import { logit, crossEncoderSure, sureThreshold, vectorWeight } from '../../src/core/blend-rule.js';
+import { logit, crossEncoderSure, sureThreshold, keywordVectorWeight } from '../../src/core/blend-rule.js';
 
 describe('blend rule', () => {
   it('measures sureness in logit space, where saturated scores keep their gap', () => {
@@ -41,9 +41,12 @@ describe('blend rule', () => {
     expect(crossEncoderSure([1, 1], false, {})).toBe(false);
   });
 
-  it('weights the vector rank at a quarter for keyword queries only', () => {
-    expect(vectorWeight(false, {})).toBe(0.25);
-    expect(vectorWeight(true, {})).toBe(1);
-    expect(vectorWeight(false, { AWM_BLEND_VEC_KEYWORD: '1' })).toBe(1);
+  it('a keyword re-blend weights the vector rank at a quarter unless both channels rank it top two', () => {
+    expect(keywordVectorWeight(5, 0, {})).toBe(0.25);   // vector #1, BM25 #6: the public-store failure
+    expect(keywordVectorWeight(1, 0, {})).toBe(1);      // both channels top two: full weight
+    expect(keywordVectorWeight(0, 1, {})).toBe(1);
+    expect(keywordVectorWeight(-1, 0, {})).toBe(0.25);  // BM25 missed it
+    expect(keywordVectorWeight(2, 2, { AWM_BLEND_AGREE_RANK: '2' })).toBe(1);
+    expect(keywordVectorWeight(5, 0, { AWM_BLEND_VEC_KEYWORD: '1' })).toBe(1);
   });
 });

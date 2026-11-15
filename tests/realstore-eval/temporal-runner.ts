@@ -21,7 +21,7 @@
  *
  * Run: npx tsx tests/realstore-eval/temporal-runner.ts
  */
-import { readFileSync, copyFileSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, copyFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { EngramStore } from '../../src/storage/sqlite.js';
@@ -52,19 +52,24 @@ async function main() {
   const results: Record<string, { s1: number; s5: number; rr: number }> = {};
   for (const ph of PHRASINGS) {
     let s1 = 0, s5 = 0, rr = 0;
+    const blendDump: any[] = []; // BLEND_DUMP=<prefix>: <prefix>-<phrasing>.json (blend-study.ts)
     for (const it of items) {
+      let blendIn: any = null;
       const res: any[] = await act.activate({
         agentId: (it as any).agent ?? 'work', context: it.phrasings[ph], limit: K, internal: true,
         // Anchor relative phrasing to the fixture, not the wall clock, or
         // "last Friday" would mean something different on every run.
         asOf: new Date(it.asOf + 'T12:00:00Z').getTime(),
+        ...(process.env.BLEND_DUMP ? { onBlendInputs: (b: any) => { blendIn = b; } } : {}),
       } as any);
+      if (process.env.BLEND_DUMP) blendDump.push({ goldId: it.goldId, top: res.map((r: any) => r.engram.id), blend: blendIn });
       const i = res.findIndex(r => r.engram.id === it.goldId);
       if (i === 0) s1++;
       if (i >= 0 && i < 5) s5++;
       if (i >= 0) rr += 1 / (i + 1);
     }
     results[ph] = { s1, s5, rr };
+    if (process.env.BLEND_DUMP) writeFileSync(`${process.env.BLEND_DUMP}-${ph}.json`, JSON.stringify(blendDump));
     const n = items.length;
     console.log(
       `  ${ph.padEnd(15)} ${(100 * s1 / n).toFixed(1).padStart(5)}%  ${(100 * s5 / n).toFixed(1).padStart(5)}%  ` +

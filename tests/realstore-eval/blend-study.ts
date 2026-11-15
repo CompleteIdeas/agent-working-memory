@@ -22,18 +22,27 @@ type Probe = { goldId: string; top: string[]; blend: Blend | null };
 
 const dir = process.argv[2];
 if (!dir) { console.error('usage: blend-study.ts <dump dir>'); process.exit(1); }
-const SUITES = ['identifier', 'category', 'nl', 'nl-wq', 'public', 'public99', 'longmem'];
-const REAL = new Set(['identifier', 'category', 'nl', 'nl-wq']);
+const TEMPORAL = ['t-none', 't-relativeDay', 't-relativeWeek', 't-absoluteDate', 't-absoluteMonth'];
+const SUITES = ['identifier', 'category', 'nl', 'nl-wq', ...TEMPORAL, 'public', 'public99', 'longmem'];
+const REAL = new Set(['identifier', 'category', 'nl', 'nl-wq', ...TEMPORAL]);
 
 const rankNorm = (cs: Cand[], f: (c: Cand) => number) =>
   new Map([...cs].sort((a, b) => f(b) - f(a)).map((c, i, arr) => [c.id, arr.length > 1 ? 1 - i / (arr.length - 1) : 1]));
 const logit = (p: number) => { const q = Math.min(1 - 1e-6, Math.max(1e-6, p)); return Math.log(q / (1 - q)); };
 
-/** The shipped key, exactly as src/engine/activation.ts computes it. */
+/** The 0.22.3 rule (always blend, vector weight 1), recomputed from the recorded ranks so a dump
+ *  recorded under either rule replays the same way. */
 function shippedOrder(b: Blend): string[] {
+  const f = fusedRanks(b, () => 1);
   const rrN = b.byRank ? rankNorm(b.cands, c => c.rr) : null;
-  const key = (c: Cand) => (b.blendA * (rrN ? rrN.get(c.id)! : c.rr) + (1 - b.blendA) * c.fused) * c.stale;
+  const key = (c: Cand) => (b.blendA * (rrN ? rrN.get(c.id)! : c.rr) + (1 - b.blendA) * f.get(c.id)!) * c.stale;
   return [...b.cands].sort((x, y) => key(y) - key(x)).map(c => c.id);
+}
+/** RRF over BM25 and vector ranks with a per-candidate vector weight, rank-normalised in the pool. */
+function fusedRanks(b: Blend, wvOf: (c: any) => number): Map<string, number> {
+  const K = 60;
+  const s = (c: any) => (c.bm25Rank >= 0 ? 1 / (K + c.bm25Rank) : 0) + (c.vecRank >= 0 ? wvOf(c) / (K + c.vecRank) : 0);
+  return new Map([...b.cands].sort((x, y) => s(y) - s(x)).map((c, i, arr) => [c.id, arr.length > 1 ? 1 - i / (arr.length - 1) : 1]));
 }
 const ceOrder = (b: Blend) => [...b.cands].sort((x, y) => y.rr * y.stale - x.rr * x.stale).map(c => c.id);
 
@@ -86,11 +95,7 @@ for (const d of [0.25, 0.5, 1, 1.5, 2, 3]) {
 // (shipped: wv = 1, RRF k = 60 over BM25 and vector ranks, rank-normalised within the pool).
 // On the synthetic corpora the blend's wrong picks are mostly the vector channel's #1, its right
 // picks almost always BM25's #1.
-function fusedWith(b: Blend, wv: number): Map<string, number> {
-  const K = 60;
-  const s = (c: any) => (c.bm25Rank >= 0 ? 1 / (K + c.bm25Rank) : 0) + (c.vecRank >= 0 ? wv / (K + c.vecRank) : 0);
-  return new Map([...b.cands].sort((x, y) => s(y) - s(x)).map((c, i, arr) => [c.id, arr.length > 1 ? 1 - i / (arr.length - 1) : 1]));
-}
+function fusedWith(b: Blend, wv: number): Map<string, number> { return fusedRanks(b, () => wv); }
 function blendWith(b: Blend, wv: number): string[] {
   const f = fusedWith(b, wv);
   const rrN = b.byRank ? rankNorm(b.cands, c => c.rr) : null;
@@ -107,11 +112,40 @@ const ceMargin = (b: Blend) => {
   const ce = [...b.cands].sort((x, y) => y.rr * y.stale - x.rr * x.stale);
   return { ce, m: ce.length < 2 ? Infinity : logit(ce[0]!.rr * ce[0]!.stale) - logit(ce[1]!.rr * ce[1]!.stale) };
 };
-for (const wv of [0.25, 0.5]) for (const dK of [1, 1.5, 2, 99]) for (const dN of [1, 1.5, 99]) {
+for (const wv of [0.25, 0.4, 0.5, 0.6, 0.75]) for (const dK of [0.75, 1, 1.25, 1.5]) for (const dN of [1.5]) {
   rules.push({ name: `combo w=${wv} dK=${dK} dN=${dN}`, order: (b) => {
     const { ce, m } = ceMargin(b);
     if (m >= (b.natural ? dN : dK)) return ce.map(c => c.id);
     return b.natural ? shippedOrder(b) : blendWith(b, wv);
+  } });
+}
+// Agreement: the vector rank keeps full weight for a candidate both channels rank highly
+// (BM25 rank <= A and vector rank <= A); elsewhere it counts wv. Same sure-gate.
+for (const wv of [0.25, 0.4]) for (const A of [1, 2, 4]) for (const dK of [1]) {
+  rules.push({ name: `agree w=${wv} A=${A} dK=${dK}`, order: (b) => {
+    const { ce, m } = ceMargin(b);
+    if (m >= (b.natural ? 1.5 : dK)) return ce.map(c => c.id);
+    if (b.natural) return shippedOrder(b);
+    const f = fusedRanks(b, (c) => (c.bm25Rank >= 0 && c.bm25Rank <= A && c.vecRank >= 0 && c.vecRank <= A) ? 1 : wv);
+    const key = (c: Cand) => (b.blendA * c.rr + (1 - b.blendA) * f.get(c.id)!) * c.stale;
+    return [...b.cands].sort((x, y) => key(y) - key(x)).map(c => c.id);
+  } });
+}
+// Top-1 only: the agreement rule chooses FIRST place; every other position keeps the 0.22.3 order
+// (the blend orders places 2-5 better than the cross-encoder does).
+for (const wv of [0.25]) for (const A of [1]) for (const dK of [0.75, 1, 1.25]) for (const dN of [1, 1.5, 2]) {
+  rules.push({ name: `top1 w=${wv} A=${A} dK=${dK} dN=${dN}`, order: (b) => {
+    const base = shippedOrder(b);
+    const { ce, m } = ceMargin(b);
+    let first: string;
+    if (m >= (b.natural ? dN : dK)) first = ce[0]!.id;
+    else if (b.natural) first = base[0]!;
+    else {
+      const f = fusedRanks(b, (c) => (c.bm25Rank >= 0 && c.bm25Rank <= A && c.vecRank >= 0 && c.vecRank <= A) ? 1 : wv);
+      const key = (c: Cand) => (b.blendA * c.rr + (1 - b.blendA) * f.get(c.id)!) * c.stale;
+      first = [...b.cands].sort((x, y) => key(y) - key(x))[0]!.id;
+    }
+    return [first, ...base.filter(id => id !== first)];
   } });
 }
 const data: Record<string, Probe[]> = {};
@@ -125,7 +159,10 @@ const present = SUITES.filter(s => data[s]);
 for (const s of present) {
   const ps = data[s]!;
   const withBlend = ps.filter(p => p.blend && p.blend.cands.length > 1);
-  const mism = withBlend.filter(p => shippedOrder(p.blend!)[0] !== p.top[0]).length;
+  const newRule = (b: Blend) => rules.find(r => r.name === 'top1 w=0.25 A=1 dK=1 dN=1.5')!.order(b); // the 0.22.4 rule
+  const m0 = withBlend.filter(p => shippedOrder(p.blend!)[0] !== p.top[0]).length;
+  const m1 = withBlend.filter(p => newRule(p.blend!)[0] !== p.top[0]).length;
+  const mism = Math.min(m0, m1);
   console.log(`${s.padEnd(10)} probes ${String(ps.length).padStart(4)} · blended ${String(withBlend.length).padStart(4)} · shipped-replay mismatches on top-1: ${mism}`);
 }
 
@@ -149,7 +186,7 @@ for (const r of rules) {
 // 3. Held-out: choose each family's parameter on even probes (no real-suite regression, then the
 //    best synthetic mean), report the odd half.
 const half = (ps: Probe[], k: 0 | 1) => ps.filter((_, i) => i % 2 === k);
-for (const fam of ['logit', 'gate', 'band', 'vec', 'kwvec', 'combo']) {
+for (const fam of ['agree', 'top1']) {
   const cand = rules.filter(r => r.name.startsWith(fam));
   const score = (r: Rule, k: 0 | 1) => {
     let ok = true; let syn = 0; let nSyn = 0;
@@ -167,5 +204,19 @@ for (const fam of ['logit', 'gate', 'band', 'vec', 'kwvec', 'combo']) {
   for (const s of present) {
     const h = half(data[s]!, 1);
     console.log(`  ${s.padEnd(10)} shipped ${pct(at1(h, rules[0]!), h.length)}  ${best.name} ${pct(at1(h, best), h.length)}`);
+  }
+}
+
+// 4. Top-k check for one rule (BLEND_STUDY_RULE=<name>): success@1/@3/@5 against the 0.22.3 rule
+//    on every suite, so a rule that holds first place but loses the top five is caught.
+if (process.env.BLEND_STUDY_RULE) {
+  const r = rules.find(x => x.name === process.env.BLEND_STUDY_RULE);
+  if (!r) { console.log(`no rule named ${process.env.BLEND_STUDY_RULE}`); process.exit(1); }
+  const atK = (ps: Probe[], rule: Rule, k: number) => ps.filter(p => (p.blend && p.blend.cands.length > 1 ? rule.order(p.blend) : p.top).slice(0, k).includes(p.goldId)).length;
+  console.log(`\n${r.name} vs 0.22.3 — s@1 / s@3 / s@5 (count deltas)`);
+  for (const s of present) {
+    const ps = data[s]!;
+    const d = [1, 3, 5].map(k => atK(ps, r, k) - atK(ps, rules[0]!, k));
+    console.log(`  ${s.padEnd(16)} ${[1, 3, 5].map(k => pct(atK(ps, r, k), ps.length)).join(' / ')}   Δ ${d.map(x => (x > 0 ? '+' : '') + x).join(' / ')}${d.some(x => x < 0) && REAL.has(s) ? '  <-- drop' : ''}`);
   }
 }
