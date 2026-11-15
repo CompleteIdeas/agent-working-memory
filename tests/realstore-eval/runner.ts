@@ -149,8 +149,11 @@ async function main() {
   const traceLines: string[] = [];
 
   let qi = 0;
+  // BLEND_DUMP=<file>: save what the final blend saw for every probe (tests/realstore-eval/blend-study.ts).
+  const blendDump: any[] = [];
   for (const it of items) {
     const _t0 = process.hrtime.bigint();
+    let blendIn: any = null;
     // 0.14.5: query as the gold's OWN agent. The fixture has carried an `agent` field
     // all along (983 work / 333 personal) but the runner hardcoded 'work', so every
     // personal-scoped gold was cut by agent isolation before any scoring ran and
@@ -162,8 +165,10 @@ async function main() {
       agentId: it.agent ?? 'work', context: it.query, limit: RECALL_LIMIT,
       granularity: GRANULARITY, internal: true,
       now: snapshotNow, asOf: snapshotNow,
+      ...(process.env.BLEND_DUMP ? { onBlendInputs: (b: any) => { blendIn = b; } } : {}),
     } as any);
     lat.push(Number(process.hrtime.bigint() - _t0) / 1e6);
+    if (process.env.BLEND_DUMP) blendDump.push({ goldId: it.goldId, top: res.map(r => r.engram.id), blend: blendIn });
     const idx = res.findIndex(r => r.engram.id === it.goldId);
     const hit1 = idx === 0;
     const hit5 = idx >= 0 && idx < 5;
@@ -219,6 +224,7 @@ async function main() {
   store.close?.();
   for (const s of ['', '-wal', '-shm']) { try { if (existsSync(WORK + s)) unlinkSync(WORK + s); } catch {} }
   try { writeFileSync(TRACE, traceLines.join('\n') + '\n'); console.log(`  per-query trace: ${TRACE}`); } catch { /* trace is best-effort */ }
+  if (process.env.BLEND_DUMP) { writeFileSync(process.env.BLEND_DUMP, JSON.stringify(blendDump)); console.log(`  blend dump: ${process.env.BLEND_DUMP}`); }
 
   const pct = (k: number, d: number) => (d ? `${(100 * k / d).toFixed(1)}%` : '—');
   console.log(`  success@1 ${pct(s1, n)}   success@5 ${pct(s5, n)}   MRR ${(rr / Math.max(n, 1) * 100).toFixed(1)}%`);

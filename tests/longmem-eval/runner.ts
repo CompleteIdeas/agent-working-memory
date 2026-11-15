@@ -19,7 +19,7 @@
  *
  * Run: npx tsx tests/longmem-eval/runner.ts
  */
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EngramStore } from '../../src/storage/sqlite.js';
 import { ActivationEngine } from '../../src/engine/activation.js';
@@ -60,12 +60,16 @@ async function main() {
   const byBucket = new Map<string, { n: number; s1: number; s5: number; ranks: number[]; gr: number[]; tm: number[] }>();
   for (const b of BUCKETS) byBucket.set(b.name, { n: 0, s1: 0, s5: 0, ranks: [], gr: [], tm: [] });
 
+  const blendDump: any[] = []; // BLEND_DUMP=<file>: what the final blend saw (blend-study.ts)
   for (const m of corpus) {
     const goldId = idOf.get(m.id);
     if (!goldId) continue;
+    let blendIn: any = null;
     const results: any[] = await activation.activate({
       agentId: AGENT, context: m.query, limit: 10, internal: true,
+      ...(process.env.BLEND_DUMP ? { onBlendInputs: (b: any) => { blendIn = b; } } : {}),
     } as any);
+    if (process.env.BLEND_DUMP) blendDump.push({ goldId, bucket: m.bucket, top: results.map(r => r.engram.id), blend: blendIn });
 
     const idx = results.findIndex(r => r.engram.id === goldId);
     const rank = idx < 0 ? 0 : idx + 1;
@@ -105,6 +109,7 @@ async function main() {
   console.log('='.repeat(84));
   console.log('\n Read: if truncation is the mechanism, `gold rerank` collapses past 400 while');
   console.log(' `gold BM25` stays high — the memory is retrievable but not rankable.\n');
+  if (process.env.BLEND_DUMP) writeFileSync(process.env.BLEND_DUMP, JSON.stringify(blendDump));
   process.exit(0);
 }
 main().catch(e => { console.error('\nERROR:', e); process.exit(1); });

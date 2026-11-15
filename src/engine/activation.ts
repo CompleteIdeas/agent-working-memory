@@ -95,6 +95,7 @@ import { buildRerankPassage, rerankTruncation, rerankWindowMode } from '../core/
 import { parseTemporal, temporalEnabled, temporalBoost, type TemporalMatch } from '../core/temporal-query.js';
 import { aliasTermsFor } from '../core/alias-map.js';
 import { entityQueryGrams, selectEntityHitTerms } from '../core/entity-extract.js';
+import { crossEncoderSure, vectorWeight } from '../core/blend-rule.js';
 
 // ─── Query-adaptive pipeline parameters ───────────────────────────
 
@@ -1479,12 +1480,25 @@ export class ActivationEngine {
       const RRF_K = 60;
       const bRank = new Map(bm25Ranked.map((r, i) => [r.engram.id, i]));
       const vRank = new Map([...rawCosineSims.entries()].sort((a, b) => b[1] - a[1]).map(([id], i) => [id, i]));
+      // 0.22.4: on keyword-shaped queries the vector rank counts a quarter as much in the fused
+      // term (AWM_BLEND_VEC_KEYWORD, 1 restores 0.22.3). On near-template corpora the blend's wrong
+      // first places were mostly the vector channel's #1 (72 of 107 on the public store), its
+      // right ones BM25's #1 (39 of 40). See src/core/blend-rule.ts.
+      const wv = vectorWeight(natural);
       const rrf2 = (id: string) => {
         const b = bRank.get(id), v = vRank.get(id);
-        return (b === undefined ? 0 : 1 / (RRF_K + b)) + (v === undefined ? 0 : 1 / (RRF_K + v));
+        return (b === undefined ? 0 : 1 / (RRF_K + b)) + (v === undefined ? 0 : wv / (RRF_K + v));
       };
       const byFused = [...finalRanked].sort((a, b) => rrf2(b.engram.id) - rrf2(a.engram.id));
       const fused = new Map(byFused.map((r, i) => [r.engram.id, 1 - i / (byFused.length - 1)]));
+      query.onBlendInputs?.({
+        natural, naturalModel, poolHasQuestions, blendA, byRank: blendByRank,
+        cands: finalRanked.map(r => ({
+          id: r.engram.id, rr: r.phaseScores.rerankerScore, fused: fused.get(r.engram.id)!,
+          stale: r.phaseScores.stalePenalty ?? 1,
+          bm25Rank: bRank.get(r.engram.id) ?? -1, vecRank: vRank.get(r.engram.id) ?? -1,
+        })),
+      });
       // EXPERIMENT (AWM_BLEND_RECENCY=<w>): favour the newer of otherwise similar candidates —
       // the candidate's creation-time rank within the pool (newest 1, oldest 0), weighted w. On the
       // recent-decisions fixture an older memory took first place from the decision in 46 of 120.
@@ -1503,7 +1517,17 @@ export class ActivationEngine {
       const key = (r: typeof finalRanked[number]) =>
         (blendA * rr(r) + (1 - blendA) * fused.get(r.engram.id)! + recW * (recency.get(r.engram.id) ?? 0))
         * (r.phaseScores.stalePenalty ?? 1);
-      ordered = [...finalRanked].sort((a, b) => key(b) - key(a));
+      // 0.22.4: when the cross-encoder is sure, its order stands. "Sure" = its top-two margin in
+      // logit space is at least AWM_BLEND_SURE_KEYWORD (1) on keyword queries, AWM_BLEND_SURE_NATURAL
+      // (1.5) on natural ones; `AWM_BLEND_SURE=off` restores 0.22.3, which always blended. The blend's
+      // 0.05 slice of fused rank used to outvote a cross-encoder whose scores saturate near 1 (0.99
+      // vs 0.95 is a logit gap of 1.7): public benchmark 38.8% first, long memories 72.9%. With
+      // both changes, on the same pools: identifier 93.8 → 94.9, topic 96.0 → 96.2, natural
+      // 47.9 → 48.5 (52.6 → 53.1 with questions), public 38.8 → 56.5 (seed 99: 35.3 → 54.5),
+      // long memories 72.9 → 77.1; no suite's success@1 or @3 drops.
+      const ceKey = (r: typeof finalRanked[number]) => r.phaseScores.rerankerScore * (r.phaseScores.stalePenalty ?? 1);
+      const byCe = [...finalRanked].sort((a, b) => ceKey(b) - ceKey(a));
+      ordered = crossEncoderSure(byCe.map(ceKey), natural) ? byCe : [...finalRanked].sort((a, b) => key(b) - key(a));
     } else {
       ordered = rerank2Enabled()
         ? reorderByReranker(finalRanked, rerank2WindowSize())

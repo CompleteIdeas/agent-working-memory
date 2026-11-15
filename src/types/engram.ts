@@ -364,6 +364,12 @@ export interface ActivationQuery {
   onStages?: (stages: Record<string, string[]>) => void;
   /** Diagnostics only: every rerank-pool candidate's scores, after the cross-encoder. */
   onRerankScores?: (pool: Array<{ id: string; rr: number; composite: number; text: number; vec: number }>) => void;
+  /** Diagnostics only: exactly what the final blend sees, for offline blend studies
+   *  (tests/realstore-eval/blend-study.ts). Read-only; never changes the order. */
+  onBlendInputs?: (b: {
+    natural: boolean; naturalModel: boolean; poolHasQuestions: boolean; blendA: number; byRank: boolean;
+    cands: Array<{ id: string; rr: number; fused: number; stale: number; bm25Rank: number; vecRank: number }>;
+  }) => void;
   spread?: boolean;            // R2: when AWM_SPREAD=1, set false to skip iterative spreading activation (connection-discovery uses this so edge-building doesn't recurse)
   memoryType?: MemoryType;     // Filter by memory type (episodic, semantic, procedural)
   mode?: QueryMode;            // Pipeline mode — 'auto' by default
