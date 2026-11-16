@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.22.5 (2026-11-16) — documentation reviewed against the code
+
+A full review of every page against `src/` and the 0.22.4 measurements; each finding was
+checked in the code before it was fixed. No change to how recall ranks.
+
+- **Agent guidance** (the block `awm setup` writes into CLAUDE.md / AGENTS.md, and the plugin
+  skill): removed `mode: "exploratory"` (`memory_recall` has no such parameter, so it did
+  nothing); the HTTP fallback is described as available only where `awm serve` runs; topic is
+  a ranking signal, not a filter; questions lift natural-language first place 48.5% -> 53.1%;
+  the three retrieval settings are code defaults; the experimental Postgres backend is named.
+- **Plugin hooks match `awm setup`:** Stop runs `awm-used.cjs` (implicit feedback, 0.20)
+  instead of an echo, and the database-change reminder fires after PowerShell as well as Bash.
+- **22 tools everywhere:** the Desktop bundle description, the marketplace entry and
+  `awm plugin` said 19.
+- **`memory_recall`'s `limit` description** gave the cross-encoder pool as max(limit*4, 40);
+  it is max(limit*4, 32).
+- **`RECALL_FLAGS`** gains 30 settings that change what recall returns (model choices, floors,
+  shortlist, sub-knobs, gate settings), so a benchmark run that sets one says so.
+- **Dockerfile:** models cache on the `/data` volume (`HF_HOME=/data/models`), so a recreated
+  container does not download them again.
+- **Docs:** quick start (doctor check, first write and recall, log at `~/.awm/awm.log`),
+  `llms.txt` (q8 is the default reranker precision, current latency, the writing features),
+  `reference.md` (all 32 HTTP routes, 66 more environment variables, salience weights, write
+  response codes, the recall pipeline table), architecture and feature pages, claims and
+  benchmarks (provenance at 0.22.4), setup and operations pages (containers need `AWM_BIND`
+  and `AWM_API_KEY` to be reachable; paths; `awm export`), README and the docs index.
+- **Known, not fixed in this release:** `awm serve`'s integrity restore copies the newest
+  backup, which is the copy of the database taken at that same startup; and the default model
+  cache sits inside the installed package, so an `npm i -g` upgrade most likely downloads the models
+  again (read from the code, not measured) (`AWM_CACHE_DIR=~/.awm/models` avoids it).
+
 ## 0.22.4 (2026-11-15) — first place goes to the right memory more often; published numbers corrected
 
 - **A sure cross-encoder now decides first place.** Since 0.21.1 the final order has blended the

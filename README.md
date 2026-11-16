@@ -220,10 +220,11 @@ compatible, and the store is the same SQLite file before and after.
 
 ---
 
-## What's new — v0.22.4
+## What's new — v0.22.5
 
 | | |
 |---|---|
+| **0.22.5** | **Documentation reviewed end to end against the code.** The guidance `awm setup` installs no longer tells agents to pass a `mode` that `memory_recall` does not have, or to fall back to an HTTP port a standard install does not run; topic is described as a ranking signal, not a filter. The quick start gains an `awm doctor` check, a first write-and-recall test and the right log path (`~/.awm/awm.log`). The plugin's hooks now match `awm setup` (implicit feedback on Stop, the shell reminder on PowerShell too), and every surface says 22 tools. `reference.md` covers all 32 HTTP routes and 66 more settings; container instructions set `AWM_BIND`. No ranking change. **Plugin users: `/plugin marketplace update agent-working-memory`.** [CHANGELOG](CHANGELOG.md) |
 | **0.22.4** | **First place goes to the right memory more often, and three published numbers are corrected.** The final order blends the cross-encoder with first-stage rank, and that small slice of rank could outvote a cross-encoder that was clearly sure (its scores crowd near 1, so 0.99 against 0.95 looked like a tie). Now, when the cross-encoder is sure, its #1 goes first, and keyword queries lean less on the vector channel for first place; places 2+ are unchanged. First place, same questions: identifier 93.8% → **95.4%** (95.0% on the 300-probe benchmark page), topic 96.0% → **96.2%**, natural-language 47.9% → **48.5%** (53.1% with questions), public synthetic benchmark 38.8% → **52.8%**, long memories 72.9% → **77.1%**; no suite's top 1, 3 or 5 dropped. The opt-in gate's decisions are unchanged. `AWM_BLEND_SURE=off` restores 0.22.3. **Corrections:** the gate withholds **50 of 73** never-stored facts (58 was published, and never reproduced); on natural-language questions with questions it withholds **3 of 103** correct answers (10 of 97 was published) but answers 88 of 97 whose fact was deleted. [CHANGELOG](CHANGELOG.md) |
 | **0.22.3** | **Everything about a name.** New `memory_about` returns every memory about one person, organisation or thing, oldest first (recall returns only the few best matches, so the ninth memory about someone never showed); a name that could mean two people comes back as both, never merged. New `memory_alias` records other names ("Jenna", "Jenna Park" → `contact:events@harborhotel.example`), now kept per agent. Opt-in `AWM_ENTITY_ALIAS_MATCH` + `AWM_ENTITY_ALIAS_PASSAGE` let ordinary questions reach those memories from lowercase names: on a new synthetic eval, questions that name only the person went 68.8% → **100%** in the top 5; the real-store benchmark is unchanged; off by default until a real workload confirms it. **`awm-learn` now surveys a folder before reading it** (each file's role, authority, dates and decision lines). Fixes: a memory could supersede itself and vanish; a merged write lost its entity tags. 22 tools. [CHANGELOG](CHANGELOG.md) |
 | **0.22.2** | **`awm setup` installs `awm-learn`, and the agent knows when to use it.** The skill that learns a whole repo or folder into memory used to reach plugin users only; setup now installs it into `~/.claude/skills/` too, upgrading its own copy on each run and leaving an edited one alone. The installed guidance tells the agent to reach for `/awm-learn` on a new project or when recall keeps missing. New page: [docs/awm-learn.md](docs/awm-learn.md). **Re-run `awm setup --global`.** [CHANGELOG](CHANGELOG.md) |
@@ -372,7 +373,7 @@ npm run test:linux      # build + full suite on Linux
 
 ## Status
 
-Active development, v0.22.4. Core retrieval, consolidation, MCP integration, hooks, task
+Active development, v0.22.5. Core retrieval, consolidation, MCP integration, hooks, task
 management, and the HTTP API are stable and in daily production use. PGlite backend stable;
 networked Postgres experimental.
 

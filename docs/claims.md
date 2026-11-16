@@ -120,7 +120,10 @@ page, README and other docs). Nothing between the two touches `src/`:
 git diff 29365a9 v0.22.4 -- src/
 ```
 
-returns nothing, so §1 describes the code on npm.
+returns nothing, so §1 describes the code on npm. 0.22.5 (2026-11-16) is a documentation release:
+its `src/` changes are comments, tool and flag descriptions, the benchmark-label list
+(`RECALL_FLAGS`) and the plugin's hook wiring; none changes how recall ranks, so the
+0.22.4 page still describes it.
 
 **What is still missing is structural, and it has produced a rewrite of this section at
 nearly every release.** The page records a version and a commit but never says whether that
