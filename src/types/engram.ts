@@ -256,6 +256,12 @@ export interface ActivationResult {
   /** On the first result only: the signals the calibrated gate judged (or would judge). */
   gateFeatures?: import('../engine/abstention-gate.js').GateFeatures;
   /**
+   * On the first result only: the memory those signals describe. Since 0.22.4 it can differ
+   * from the first result, because the gate reads the blend's #1 and first place follows the
+   * sure-ranker rule; calibration labels a probe correct by this id so features and label match.
+   */
+  gateTopId?: string;
+  /**
    * Id of the activation_events row this recall logged (0.14.3). Same value on
    * every result in the same recall. Hand it back on memory_feedback so the
    * feedback joins to the recall that produced it — before this, the id was

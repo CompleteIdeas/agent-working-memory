@@ -139,7 +139,8 @@ export async function calibrateGate(
       rerankSecond: res[1]?.phaseScores?.rerankerScore ?? 0,
       vectorTop: res[0].phaseScores?.vectorMatch ?? 0,
     };
-    return { f, correct: !!p.goldId && res[0].engram.id === p.goldId };
+    // Correct = the memory the features describe is the gold (the blend's #1 since 0.22.4).
+    return { f, correct: !!p.goldId && (res[0].gateTopId ?? res[0].engram.id) === p.goldId };
   };
 
   // One at a time: the cross-encoder is the expensive stage and running hundreds of recalls

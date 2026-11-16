@@ -645,6 +645,10 @@ reproduced the combined wins; all CIs overlap at k=3 — no default flip without
 | `AWM_BLEND` / `AWM_BLEND_KEYWORD` | `0.85` / `0.95` | (0.21.1) Cross-encoder weight in the final blend for natural questions scored by the main model, and for keyword lookups. `AWM_BLEND=off` sorts by the cross-encoder alone, as before 0.21.1. |
 | `AWM_BLEND_QUESTIONS` | `0.5` | Blend weight for a natural question scored by the main model when at least half the candidate pool carries questions. |
 | `AWM_BLEND_MODE` | score | `rank` forces the rank blend for every query (experiments). |
+| `AWM_BLEND_SURE` | on | (0.22.4) First place is chosen by a rule; places 2+ keep the blend's order. When the cross-encoder is sure (its top-two margin in logit space is at least the threshold below), its #1 goes first; otherwise a keyword query re-blends for first place with the vector rank counting a quarter; otherwise the blend's #1 stays. `off` restores 0.22.3 exactly. Code: `src/core/blend-rule.ts`. |
+| `AWM_BLEND_SURE_KEYWORD` / `AWM_BLEND_SURE_NATURAL` | `1` / `1.5` | (0.22.4) Logit margin between the cross-encoder's top two that counts as sure, for keyword and natural queries. Its sigmoid scores saturate near 1: 0.99 against 0.95 is a margin of 1.7. |
+| `AWM_BLEND_VEC_KEYWORD` | `0.25` | (0.22.4) Weight of the vector rank when a keyword query re-blends for first place. On near-template corpora the blend's wrong first places were mostly the vector channel's #1. `1` turns the re-blend into a no-op. |
+| `AWM_BLEND_AGREE_RANK` | `1` | (0.22.4) A candidate both channels rank this high or better (0-based, so `1` = top two) keeps the full vector weight in that re-blend. |
 | `AWM_GATE_FEATURES` | `1` | `2` selects the eight-signal gate feature set (measured, not better: `docs/abstention-signals-2026-10-30.md` §14). |
 
 **`memory_write` / `POST /memory/write` fields:**
@@ -686,9 +690,10 @@ Full write-ups: [`redaction.md`](redaction.md), [`vault.md`](vault.md),
 | `AWM_ABSTAIN_RECALIBRATE_DAYS` | `7` | After a full consolidation, the gate's model is refitted when it is missing, older than this, or the store has grown by 20%. The model is saved per agent in `abstention-model.json` beside the store. |
 
 Measured with the calibrated gate on the real 29,853-memory snapshot
-(`tests/realstore-eval/gate-eval.ts`): it withholds 66 of 73 never-stored facts, withholds 0 of
-694 correct answers (flags 4), and of 200 absent questions asked in familiar vocabulary withholds
-92 and flags 30. One store, keyword-style questions; see [`abstention.md`](abstention.md).
+(`tests/realstore-eval/gate-eval.ts`, v0.22.4): it withholds 50 of 73 never-stored facts, withholds
+1 of 718 correct answers (flags 6), and of 200 absent questions asked in familiar vocabulary
+withholds 95 and flags 19. On natural-language questions, once memories carry questions, it
+withholds 3 of 103 correct answers. One store; see [`abstention.md`](abstention.md).
 
 **Responses.** `POST /memory/write` (and `memory_write`) carries a `redaction` field naming what
 was masked. With the gate on, each `/memory/activate` result carries `signal`

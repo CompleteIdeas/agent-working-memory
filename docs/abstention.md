@@ -8,6 +8,8 @@ answer to "what is our Kafka consumer-lag threshold?", when nobody ever stored o
 have that". The calibrated gate makes AWM say so, using a noise floor it learns from its own
 store.
 
+**Current figures (v0.22.4, one real store, re-measured 2026-11-15).** Keyword-shaped questions: withholds **50 of 73** never-stored facts and **1 of 718** correct answers (flags 6); of 200 questions whose fact was deleted, withholds 95 and flags 19. Natural-language questions, once memories carry questions: withholds **3 of 103** correct answers, but answers 88 of 97 questions whose fact was deleted. Earlier pages published 58 (and 66) of 73 and 10 of 97; those do not reproduce ([claims §2](claims.md)). The sections below are the history of how the gate was built, with the figures measured at each step.
+
 ## Why the old gate could not do it
 
 The shipped `require_confidence` gate judges the *shape* of one query's scores ("is #1 clearly

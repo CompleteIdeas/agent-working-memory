@@ -20,12 +20,12 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 1. Retrieval accuracy
 
-> **93.3%** of identifier queries · **96.0%** of topic queries · **98.7%** in the top five (both)
+> **95.0%** of identifier queries · **96.2%** of topic queries · **98.7%** in the top five (both)
 
 - **Produced by:** `tests/realstore-eval/runner.ts` over `fixture.json` (300 probes) and `fixture-category.json` (450 probes).
 - **Corpus:** `snapshot/store.db` — a frozen copy of a real work store, 29,853 engrams total, **11,262 retrievable**. Gitignored and will stay that way.
 - **Ground truth:** unique-identifier hold-out. An identifier appearing in exactly one active engram, uniqueness confirmed through FTS — the real retrieval path, not a regex. Derived by `tests/realstore-eval/build-fixture.mjs`.
-- **Stamped at:** v0.21.1, 2026-10-31 — `bench-runs/0.21.0-2026-10-31/` (the run directory carries the pre-bump version number). Previously 92.7% / 92.7% / 97.3% at v0.16.0 – v0.21.0.
+- **Stamped at:** v0.22.4, 2026-11-15 — `docs/benchmarks-current.md` at the release commit; the 0.22.3 audit run is `bench-runs/0.22.3-2026-11-15/`. Previously 93.3% / 96.0% / 98.7% at v0.21.1 – v0.22.3 (re-measured on 0.22.3: identical), and 92.7% / 92.7% / 97.3% at v0.16.0 – v0.21.0.
   (identifier.log, category.log; gitignored and maintainer-only, like the snapshot
   itself). `npm run bench` measured this run once. The same figures were measured
   twice by different drivers at `eb0620f` — `npm run bench` and
@@ -44,11 +44,14 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 2. Correct silence
 
-> With the opt-in calibrated gate, AWM withholds **66 of 73** questions about facts never stored, and withholds **2 of 706** correct answers to keyword-shaped questions; on natural-language questions it withholds **21 of 88** correct answers
+> With the opt-in calibrated gate, AWM withholds **50 of 73** questions about facts never stored, and withholds **1 of 718** correct answers to keyword-shaped questions; on natural-language questions, once memories carry questions, it withholds **3 of 103** correct answers
+
+- **Current figures (v0.22.4, re-measured 2026-11-15):** keyword questions: of 750 answerable, 739 answered, 9 flagged, 2 withheld (1 of them a correct answer, of 718); never-stored 50 of 73 withheld, 3 flagged, 1 empty; familiar-vocabulary deleted facts 95 of 200 withheld, 19 flagged, 86 answered. Natural-language questions on the snapshot with questions (`store-wq.db`, `GATE_FIXTURE=fixture-nl.json`): 183 answered, 11 withheld (3 of them correct, of 103); never-stored 50 of 73; deleted facts 9 of 97 withheld, 88 answered. The v0.22.3 tag, re-run the same day, gives the same thresholds and the same counts; the 0.22.4 ranking only adds correct first answers (712 → 718, 102 → 103).
+- **Correction (2026-11-15):** README and these pages published **58 of 73** (and 66 of 73 at 0.21.0) never-stored facts withheld, and **10 of 97** correct natural answers withheld. Neither reproduces: the v0.22.0 and v0.22.3 tags both measure 50 of 73, and the v0.22.3 tag 2 of 102 natural. The earlier figures came from runs whose tree was not recorded.
 
 - **Produced by:** `tests/realstore-eval/gate-eval.ts`. The shipped `calibrateGate()` fits each agent's gate from the store alone, on synthetic queries with no labels. Then every labelled question goes through ordinary recall: 750 answerable, 73 verified absent (`fixture-absent.json`, every distinctive term checked absent from the store), and 200 "familiar" absent (real questions asked of a copy with their answer deleted). Method and full table: `docs/abstention.md`.
 - **Also measured:** of the 200 familiar-vocabulary absent questions, it withholds 98, flags 28 as low signal and answers 74. That is the hard case, and the figure is pessimistic, because a deleted fact may be repeated elsewhere.
-- **Natural-language questions (0.21.1 ranking, 2026-10-31):** On natural-language questions (194, written per memory and vetted so they can't lean on rare store words) it withholds **21 of 88** correct answers (24%) and flags 3, while still withholding 65 of 73 never-stored facts. Its calibration probes are keyword-shaped, so natural questions score below the floor it learns. Reproduce with `GATE_FIXTURE=fixture-nl.json`.
+- **History — natural-language questions (0.21.1 ranking, 2026-10-31):** On natural-language questions (194, written per memory and vetted so they can't lean on rare store words) it withholds **21 of 88** correct answers (24%) and flags 3, while still withholding 65 of 73 never-stored facts. Its calibration probes are keyword-shaped, so natural questions score below the floor it learns. Reproduce with `GATE_FIXTURE=fixture-nl.json`.
 - **Correction (2026-10-30):** 0.21.0 published "withholds **0 of 694** correct answers". `gate-eval.ts` judged correctness from the gated recall, so a withheld answer could never count as correct and that figure was 0 by construction. Judged from an ungated recall, it is **1 of 695**.
 - **Reproducibility:** **Private corpus**, one real store. The gate's tests (`tests/core/abstention-gate.test.ts`) pin the mechanics anywhere; the rates are measured only on the private snapshot so far.
 - **Correction (2026-10-29):** this row used to read "**90.0%** correct abstention", published next to 92.7% first-result accuracy. The two were measured in different configurations and were never true together. The 90% came from a strict gate (`abstentionThreshold` 0.3) that drops first-result accuracy to 38% (identifier) and 57% (topic), and it was measured on 10 probes. With the gate actually shipped, `require_confidence` 0.05, AWM withheld **0 of 10**. The old gate could not separate absent from answerable at any threshold; the calibrated gate replaces it as the opt-in.
@@ -160,17 +163,25 @@ Rocchio pass and scored the old 92.7% / 92.0% / 96.7%.
 ## 8. What the public benchmark does and does not tell you
 
 `npm run bench:public:build && npm run bench:public` is fully reproducible.
-Current baseline, 400 probes: `s@1` **56.3%**, `s@5` 62.0%, MRR 58.9%, **100%**
-correct silence, **100%** sufficiency, **+245** tokens per recall. Split by
-identifier position: **97.3%** where the reranker can see the identifier,
-**46.8%** where it cannot.
+Current baseline (v0.22.4, 2026-11-15, seed 20261008), 400 probes: `s@1` **52.8%**,
+`s@5` 67.8%, MRR 59.1%, **100%** sufficiency, **+354** tokens per recall. Split by
+identifier position: **86.7%** where the reranker can see the identifier, **44.9%**
+where it cannot. Seed 99: `s@1` 47.5%, `s@5` 66.3%. Correct silence on the 10
+adversarial probes is **40%** (4 of 10), as on 0.22.3; the October figure was 100%,
+and the cause of that drop has not been traced yet.
 
-**Measured 2026-10-08 (seed 20261008), with the Rocchio pass still ON**, so this
-baseline sits on the pre-flip pipeline like §1's did. It has not been re-run at
-the new default. A 200-probe arm of the same corpus was diffed per query across
-the flip and **0 of 200 queries changed** in gold rank, top-1 identity or top-1
-score, so these figures are expected to carry forward unchanged — but that is an
-inference from a subset, not a re-run of the 400.
+**The 0.21.1 blend cost this corpus 17 points, and 0.22.4 won most of it back.** On
+0.22.3 the same run scored `s@1` 38.8% (seed 99: 35.3%): the final blend's slice of
+first-stage rank let the vector channel's #1 outvote a cross-encoder that was sure.
+Run with the October configuration, the same corpus still scores 56.5%, so the
+instrument is sound; the 0.22.4 rule (`src/core/blend-rule.ts`) brings it to 52.8%
+without costing any real-store suite a point. The long-memory suite (`tests/longmem-eval/runner.ts`, 48 questions
+about memories longer than the rerank window) moved the same way: **87.5%** first when
+the query-dense rerank window shipped (2026-08-24), 72.9% on 0.22.3, **77.1%** on 0.22.4.
+
+**History — measured 2026-10-08 (seed 20261008), with the Rocchio pass still ON:**
+`s@1` 56.3%, `s@5` 62.0%, MRR 58.9%, 100% correct silence, +245 tokens per recall,
+97.3% / 46.8% by identifier position.
 
 - It **does** verify the method, the abstention accounting, the sufficiency
   check and the truncation cliff, on data you can rebuild byte-for-byte.

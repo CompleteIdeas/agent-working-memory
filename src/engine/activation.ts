@@ -1475,6 +1475,11 @@ export class ActivationEngine {
       : Number(process.env.AWM_BLEND ?? 0.85);
     const blendByRank = naturalModel || process.env.AWM_BLEND_MODE === 'rank';
     let ordered: typeof finalRanked;
+    // The order the calibrated gate reads its features from. It is the 0.21.1 blend's order even
+    // when the 0.22.4 rule changes first place: the gate's thresholds were fitted on the blend's
+    // #1, and scoring the rule's #1 shifted its decisions (never-stored withheld 50 -> 49,
+    // natural correct withheld 1 -> 4). Reading the blend keeps them identical to 0.22.3.
+    let gateOrder: typeof finalRanked | undefined;
     if (rerank2Enabled() && Number.isFinite(blendA) && finalRanked.length > 1
         && finalRanked.every(r => r.phaseScores.rerankerScore > 0)) {
       const RRF_K = 60;
@@ -1546,6 +1551,7 @@ export class ActivationEngine {
         }
       }
       ordered = first === blended[0] ? blended : [first, ...blended.filter(r => r !== first)];
+      gateOrder = blended;
     } else {
       ordered = rerank2Enabled()
         ? reorderByReranker(finalRanked, rerank2WindowSize())
@@ -1553,13 +1559,15 @@ export class ActivationEngine {
     }
 
     // ── Calibrated abstention (AWM_ABSTAIN_GATE=calibrated) ──
-    // Judges the FINAL order — the same order the calibration measured — against this
+    // Judges the blend's order (gateOrder above; the final order when there is no blend) — the
+    // same order the calibration measured — against this
     // agent's store-fitted model (src/engine/abstention-gate.ts). Withhold is reported via
     // onAbstain, never a silent []; a low signal still returns, flagged. Skipped when the
     // cross-encoder did not run: every reranker feature would read 0 and look like noise.
     let signal: SignalReport | undefined;
     let gateFeatures: GateFeatures | undefined;
-    if (ordered.length > 0) {
+    const g = gateOrder ?? ordered;
+    if (g.length > 0) {
       // The same numbers calibration fits on (it reads them off the first result), so the gate
       // and its training see one definition. Match density comes from work already done: the
       // BM25 list's top score un-normalised (searchBM25WithRank stores |rank|/(1+|rank|)), and
@@ -1572,14 +1580,14 @@ export class ActivationEngine {
       // widest gap of all and read as "one clear peak" (first end-to-end run, 2026-10-30).
       const tenth = sims[9] ?? Math.min(sims[0] ?? SIM_CANDIDATE_FLOOR, SIM_CANDIDATE_FLOOR);
       gateFeatures = {
-        rerankTop: ordered[0]!.phaseScores.rerankerScore ?? 0,
-        rerankSecond: ordered[1]?.phaseScores.rerankerScore ?? 0,
-        vectorTop: ordered[0]!.phaseScores.vectorMatch ?? 0,
+        rerankTop: g[0]!.phaseScores.rerankerScore ?? 0,
+        rerankSecond: g[1]?.phaseScores.rerankerScore ?? 0,
+        vectorTop: g[0]!.phaseScores.vectorMatch ?? 0,
         bm25Top: bm25Norm >= 1 ? 1e6 : bm25Norm / (1 - bm25Norm),
         cosineTop: sims[0] ?? 0,
         cosineGap: (sims[0] ?? 0) - tenth,
         cosineAbove70: Math.min(50, sims.filter(s => s >= 0.7).length),
-        bm25RankTop: bm25Sorted.findIndex(r => r.engram.id === ordered[0]!.engram.id),
+        bm25RankTop: bm25Sorted.findIndex(r => r.engram.id === g[0]!.engram.id),
       };
     }
     if (gateEnabled() && !query.skipCalibratedGate && gateFeatures
@@ -1705,7 +1713,10 @@ export class ActivationEngine {
       if (this.recentRecalls.length > RECENT_RECALLS_MAX) this.recentRecalls.splice(0, this.recentRecalls.length - RECENT_RECALLS_MAX);
     }
 
-    if (results[0] && gateFeatures) results[0].gateFeatures = gateFeatures;
+    if (results[0] && gateFeatures) {
+      results[0].gateFeatures = gateFeatures;
+      results[0].gateTopId = g[0]?.engram.id;
+    }
     prof.finish({ results: results.length });
     return results;
   }

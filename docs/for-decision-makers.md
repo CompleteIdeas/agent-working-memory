@@ -46,8 +46,8 @@ dated files under [`archive/`](archive/README.md).
 
 | test | what it asks | result |
 |---|---|---|
-| Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **98.7%** in the top five, **93.3%** correct on the first result |
-| Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **98.7%** in the top five, **96.0%** first-result |
+| Identifier fixture, 300 real queries | "Find the memory that contains this specific ticket number / table name / file" | **98.7%** in the top five, **95.0%** correct on the first result |
+| Category fixture, 450 real queries | "Find the memory about this topic," phrased the way a person would | **98.7%** in the top five, **96.2%** first-result |
 
 **A baseline belongs next to those numbers.** Plain keyword search (BM25) on the same questions
 puts the right memory first for **95.7%** (identifier) and **91.6%** (topic). The fixtures are
@@ -141,7 +141,7 @@ remembered, it is silently re-decided.
 |---|---|
 | **Install** | `npm install -g agent-working-memory && awm setup --global`, then restart Claude Code. About two minutes, plus a one-time ~175 MB model download. |
 | **Footprint** | One database file (a mature store is ~250 MB), three cached models (~175 MB), one lightweight background process per assistant session. |
-| **Latency** | A recall takes under half a second once warm on a 30,000-memory store (p50 375–438 ms); the first one in a session can take a few seconds while models load. Not disruptive. |
+| **Latency** | A recall takes under half a second once warm on a 30,000-memory store (p50 378–391 ms); the first one in a session can take a few seconds while models load. Not disruptive. |
 | **Ramp-up** | A new store knows nothing. `/awm-learn` reads an existing project into memory in one pass: the first measured run took about ten minutes and 1.55M model tokens for a 374-file codebase. That is a one-time cost, paid in the assistant's own tokens, and later refreshes only re-read what changed. |
 | **Data** | Stays local. Separate memory pools per project or per person are supported. |
 | **Lock-in** | The store is a plain SQLite file with a documented schema and an export command. |

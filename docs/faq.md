@@ -41,7 +41,8 @@ questions memories answer (see below); that runs in the host, not in AWM.
 `memory_write` takes up to five `questions`: how someone would ask for this memory later, in their
 own words ("when does the fall fee go up?"). They go into a second keyword index that only
 natural-language recall reads, so they can't disturb identifier or topic lookups. On the real-store
-benchmark, natural-language first place rose from 47.9% to 52.6% when memories carried questions;
+benchmark, natural-language first place rose from 47.9% to 52.6% when memories carried questions
+(48.5% to 53.1% with the 0.22.4 final order);
 identifier and topic were unchanged.
 
 Older memories have none. A host with a model can fill them in: pass `capabilities: ["questions"]`
@@ -127,14 +128,14 @@ keyword-shaped model judges everything, as in 0.21. It has not been measured on 
 ### Is AWM's ranking better than keyword search?
 
 It depends on how the question is asked. On the real-store keyword fixtures, plain BM25 puts the
-right memory first for 95.7% of identifier queries and 91.6% of topic queries, against AWM's 93.3%
-and 96.0%. Those fixtures are keyword-friendly by construction: each question is built around an
+right memory first for 95.7% of identifier queries and 91.6% of topic queries, against AWM's 95.0%
+and 96.2%. Those fixtures are keyword-friendly by construction: each question is built around an
 identifier that appears in exactly one memory, which is the case BM25 is best at.
 
 On natural-language questions — 194 of them, written the way a person asks and vetted so they
-can't lean on rare words in the store — AWM puts the right memory first for 47.9%, against 42.8%
+can't lean on rare words in the store — AWM puts the right memory first for 48.5%, against 42.8%
 for BM25 and 45.4% for fused BM25 + vector search. With questions stored on the memories (0.22)
-AWM reaches 52.6%. Those are the hard questions, and the gap to the keyword fixtures is real.
+AWM reaches 53.1%. Those are the hard questions, and the gap to the keyword fixtures is real.
 
 Where AWM measurably differs is its lifecycle: supersession and retraction. The BM25 figures above
 were measured on the pool AWM's lifecycle leaves retrievable. Run over the raw store, with
@@ -162,8 +163,8 @@ Example: `composite=0.820 | text=0.75 | vector=0.68 | decay=1.20 | hebbian=0.15 
 
 ### How fast is activation?
 
-On the 30,000-memory benchmark store, with every model on, a warm recall takes 375–438 ms at the
-median and under 0.6 s at p90 ([benchmarks-current.md](benchmarks-current.md)). Smaller stores
+On the 30,000-memory benchmark store, with every model on, a warm recall takes 378–391 ms at the
+median and under 0.5 s at p90 ([benchmarks-current.md](benchmarks-current.md)). Smaller stores
 are faster. With ML disabled (`useReranker: false, useExpansion: false`): ~5-20 ms per query.
 
 The first query after server start is slower while models load, and the very first

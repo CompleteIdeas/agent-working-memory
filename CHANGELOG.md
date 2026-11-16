@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.22.4 (2026-11-15) — first place goes to the right memory more often; published numbers corrected
+
+- **A sure cross-encoder now decides first place.** Since 0.21.1 the final order has blended the
+  cross-encoder with the fused BM25 + vector rank. The cross-encoder's sigmoid scores saturate
+  near 1, so the blend's small slice of first-stage rank (5% on keyword queries) could outvote it
+  even when it was clearly sure: 0.99 against 0.95 looks like a 0.04 gap but is a logit gap of
+  1.7. First place is now chosen by a rule (`src/core/blend-rule.ts`); places 2+ keep the
+  blend's order, which ranks them better than the cross-encoder alone:
+  - the cross-encoder is sure (top-two logit margin ≥ 1 keyword, ≥ 1.5 natural) → its #1;
+  - otherwise, on a keyword query, the #1 of the same blend with the vector rank counting a
+    quarter, unless both BM25 and vector rank the candidate in their top two (on near-template
+    corpora the blend's wrong first places were mostly the vector channel's #1: 72 of 107);
+  - otherwise the blend's #1, as before.
+- **Measured, same pools, 0.22.3 → 0.22.4 (success@1):** identifier 93.8 → **95.4** (bench page
+  95.0, 300 probes), topic 96.0 → **96.2**, natural-language 47.9 → **48.5** (52.6 → **53.1**
+  with questions), public synthetic benchmark 38.8 → **52.8** (seed 99: 35.3 → **47.5**), long
+  memories 72.9 → **77.1**; the temporal suite equal or up. No suite's success@1, @3 or @5
+  dropped. The offline study that chose the rule is `tests/realstore-eval/blend-study.ts`
+  (rules fitted on half the questions, checked on the other half).
+- **The opt-in gate's decisions are unchanged.** It reads its features from the blend's order,
+  the one its thresholds were fitted on, and calibration labels a probe correct by that same
+  memory (`gateTopId` on the first result). Scoring the new first place instead had shifted its
+  thresholds and its decisions (never-stored withheld 50 → 49). Re-measured against the v0.22.3
+  tag on both snapshots: identical thresholds and identical answer / low / withhold counts on
+  every population; it now withholds 1 of 718 correct keyword answers (1 of 712 before) and 3
+  of 103 correct natural ones (2 of 102).
+- **Settings:** `AWM_BLEND_SURE=off` restores 0.22.3 exactly. `AWM_BLEND_SURE_KEYWORD` (1),
+  `AWM_BLEND_SURE_NATURAL` (1.5), `AWM_BLEND_VEC_KEYWORD` (0.25) and `AWM_BLEND_AGREE_RANK` (1)
+  tune it. All are in `RECALL_FLAGS`, so a benchmark arm names them, as are the entity-alias
+  flags from 0.22.3, which had been left out.
+- **Published numbers corrected.** A full benchmark re-run on 0.22.3 found three figures that do
+  not reproduce:
+  - the gate withholds **50 of 73** never-stored facts, not 58 (66 in the 0.21.0 notes); the
+    same at the v0.22.0 tag, so it was never reproducible as published;
+  - on natural-language questions with the questions index it withholds **2 of 102** correct
+    answers, not 10 of 97, and answers 88 of 97 questions whose fact was deleted;
+  - the public benchmark had fallen from 56.3% to 38.8% first and long memories from 87.5% to
+    72.9%, both with the 0.21.1 blend, which is what this release fixes. With the 2026-10-08
+    configuration the public corpus still scores 56.5%, so the instrument is sound.
+- **New:** `onBlendInputs` on the activation query (test hook) and `BLEND_DUMP=<file>` in the
+  real-store, long-memory and temporal runners record what the final blend saw, for offline
+  study.
+
 ## 0.22.3 (2026-11-13) — awm-learn surveys before it reads; everything about a name
 
 - **`awm-learn` starts with a survey.** `ledger.mjs survey <path>` works out, in about a second and
