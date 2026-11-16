@@ -7,7 +7,7 @@ AWM's design draws from established cognitive science theories. This document ex
 **Theory** (Anderson 1993): Memory activation decays as a power law of time since last access. Frequently accessed memories decay more slowly.
 
 **In AWM** (`src/core/decay.ts`):
-- Each memory has a `last_access` timestamp and `access_count`
+- Each memory has a `last_accessed` timestamp and `access_count`
 - Activation score decreases with time: `decay = t^(-d)` where `d` is the decay rate
 - Multiple accesses create multiple time traces that sum
 - High-access memories resist decay proportionally
@@ -70,8 +70,8 @@ AWM's design draws from established cognitive science theories. This document ex
 **Theory**: Not all experiences are equally memorable. Events with high emotional valence, surprise, or causal significance are preferentially encoded (McGaugh 2004).
 
 **In AWM** (`src/core/salience.ts`):
-- Each write is scored on: novelty (BM25 duplicate check), surprise (how unexpected), causal depth (how many implications), and effort (how much work went into discovering this)
-- Score determines disposition: active (high), staging (medium), discard (low)
+- Each write is scored on: novelty (BM25 + embedding duplicate check), surprise (how unexpected), whether a decision was made, causal depth (how many implications), and effort (how much work went into discovering this), plus an event-type bonus
+- Score determines disposition: active (≥ 0.4), staging (≥ 0.2), or low-salience (< 0.2). A low-salience write is **still stored**, at confidence 0.25 and tagged `low-salience`, so it ranks low and is first in line for forgetting rather than being dropped at the door. Canonical writes have a 0.7 floor and always go active; `scope: "session"` notes are always kept
 - This happens at write time, not retrieval time
 
 **Effect**: Agents don't need to decide what's worth remembering. The salience filter makes that judgment automatically, keeping the memory pool lean.
@@ -83,7 +83,7 @@ AWM's design draws from established cognitive science theories. This document ex
 | ACT-R decay | Temporal activation scoring | `src/core/decay.ts` |
 | Hebbian learning | Edge strengthening on co-retrieval | `src/core/hebbian.ts` |
 | CLS fast path | Salience filter + staging | `src/core/salience.ts` |
-| CLS slow path | 7-phase sleep consolidation | `src/engine/consolidation.ts` |
+| CLS slow path | 12-step sleep consolidation (phases 0–7, including 2.5, 5.5, 6.5 and 6.7) | `src/engine/consolidation.ts` |
 | Synaptic homeostasis | Hub weight normalization | `consolidation.ts` Phase 5 |
 | Adaptive forgetting | Archive/delete low-value memories | `consolidation.ts` Phase 6 |
 | Salience encoding | Write-time novelty + importance | `src/core/salience.ts` |

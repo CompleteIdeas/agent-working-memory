@@ -1,5 +1,7 @@
 # Memory Quality Hardening RFC
 
+Status: 2026-03 proposal; partly shipped in a different form (`memory_class`, `superseded_by`, `memory_supersede`).
+
 ## Purpose
 
 This RFC turns recent real-world findings into implementation tasks that improve recall precision, reduce stale/noisy memory retrieval, and lower token waste during long multi-agent workflows.

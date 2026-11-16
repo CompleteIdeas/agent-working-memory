@@ -26,7 +26,7 @@ Do not read the whole list. Find the rows that match what you actually changed.
 | **A default, threshold or env var** | `docs/reference.md` (the authoritative list), the generated guidance in `src/adapters/common.ts` if an agent needs to know, and any doc that *quotes the number* — `check:release` prints the blast radius |
 | **The recall or write pipeline** | `docs/pipeline-walkthrough.html` if the mental model changed, not just the numbers. Re-run the benchmark and follow the "benchmark numbers" row below |
 | **A benchmark number** | Do not hand-edit it. Run `npm run bench`, which regenerates `docs/benchmarks-current.md` stamped with version, commit and snapshot. Then update every doc `check:release` lists under `benchmark-spread`, in the same commit. This is the single most common miss |
-| **Anything the MCP server exposes** | Tool count claims (checked), `docs/reference.md`, and the tool descriptions themselves — those are prompts, and agents act on them |
+| **Anything the MCP server exposes** | Tool count claims — `check:release` checks them only in `README.md`, `docs/architecture.md`, `docs/claude-code-setup.md`, `docs/product-overview.md` and `docs/quickstart.md`, and only in the form "N tools"; other pages (`docs/plugin.md`, `docs/desktop.md`, `docs/team-setup-guide.md`, `docs/integrations/`) are yours to grep — plus `docs/reference.md`, and the tool descriptions themselves — those are prompts, and agents act on them |
 | **Hook behaviour, ports, or the sidecar** | `src/adapters/hook-scripts.ts` **and** `AWM_HOOKS_VERSION`, `tests/adapters/hook-scripts.test.ts`, `docs/reference.md` hook section, `docs/claude-code-setup.md` |
 | **Anything that changes what a FRESH install should look like** | `src/adapters/` — see the box below. This is the one that cost a whole release |
 | **Anything a reader sees on npmjs.com** | The package page renders the README from the PUBLISHED tarball, so a docs fix does not reach it without a version bump and a publish. 0.15.5 exists because the README had install instructions and no upgrade instructions, and that was invisible from the repo |
@@ -101,8 +101,15 @@ probed for and skipped with the reason. To actually run them, start a server aga
 **scratch database** first, never your real store, because these suites seed and mutate data:
 
 ```bash
-AWM_DB_PATH=/tmp/bench-scratch.db npm start
+AWM_DB_PATH=/tmp/bench-scratch.db npm start                                   # macOS / Linux
 ```
+
+```powershell
+$env:AWM_DB_PATH = "$env:TEMP/bench-scratch.db"; npm start                    # PowerShell
+```
+
+(In PowerShell the variable stays set for the rest of that terminal; open a new one afterwards
+so nothing else picks up the scratch store.)
 
 Commit before you measure: a dirty tree stamps the generated page
 *"not a releasable measurement"*. Anything
@@ -133,7 +140,7 @@ but not that the code *builds* there, and it only loads the import graph that st
 setup and one recall happen to touch. The other mode closes that:
 
 ```bash
-npm run test:linux         # compiles from source in Linux, runs all 65 test files there
+npm run test:linux         # compiles from source in Linux, runs all 109 test files there
 ```
 
 Windows resolves a wrong-cased import happily and `tsc` never sees the conflict, so
@@ -159,7 +166,7 @@ Two things it does on purpose, both learned the hard way:
   until a full reinstall.
 - The model cache is mirrored as a symlink farm rather than mounted read-only.
   transformers.js writes lock files and `.no_exist` markers next to the weights; across
-  65 files a read-only `HF_HOME` produces failures that read like model bugs.
+  109 files a read-only `HF_HOME` produces failures that read like model bugs.
 
 It reports `OOMKilled` from `docker inspect` before you read any failure, because a
 container OOM presents as a test failure, not as an OOM.

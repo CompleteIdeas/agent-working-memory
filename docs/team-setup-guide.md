@@ -47,10 +47,11 @@ Then set it up globally (one brain across all your projects):
 awm setup --global
 ```
 
-That's it. This does three things:
+That's it. This does four things:
 1. Creates `~/.mcp.json` — tells Claude Code to load the AWM memory server
 2. Creates `~/.claude/CLAUDE.md` — gives Claude instructions on when to use memory
-3. Installs auto-checkpoint hooks in `~/.claude/settings.json`
+3. Installs the hooks in `~/.claude/settings.json` (memory priming, auto-checkpoint, reminders — see below)
+4. Installs the `awm-learn` skill in `~/.claude/skills/awm-learn/` (0.22.2) — `/awm-learn` learns a whole repo or folder into memory
 
 **Restart Claude Code** after setup.
 
@@ -58,9 +59,9 @@ The first conversation will take minutes longer while it downloads three ML mode
 
 ---
 
-## Option B: Install without npm (PowerShell)
+## Option B: Install Node.js first, then AWM (PowerShell)
 
-If you don't have Node.js or npm installed, you can set everything up manually.
+If you don't have Node.js or npm installed yet, install Node.js (which includes npm), then install AWM with npm.
 
 ### Step 1: Install Node.js
 
@@ -122,8 +123,10 @@ inline `curl` commands, so there is nothing to hand-edit and no secret to paste:
 | File | What it does |
 |---|---|
 | `~/.claude/hooks/awm-find-sidecar.cjs` | Works out which server this project talks to — reads the MCP config for the directory, probes the port range, picks the sidecar whose `/health` reports that agent |
-| `~/.claude/hooks/awm-checkpoint.cjs` | Auto-saves on Stop, PreCompact and SessionEnd |
+| `~/.claude/hooks/awm-checkpoint.cjs` | Auto-saves on PreCompact and SessionEnd |
+| `~/.claude/hooks/awm-used.cjs` | Stop (0.20) — reminds Claude to save what it learned, and credits the memories the reply actually used (implicit feedback) |
 | `~/.claude/hooks/awm-prime.cjs` | Puts relevant memory into context when you send a prompt |
+| `~/.claude/hooks/awm-db-mutation-reminder.cjs` | PostToolUse on Bash / PowerShell — reminds Claude that a data change is not done until it is written to memory |
 | `~/.claude/hooks/awm-hooks.json` | A record of what setup installed |
 
 **Check it worked:**
@@ -151,10 +154,12 @@ If you are upgrading from a version before 0.14.6, re-run `awm setup --global` o
 will tell you if the old inline-`curl` hooks are still in place.
 
 **What the hooks do:**
-- **Stop** — reminds Claude to save important learnings after each response (background, no delay)
+- **Stop** — reminds Claude to save important learnings after each response, and credits the recalls the reply used (background, no delay)
 - **PreCompact** — auto-saves state before Claude's context window gets compressed
 - **SessionEnd** — auto-saves state when you close the session, and triggers consolidation
 - **UserPromptSubmit** — primes relevant memory into context before Claude sees your prompt
+- **PostToolUse (Bash / PowerShell)** — after a shell command, reminds Claude to record a data change in memory
+- **Every 15 minutes** — a silent auto-checkpoint while the session is active
 
 ---
 
@@ -167,29 +172,33 @@ Start a new conversation and ask:
 
 > "What memory tools do you have?"
 
-Claude should mention `memory_write`, `memory_recall`, `memory_restore`, `memory_task_begin`, `memory_task_end`, etc. — 22 tools total (20 memory + 2 onboarding).
+Claude should mention `memory_write`, `memory_recall`, `memory_restore`, `memory_task_begin`, `memory_task_end`, etc. — 22 tools total (18 `memory_*` + 2 onboarding + `compress_output` / `retrieve_original`).
 
 ### 2. Check the activity log
 
 Open a second terminal and watch the log in real time:
 
+The log is `awm.log`, next to the database — `~/.awm/awm.log` for a default install.
+
 **PowerShell:**
 ```powershell
-Get-Content "$(npm root -g)\agent-working-memory\data\awm.log" -Wait
+Get-Content "$HOME\.awm\awm.log" -Wait
 ```
 
-**Bash/Git Bash:**
+**macOS / Linux / Git Bash:**
 ```bash
-tail -f "$(npm root -g)/agent-working-memory/data/awm.log"
+tail -f ~/.awm/awm.log
 ```
 
-You'll see one line per event:
+You'll see one line per event (`time | agent | event | detail`):
 ```
-2026-03-10T14:30:00Z | claude | startup     | MCP server starting...
-2026-03-10T14:30:01Z | claude | restore     | idle=5min checkpoint=true recalled=3
-2026-03-10T14:31:00Z | claude | recall      | "auth middleware patterns" → 2 results
-2026-03-10T14:32:00Z | claude | write:active| "JWT token rotation" salience=0.52 novelty=1.0
-2026-03-10T14:45:00Z | claude | hook:PreCompact | auto-checkpoint files=4
+2026-11-15T14:30:00.000Z | work | startup | MCP server starting (backend: sqlite, db: C:/Users/you/.awm/memory.db, hooks: 8401)
+2026-11-15T14:30:01.000Z | work | restore | idle=5min checkpoint=true recalled=3 lastWrite=JWT token rotation
+2026-11-15T14:30:40.000Z | work | hook:prime | "how does the auth middleware work" (…) → 2/8 injected, ~210 tok
+2026-11-15T14:31:00.000Z | work | recall | "auth middleware patterns" → 2 results
+2026-11-15T14:32:00.000Z | work | write:active | "JWT token rotation" salience=0.52 novelty=1.0 id=…
+2026-11-15T14:32:30.000Z | work | hook:used | 1 recalled memory credited from the reply
+2026-11-15T14:45:00.000Z | work | hook:PreCompact | auto-checkpoint files=4 task="…"
 ```
 
 If the log path is different on your machine, ask Claude to call `memory_stats` — it shows the log path.
@@ -233,7 +242,7 @@ Every memory in AWM is namespaced by `AWM_AGENT_ID`. Different IDs = completely 
 Claude Code walks up the directory tree to find the nearest `.mcp.json`. The closest one wins:
 
 ```
-~/.mcp.json                    ← global fallback (agentId: "claude")
+~/.mcp.json                    ← global fallback (agentId: "work" — what `awm setup --global` writes)
 C:\Users\you\work\.mcp.json   ← work projects (agentId: "work")
 C:\Users\you\personal\.mcp.json ← personal projects (agentId: "personal")
 ```
@@ -244,7 +253,9 @@ Opening Claude Code in `work/ProjectA/` → uses "work" pool. Opening in `person
 
 1. Create a `.mcp.json` in each parent folder. Copy from your `~/.mcp.json` and change:
    - `AWM_AGENT_ID` — unique name for this pool (e.g., `"work"`, `"personal"`, `"client-x"`)
-   - `AWM_HOOK_PORT` — different port per pool if you run multiple sessions at once (e.g., `8401`, `8402`)
+
+   Leave `AWM_HOOK_PORT` as it is: since 0.14.2 each server walks to the next free port on its own, and
+   the hooks find the sidecar for their own agent (see *Setting up the hooks* above).
 
 Example for `C:\Users\you\work\.mcp.json`:
 ```json
@@ -310,9 +321,9 @@ To start fresh, delete `~/.awm/memory.db` and Claude starts with a blank slate.
 - Check `memory_stats` to see session write count
 
 **Hook errors:**
-- Verify curl is available: `curl --version` (comes with Windows 11)
+- The hooks are Node scripts (since 0.14.6), so they need only `node` on your PATH: `node --version` (22 or newer)
 - Run `awm doctor claude-code` — it checks the live sidecars, the installed hook versions, and whether one serves this directory's agent. The secret is read from the MCP config at run time, so there is nothing to compare by hand
-- Test the sidecar: `curl http://127.0.0.1:8401/health`
+- Test the sidecar: `curl http://127.0.0.1:8401/health` (PowerShell: `curl.exe http://127.0.0.1:8401/health`). If several sessions are running, the sidecar may be on 8402–8410 — `awm doctor claude-code` lists them
 
 **Want to see what Claude remembers:**
 - Ask: "What do you have in memory about [topic]?"

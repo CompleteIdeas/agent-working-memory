@@ -1,13 +1,35 @@
 # Coordination API Reference
 
 All endpoints are at the root of `http://127.0.0.1:8400`. Enabled via `AWM_COORDINATION=true`.
+Routes are defined in `src/coordination/routes.ts` (`registerCoordinationRoutes`); request schemas in
+`src/coordination/schemas.ts`. Every route except `/health` is rate-limited to 300 requests per
+minute per agent (429 beyond that).
+
+### Session tokens
+
+`POST /checkin` returns a `sessionToken` (a fresh one when a dead agent reconnects, the stored one on
+a live heartbeat). Routes that act as an agent — `POST /checkout`, `PATCH /pulse`,
+`POST /assignment/:id/claim`, `POST /lock`, `DELETE /lock`, `POST /finding` and `POST /decisions` —
+check it when the caller sends it in the `x-session-token` header: a mismatch returns `403
+{"error": "invalid session token"}`. A request **without** the header passes by default, for
+workers that never send tokens; set `AWM_COORD_REQUIRE_TOKENS=1` to reject it. (Agent rows written
+before tokens existed have no token and always pass.)
+
+### MCP tools
+
+With `AWM_COORDINATION=true` (or `1`), the MCP server also registers **13 `coord_*` tools**
+(`src/coordination/mcp-tools.ts`, `registerCoordinationTools`): `coord_checkin`, `coord_checkout`,
+`coord_assign`, `coord_assignment`, `coord_assignment_update`, `coord_lock`, `coord_unlock`,
+`coord_locks`, `coord_command`, `coord_command_poll`, `coord_workers`, `coord_finding`,
+`coord_status`. They are not counted in the 22 memory tools.
 
 ## Agents
 
 | Method | Endpoint | Body / Query | Response |
 |--------|----------|-------------|----------|
-| POST | `/checkin` | `{name, role?, pid?, capabilities?, workspace?}` | `{agentId, status, action}` |
+| POST | `/checkin` | `{name, role?, pid?, metadata?, capabilities?, workspace?, channelUrl?}` | `{agentId, sessionToken, action, status, workspace}` (201 on first registration) |
 | POST | `/checkout` | `{agentId}` | `{ok}` |
+| POST | `/shutdown` | — | `{ok, agents_marked_offline}` — marks every live agent dead, releases their locks, checkpoints the WAL |
 | PATCH | `/pulse` | `{agentId}` | `{ok}` |
 | POST | `/next` | `{name, role?, workspace?, capabilities?}` | `{agentId, status, assignment, commands}` |
 | GET | `/workers` | `?capability=&status=&workspace=` | `{workers, count}` |
@@ -26,6 +48,7 @@ All endpoints are at the root of `http://127.0.0.1:8400`. Enabled via `AWM_COORD
 | PATCH | `/assignment/:id` | `{status, result?, commit_sha?}` | `{ok}` |
 | PUT | `/assignment/:id` | `{status, result?, commit_sha?}` | `{ok}` |
 | POST | `/assignment/:id/update` | `{status, result?, commit_sha?}` | `{ok}` |
+| POST | `/assignment/:id/fail` | `{result?, mode?}` | `{ok, outcome, attempt_count, last_failure_mode}` — retries or fails the assignment by failure mode and records a circuit-breaker failure; 400 if already `completed`/`failed` |
 | POST | `/reassign` | `{assignmentId, targetAgentId?, target_worker_name?}` | `{ok, assignmentId, newAgentId, status}` |
 
 ## Locks
@@ -83,7 +106,20 @@ All endpoints are at the root of `http://127.0.0.1:8400`. Enabled via `AWM_COORD
 | GET | `/status` | — | `{agents, assignments, locks, stats, recentFindings}` |
 | GET | `/stats` | — | `{workers, tasks, decisions, uptime_seconds}` |
 | GET | `/metrics` | — | Prometheus text format |
-| GET | `/health/deep` | — | `{status, db, agents}` |
+| GET | `/health/deep` | — | `{status, db_healthy, agents_alive, stale_agents, pending_tasks, uptime_seconds, wal_size_bytes, wal_autocheckpoint}` (detail below) |
+| GET | `/telemetry/channels` | — | Channel push delivery counters since start (`attempts`, `delivered`, `failed_http`, `failed_unreachable`, `no_session`, `fallback_mailbox`, `session_disconnects`, `delivery_rate`) and `per_agent` rows |
+
+## Channel Sessions
+
+| Method | Endpoint | Body / Query | Response |
+|--------|----------|-------------|----------|
+| POST | `/channel/register` | `{agentId, channelId}` | `{ok}` (404 if the agent is unknown) |
+| DELETE | `/channel/register` | `{agentId}` | `{ok}` |
+| POST | `/channel/push` | `{agentId, message}` or `{role, workspace, message}` | `{ok, delivered: true, channelId}`, or `{ok, delivered: false, queued: true}` when it fell back to the mailbox (delivered on the next `/next`); 423 when the worker's circuit is open |
+| GET | `/channel/sessions` | — | `{sessions}` (connected only) |
+| POST | `/channel/probe` | — | `{probed, alive, dead, results}`; unreachable sessions are marked disconnected |
+
+`POST /checkin` with `channelUrl` registers the channel session in the same call.
 
 ## Status Values
 
@@ -339,9 +375,9 @@ Deep health check that inspects the SQLite database, agent liveness, and WAL fil
 | Field | Type | Description |
 |-------|------|-------------|
 | `status` | `"ok"` \| `"degraded"` | `"degraded"` if DB integrity fails or `stale_agents > 2` |
-| `db_healthy` | boolean | Result of SQLite `PRAGMA integrity_check` |
+| `db_healthy` | boolean | The memory store's `integrityCheck()` (`true` when coordination runs without a store) |
 | `agents_alive` | integer | Agents where `status != 'dead'` |
-| `stale_agents` | integer | Live agents unseen for more than 120 seconds |
+| `stale_agents` | integer | Live agents unseen for more than 300 seconds |
 | `pending_tasks` | integer | Assignments in `pending`, `assigned`, or `in_progress` |
 | `uptime_seconds` | integer | Seconds since the earliest live agent's `started_at` |
 | `wal_size_bytes` | integer \| null | WAL file size in bytes; `null` if WAL file absent |

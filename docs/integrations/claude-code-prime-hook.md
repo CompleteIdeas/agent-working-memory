@@ -3,6 +3,15 @@
 Auto-inject relevant memories into the conversation without the agent having to
 remember to call `memory_recall`.
 
+> **In Claude Code you already have this.** Since 0.14.6, `awm setup` and the Claude Code
+> plugin install the prime hook for you as a shipped script, `awm-prime.cjs`, on
+> `UserPromptSubmit`. **Do not add the hook below by hand on top of it** — you would get two
+> injections on every prompt. To turn the installed one off, create an empty
+> `~/.claude/hooks/awm-prime.disabled`.
+>
+> This page documents the `POST /hooks/prime` endpoint that hook calls, for wiring the same
+> behaviour into **other harnesses** (or a Claude Code install without `awm setup`).
+
 ## Why
 
 AWM's own instructions name the #1 failure mode plainly: **the agent doesn't call
@@ -16,17 +25,24 @@ injects only when it is confident it has something worth the tokens.
 ## Setup
 
 The MCP server already runs the hook sidecar in its own process, so there is no
-extra service to start. Set a secret and (optionally) a port:
+extra service to start. Set a secret and (optionally) the first port to try:
 
 ```jsonc
-// .mcp.json — the AWM server entry
+// the AWM server entry in your MCP config
 "env": {
   "AWM_HOOK_SECRET": "choose-a-secret",
-  "AWM_HOOK_PORT": "8401"          // default
+  "AWM_HOOK_PORT": "8401"          // default: the FIRST port tried
 }
 ```
 
-Then add the hook:
+**The port is not fixed.** The sidecar binds the first free port from `AWM_HOOK_PORT` upward
+through `AWM_HOOK_PORT_RANGE` (default 10, so 8401–8410): a second session or project lands on
+8402, and so on. A hook that hard-codes 8401 will talk to whichever process got there first,
+which may be a different agent. Find the right one by probing `GET /health` across the range —
+it needs no auth and returns `{agentId, port, pid, version}` — and picking the sidecar whose
+`agentId` matches your session. That is what the shipped `awm-find-sidecar.cjs` does.
+
+A minimal hook for a single session, with the port fixed for illustration:
 
 ```jsonc
 // .claude/settings.json
@@ -57,7 +73,7 @@ Three properties matter more than recall quality here, because this runs on
 
 | Property | Behaviour |
 |---|---|
-| **Silence by default** | Abstains below `minConfidence` (0.25). AWM's measured recall accuracy is ~65%, so an unconditional injector would spend tokens on noise roughly a third of the time, on every prompt. |
+| **Silence by default** | Abstains below `minConfidence` (0.10; it was 0.25 until 0.14.6, which silenced specific prompts with one clear winner). An unconditional injector would spend tokens on every prompt, including the ones memory has nothing for. |
 | **Hard token cap** | `maxTokens` (600) bounds the whole injection, using the same packer as `memory_recall` — including the rule that the top-scored memory gets first refusal. |
 | **Never breaks the prompt** | Any failure returns an empty injection with HTTP 200, never an error. A hook that errors on every prompt is worse than no hook. `--max-time 3` on the curl guards the other direction. |
 
@@ -70,7 +86,7 @@ Three properties matter more than recall quality here, because this runs on
 | Field | Default | Raise it when |
 |---|---|---|
 | `maxTokens` | 600 | you have context to spare and want more recall |
-| `minConfidence` | 0.25 | injections feel noisy — 0.4 is aggressive |
+| `minConfidence` | 0.10 | injections feel noisy — 0.25 silences some specific prompts, 0.4 is aggressive |
 | `minScore` | 0.10 | individual weak results are slipping in |
 
 ## Response

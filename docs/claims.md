@@ -22,24 +22,21 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 > **95.0%** of identifier queries · **96.2%** of topic queries · **98.7%** in the top five (both)
 
-- **Produced by:** `tests/realstore-eval/runner.ts` over `fixture.json` (300 probes) and `fixture-category.json` (450 probes).
+- **Produced by:** `tests/realstore-eval/runner.ts` over a seeded 300-probe sample of `fixture.json` (1,316 probes; `REALSTORE_LIMIT=300` in `scripts/bench-current.mjs`) and all 450 probes of `fixture-category.json`.
 - **Corpus:** `snapshot/store.db` — a frozen copy of a real work store, 29,853 engrams total, **11,262 retrievable**. Gitignored and will stay that way.
 - **Ground truth:** unique-identifier hold-out. An identifier appearing in exactly one active engram, uniqueness confirmed through FTS — the real retrieval path, not a regex. Derived by `tests/realstore-eval/build-fixture.mjs`.
-- **Stamped at:** v0.22.4, 2026-11-15 — `docs/benchmarks-current.md` at the release commit; the 0.22.3 audit run is `bench-runs/0.22.3-2026-11-15/`. Previously 93.3% / 96.0% / 98.7% at v0.21.1 – v0.22.3 (re-measured on 0.22.3: identical), and 92.7% / 92.7% / 97.3% at v0.16.0 – v0.21.0.
-  (identifier.log, category.log; gitignored and maintainer-only, like the snapshot
-  itself). `npm run bench` measured this run once. The same figures were measured
-  twice by different drivers at `eb0620f` — `npm run bench` and
-  `npm run profile:recall`, which agreed to the decimal — and reproduced here
-  unchanged on a different transformers major.
+- **Stamped at:** v0.22.4 / `29365a9`, 2026-11-16 — `docs/benchmarks-current.md`. Measured by `npm run bench` at `29365a9` (`bench-runs/0.22.4-2026-11-16/`: identifier.log, category.log, results.json; gitignored and maintainer-only, like the snapshot itself). The same figures, down to the delivered-token spend, appeared at `4238a43` (`bench-runs/0.22.3-2026-11-15/`, labelled 0.22.3 because `package.json` had not been bumped; the commit is inside 0.22.4).
+- **Previous figures** (identifier `s@1` / topic `s@1` / top five): 93.3% / 96.0% / 98.7% at v0.21.1 – v0.22.3 (the v0.22.3 tag re-measured identically: `bench-runs/0.22.3-2026-11-14/` at `a0038b8`); 92.7% / 92.7% / 97.3% (identifier top five) at v0.19.0 – v0.21.0, first at `72a0934`, the q8-reranker commit, in a run labelled 0.18.1; 93.0% / 92.2% / 97.0% at v0.16.0 – v0.18.1 (runs at `eb0620f`, `2375582`, `7daa286`, `181012b`).
+- **95.0% here, 95.4% in the CHANGELOG and README:** the release notes score all 1,316 identifier queries (93.8% → 95.4% across 0.22.3 → 0.22.4); this page and the benchmark page score the seeded 300-probe sample (93.3% → 95.0%). Same code, different denominators.
 - **Reproducibility:** **Method public.** `npm run bench:public` runs the *same* runner and the *same* hold-out code against a synthetic corpus anyone can rebuild. One implementation serves both corpora, so checking the method here checks the method used there.
 - **Caveats a reviewer should hold us to:**
-  - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers retracted rows; staged and superseded rows can still enter the candidate pool (the BM25 channel filters on agent and retraction only) and superseded, expired and not-yet-valid rows are down-ranked to 0.15 of their score rather than excluded. The benchmark denominator excludes them. `benchmarks-current.md` says this; make sure every other page does too.
-  - These numbers describe **what is published**. They were measured at `2375582`,
-    a commit *inside* the 0.16.1 release; the only source change after it is a
-    comment — §7 carries the diff. They also reproduced *identically* across two
-    transformers majors (3.8.1 and 4.3.1), down to the delivered-token spend, which
-    is the strongest evidence on this page that the figures are a property of the
-    code rather than of one run.
+  - Quote the **retrievable** count (11,262), not the total (29,853). The ranker never considers retracted rows; staged and superseded rows can still enter the candidate pool (the BM25 channel filters on agent and retraction only) and superseded, expired and not-yet-valid rows are down-ranked to 0.15 of their score rather than excluded. The benchmark denominator excludes them. Every page that quotes these figures should say so.
+  - These numbers describe **what is published**: nothing between `29365a9` and the v0.22.4 tag touches `src/` (§7).
+  - **History (0.16.0):** the 93.0% / 92.2% figures were measured twice by different
+    drivers at `eb0620f` (`npm run bench` and `npm run profile:recall`, which agreed to
+    the decimal), then at `2375582`, a commit inside 0.16.1 whose only later source
+    change was a comment. They reproduced *identically* across two transformers majors
+    (3.8.1 and 4.3.1), down to the delivered-token spend.
   - Decay runs on the wall clock, so the snapshot must be clock-pinned or the same corpus scores differently on different days — measured, 70.0% vs 67.0% twenty hours apart before the clock was pinned.
 
 ## 2. Correct silence
@@ -50,10 +47,10 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 - **Correction (2026-11-15):** README and these pages published **58 of 73** (and 66 of 73 at 0.21.0) never-stored facts withheld, and **10 of 97** correct natural answers withheld. Neither reproduces: the v0.22.0 and v0.22.3 tags both measure 50 of 73, and the v0.22.3 tag 2 of 102 natural. The earlier figures came from runs whose tree was not recorded.
 
 - **Produced by:** `tests/realstore-eval/gate-eval.ts`. The shipped `calibrateGate()` fits each agent's gate from the store alone, on synthetic queries with no labels. Then every labelled question goes through ordinary recall: 750 answerable, 73 verified absent (`fixture-absent.json`, every distinctive term checked absent from the store), and 200 "familiar" absent (real questions asked of a copy with their answer deleted). Method and full table: `docs/abstention.md`.
-- **Also measured:** of the 200 familiar-vocabulary absent questions, it withholds 98, flags 28 as low signal and answers 74. That is the hard case, and the figure is pessimistic, because a deleted fact may be repeated elsewhere.
-- **History — natural-language questions (0.21.1 ranking, 2026-10-31):** On natural-language questions (194, written per memory and vetted so they can't lean on rare store words) it withholds **21 of 88** correct answers (24%) and flags 3, while still withholding 65 of 73 never-stored facts. Its calibration probes are keyword-shaped, so natural questions score below the floor it learns. Reproduce with `GATE_FIXTURE=fixture-nl.json`.
+- **Also measured:** of the 200 familiar-vocabulary absent questions, it withholds 95, flags 19 as low signal and answers 86 (v0.22.4; 0.21.1 published 98 / 28 / 74). That is the hard case, and the figure is pessimistic, because a deleted fact may be repeated elsewhere.
+- **History — natural-language questions (0.21.1 ranking, 2026-10-31):** On natural-language questions (194, written per memory and vetted so they can't lean on rare store words) it withholds **21 of 88** correct answers (24%) and flags 3, while still withholding 65 of 73 never-stored facts (0.21.1; not re-measured; 66 of 73 at 0.21.0 did not reproduce, see above). Its calibration probes are keyword-shaped, so natural questions score below the floor it learns. Reproduce with `GATE_FIXTURE=fixture-nl.json`.
 - **Correction (2026-10-30):** 0.21.0 published "withholds **0 of 694** correct answers". `gate-eval.ts` judged correctness from the gated recall, so a withheld answer could never count as correct and that figure was 0 by construction. Judged from an ungated recall, it is **1 of 695**.
-- **Reproducibility:** **Private corpus**, one real store. The gate's tests (`tests/core/abstention-gate.test.ts`) pin the mechanics anywhere; the rates are measured only on the private snapshot so far.
+- **Reproducibility:** **Maintainer only**, one real store. The gate's tests (`tests/core/abstention-gate.test.ts`) pin the mechanics anywhere; the rates are measured only on the private snapshot so far.
 - **Correction (2026-10-29):** this row used to read "**90.0%** correct abstention", published next to 92.7% first-result accuracy. The two were measured in different configurations and were never true together. The 90% came from a strict gate (`abstentionThreshold` 0.3) that drops first-result accuracy to 38% (identifier) and 57% (topic), and it was measured on 10 probes. With the gate actually shipped, `require_confidence` 0.05, AWM withheld **0 of 10**. The old gate could not separate absent from answerable at any threshold; the calibrated gate replaces it as the opt-in.
 - **Why it matters:** this is the metric most agent-memory benchmarks invert. LoCoMo rewards indiscriminate retention, so it caps a salience filter at ~50% however good ranking gets, which is why it was retired in 0.13.x (`docs/benchmarks.md`).
 
@@ -67,21 +64,21 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
   | Suite | spend | recalls | mean per recall |
   |---|---|---|---|
-  | Identifier | 455,486 | 300 | **1,518** |
-  | Topic | 713,745 | 450 | **1,586** |
+  | Identifier | 453,125 | 300 | **1,510** |
+  | Topic | 715,655 | 450 | **1,590** |
 
-  (From the stamped run, `bench-runs/0.16.0-2026-10-10/{identifier,category}.log`.
-  Both totals reproduced to the token on the 2026-10-09 run at `eb0620f`, on a
-  different transformers major. The figures before those — 1,510 and 1,588 — were
-  from the 2026-10-08 run, before the Rocchio pass was defaulted off.)
+  (From the stamped run, `bench-runs/0.22.4-2026-11-16/{identifier,category}.log`;
+  both totals reproduced to the token at `4238a43`. History: 455,486 and 713,745
+  — 1,518 and 1,586 per recall — at v0.16.0 (`bench-runs/0.16.0-2026-10-10/`),
+  and 1,510 and 1,588 on the 2026-10-08 run, before the Rocchio pass was defaulted off.)
 
   So a scoped recall costs roughly **1.5k tokens**, not ~630, and the published figure understates the cost of the product's central operation by about 2.4x — an error in AWM's own favor, which is the direction that most deserves scrutiny.
 
-  **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,518 x 0.30 is about 455, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
+  **A possible benign explanation, untested:** `granularity: 'compact'` saves roughly 70% of recall output, and 1,510 x 0.30 is about 453, so ~630 may be a compact-mode or `auto`-mode figure from an earlier default. The shipped default is `full`. If that is the origin, the claim needs the mode stated next to it; if it is not, the number should be replaced with the measured one. Either way it should not stand unqualified.
 
-  Note also that **net** economics and **cost** are different quantities, and were conflated here previously: the runner reports +518 net per recall on the identifier suite (what a successful recall saves against the ~2,106-token cost of the agent reading the codebase instead), which is not a cost figure and does not reproduce ~630.
+  Note also that **net** economics and **cost** are different quantities, and were conflated here previously: the runner reports +560 net per recall on the identifier suite (what a successful recall saves against the ~2,106-token cost of the agent reading the codebase instead), which is not a cost figure and does not reproduce ~630.
 - **`~1.3M tokens`: now derived, and it holds.** `npm run bench` computes it from the snapshot and stamps it in the provenance table, using the same token estimator the runner applies to what a recall delivers, so both sides of the comparison are measured alike. Over the 11,262 retrievable engrams: **1,234,429** tokens of `concept + content`, **1,545,526** including tags, mean **110** per engram. The published "~1.3M" sits between those two and was correct all along — it simply had no arithmetic behind it. Separately, `docs/awm-for-agents.html` compares the same ~630 against a **29M-token project**: that is a *different* denominator (a codebase, not the store), and the figures are not in conflict, but neither page says which it is using.
-- **What *is* reproducible:** net token economics, by the accounting actually implemented — a recall is credited only when the delivered text contains the answer-bearing identifier, so a recall that returns an unusable pointer scores as a miss rather than a save. Public corpus: **+245** net per recall (seed 20261008), **+181** (seed 99). Private snapshot at the stamped commit: **+518**.
+- **What *is* reproducible:** net token economics, by the accounting actually implemented — a recall is credited only when the delivered text contains the answer-bearing identifier, so a recall that returns an unusable pointer scores as a miss rather than a save. Public corpus: **+354** net per recall (seed 20261008, v0.22.4; the seed-99 run's net figure was not archived). Private snapshot at the stamped commit: **+560**. History: October published +245 (seed 20261008) and +181 (seed 99) public, +518 private (v0.16.0).
 - **Reproducibility:** **Maintainer only** for `~1.3M` — the derivation is published and runs on any store, but reproducing *this* figure needs the private snapshot. **Not reproducible** for `~630` as written, because nothing derives it. **Method public** for net economics.
 - **Action remaining:** `~1.3M` is done. `~630` needs resolving before outreach: re-measure the identifier suite with `REALSTORE_GRANULARITY=compact` to test whether that is the figure's origin, then either qualify the claim with the mode or replace it with the measured ~1.5k. Both pages should also say which denominator they are using, so ~1.3M (the store) and 29M (a codebase) stop reading as a contradiction.
 
@@ -115,39 +112,21 @@ is weak, this page says so rather than waiting for a reviewer to find it.
 
 ## 7. Version currency — the page is measured inside the release it describes
 
-`docs/benchmarks-current.md` is stamped **v0.16.0 / `2375582` / 2026-10-10**. That commit is
-*inside* 0.16.1 — it is the dependency sweep this release ships — and nothing between it and
-the tag touches `src/`:
+`docs/benchmarks-current.md` is stamped **v0.22.4 / `29365a9` / 2026-11-16**. The v0.22.4 tag
+is `4e14a30`, one commit later, and that commit changes documentation only (the regenerated
+page, README and other docs). Nothing between the two touches `src/`:
 
 ```bash
-git diff 2375582..v0.16.1 -- src/
+git diff 29365a9 v0.22.4 -- src/
 ```
 
-It returns one file, `src/core/reranker.ts`, and every changed line is a comment: the
-correction that re-dates the dead `return_tensors` key from 0.7.13 to 0.5.2. So §1 describes
-the code on npm, and the lag is zero lines of executable source. Quoting "empty" here would
-have been easier and wrong — the first draft of this section did, and the one-command proof
-is exactly what a reviewer runs.
+returns nothing, so §1 describes the code on npm.
 
-The version *label* on the page reads 0.16.0 because that is what `package.json` said when the
-suites ran; the page is a record of a run, not a statement about a release. Re-measuring after
-the version bump would change the label and nothing else, and the figures had already
-reproduced identically across two transformers majors (§1). It was not re-run because the
-preflight would not let it start. `npm run bench -- --dry-run` at release time printed:
-
-```
-x memory headroom: 4.8 GB free (need 8) — lower of commit 72.1 GB, physical 4.8 GB
-  Five eval runs have been OOM-killed on this machine, one mid-write. Refusing to start.
-```
-
-That refusal is deliberate and was left in force rather than overridden with
-`BENCH_MIN_HEADROOM_GB`.
-
-**What is still missing is structural, and it has now produced three rewrites of this section
-in two days.** The page records a version and a commit but never says whether that commit is
-*released*, so a reader cannot tell which side of the tag they are on without doing the
-arithmetic by hand. Numbers behind the package, numbers ahead of it, and now numbers level with
-it — all three states trace to that one absent field.
+**What is still missing is structural, and it has produced a rewrite of this section at
+nearly every release.** The page records a version and a commit but never says whether that
+commit is *released*, so a reader cannot tell which side of the tag they are on without doing
+the arithmetic by hand. Numbers behind the package, numbers ahead of it, and numbers level
+with it all trace to that one absent field.
 
 - **Action:** have `scripts/bench-current.mjs` stamp the commit's position relative to the
   newest tag — "released" or "N commits past vX.Y.Z" — so the page answers this itself instead
@@ -159,6 +138,14 @@ it — all three states trace to that one absent field.
 shipped. It was then rewritten to warn of the inverse: figures 21 commits *ahead* of the
 released tag, describing a repository rather than a package, where an install still ran the
 Rocchio pass and scored the old 92.7% / 92.0% / 96.7%.
+
+At 0.16.1 the page was stamped **v0.16.0 / `2375582` / 2026-10-10**, a commit inside 0.16.1
+(the dependency sweep it shipped). `git diff 2375582..v0.16.1 -- src/` returned one file,
+`src/core/reranker.ts`, and every changed line was a comment, so that page also described the
+code on npm. The label read 0.16.0 because that is what `package.json` said when the suites
+ran. It was not re-run after the version bump because the bench preflight refused to start
+(`4.8 GB free (need 8)`; five eval runs had been OOM-killed on the machine), a refusal left in
+force rather than overridden with `BENCH_MIN_HEADROOM_GB`.
 
 ## 8. What the public benchmark does and does not tell you
 
@@ -188,9 +175,10 @@ the query-dense rerank window shipped (2026-08-24), 72.9% on 0.22.3, **77.1%** o
 - It **does not** reproduce the published numbers, and is not comparable to
   them. A synthetic corpus scores **lower**: generated prose is more
   self-similar, so same-domain neighbors are harder to separate.
-- **Noise floor:** two builds differing only in seed gave `s@1` 56.3% and
-  52.0%. The corpus *shape* reproduces to 0.2pp and every qualitative result
-  holds, but a 2pp move in the absolute is noise. Confirm on two seeds.
+- **Noise floor:** measured 2026-10-08: two builds differing only in seed gave
+  `s@1` 56.3% and 52.0%. The corpus *shape* reproduces to 0.2pp and every
+  qualitative result holds, but a 2pp move in the absolute is noise. On 0.22.4
+  the two seeds differ by 5.3pp (52.8% vs 47.5%). Confirm on two seeds.
 
 ---
 
@@ -223,7 +211,7 @@ the query-dense rerank window shipped (2026-08-24), 72.9% on 0.22.3, **77.1%** o
 
 Listed deliberately, in the order we would attack it ourselves:
 
-1. **`~630 tokens` is not derived, and the harness measures ~1,518 instead** —
+1. **`~630 tokens` is not derived, and the harness measures ~1,510 instead** —
    the published figure understates the cost of a scoped recall by about 2.4x,
    in the product's favor (§3).
    `~1.3M` now is — `npm run bench` computes 1,234,429 from the snapshot and
@@ -231,18 +219,18 @@ Listed deliberately, in the order we would attack it ourselves:
    it. Two pages still fail to say which denominator they use, so ~1.3M (the
    store) and 29M (a codebase) read as a conflict when they are not.
 2. **The benchmark page cannot say whether the commit it names is released** — the
-   figures do describe what 0.16.1 ships, and §7 carries a one-command proof, but the
+   figures do describe what 0.22.4 ships, and §7 carries a one-command proof, but the
    page itself records only a version and a commit, so a reader has to do the tag
-   arithmetic by hand. Three rewrites of §7 in two days all trace to that one absent
-   field (§7).
+   arithmetic by hand. Every rewrite of §7 traces to that one absent field (§7).
 3. **The two most rhetorically effective claims — 14/15 and 49-vs-100 — are
    `n = 15` and `n = 4`, and neither is reproducible** (§4, §5).
 4. **The 41% "entered only through a recall" figure has no harness** (§6),
    despite being the most load-bearing claim about whether any of this changes
    outcomes.
-5. **The abstention figures come from one store and keyword-style questions** (§2). The old
-   ten-probe basis is replaced by 73 verified-absent plus 200 familiar-vocabulary probes, but
-   the benchmark still has no natural-language questions.
+5. **The abstention figures come from one private store** (§2). The old ten-probe basis is
+   replaced by 73 verified-absent plus 200 familiar-vocabulary probes, and natural-language
+   questions are measured too (194 in `fixture-nl.json`), but every population is drawn from
+   that one store.
 6. **The headline model — one thread, any number of topics — rests on 4/5 vs 3/5** in one
    multi-task run, where AWM's own share was not isolated (§9).
 

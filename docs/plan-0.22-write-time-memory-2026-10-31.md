@@ -1,6 +1,6 @@
 # Plan: AWM 0.22 — memory that does its work when it is written
 
-*Design record, 2026-10-31. Status: proposed, for Robert's review. Builds on the measurements in
+*Design record, 2026-10-31. Status: largely shipped in 0.22.0–0.22.4 (questions, slots, the capability hand-off and the natural-language re-ranker; see CHANGELOG); some sections, such as the profiles in §4.11, have no matching release entry. Builds on the measurements in
 [abstention-signals-2026-10-30.md](abstention-signals-2026-10-30.md) (the findings ledger) and the
 0.21.1 ranking work in the CHANGELOG. Every decision below names the measurement behind it.*
 

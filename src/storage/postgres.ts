@@ -1463,7 +1463,7 @@ export class PostgresEngramStore {
   async searchEntities(term: string, limit: number = 8, agentIds?: string[]): Promise<string[]> {
     const t = term.toLowerCase().replace(/[%_]/g, '');
     if (!t) return [];
-    // 0.23: scoped to the given agents when supplied (their mentions, their own aliases plus
+    // 0.22.3: scoped to the given agents when supplied (their mentions, their own aliases plus
     // the shared '' ones). Unscoped callers see everything, as before.
     if (agentIds && agentIds.length > 0) {
       const res = await this.q(
@@ -1495,7 +1495,7 @@ export class PostgresEngramStore {
     return (res.rows as Array<{ engram_id: string }>).map(r => r.engram_id);
   }
 
-  /** 0.23: register `alias → entity` for one agent; returns what it pointed at before. */
+  /** 0.22.3: register `alias → entity` for one agent; returns what it pointed at before. */
   async setEntityAlias(agentId: string, alias: string, entity: string): Promise<{ previous: string | null }> {
     const prev = await this.q('SELECT entity FROM entity_aliases WHERE agent_id = $1 AND alias = $2', [agentId, alias]);
     await this.q(`INSERT INTO entity_aliases (agent_id, alias, entity) VALUES ($1, $2, $3)
@@ -1504,13 +1504,13 @@ export class PostgresEngramStore {
     return { previous: p && p !== entity ? p : null };
   }
 
-  /** 0.23: remove one agent's alias. True when a row was deleted. */
+  /** 0.22.3: remove one agent's alias. True when a row was deleted. */
   async removeEntityAlias(agentId: string, alias: string): Promise<boolean> {
     const res = await this.q('DELETE FROM entity_aliases WHERE agent_id = $1 AND alias = $2 RETURNING alias', [agentId, alias]);
     return res.rows.length > 0;
   }
 
-  /** 0.23: aliases visible to these agents (their own plus shared ''), optionally for one entity. */
+  /** 0.22.3: aliases visible to these agents (their own plus shared ''), optionally for one entity. */
   async listEntityAliases(agentIds: string[], entity?: string): Promise<Array<{ agentId: string; alias: string; entity: string }>> {
     if (agentIds.length === 0) return [];
     const res = entity
@@ -1519,7 +1519,7 @@ export class PostgresEngramStore {
     return (res.rows as Array<{ agent_id: string; alias: string; entity: string }>).map(r => ({ agentId: r.agent_id, alias: r.alias, entity: r.entity }));
   }
 
-  /** 0.23: exact key / alias / value matches for normalised terms (see the SQLite store). */
+  /** 0.22.3: exact key / alias / value matches for normalised terms (see the SQLite store). */
   async matchEntityTerms(terms: string[], agentIds: string[]): Promise<Array<{ term: string; entity: string; via: 'key' | 'alias' | 'value'; agentId: string }>> {
     const uniq = Array.from(new Set(terms.filter(t => t && t.length <= 160)));
     if (uniq.length === 0 || agentIds.length === 0) return [];

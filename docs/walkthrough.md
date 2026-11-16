@@ -57,7 +57,7 @@ The score lands the write in one of three places:
 | salience | disposition | what happens |
 |---|---:|---|
 | ≥ 0.4 | **active** | stored, visible to recall immediately |
-| 0.2 – 0.4 | **staging** | held in a probationary area; promoted if later evidence supports it, otherwise swept after 30 days |
+| 0.2 – 0.4 | **staging** | held in a probationary area; promoted if later evidence supports it, otherwise deleted after 24 hours |
 | < 0.2 | **low-salience** | kept at reduced confidence so it is not lost, but effectively invisible to recall |
 
 On the live store this is not theoretical: **about one third** of everything ever offered
@@ -107,13 +107,15 @@ result. It is kept because the links themselves are useful state; see the limita
 **Re-read the top candidates properly.** The stages above are fast and approximate. The
 final stage hands the top few dozen to a small model — a *cross-encoder* — that reads the
 query and each candidate together and produces a relevance judgment. This is expensive per
-item, which is why it only runs on the shortlist, and it decides the final order.
+item, which is why it only runs on the shortlist. When it is clearly sure, its top pick goes
+first; otherwise its score is blended with the earlier stages' rank, which orders the rest.
 
 One detail here is the kind of thing that only shows up in real use. Real memories are
 long — the median is about 2,000 characters — and the cross-encoder can only read 400. For
 a long time AWM handed it the *first* 400, and the identifier that mattered was usually
 further down. It now hands it the 400-character window densest in the query's own terms,
-plus the memory's tags. That one change moved recall on long memories from 25% to 87.5%.
+plus the memory's tags. That one change moved recall on long memories from 25% to 87.5% when it shipped (77.1% today, with
+the current final order).
 
 **Decide whether to answer at all.** This is the third difference. Before returning
 results, AWM looks at the *shape* of the scores. If the best candidate is only slightly
@@ -125,7 +127,7 @@ light enough that it rarely fires: on ten questions about facts that were never 
 default stayed quiet on none. (An earlier "nine of ten" came from a strict setting nobody
 ships, and has been withdrawn.) The opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`)
 does this job properly: it learns from the store what "no answer here" looks like and, on the
-same real store, withholds 66 of 73 never-stored facts and none of 694 correct answers. See
+same real store, withholds 50 of 73 never-stored facts and 1 of 718 correct answers (v0.22.4). See
 [abstention.md](abstention.md).
 
 For our query, the top result is the memory written in step 1. It arrives as:
@@ -170,8 +172,8 @@ When a session ends, or after five idle minutes, AWM runs a maintenance pass it 
 - archives memories that are low-confidence, rarely accessed, and old
 - promotes or sweeps whatever is sitting in staging
 
-Nothing here is deleted. Archived and swept memories remain in the database and can be
-found by direct search; they just stop competing in recall. The store has a hard cap of
+Archived memories are not deleted: they remain in the database and can be found by direct
+search; they just stop competing in recall. Staged memories that never earn promotion are deleted. The store has a hard cap of
 10,000 *active* memories per agent; the live store sits at about 8,000.
 
 ## 6. The fact changes
@@ -226,12 +228,12 @@ a shared **workspace** so specialised agents read from a common pool.
 | keep it local and per-agent | no data leaves the box; work and personal never mix |
 
 Measured, on a frozen copy of a real 30,000-memory store: the right memory is the **first**
-result **92.7%** of the time on identifier queries and **92.7%** on topic queries, in the
-top five about 97% of the time. Plain keyword search scores about the same on those
+result **95.0%** of the time on identifier queries and **96.2%** on topic queries, in the
+top five 98.7% of the time (v0.22.4). Plain keyword search scores about the same on those
 questions (95.7% / 91.6% first), because they are keyword-friendly by construction; over the
 raw store, with replaced facts still in it, keyword search falls to 87.7% / 79.8% and puts a
-superseded memory first 8–15% of the time. With the opt-in calibrated gate, AWM withholds 66
-of 73 questions it has no answer to. Warm recall takes about half a second.
+superseded memory first 8–15% of the time. With the opt-in calibrated gate, AWM withholds 50
+of 73 questions it has no answer to. Warm recall takes about 300 ms at the median (p90 under 0.4 s).
 
 ## What it does not do, stated plainly
 
@@ -243,8 +245,8 @@ of 73 questions it has no answer to. Warm recall takes about half a second.
   does that. The graph's value is in the state it accumulates, not in today's ranking.
 - Small one-off tasks do not benefit. The overhead of writing and recalling pays back when
   knowledge is reused or when the project outgrows what fits in the assistant's context.
-- It is version 0.x and honest about it: the benchmark itself has been corrected three
-  times this month when the instrument, not the engine, turned out to be wrong.
+- It is version 0.x and honest about it: the benchmark itself has been corrected several
+  times when the instrument, not the engine, turned out to be wrong (see the CHANGELOG).
 
 The full list is in [`known-limitations.md`](known-limitations.md).
 

@@ -334,7 +334,8 @@ function render(meta, results) {
   L.push('');
   L.push('> **Which engram count to quote.** Recall can only ever return the *retrievable*');
   L.push('> population, so that is the honest denominator for a retrieval score. The larger');
-  L.push('> total counts staged, retracted and superseded rows the ranker never considers.');
+  L.push('> total also counts retracted rows (never considered) and staged or superseded rows,');
+  L.push('> which can enter the candidate pool but are down-ranked and excluded from the denominator.');
   L.push('> Quote one, say which, and use the same one everywhere.');
   L.push('');
   L.push('## Retrieval');

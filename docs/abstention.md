@@ -46,11 +46,20 @@ but the gate was not listening to it.
 
 ## How the calibrated gate works
 
-1. **Features.** It uses three numbers from the final ranking:
+1. **Features.** It uses three numbers from the ranking:
    - the cross-encoder score of the top result, on the logit scale (scores bunch near 1, and the
      logit keeps them apart);
    - the vector similarity of the top result;
    - the logit margin between results #1 and #2.
+
+   Since 0.22.4 those are read from the **blend's** order (`gateOrder` in
+   `src/engine/activation.ts`), not from the final order after the first-place rule: the
+   thresholds were fitted on the blend's #1, and scoring the rule's #1 shifted the gate's
+   decisions. Calibration labels its probes by the same result (`gateTopId`). A natural-language
+   question (`src/core/query-shape.ts`) is scored by a **separate model** (`GateModel.natural`,
+   0.22), fitted on the memories' stored questions; when the store has too few questions to fit
+   it, natural queries use the main model. `AWM_GATE_FEATURES=2` selects an eight-signal set
+   (adds BM25 and cosine-distribution features); the three-signal set is the default.
 2. **Self-calibration, with no labels.** After a full consolidation, or on `awm calibrate`, AWM
    generates about 300 queries from its own store and runs them as internal recalls, which leave
    no trace. There are three kinds:
@@ -75,7 +84,11 @@ but the gate was not listening to it.
 `require_confidence: 0` on `memory_recall` opens the gate, for when the user has reason to think
 the fact *is* stored.
 
-## Measured: the shipped code on the real snapshot
+## History: 0.21.1 measurements on the real snapshot
+
+> **History, not current figures.** This section records the 0.21.1 measurements, before the
+> natural-question model and stored questions (0.22) and the first-place rule (0.22.4). The
+> current figures are at the top of this page.
 
 `tests/realstore-eval/gate-eval.ts` runs the real `calibrateGate()` per agent from the store
 alone, switches the gate on, and sends every labelled question through ordinary recall. Figures
@@ -88,7 +101,7 @@ the 0.21.0 figures are in the CHANGELOG.
 | Absent, new vocabulary (73) | 5 | 2 | **65 (89%)** + 1 empty |
 | Absent, familiar vocabulary (200) | 74 | 28 | **98 (49%)** |
 
-The same gate on **natural-language questions** (`GATE_FIXTURE=fixture-nl.json`: 194 questions
+The same 0.21.1 gate on **natural-language questions** (`GATE_FIXTURE=fixture-nl.json`: 194 questions
 written per memory, vetted to use at most one store-rare word and no identifiers):
 
 | | Answered | ⚠ Low signal | Withheld |
@@ -102,20 +115,22 @@ judged correctness from the gated recall, so a withheld answer could never be co
 the figure was 0 by construction. It now judges correctness from an ungated recall; on the 0.21.0
 ranking the true figure was 1 of 695.
 
-The two agents get different floors (answer at −0.93 and −2.10 on this run), which is the gate
+The two agents got different floors (answer at −0.93 and −2.10 on that run), which is the gate
 adapting to each store.
 
-**What this means:**
-- **Never-stored facts:** AWM withholds 89% of questions about facts that were never stored, up
-  from about 0% with the default gate.
-- **Correct answers:** on keyword-shaped questions it withholds two of 706 and flags three. On
-  natural-language questions it withholds 21 of 88. Calibration generates keyword-shaped probes
-  (title words plus a distinctive term), so a naturally phrased question scores below the floor it
-  learned. Why, measured, and the fix planned for 0.22:
-  [abstention-signals-2026-10-30.md](abstention-signals-2026-10-30.md).
+In 0.21.1 natural-language questions lost a quarter of their correct answers (21 of 88) because
+calibration generates keyword-shaped probes, so a naturally phrased question scored below the
+floor it learned ([abstention-signals-2026-10-30.md](abstention-signals-2026-10-30.md)). 0.22
+shipped the fix: a separate model for natural-language questions, fitted on stored questions.
+
+**What this means (v0.22.4, re-measured 2026-11-15):**
+- **Never-stored facts:** AWM withholds 50 of 73 questions about facts that were never stored,
+  up from about 0% with the default gate.
+- **Correct answers:** on keyword-shaped questions it withholds 1 of 718 and flags 6. On
+  natural-language questions, once memories carry questions, it withholds 3 of 103.
 - **The hard case:** facts whose surroundings are familiar but the answer is gone. On keyword
-  questions it withholds or flags 63% and still answers 37%; on natural-language questions it
-  withholds or flags 71% and answers 29%.
+  questions it withholds 95 of 200 and flags 19 more; on natural-language questions it still
+  answers 88 of 97.
 
 ## Limits
 
@@ -129,9 +144,11 @@ adapting to each store.
   §4–5 and §12.
 - **Measured on one store.** It is a real 29,853-memory store, but only one. The public
   synthetic corpus (`npm run bench:public`) is the reproducible check for others.
-- **The question set is keyword-style.** It contains no natural-language questions; that is a
-  benchmark gap to close.
+- **Two question sets, one store.** The keyword-style set is the main one; the natural-language
+  fixture (`fixture-nl.json`, 194 questions written per memory) is smaller, so its figures move
+  more from run to run.
 - **The cross-encoder must run.** With the reranker disabled, the gate stands aside.
 - **The familiar-vocabulary absent set** is built by deleting one memory. If the same fact is
-  repeated in another memory, that "absent" question is really answerable, so the 39% is a
+  repeated in another memory, that "absent" question is really answerable, so the share of
+  deleted-fact questions still answered (for example 88 of 97 natural-language ones) is a
   pessimistic figure.

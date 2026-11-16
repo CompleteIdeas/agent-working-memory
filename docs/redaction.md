@@ -49,14 +49,17 @@ Stored (active) "Stripe payout setup" [0.72]
 
 ## Where it runs
 
-1. **`performWrite`** (`src/core/write-pipeline.ts`) redacts concept, content and tags first,
-   so novelty matching and the embedding never see the value, and returns the findings.
+1. **`performWrite`** (`src/core/write-pipeline.ts`) redacts concept, content, tags and
+   questions first, so novelty matching and the embedding never see the value, and returns the
+   findings.
 2. **The store wrapper** (`src/storage/redacting-store.ts`), applied in `openStore()` to
-   every backend, masks the nine methods that persist free text:
-   - `createEngram`, `updateContent`, `updateTags`;
+   every backend, masks the methods that persist free text (`REDACTED_METHODS`, eleven as of
+   v0.22.4):
+   - `createEngram` (including its questions), `setQuestions`, `updateContent`, `updateTags`;
    - `saveCheckpoint`, `saveSessionCheckpoint`;
    - `logActivationEvent`, `logRetrievalFeedback`, `updateAutoCheckpointRecall`;
-   - `createEpisode`.
+   - `createEpisode`;
+   - `setEntityAlias` (masked but not sealed, so the same alias still matches itself).
 
    Paths that bypass the pipeline (HTTP batch writes, tasks, consolidation, retraction,
    recall-query logs) are covered without remembering to.

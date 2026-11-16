@@ -82,10 +82,16 @@ The global install path inside the image is
 
 ```bash
 npm install -g agent-working-memory
-node -e "console.log(require.resolve('agent-working-memory/dist/mcp.js'))"
+echo "$(npm root -g)/agent-working-memory/dist/mcp.js"          # macOS / Linux
 ```
 
-Use the printed path as the `args` value in the config block.
+```powershell
+Join-Path (npm root -g) "agent-working-memory/dist/mcp.js"       # PowerShell
+```
+
+Use the printed path as the `args` value in the config block. (`require.resolve` does not
+search the global npm root, so a `node -e "require.resolve(...)"` one-liner fails for a global
+install.)
 
 ---
 
@@ -95,13 +101,15 @@ Add the [`mcp_servers.awm`](#tldr) block to `~/.hermes/config.yaml` (inside the
 Hermes data dir, e.g. `/opt/data/config.yaml` in Docker). Notes:
 
 - **`AWM_DB_PATH`** must point at a persistent location (a mounted volume in
-  Docker) so memories survive container/session recreation. Pre-create the
-  parent directory — `better-sqlite3` will not create it.
+  Docker) so memories survive container/session recreation. AWM creates the
+  parent directory on startup (its logger writes `awm.log` there before the
+  store opens), but on a mounted volume it must be writable by the Hermes user.
 - **`AWM_AGENT_ID`** namespaces the memories. Use a stable value per agent. Set
   it to a shared name (and `AWM_WORKSPACE`) if multiple agents should share a
   memory pool.
-- **`timeout: 600`** — the *first* recall/write triggers a one-time embedding
-  model download (~tens of MB) into `HF_HOME`. Subsequent calls are fast.
+- **`timeout: 600`** — the *first* recall/write triggers a one-time model
+  download (~175 MB: the embedder and two rerankers) into `HF_HOME` (or
+  `AWM_CACHE_DIR`, which takes precedence). Subsequent calls are fast.
 
 Hermes rewrites `config.yaml` to its full canonical form on first boot but
 **preserves your `mcp_servers` block**.
@@ -178,7 +186,8 @@ MCP tools are namespaced `mcp_<server>_<tool>`. With `awm` as the server name:
 | `memory_task_begin` / `memory_task_end` | `mcp_awm_memory_task_begin` / `_end` |
 | `compress_output` / `retrieve_original` | `mcp_awm_compress_output` / `_retrieve_original` |
 
-All 16 AWM tools are exposed. Hermes also has its own lightweight memory
+All 22 AWM tools are exposed (18 `memory_*`, `onboard_scan` / `onboard_questions`,
+and `compress_output` / `retrieve_original`). Hermes also has its own lightweight memory
 (`MEMORY.md` + FTS5 session search); AWM adds cognitive recall
 (embeddings + BM25 + reranker + associative graph + decay) on top — leave both
 on, or scope Hermes' built-in memory toolset off if you want AWM to be the sole
@@ -197,7 +206,8 @@ memory layer.
   Keep `HF_HOME` on the persistent volume so it's cached across runs.
 - **`hermes mcp list`** may error `typer is required` — cosmetic, unrelated to
   runtime MCP. Verify with an actual `chat` instead.
-- **`AWM_DB_PATH` parent dir** must exist before first run.
+- **`AWM_DB_PATH` parent dir** is created on first run; it must be writable by the
+  user Hermes runs as.
 
 ---
 
@@ -211,6 +221,10 @@ command: node
 args:    [<path>/agent-working-memory/dist/mcp.js]
 env:     AWM_AGENT_ID, AWM_DB_PATH, HF_HOME, [AWM_WORKSPACE]
 ```
+
+The retrieval flags `awm setup` writes for Claude Code (`AWM_RERANK2`, `AWM_RERANK_WINDOW`,
+`AWM_RERANK_TAGS`) are code defaults since 0.18, so a generic host gets the same ranking
+without setting them.
 
 This is the same server Claude Code connects to; pointing two hosts at the same
 `AWM_DB_PATH` (+ shared `AWM_AGENT_ID`/`AWM_WORKSPACE`) gives them a shared

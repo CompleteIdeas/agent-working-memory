@@ -1,5 +1,8 @@
 # How-To Recipes
 
+The HTTP recipes below need the API server: run `awm serve` (port 8400, `AWM_PORT` changes it).
+`awm setup` installs only the MCP server, which agents use through tools rather than HTTP.
+
 ## 1. Store a high-importance memory
 
 Set `eventType: "decision"` or `"causal"` with high `surprise` and `causalDepth` to ensure the memory lands in `active` (not staging or discarded).
@@ -39,7 +42,7 @@ curl -X POST http://localhost:8400/memory/activate \
 
 ## 3. Recall with maximum quality (reranker + expansion)
 
-Both are on by default, but you can explicitly control them:
+The reranker is on by default. Expansion is off since 0.22.1 (`AWM_DEFAULT_EXPANSION=1`, or `useExpansion: true` per call, turns it on; it downloads the 377 MB flan-t5 model):
 
 ```bash
 curl -X POST http://localhost:8400/memory/activate \
@@ -55,7 +58,7 @@ curl -X POST http://localhost:8400/memory/activate \
 
 ## 4. Fast recall without ML overhead
 
-Disable the reranker and query expander for faster responses (~10ms vs ~200ms):
+Disable the reranker and query expander for faster responses (~10 ms vs ~300 ms warm on a 30k-memory store):
 
 ```bash
 curl -X POST http://localhost:8400/memory/activate \
@@ -124,7 +127,7 @@ Healthy indicators:
 - Average confidence between 0.3-0.8
 - Retraction rate < 5%
 - Edge utility rate > 50%
-- P95 latency < 100ms
+- Warm recall p90 under ~0.5 s with the reranker on (p50 ~300 ms on a 30k-memory store)
 
 ## 9. Run capacity enforcement manually
 
@@ -173,8 +176,9 @@ npm run test:self
 # Workday eval (14 coding recall challenges)
 npm run test:workday
 
-# LOCOMO benchmark (199 QA pairs, industry standard)
-npm run test:locomo
+# Real-store and public benchmarks (LoCoMo was retired in 0.13.x; see docs/benchmarks.md)
+npm run bench
+npm run bench:public:build && npm run bench:public
 ```
 
 ## 13. Keep secrets out of memory
@@ -253,8 +257,8 @@ grown by 20%). Each recall then lands in one of three bands:
 If you have reason to think the fact is stored, pass `require_confidence: 0` on `memory_recall` to
 open the gate for that call.
 
-Measured on one real store with keyword-style questions, it withheld 66 of 73 questions about
-facts never stored and none of 694 correct answers. See [abstention.md](abstention.md).
+Measured on one real store (v0.22.4), it withheld 50 of 73 questions about facts never stored
+and 1 of 718 correct keyword-style answers; on natural-language questions, 3 of 103 correct answers. See [abstention.md](abstention.md).
 
 ## 16. Teach the agent a whole project
 

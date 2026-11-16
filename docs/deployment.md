@@ -12,17 +12,18 @@ Three patterns covered here, in order of complexity:
 2. **Railway / Fly / Render** — managed platforms that consume the Docker image.
 3. **Plain Linux server (systemd)** — when you want full control.
 
-Plus a section on **backup, restore, and migration** because the
-[known-limitations](known-limitations.md) note about "no built-in export/import"
-applies to library tooling, not to the file-level procedures that actually work.
+Plus a section on **backup, restore, and migration**: file-level copies for
+whole stores, and the `awm export` / `awm import` / `awm merge` CLI commands for
+moving one agent's memories between stores.
 
 ---
 
 ## 1. The Docker recipe (foundation)
 
 The canonical Dockerfile lives at the top of the AWM repo. It's
-multi-stage (build with full toolchain, ship with prod deps only) and
-sized at ~200 MB.
+multi-stage (build with full toolchain, ship with prod deps only). The
+models are not baked into the image: about 175 MB downloads to the model
+cache on first use, which is why the cache belongs on the persistent volume.
 
 Key choices baked into the recipe, in case you adapt it:
 
@@ -43,17 +44,41 @@ docker run -d --name awm \
   -p 8400:8400 \
   -v awm-data:/data \
   -e AWM_AGENT_ID=my-agent \
+  -e AWM_BIND=0.0.0.0 \
+  -e AWM_API_KEY=<key> \
   awm:dev
 curl http://localhost:8400/health
-# {"status":"ok","version":"0.8.x","coordination":false}
+# {"status":"ok","timestamp":"…","version":"<installed version>","coordination":false,…}
 ```
+
+PowerShell (Windows) — the same command with backtick line continuations:
+
+```powershell
+docker run -d --name awm `
+  -p 8400:8400 `
+  -v awm-data:/data `
+  -e AWM_AGENT_ID=my-agent `
+  -e AWM_BIND=0.0.0.0 `
+  -e AWM_API_KEY=<key> `
+  awm:dev
+curl.exe http://localhost:8400/health
+```
+
+`AWM_BIND=0.0.0.0` is what makes the published port reachable. The server binds
+`127.0.0.1` unless `AWM_BIND` says otherwise, and inside a container that is the
+container's own loopback — so without it `-p 8400:8400` forwards to nothing and
+`curl` from the host fails even though the container's own health check passes.
+Binding beyond loopback with no `AWM_API_KEY` is refused at startup (the process
+logs `AWM refusing to start` and exits); `AWM_ALLOW_INSECURE=1` overrides that on
+a network you trust.
 
 Required ENV (no defaults you'd want to keep in prod):
 
 | Variable | Recommended |
 |---|---|
 | `AWM_AGENT_ID` | A stable namespace string per logical agent |
-| `AWM_API_KEY` | Bearer token for the HTTP API (set this!) |
+| `AWM_BIND` | `0.0.0.0` in a container (or the interface your clients reach). The default, `127.0.0.1`, is unreachable from outside the container |
+| `AWM_API_KEY` | Bearer token for the HTTP API. Required whenever `AWM_BIND` is not loopback — the server refuses to start without it |
 | `AWM_HOOK_SECRET` | Bearer token for the hook sidecar |
 
 Optional but useful:
@@ -204,17 +229,20 @@ sudo systemctl enable --now awm
 sudo journalctl -u awm -f
 ```
 
-If you set `AWM_API_KEY`, every HTTP request needs
+If you set `AWM_API_KEY`, every HTTP request except `GET /health` needs
 `Authorization: Bearer <key>`. The hook sidecar uses `AWM_HOOK_SECRET`
-separately. Without these, anything on the same network can write to your
-memory store.
+separately. The server binds `127.0.0.1` unless `AWM_BIND` is set, and a
+non-loopback `AWM_BIND` with no `AWM_API_KEY` refuses to start, so an open
+network listener takes an explicit `AWM_ALLOW_INSECURE=1`. (Before 2026-07-30
+the server listened on all interfaces with no key required.)
 
 ---
 
 ## 5. Backup, restore, migration
 
-The library has no built-in export tool, but the file-level procedures
-below work and are what you'd reach for in production.
+Whole-store backup and restore are file-level procedures, below. To move one
+agent's memories between stores, use the `awm export` / `awm import` / `awm merge`
+commands (see *Subset migration*).
 
 ### Backup
 
@@ -263,25 +291,19 @@ additive `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE`), the
 ### Subset migration (one agent_id from one DB to another)
 
 Useful when you want to seed a fresh production AWM with a curated
-subset of an existing dev DB:
+subset of an existing dev DB. Export the agent you want, then import it
+into the target store (the same commands work in PowerShell, bash and zsh):
 
-```python
-import sqlite3, shutil
-shutil.copy("dev-memory.db", "subset.db")
-con = sqlite3.connect("subset.db")
-con.execute("DELETE FROM engrams WHERE agent_id NOT IN ('my-real-agent','awm-meta')")
-# Also clean orphaned rows in tables that have agent_id columns:
-for t in ["activation_events", "conscious_state", "episodes", "staging_events"]:
-    con.execute(f"DELETE FROM {t} WHERE agent_id NOT IN ('my-real-agent','awm-meta')")
-con.commit()
-con.execute("VACUUM")
-con.close()
-# subset.db is now ready to ship to prod.
+```bash
+awm export --db dev.db --agent my-real-agent --output my-real-agent.json
+awm import my-real-agent.json --db prod.db --dedupe
 ```
 
-The FTS5 indices, embeddings, and association tables are referenced by
-engram ID and are cleaned automatically by the `DELETE … WHERE agent_id`
-plus `VACUUM`.
+`awm import` also takes `--remap-agent <id>` (load under a different agent id)
+and `--dry-run`; `awm export --active-only` leaves archived memories out. To
+combine whole stores, use
+`awm merge --target <path> --source <path> [--source <path> …] [--dedupe] [--dry-run]`.
+Take a backup of the target first.
 
 ---
 
@@ -312,42 +334,42 @@ multi-agent task hand-off within a single store, not for sharding across
 stores.
 
 
-### Operating modes: quality-first and latency-first
+<a id="operating-modes-quality-first-and-latency-first"></a>
 
-AWM ships the default plus **one** supported latency mode, and that mode is a
-single knob, deliberately.
+### Reranker precision: q8 (default) and fp32
 
-| | Quality-first (default) | Latency-first |
+Since 0.19 the cross-encoder runs **int8-quantized (`q8`) by default**.
+`AWM_RERANKER_DTYPE=fp32` is the opt-in that restores the full-precision ranker
+AWM shipped through 0.18. It is a single knob, deliberately.
+
+| | q8 (default since 0.19) | fp32 (opt-in) |
 |---|---|---|
-| Setting | *nothing — this is the default* | `AWM_RERANKER_DTYPE=q8` |
-| Cross-encoder weights | fp32 | int8-quantized |
-| Warm recall p50 | 292–533 ms | 196–395 ms (**−26% to −33%**) |
-| *(that range spans)* | *identifier 533, topic 522, public 292* | *identifier 395, topic 358, public 196* |
-| ONNX file the dtype selects | 91 MB | 23 MB |
-| Correct abstention | baseline | unchanged on all three suites |
-| `success@5` | baseline | unchanged on both private suites; **+0.5pp** on the public corpus, inside its 4pp seed-noise floor |
-| `success@1` | baseline | −0.2pp on one suite of three; unchanged on another |
-| Published numbers | all measured here | not measured here |
+| Setting | *nothing — this is the default* | `AWM_RERANKER_DTYPE=fp32` |
+| Cross-encoder weights | int8-quantized | fp32 |
+| ONNX file the dtype selects | 23 MB | 91 MB |
+| Warm recall p50 (30k-memory store, v0.22.4) | 287–304 ms | slower: in the 2026-10-09 sweep q8 cut recall p50 by 26–33% (fp32 533 / 522 / 292 ms against q8 395 / 358 / 196 ms on the identifier, topic and public suites) |
+| Correct abstention | unchanged on all three suites in that sweep | |
+| `success@5` | unchanged on both private suites; +0.5pp on the public corpus, inside its 4pp seed-noise floor | |
+| `success@1` | −0.2pp on one suite of three; unchanged on another | |
+| Published numbers | figures from 0.19 on are measured at q8 | figures published before 0.19 stand at fp32 |
 
-**Choose latency-first when one of these is true.** If none of them is, stay on
-the default — otherwise you are spending ranking accuracy on latency nothing is
-waiting for:
+The accuracy rows compare q8 against fp32 on the 2026-10-09 pipeline; the full
+tables are in [recall-latency.md](recall-latency.md). The ~175 MB first-run model
+download is at the q8 default.
 
-- recall is called more than once per agent turn (planner + executor + verifier
-  patterns multiply the saving);
-- you have an interactive budget under a second, end to end;
-- you are CPU-constrained in a container at concurrency > 1;
-- recall sits on a serialized critical path where p95/p99 is what you are judged
-  on.
+**Choose fp32 only when you need the pre-0.19 ranker exactly** — for instance to
+compare against a result published before 0.19, or because you have measured
+that q8 costs your corpus a query you care about. Otherwise q8 is the better
+trade: the saving is large and the accuracy cost is a query or two in hundreds.
 
-**The warning, plainly: `q8` changes ranking outcomes. It is not a transparent
-speedup.** On the private snapshot the measured cost is one query in 450 on the
-topic suite; on the identifier suite two golds move and cancel, so "no change"
-there is an aggregate statement and not a per-query one. The quantization is
-deterministic — two runs of the same arm agree on all 450 queries to within 1e-6
-— so whatever it does to your corpus, it will do consistently rather than
-intermittently. **Validate before trusting it** — and the available path depends
-on what you installed, because the harness is not in the published package:
+**`q8` does change ranking outcomes. It is not a transparent speedup.** On the
+private snapshot the measured cost is one query in 450 on the topic suite; on the
+identifier suite two golds move and cancel, so "no change" there is an aggregate
+statement and not a per-query one. One property changes at q8: a pair's score
+depends very slightly on the other pairs in its batch (measured max 0.00105 over
+80 pairs, top-1 unchanged). For a given query and store the results are still
+reproducible. **To validate on your own data** — the available path depends on
+what you installed, because the harness is not in the published package:
 
 - **Latency, on your own store, from any install.** Set `AWM_PROFILE_RECALL=1` for
   one stderr line per recall with the per-stage breakdown
@@ -357,7 +379,7 @@ on what you installed, because the harness is not in the published package:
 - **Accuracy needs ground truth, so it needs a repo checkout.** Neither
   `scripts/` nor `tests/` is in the npm tarball. From a clone, the reproducible
   A/B is `npm run bench:public:build` followed by
-  `npm run profile:recall -- --public` against
+  `npm run profile:recall -- --public --dtype fp32` against
   `npm run profile:recall -- --public --dtype q8`. Note that corpus has a measured
   **4pp seed-noise floor** on accuracy, so read it for the latency result and the
   shape, not for a precise accuracy delta.
@@ -369,7 +391,7 @@ on what you installed, because the harness is not in the published package:
   same derivation AWM's own published fixtures use.
 
 
-**Applying the mode — it needs a process restart, and here is how to confirm it
+**Switching to fp32 needs a process restart, and here is how to confirm it
 took.** `AWM_RERANKER_DTYPE` is read once when the reranker module is imported
 (`src/core/reranker.ts`) and the loaded model is then cached for the life of the
 process, so setting the variable against a *running* AWM does nothing at all. For
@@ -385,25 +407,29 @@ a hand-set `AWM_RERANKER_DTYPE` is preserved. There is a test for precisely that
 ("re-run keeps the user's agent id, db path, port and every foreign env value",
 `tests/adapters/claude-code-setup.test.ts`).
 
-Then check stderr for the load line, which names the precision in use:
+Then check the load lines, which name the precision in use. There is one per
+reranker model as it loads — the MiniLM cross-encoder for keyword queries, and the
+Ettin-17m reranker for natural-language questions (since 0.22):
 
 ```
-Re-ranker model loaded in-process: Xenova/ms-marco-MiniLM-L-6-v2 (q8)
+Re-ranker model loaded in-process: Xenova/ms-marco-MiniLM-L-6-v2 (fp32)
 ```
 
-If that line says `(fp32)`, the mode is not active and the variable did not reach
-the process. `AWM_RERANKER_DTYPE` is also part of the configuration fingerprint
+In-process they go to stderr. With the shared model daemon on (`AWM_MODEL_DAEMON=1`)
+the models load in the daemon, so the lines are in the daemon's log under
+`~/.awm/run/` instead. If the MiniLM line still says `(q8)`, `AWM_RERANKER_DTYPE=fp32`
+did not reach the process. `AWM_RERANKER_DTYPE` is also part of the configuration fingerprint
 that `npm run profile:recall` prints as its `arm=` label, so a profiling run
 reports which mode it measured rather than leaving two different arms to print the
 same thing.
 
-**One caveat on the latency figure.** The −26% to −33% above follows from the
+**One caveat on the latency figure.** The 26–33% difference above follows from the
 cross-encoder being ~83% of warm recall on an 11,262-engram store. On a much
 smaller store the other phases are a larger share of a smaller total, so the
-proportional saving will be lower. This is the other reason to measure on your own
-corpus rather than adopting the number.
+proportional difference will be lower. Measure on your own corpus rather than
+adopting the number.
 
-**Why the mode is one knob rather than a bundle.** The other latency levers were
+**Why precision is one knob rather than a bundle.** The other latency levers were
 measured and rejected, so do not stack them on top of `q8` expecting more:
 cutting the rerank pool (`AWM_RERANK_POOL=16`) buys a similar saving for
 **−4.0pp** `success@1` and **−3.4pp** `success@5` (measured 2026-10-08 on the pre-Rocchio-flip
@@ -411,15 +437,11 @@ pipeline and not re-run since, so treat the magnitude as indicative), and `q4` i
 — equal accuracy to fp32, only −3% latency, and a 6,080 ms cold start against
 fp32's 1,591 ms. Full tables in [recall-latency.md](recall-latency.md).
 
-**Why quality-first is the default**, since the accuracy cost above is small
-enough that the question is fair: every accuracy figure AWM publishes is measured
-at fp32, and the corpus behind those figures is private. A reviewer can
-independently reproduce the **latency** win — the public corpus rebuilds from a
-seeded generator — but cannot reproduce the **accuracy** cost. Shipping the faster
-mode by default would mean publishing headline numbers that nobody outside can
-check, to buy a saving that is not binding on the median install. That is a
-measurement-honesty choice (see [claims.md](claims.md)), not a doubt about the
-quantization itself.
+*History:* through 0.18, fp32 was the default and q8 the opt-in "latency-first"
+mode, on the reasoning that every published accuracy figure was measured at fp32
+on a private corpus. 0.19 (2026-10-19) made q8 the default after the speed review;
+an interleaved in-process comparison cut the cross-encoder's p50 by 35–45%, and
+figures published since are measured at q8 (see [claims.md](claims.md)).
 
 ---
 
@@ -433,8 +455,8 @@ For production, you want at minimum:
 | Recall latency | `GET /agent/:id/metrics` → `avgLatencyMs`, `p95LatencyMs` (24h rolling window) |
 | Storage growth | `GET /agent/:id/stats` → engram counts by stage; alarm on `staging` running unbounded |
 | Build provenance | startup log line `AWM build <ref> @ <timestamp>` (set via `--build-arg`) |
-| Activity stream | tail `data/awm.log` (writes, recalls, hook events) |
-| Daily counts | `GET /stats` on the hook sidecar. It binds the first free port in `AWM_HOOK_PORT`..+`AWM_HOOK_PORT_RANGE` (default 8401–8410), so with several agents running check `/health` for the port each one actually took, or run `awm doctor` |
+| Activity stream | tail `awm.log`, written next to the database (`/data/awm.log` with `AWM_DB_PATH=/data/memory.db`; `~/.awm/awm.log` for a local `awm setup` install) — writes, recalls, hook events |
+| Daily counts | `GET /stats` on the hook sidecar, with `Authorization: Bearer <AWM_HOOK_SECRET>` (it is behind the sidecar's auth gate; only `/health` is open). The sidecar binds the first free port in `AWM_HOOK_PORT`..+`AWM_HOOK_PORT_RANGE` (default 8401–8410), so with several agents running check `/health` for the port each one actually took, or run `awm doctor` |
 
 If you've got a Prometheus stack, scrape the coordination telemetry
 counters at `GET /telemetry/channels` (these are enabled when

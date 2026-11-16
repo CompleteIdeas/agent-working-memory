@@ -56,9 +56,14 @@ Requires **Node.js 22+**.
 awm doctor claude-code
 ```
 
-That probes the hook port range and reports each live sidecar as `port=agent@version pid`. In
-a session, ask Claude what memory tools it has — you should get 19, and `memory_whoami` will
-tell you which store and agent the running process actually has.
+On a plugin-only install, read only the **Sidecars** line: it probes the hook port range and
+reports each live sidecar as `port=agent@version pid`. The other checks look for the MCP entry
+and hooks that `awm setup` writes (`~/.mcp.json`, `.claude/mcp.json`, `settings.json`), which a
+plugin never writes, so they report failures that are not real — and the fix they suggest,
+`awm setup --global`, would register AWM a second time on top of the plugin. Don't run it.
+
+In a session, ask Claude what memory tools it has — you should get 22 — and `memory_whoami`
+tells you which store and agent the running process actually has.
 
 ---
 
@@ -87,8 +92,10 @@ written would appear to be gone.
 So a plugin install and a CLI install share one store. Point somewhere else by setting
 `AWM_DB_PATH` yourself.
 
-**Which agent you get.** With `AWM_AGENT_ID` unset, the server derives the pool from the
-directory: anything under `Personal-Projects/` is `personal`, everything else is `work`. Two
+**Which agent you get.** Only when `AWM_AGENT_ID` is unset does the server derive the pool
+from the directory, and the rule is a fixed one in `src/core/agent-id.ts`: a path containing a
+folder literally named `Personal-Projects` is `personal`, everything else is `work`. (Set
+`AWM_AGENT_ID` to choose the pool yourself; an `awm setup --global` install pins it to `work`.) Two
 sessions in different projects therefore get different pools from the same install, and the
 hooks find the sidecar serving *their* agent rather than whichever process started first.
 
@@ -126,7 +133,7 @@ to tell what you have.
 |---|---|---|
 | **Claude Code** | **Yes** | Everything: 22 tools, all five hooks, both skills |
 | **Claude Cowork** | **No — do not install it there** | The skill loads and hooks run, but the memory tools do not |
-| **Claude Desktop** | Not yet | Needs an `.mcpb` bundle; Desktop does support local stdio MCP, so this is a packaging job rather than a limitation |
+| **Claude Desktop** | **Yes, via the `.mcpb` bundle** | Not this plugin — Desktop installs an `.mcpb` extension instead. Same engine and store, no hooks; see [desktop.md](desktop.md) |
 
 ### Why not Cowork
 
@@ -199,7 +206,11 @@ Full list with measured effects: [`reference.md`](reference.md).
 it without uninstalling, create an empty file:
 
 ```bash
-touch ~/.claude/hooks/awm-prime.disabled
+touch ~/.claude/hooks/awm-prime.disabled          # macOS / Linux / Git Bash
+```
+
+```powershell
+New-Item -ItemType File "$HOME\.claude\hooks\awm-prime.disabled"   # PowerShell
 ```
 
 ---

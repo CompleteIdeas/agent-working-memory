@@ -13,7 +13,7 @@ against. That is where your time and your tokens go.
 AWM fixes that at the source. The agent's context is **drawn fresh from memory at every turn**:
 a recall primed on each prompt and after every compaction, which returns the two or three
 memories that matter and **nothing** when nothing fits. On a real 30,000-memory work store it
-puts the right memory first for **96%** of topic questions and **93%** of identifier lookups. A
+puts the right memory first for **96%** of topic questions and **95%** of identifier lookups. A
 corrected fact replaces the old one instead of competing with it. And with **`/awm-learn`** the
 agent reads an entire repo, manuscript or docs folder into memory, so recall is useful on day
 one, not day ten. One local process, one SQLite file, no cloud, no API keys, no telemetry, and
@@ -29,7 +29,7 @@ every number above is published with how to check it.
 | **Learns a project in one command** | `/awm-learn` reads a repo or folder into memory, map first, then every part, and resumes where it stopped. Refresh re-learns only what changed | One run, measured: a 374-file production API learned by 5 agents in **about 10 minutes**, **344 memories**, **17 of 20** newcomer questions answered correctly in the top 3. Re-learned from scratch with the 0.22.3 skill: **22 of 30** fresh questions answered against 20, with the right answer first 19 times against 15, within judge noise. Its token estimate now runs 1.37× low, not 2.5× ([details](docs/awm-learn.md)) |
 | **Selective, not a sponge** | It keeps what is worth keeping and returns the two or three memories that matter, not the top-K of everything | By design; the salience filter and its audit are in [`docs/cognitive-model.md`](docs/cognitive-model.md) |
 | **Less digging, fewer tokens** | The agent recalls where the answer is instead of searching for it again | One controlled test, four real support tickets with and without AWM: **half the lookups** (49 vs 100), **26% fewer output tokens**, and **2×** the facts the answer needed — n = 4, directional ([claims §5](docs/claims.md)) |
-| **Costs the same at any scale** | A scoped recall costs about the same whether the store holds a hundred memories or thirty thousand | Measured as flat; the size is disputed — published as ~630 tokens, the harness measures ~1,518. Either way against ~1.3M to carry the store ([claims §3](docs/claims.md)) |
+| **Costs the same at any scale** | A scoped recall costs about the same whether the store holds a hundred memories or thirty thousand | Measured as flat; the size is disputed — published as ~630 tokens, the harness measures ~1,510. Either way against ~1.3M to carry the store ([claims §3](docs/claims.md)) |
 | **Lets a cheap model punch up** | A small model with the right memory beats a frontier model without it on domain work | One experiment: **14/15 vs 7/15** on a 15-task workload, at ~1/40th the cost — n = 15, not reproducible ([claims §4](docs/claims.md)) |
 | **Keeps secrets out — or keeps them safely** | Credentials are masked before anything is stored; with the vault on, AWM *keeps* them sealed and can use one in a command without ever saying it | Measured: 0 of 40 sealed values left anywhere in a migrated real store ([redaction](docs/redaction.md), [vault](docs/vault.md)) |
 | **Yours, on your machine** | No cloud, no account, no API keys, no telemetry | One process, one SQLite file |
@@ -56,7 +56,7 @@ retrievable**, which is the honest denominator for a retrieval score. Not synthe
 not a corpus we can publish: it is a real store with real colleagues and real decisions in it,
 so it is gitignored and so is everything derived from it.
 
-What you *can* run: **`npm run bench:public`** scores the same runner through the same
+What you *can* run: **`npm run bench:public:build && npm run bench:public`** scores the same runner through the same
 ground-truth derivation against a synthetic corpus you rebuild yourself. It verifies the method,
 not the figures — a synthetic corpus scores lower. Current numbers, stamped with the commit that
 produced them, are in [`docs/benchmarks-current.md`](docs/benchmarks-current.md); every claim
@@ -67,7 +67,7 @@ including the ones we think are weakest.
 |---|---|
 | **Finds the right memory** | In the top five for **98.7%** of identifier queries and **98.7%** of topic queries — and **first** for **95.0%** and **96.2%**. A recall returns three by default, so the top-five figure is what the agent gets; the first-result figure is what the ranker is held to. **Baselines on the same questions:** plain keyword search (BM25) puts the right memory first for 95.7% / 91.6% — ahead of AWM on identifier lookups, behind it on topic questions. These fixtures are keyword-friendly by construction. **On natural-language questions** (194, phrased the way a person asks) AWM puts the right memory first for **48.5%**, ahead of fused BM25 + vector search (45.4%) and plain BM25 (42.8%) on the same questions — and **53.1%** once memories carry the questions they answer (new in 0.22). Over the raw store, with superseded and retracted memories still in it, BM25 falls to 87.7% / 79.8% on the keyword fixtures and returns an outdated memory first 8–15% of the time; AWM's lifecycle is what it adds there |
 | **Stays silent when it should** | With the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`), withholds **50 of 73** questions about facts never stored, while withholding **1 of 718** correct answers to keyword-shaped questions. Natural-language questions get their own model once a quarter of the store's memories carry questions: it withholds **3 of 103** correct natural answers (was 21 of 88 in 0.21), at the price of answering 88 of 97 natural questions whose fact was deleted. The gate learns its noise floor from the store itself; [how it works and what it costs](docs/abstention.md). Off (the default), AWM answers almost every question with its nearest match. |
-| **Costs the same at any scale** | Scoped recall stays flat as the store grows — published as **~630 tokens**, measured by the harness at ~1,518 ([claims §3](docs/claims.md) explains the gap). Carrying the store instead: ~1.3M tokens |
+| **Costs the same at any scale** | Scoped recall stays flat as the store grows — published as **~630 tokens**, measured by the harness at ~1,510 ([claims §3](docs/claims.md) explains the gap). Carrying the store instead: ~1.3M tokens |
 | **Keeps secrets out** | On by default: credentials are masked before store, index, embedding or log. A read-only scan of the real store found them in ~70 memories written before this existed — exactly what it now stops. With the opt-in vault, a migration of a copy of that store sealed 40 distinct values and left **0** anywhere in the file, with recall unchanged (same first result for 8 of 8 test questions) |
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
 
@@ -161,16 +161,12 @@ awm onboard ./docs --repo . --project <name>    # review the pack, then
 awm import <pack> --db <path> --dedupe
 ```
 
-**Turn on the three retrieval improvements.** They ship default-off and belong together:
-
-```bash
-AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1
-```
-
-Second-stage rerank by the cross-encoder's own score; a 400-character rerank window placed on the
-densest query-term region rather than the prefix (**25% → 87.5%** on long memories when it shipped; **77.1%** with today's final order, [why](docs/claims.md)); and tags fed
-into the rerank passage (**+7.4pp**). `awm setup` writes them on a fresh install. `memory_whoami`
-prints the active fingerprint so you can confirm a running process has them.
+**The three retrieval improvements are on by default** (code defaults since 0.18): the
+cross-encoder re-orders the shortlist; its 400-character window is placed on the densest
+query-term region rather than the prefix (**25% → 87.5%** on long memories when it shipped;
+**77.1%** with today's final order, [why](docs/claims.md)); and tags are fed into the rerank
+passage (**+7.4pp**). `AWM_RERANK2=0`, `AWM_RERANK_WINDOW=prefix` and `AWM_RERANK_TAGS=0` turn
+them off for experiments. `memory_whoami` prints the active fingerprint.
 
 **Check it worked:** `awm doctor claude-code` reports the live sidecars, which agent each serves,
 and whether anything needs a re-run of setup.
@@ -202,7 +198,9 @@ however you installed it:
 | Claude Desktop | Rebuild the `.mcpb` and re-install it |
 
 Then **restart Claude Code** (or Desktop). A running MCP connection keeps the code it loaded
-at spawn time, so nothing changes until a fresh session starts.
+at spawn time, so nothing changes until a fresh session starts. If you turned on the opt-in
+gate (`AWM_ABSTAIN_GATE=calibrated`), run `awm calibrate` after upgrading; the next
+consolidation would refit it anyway, but until then it judges with the old fit.
 
 **A plugin marketplace installed from a local directory does not refresh itself.** Measured:
 a GitHub-sourced marketplace on one machine refreshed on a schedule, while a directory-sourced
@@ -226,7 +224,7 @@ compatible, and the store is the same SQLite file before and after.
 
 | | |
 |---|---|
-| **0.22.4** | **First place goes to the right memory more often, and three published numbers are corrected.** The final order blends the cross-encoder with first-stage rank, and that small slice of rank could outvote a cross-encoder that was clearly sure (its scores crowd near 1, so 0.99 against 0.95 looked like a tie). Now, when the cross-encoder is sure, its #1 goes first, and keyword queries lean less on the vector channel for first place; places 2+ are unchanged. First place, same questions: identifier 93.8% → **95.4%**, topic 96.0% → **96.2%**, natural-language 47.9% → **48.5%** (53.1% with questions), public synthetic benchmark 38.8% → **52.8%**, long memories 72.9% → **77.1%**; no suite's top 1, 3 or 5 dropped. The opt-in gate's decisions are unchanged. `AWM_BLEND_SURE=off` restores 0.22.3. **Corrections:** the gate withholds **50 of 73** never-stored facts (58 was published, and never reproduced); on natural-language questions with questions it withholds **3 of 103** correct answers (10 of 97 was published) but answers 88 of 97 whose fact was deleted. [CHANGELOG](CHANGELOG.md) |
+| **0.22.4** | **First place goes to the right memory more often, and three published numbers are corrected.** The final order blends the cross-encoder with first-stage rank, and that small slice of rank could outvote a cross-encoder that was clearly sure (its scores crowd near 1, so 0.99 against 0.95 looked like a tie). Now, when the cross-encoder is sure, its #1 goes first, and keyword queries lean less on the vector channel for first place; places 2+ are unchanged. First place, same questions: identifier 93.8% → **95.4%** (95.0% on the 300-probe benchmark page), topic 96.0% → **96.2%**, natural-language 47.9% → **48.5%** (53.1% with questions), public synthetic benchmark 38.8% → **52.8%**, long memories 72.9% → **77.1%**; no suite's top 1, 3 or 5 dropped. The opt-in gate's decisions are unchanged. `AWM_BLEND_SURE=off` restores 0.22.3. **Corrections:** the gate withholds **50 of 73** never-stored facts (58 was published, and never reproduced); on natural-language questions with questions it withholds **3 of 103** correct answers (10 of 97 was published) but answers 88 of 97 whose fact was deleted. [CHANGELOG](CHANGELOG.md) |
 | **0.22.3** | **Everything about a name.** New `memory_about` returns every memory about one person, organisation or thing, oldest first (recall returns only the few best matches, so the ninth memory about someone never showed); a name that could mean two people comes back as both, never merged. New `memory_alias` records other names ("Jenna", "Jenna Park" → `contact:events@harborhotel.example`), now kept per agent. Opt-in `AWM_ENTITY_ALIAS_MATCH` + `AWM_ENTITY_ALIAS_PASSAGE` let ordinary questions reach those memories from lowercase names: on a new synthetic eval, questions that name only the person went 68.8% → **100%** in the top 5; the real-store benchmark is unchanged; off by default until a real workload confirms it. **`awm-learn` now surveys a folder before reading it** (each file's role, authority, dates and decision lines). Fixes: a memory could supersede itself and vanish; a merged write lost its entity tags. 22 tools. [CHANGELOG](CHANGELOG.md) |
 | **0.22.2** | **`awm setup` installs `awm-learn`, and the agent knows when to use it.** The skill that learns a whole repo or folder into memory used to reach plugin users only; setup now installs it into `~/.claude/skills/` too, upgrading its own copy on each run and leaving an edited one alone. The installed guidance tells the agent to reach for `/awm-learn` on a new project or when recall keeps missing. New page: [docs/awm-learn.md](docs/awm-learn.md). **Re-run `awm setup --global`.** [CHANGELOG](CHANGELOG.md) |
 | **0.22.1** | **Query expansion is off on every path, and the first download is smaller.** MCP recall, task begin, restore and the HTTP context route had been forcing expansion on while every benchmark ran with it off. Measured on the three real-store suites, first place is identical either way, and expansion cost about 220 ms per short query, so it is off everywhere and its model is no longer downloaded (`AWM_DEFAULT_EXPANSION=1` turns it back on). **New skill: `awm-learn`** learns a whole repo or folder into memory with a resumable ledger; its first full run, on a 374-file API, wrote 344 memories. [CHANGELOG](CHANGELOG.md) |
@@ -325,13 +323,13 @@ The theory and its citations: [`docs/cognitive-model.md`](docs/cognitive-model.m
 - On the benchmark's keyword-style questions, **plain BM25 ranks about as well as AWM** — the
   fixtures are keyword-friendly by construction. AWM's measured edge is knowing what is current
   and knowing what it doesn't know, not raw ranking.
-- The abstention gate is measured on one real store and on keyword-style questions; the benchmark
-  has no natural-language questions yet. Redaction is shape-based: a credential with no
+- The abstention gate is measured on one real store only, and on natural-language questions it
+  still answers most questions whose fact was deleted. Redaction is shape-based: a credential with no
   recognisable shape and no label gets through.
 - The headline thread model rests on early evidence (4/5 vs 3/5 in one multi-task run) with AWM's
   own share not yet isolated — [claims §9](docs/claims.md).
-- It is 0.x. Benchmark figures have been corrected upward more than once after the *instrument*
-  turned out to be wrong; every correction is documented in place rather than revised away.
+- It is 0.x. Benchmark figures have been corrected more than once, in both directions, after the
+  *instrument* or the published run turned out to be wrong; every correction is documented in place rather than revised away.
 
 Everything else, with evidence and workarounds: [`docs/known-limitations.md`](docs/known-limitations.md).
 
@@ -343,7 +341,7 @@ The README points outward; it does not duplicate. Everything below is the author
 
 | | |
 |---|---|
-| **All 22 MCP tools**, most HTTP endpoints with schemas (25 of 32 — the batch-write, checkpoint, export, agent-register and system routes are not yet written up), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
+| **All 22 MCP tools**, every HTTP endpoint with schemas (32), every environment variable with its measured effect | [`docs/reference.md`](docs/reference.md) |
 | Architecture, pipelines, schema, backends (SQLite · PGlite · Postgres) | [`docs/architecture.md`](docs/architecture.md) · [`docs/pglite-feature-parity.md`](docs/pglite-feature-parity.md) |
 | Current benchmark numbers, generated and stamped | [`docs/benchmarks-current.md`](docs/benchmarks-current.md) |
 | What each eval suite measures, and the measurement caveats | [`docs/benchmarks.md`](docs/benchmarks.md) |
@@ -359,8 +357,8 @@ The README points outward; it does not duplicate. Everything below is the author
 | Full index | [`docs/README.md`](docs/README.md) |
 
 **Stack:** TypeScript · SQLite + FTS5 (or PGlite / Postgres) · Fastify · `@modelcontextprotocol/sdk` ·
-local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-marco-MiniLM cross-encoder,
-flan-t5-small expansion. Node 22+.
+local ONNX via `@huggingface/transformers` — bge-small-en-v1.5 embeddings, ms-marco-MiniLM cross-encoder
+(keyword queries), Ettin-17m cross-encoder (natural-language questions); flan-t5-small expansion opt-in. Node 22+.
 
 ```bash
 npx vitest run          # 1232 tests

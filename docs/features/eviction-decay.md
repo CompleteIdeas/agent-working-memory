@@ -53,6 +53,7 @@ An association unused for 7 days loses half its weight. After ~50 days of disuse
 ## Code References
 
 - Eviction engine: `src/engine/eviction.ts`
-- Eviction candidates: `src/storage/sqlite.ts:270` — `getEvictionCandidates()`
-- Decay formula: `src/core/hebbian.ts:25` — `decayAssociation()`
-- HTTP endpoints: `src/api/routes.ts:264-274`
+- Eviction candidates: `getEvictionCandidates()` in `src/storage/sqlite.ts`
+- Decay formula: `decayAssociation()` in `src/core/hebbian.ts`
+- Eviction / edge decay: `EvictionEngine.enforceCapacity()` and `EvictionEngine.decayEdges()` in `src/engine/eviction.ts`
+- HTTP endpoints: `POST /system/evict` and `POST /system/decay` in `src/api/routes.ts`

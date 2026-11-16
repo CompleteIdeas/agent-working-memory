@@ -8,9 +8,9 @@ into any agent's instructions.*
 
 ## Why this page is the lever
 
-The retrieval figures AWM publishes — **97.3% of identifier queries and 96.9% of topic queries
-have the right memory in the top five, 92.7% of both put it first** — were measured on a real
-store whose memories were written the way this page says to. AWM is good at finding what is
+The retrieval figures AWM publishes — **98.7% of identifier and of topic queries have the right
+memory in the top five; 95.0% of identifier queries and 96.2% of topic queries put it first**
+(v0.22.4) — were measured on a real store whose memories were written the way this page says to. AWM is good at finding what is
 findable. It cannot rescue a memory that never contains the words a future question will use.
 
 Measured on an 11,000-memory store: 94% of tagged memories were missing at least one of their
@@ -28,8 +28,8 @@ way they are.
 |---|---|---|
 | BM25 (lexical) | `concept`, `content`, and tags | Exact words matter. A synonym in your head is not a match. |
 | Embedding (semantic) | `concept + content` only | Tags are invisible here. A word that lives only in a tag has no semantic weight. |
-| Entity index | structured identifier tags (`ticket=`, `person=`, …) | Exact lookup by id. Keep identifiers spelled consistently. |
-| Cross-encoder rerank | a 400-character window of the body, densest in query terms, plus `topic=`/`proj=` tags capped at 80 characters | The decisive identifier should appear early. Measured: 97.3% → 46.8% when the identifier sits past character 400 and the window is the prefix. |
+| Entity index (opt-in, `AWM_ENTITY_INDEX_FETCH=1`) | structured identifier tags (`ticket=`, `person=`, …) | Exact lookup by id. Keep identifiers spelled consistently. |
+| Cross-encoder rerank | a 400-character window of the body, densest in query terms, plus `topic=`/`proj=`/`project=` tags capped at 80 characters | The decisive identifier should appear early. Measured: 86.7% → 44.9% first place when the identifier sits beyond the 400-character window, on the public corpus (v0.22.4). |
 
 ## The rules
 
@@ -54,12 +54,14 @@ increase". Write the system, product and domain nouns beside the identifiers.
 months. Use those nouns. Do not paraphrase the user's domain language into a neutral summary.
 
 **5. Tag it and write it.** Tags boost lexical scoring and feed the entity index, but the
-embedding never sees them and the reranker sees only `topic=`/`proj=`. A tag is not a
+embedding never sees them and the reranker sees only `topic=`/`proj=`/`project=`. A tag is not a
 substitute for the word in the body.
 
 **6. Pick the most specific topic tag.** `auth-magic-link-rate-limit`, not `auth`. Topic is a
-hard filter at recall time; a generic topic puts the memory in a bucket where it competes with
-everything in the area. This is about the tag — rule 3 still wants the category in the body.
+ranking signal at recall time, not a filter: keyword search indexes it, and the rerank passage
+carries `topic=`/`proj=`/`project=` tags within 80 characters (`memory_recall` has no topic
+parameter). A generic topic adds noise where a specific one adds signal, and the memory competes
+with everything in the area. This is about the tag — rule 3 still wants the category in the body.
 
 **7. Say why, for any rule.** "Don't mock the database" is brittle. "Don't mock the database —
 mocked tests masked a broken migration last quarter" can be applied to a case nobody
@@ -90,6 +92,9 @@ succeeds and simply retrieves worse.
 | `source` | `code-reading` · `debugging` · `discussion` · `research` · `testing` · `observation` | `"debugging"` |
 | `memory_class` | `canonical` · `working` (default) · `ephemeral` | `"canonical"` |
 | `tags` | identifier prefix-tags: `ticket=`, `person=`, `date=YYYY-MM-DD`, `version=`, domain ids | `["ticket=10001", "date=2026-05-11"]` |
+| `questions` | 2–5 natural questions the memory answers (up to 5), worded the way someone would ask later without your file names or ids. Keyword-indexed only; natural-language first place 48.5% → 53.1% on the real store | `["How do I ship the club app to production?"]` |
+| `slot` | entity + attribute for a value that changes; a later write to the same slot (same agent, same class) supersedes this one automatically | `"rosterkeep.deploy-command"` |
+| `aliases` | other names for the person, organisation or thing the memory is about, so `memory_about` finds it by any of them | `["Jenna", "Jenna Park"]` |
 
 Set `valid_to` on operational facts with a shelf life (a deploy state, "waiting on a reply"),
 and `valid_from` on facts that become true on a known date. Leave both unset for durable facts.
@@ -137,6 +142,12 @@ When you write a memory:
   new one as a correction; do not add a second version beside the first.
 - Set project, topic (specific), intent, confidence_level and source on every write.
   Add ticket=, person=, date= and version= tags when the content has them.
+- Add 2-5 questions the memory answers, phrased the way someone would ask later
+  without remembering your wording, file names or ids.
+- Give a slot (entity.attribute, e.g. rosterkeep.deploy-command) to any value
+  that can change; writing the same slot again replaces the old value.
+- When the memory is about a person, organisation or thing, tag it (person=,
+  org=, contact=) and pass its other names as aliases.
 - Use memory_class canonical only for decisions, requirements and verified facts
   other agents must be able to recall.
 ```

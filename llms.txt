@@ -45,16 +45,22 @@ both say this plainly; believe them.
 This is the single most useful thing for you to understand, because the common
 failure mode is writing memories that no channel can see.
 
-A recall runs **three scoring channels**, then a reranker decides the order:
+A recall runs **three scoring channels**, then a reranker reorders the shortlist:
 
 1. **Embedding** — `Xenova/bge-small-en-v1.5`, 384 dimensions, ONNX, downloaded
    on first use and then run locally. The vector is built from
    **`concept` + `content`**.
 2. **BM25** — SQLite FTS5 over `concept`, `content` and `tags`. This is the
-   only channel that sees tags.
-3. **Cross-encoder reranker** — `Xenova/ms-marco-MiniLM-L-6-v2`. It makes the
-   **final ordering**. Its passage is built from `concept` + `content`, plus
-   tags when `AWM_RERANK_TAGS=1`.
+   only channel that indexes every tag.
+3. **Cross-encoder reranker** — `Xenova/ms-marco-MiniLM-L-6-v2` (int8 since
+   0.19) for keyword-shaped queries, and since 0.22 a second one,
+   `cross-encoder/ettin-reranker-17m-v1` (`AWM_RERANKER_MODEL_NATURAL`, `off`
+   disables it), for natural-language questions. Its order is **blended** with
+   the fused BM25 + vector rank (0.21.1); since 0.22.4 a cross-encoder that is
+   sure of its #1 takes first place outright (`src/core/blend-rule.ts`). Its
+   passage is built from `concept` + `content`, plus only the `topic=` /
+   `proj=` / `project=` tags, capped at 80 characters, while
+   `AWM_RERANK_TAGS` is on (the default).
 
 Then two things that matter less than they sound:
 
@@ -68,10 +74,12 @@ Then two things that matter less than they sound:
 
 ### The three consequences you should act on
 
-- **A word that exists only as a tag is invisible to two of the three
-  channels.** Tag it *and* write it in the body. Measured on a real 30k store:
-  **66%** of the topical terms a memory is tagged with never appear in its
-  text.
+- **A word that exists only as a tag is invisible to the embedding, and to
+  the reranker unless it is a `topic=`/`proj=`/`project=` tag inside the
+  80-character budget.** Tag it *and* write it in the body. Measured on a real
+  11k-memory store: 94% of tagged memories miss at least one of their own
+  topical terms from the body, and **66%** of those terms never appear in the
+  text at all.
 - **The reranker reads a 400-character window.** Anything past it is not seen
   by the stage that decides final order. This is not a rounding error — on the
   public benchmark corpus (`npm run bench:public`, 400 probes), `s@1` is
@@ -85,15 +93,17 @@ Then two things that matter less than they sound:
 
 ## 3. Configuration that is not optional
 
-`awm setup` installs three retrieval flags. **If they are missing, retrieval is
-materially worse and nothing warns you.** This is the number one cause of "AWM
-didn't find it."
+Three retrieval flags carry most of the ranking quality. **Since 0.18 they are
+code defaults**, so an install with no AWM env at all has them on; what hurts
+is a config that switches one *off* (`=0`, or `AWM_RERANK_WINDOW=prefix`) —
+retrieval is then materially worse and nothing warns you.
 
 ```
-AWM_RERANK2=1              # second-stage rerank by the cross-encoder's own score
+AWM_RERANK2=1              # the cross-encoder reorders the shortlist (=0 disables)
 AWM_RERANK_WINDOW=query    # 400-char window centered on the densest query terms,
-                           #   instead of truncating from the start of the body
-AWM_RERANK_TAGS=1          # tags joined into the rerank passage  (+7.4pp s@1)
+                           #   instead of truncating from the start (=prefix)
+AWM_RERANK_TAGS=1          # topic=/proj=/project= tags in the rerank passage
+                           #   (+7.4pp s@1 when it shipped; =0 disables)
 ```
 
 `AWM_RERANK_WINDOW=query` is the difference between the reranker reading the
@@ -108,8 +118,8 @@ awm doctor          # reports config, live sidecars, store, and what is missing
 ```
 
 If you installed via something other than `awm setup` — hand-written MCP
-config, a vendored copy, a container — assume these are unset until you have
-seen otherwise.
+config, a vendored copy, a container — check that nothing sets them to `0` or
+`prefix`; on a version before 0.18 they must be set explicitly.
 
 ---
 
@@ -150,8 +160,10 @@ by agent. Give each project its own `.mcp.json` with a distinct `AWM_AGENT_ID`:
 ~/work/project-b/.mcp.json  →  AWM_AGENT_ID: "project-b"
 ```
 
-Each then gets its own namespace in the same store. See
-`docs/claude-code-setup.md` ("Separate Memory Pools").
+Each then gets its own namespace in the same store. `awm setup --agent-id
+<name>`, run in the project folder without `--global`, writes the project's
+MCP entry (`.claude/mcp.json`) for you. See
+`docs/claude-code-setup.md` ("Solo developer (multiple projects)").
 
 ### C. Claude Code plugin
 
@@ -165,12 +177,16 @@ says so explicitly.
 
 ### D. Claude Desktop (MCPB bundle)
 
-`npm run pack:mcpb` produces the bundle, or take it from a release. Install it
-by double-clicking the `.mcpb`, dragging it onto the Claude Desktop window, or
+The bundle ships the wiring, not the engine, so install the package first:
+`npm install -g agent-working-memory` (without it the launcher falls back to
+`npx`, which rebuilds a native dependency on first run and can look like a
+hang). `npm run pack:mcpb` produces the bundle, or take it from a release.
+Install it by double-clicking the `.mcpb`, dragging it onto the Claude Desktop window, or
 **Settings → Extensions → Advanced settings → Install Extension…**. Desktop then
 asks for two settings: **Memory database** (default `${HOME}/.awm/memory.db` —
 leave it to share one store with Claude Code) and **Memory pool** (default
-`work`). Restart Desktop and you should have nineteen tools.
+`work`). Restart Desktop and you should have the same **22 tools** as Claude
+Code.
 
 **Sharing the store with your CLI install is the point** — Desktop and Claude
 Code then see each other's memories. See `docs/desktop.md`.
@@ -193,10 +209,12 @@ interesting case: agent A writes, agent B recalls it on its next call, with no
 network and no central service. SQLite WAL makes this multi-process safe.
 
 **The thing that silently breaks it: unpinned agent identity.** If a session
-does not set an explicit agent id, it lands in a per-directory fallback space
-that scoped recall never sees. The memory is written and is simply invisible to
-everyone else. Always set the identity explicitly, and call `memory_whoami` if
-you are unsure which space you are in.
+sets neither `AWM_AGENT_ID` nor `WORKER_NAME`, it falls back to `work` (or
+`personal` when started under a `Personal-Projects` path —
+`src/core/agent-id.ts`), which may not be the pool you meant. Its memories are
+written and simply invisible to agents scoped to another pool. Pin
+`AWM_AGENT_ID` explicitly, and call `memory_whoami` if you are unsure which
+space you are in.
 
 Cross-agent recall is opt-in per call via the `workspace` parameter; the
 default is agent-scoped.
@@ -213,7 +231,8 @@ example of seeding a store through the real write pipeline and querying it.
 - **PGlite** — embedded Postgres with pgvector. **Single-process only**: a
   second process against the same directory aborts. Only for single-process
   embedding.
-- **Networked Postgres** — a genuinely shared backend across machines.
+- **Networked Postgres** (experimental) — a genuinely shared backend across
+  machines: `AWM_STORE_BACKEND=postgres` + `AWM_DATABASE_URL`.
 
 Auto-detected: if `AWM_DB_PATH` points at an existing directory it is PGlite,
 a file is SQLite.
@@ -265,13 +284,13 @@ the plan. `docs/awm-learn.md` has the measured run.
   thresholds of 0.20+ cut net tokens saved by 25% in `tests/abstention-eval`.
   Raise it only for push-style use where nobody asked. It judges the *shape*
   of the scores, not whether the answer is stored: at the default it withheld
-  0 of 10 absent-fact probes. For that job use the calibrated gate (§7); with
+  0 of 73 never-stored questions on the real store. For that job use the calibrated gate (§7); with
   it on, `require_confidence: 0` opens it for one call.
 - `workspace` — cross-agent recall, opt-in.
 - `limit` — default **3**, and this is a measured choice, not a guess. On 400
   real-store probes k=3 is the only **token-positive** setting: **+115 tokens
   per recall, against -680 at k=5**. It is also 41% faster at p50, because
-  `limit` sizes the cross-encoder rerank pool and reranking is ~90% of warm
+  `limit` sizes the cross-encoder rerank pool and reranking is ~83% of warm
   recall time. The cost is ~0.5pp `success@1` versus k=5 — about 3 queries in
   400, inside noise. Raise it deliberately when you want breadth for
   orientation; leave it alone when you want a specific fact.
@@ -301,6 +320,25 @@ than feels natural: the head of the body is what all three channels weight most.
   it.
 - **Say why**, for any rule. A rule without a reason cannot be applied to a
   case you did not anticipate.
+- **Add 2–5 `questions` the memory answers** (`memory_write` takes up to 5),
+  phrased the way someone would ask later without remembering your wording,
+  file names or IDs: "How do I ship the club app to production?" for a note
+  about `railway up --service rowos-app`. They are indexed for keyword search
+  only (never embedded). Measured on the real store: natural-language first
+  place 48.5% → 53.1%, no loss on exact lookups.
+- **Give a `slot` to any value that can change** — entity + attribute, such as
+  `rosterkeep.deploy-command` or `robert.flight-time`. A later write to the same
+  slot (same agent, same memory class) supersedes the old value automatically;
+  an older fact (earlier `valid_from`) is kept as history, never as current.
+- **When a fact changed and you lack the old id, write with `correction:
+  true`.** AWM supersedes the closest memory about the same thing and says
+  which. Written as a plain observation, a changed value merges into or ranks
+  below the stale version.
+- **Working notes go in `scope: "session"`** — "the port is 4100", "step 3
+  done". Always kept, never merged into a durable memory, expired after
+  `AWM_SESSION_TTL_DAYS` (7). Read them back with `memory_recall(...,
+  scope: "session")` or `session_first: true`; re-write the ones worth keeping
+  without `scope` at the end of the task.
 
 ### Memory classes
 
@@ -408,37 +446,40 @@ withheld 0 of 10. Do not quote it as a current property.
 
 ## 8. Gotchas, in the order they bite
 
-1. **Retrieval flags unset.** §3. Silent, and the largest single effect.
-2. **The decisive identifier sits past character 400.** 97.3% -> 46.8% on the
-   public corpus.
-3. **Terms that exist only in tags.** Invisible to the embedding and (without
-   `AWM_RERANK_TAGS=1`) to the reranker.
-4. **Unpinned agent identity.** Writes vanish into a per-directory UUID space.
-   `memory_whoami`.
+1. **Retrieval flags switched off.** §3. Silent, and the largest single effect.
+2. **The decisive identifier sits past character 400.** 86.7% → 44.9% first
+   place on the public corpus (v0.22.4).
+3. **Terms that exist only in tags.** Invisible to the embedding, and to the
+   reranker unless they are `topic=`/`proj=`/`project=` tags within its
+   80-character budget (and `AWM_RERANK_TAGS` is on, the default).
+4. **Unpinned agent identity.** An unset id falls back to `work` (or
+   `personal` under a `Personal-Projects` path), possibly not the pool you
+   meant. Pin `AWM_AGENT_ID`; check with `memory_whoami`.
 5. **A running MCP connection never reloads code.** Rebuilding AWM on disk has
    zero effect on a session whose connection already started — a child process
    keeps the code it loaded at spawn. Restart the session, or reconnect, then
    confirm with `memory_whoami`. Do not infer the running version from
    `package.json`.
-6. **Cold start is ~1.5s; warm recall is ~480ms** (measured, k=3, 11k-engram
-   store, `npm run profile:recall`) — and on a genuinely fresh install, after a
+6. **Cold start is ~1.5s; warm recall p50 is ~290–300 ms** (v0.22.4, k=3,
+   11,262 retrievable memories, `npm run bench`; p90 under 0.4 s) — and on a
+   genuinely fresh install, after a
    one-time **~175 MB** model download, because **nothing is bundled**: no ONNX
    ships in the npm tarball or the MCPB bundle, and the models fetch lazily
    into `AWM_CACHE_DIR` > `HF_HOME` > `<packageRoot>/data/models`. The
-   cross-encoder is **83%** of the warm figure, and its first inference is
-   450-670ms of the cold one — so cold start is model load, not a slow store, and
+   cross-encoder is **83%** of the warm figure, and model load plus its first
+   inference (~390 ms at q8) make up the cold one — so cold start is model load, not a slow store, and
    it is paid once per process. Never put a cold recall on a latency-critical
-   path. `AWM_RERANKER_DTYPE=q8` cuts total latency **26-33%** on three suites
-   for **one query in 450** of accuracy (re-measured 2026-10-09 on the shipped
-   pipeline: identifier success@1 unchanged at 93.0%, topic 92.2% -> 92.0%;
-   correct silence unmoved on all three suites, success@5 unmoved on both
-   private suites and +0.5pp on the public corpus, inside its 4pp noise floor) and it shrinks the reranker
-   ONNX file it loads from 91 MB to 23 MB. fp32 is still the shipped default:
-   q8 is a documented **latency-first operating mode**, not a hidden tuning
-   flag, and it CHANGES RANKING OUTCOMES rather than being a free speedup. It is
-   read once at module import and the model is then cached, so it needs a
-   PROCESS RESTART — setting it against a running AWM does nothing, and an MCP
-   session must be restarted or reconnected. To check latency on your own store
+   path. **The int8 (`q8`) cross-encoder is the default since 0.19**: when it
+   was flipped it cut total latency **26-33%** on three suites for about **one
+   query in 450** of accuracy (measured 2026-10-09 against the then-default
+   fp32: identifier success@1 unchanged at 93.0%, topic 92.2% -> 92.0%) and
+   shrank the reranker ONNX file from 91 MB to 23 MB.
+   `AWM_RERANKER_DTYPE=fp32` restores the pre-0.19 ranker and gives that
+   **~30% latency saving** back; it changes ranking outcomes slightly rather
+   than being a free accuracy gain. It is read once at module import and the model is then
+   cached, so it needs a PROCESS RESTART — setting it against a running AWM
+   does nothing, and an MCP session must be restarted or reconnected. To check
+   latency on your own store
    from any install, set `AWM_PROFILE_RECALL=1`; checking ACCURACY needs derived
    ground truth and therefore a repo checkout, because scripts/ and tests/ are
    not in the npm tarball. See docs/deployment.md "Operating modes". `q4` is
@@ -476,14 +517,15 @@ calibrated gate (§7) judged the store does not have it. Read the source. If
 you have reason to think it is stored, `require_confidence: 0` opens the gate.
 
 **Nothing is recalled, or the wrong things are.**
-`awm doctor` → are the three flags from §3 set? Then: does the memory's body
+`awm doctor` → has a config switched off one of the three flags from §3? Then: does the memory's body
 contain the words you are querying with (§2)? Then: are you in the agent space
 that holds it (`memory_whoami`)? Then: reformulate once or twice with the
 domain's nouns rather than generic English. Three empty reformulations means
 the memory probably is not there — go read the code.
 
-**Memories are written but nobody else sees them.** Unpinned agent identity.
-Gotcha 4.
+**Memories are written but nobody else sees them.** Unpinned agent identity —
+the session fell back to `work` or `personal`, not the pool you meant. Pin
+`AWM_AGENT_ID`, check with `memory_whoami`. Gotcha 4.
 
 **A code change had no effect.** Gotcha 5. Restart the session.
 
@@ -510,9 +552,9 @@ Two benchmark paths, and the difference matters:
   (`tests/realstore-eval/public-corpus.mjs`), derives ground truth with **the
   same hold-out code** as the private path, and scores with the same runner.
 
-**Mind the noise floor.** Two full builds differing only in corpus seed gave
-`s@1` 56.3% and 52.0% — the corpus *shape* reproduces to 0.2pp and every
-qualitative result holds, but the absolute moves about 4 points between draws.
+**Mind the noise floor.** At v0.22.4 the default seed scores `s@1` 52.8% and
+seed 99 47.5% — the corpus *shape* reproduces and every qualitative result
+holds, but the absolute moves about 5 points between draws.
 A 2pp move is not a result; confirm on a second seed.
 
 **Do not quote public-benchmark numbers as the published ones.** The synthetic

@@ -74,10 +74,14 @@ Hebbian edges power the **graph walk** during retrieval — once a top result
 is identified, AWM walks two hops out along its strong edges to surface
 related context that wouldn't have hit on keyword/vector alone.
 
-> *Practical anchor:* This is what makes AWM more than RAG. If you ask
-> "how does our auth work?" and AWM also surfaces "we deprecated JWT for
-> sessions because tokens leaked in the proxy logs" — that second memory
-> won out because Hebbian edges had connected the two on previous queries.
+> *Practical anchor:* The edges are a record of co-recall history, not the
+> thing that decides the answer. If you ask "how does our auth work?" and AWM
+> also surfaces "we deprecated JWT for sessions because tokens leaked in the
+> proxy logs", the edge between them records that the two were recalled
+> together before; the order you see is set by the cross-encoder blended with
+> the BM25 + vector rank. Measured, the graph adds a score to about 85% of
+> top-3 results but changes the top-3 set in 0% of them
+> ([`known-limitations.md`](known-limitations.md)).
 
 ### Staging
 The **probationary buffer** for borderline-salience engrams (score
@@ -111,7 +115,8 @@ audit/history, but it's filtered from recall. Crucially, retraction
 local cluster cohesion (so retracting a fact in a tight narrative
 penalizes neighbors more heavily than retracting a fact in a hub).
 
-If you supply `counterContent`, AWM creates a correction engram, links
+If you supply a correction (`correction` on the `memory_retract` MCP tool,
+`counterContent` on `POST /memory/retract`), AWM creates a correction engram, links
 them, and the correction inherits the wrong engram's edges (scaled 0.7×)
 so the corrected version takes over the graph role.
 
@@ -131,7 +136,7 @@ so the corrected version takes over the graph role.
 | **Memory class** | A property on each engram. `canonical` (source of truth, 0.7 salience floor, never staged), `working` (default — salience-gated), `ephemeral` (decays fast), `structural` (system-written records, excluded from semantic recall by default). |
 | **Slim cache** | An in-memory index of every engram's `(id, concept, embedding)` for fast recall. Populated at server startup. Disable with `AWM_DISABLE_SLIM_CACHE=1` if you suspect cache drift. |
 | **Workspace** | A scoping mechanism that lets multiple agents share a memory pool while still defaulting to their own subset. Set `AWM_WORKSPACE` to opt in. |
-| **Reranker** | The cross-encoder model (ms-marco-MiniLM) that runs at the end of recall to refine the top-K ordering. Disable per-call with `useReranker: false` for fast/low-quality. |
+| **Reranker** | The cross-encoder that runs at the end of recall to refine the top-K ordering: ms-marco-MiniLM for keyword-shaped queries and, since 0.22, Ettin-17m for natural-language questions. Its order is blended with the BM25 + vector rank. Disable per-call with `use_reranker: false` (MCP) / `useReranker: false` (HTTP) for fast/low-quality. |
 | **Abstention** | On by default at a light threshold (`require_confidence: 0.05`) — AWM returns `RECALL ABSTAINED` with the withheld count instead of a best-of-bad-bunch result when the score distribution looks weak. Raise it (0.10–0.25) only for push-style use where nobody asked; a specific query with one clear winner around 0.3 will be *silenced* by 0.25. |
 
 ---
@@ -155,5 +160,6 @@ and citations (ACT-R, Hebbian learning, complementary learning systems,
 synaptic homeostasis), see [`cognitive-model.md`](cognitive-model.md).
 
 For "I read this and now what?" — the natural next read is
-[`quickstart.md`](quickstart.md) (install + first write/recall) or
+[`quickstart.md`](quickstart.md) (install, plus a first save-and-recall check),
+[`user-guide.md`](user-guide.md) (the tools, and a first write/recall over the HTTP API) or
 [`how-to.md`](how-to.md) (task recipes by goal).

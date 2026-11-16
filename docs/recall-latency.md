@@ -383,6 +383,10 @@ npm run profile:recall -- --public --n 200 --dtype q8
 
 ## Not changed
 
+> **Superseded 2026-10-20:** q8 became the default in 0.19 (`src/core/reranker.ts`);
+> `AWM_RERANKER_DTYPE=fp32` restores fp32. The text below records the state before that
+> decision.
+
 `dtype` is now readable from `AWM_RERANKER_DTYPE` instead of being a literal,
 because a value that cannot be varied cannot be measured. **The default is
 still `fp32`** and every published number stands at fp32. Flipping the shipped

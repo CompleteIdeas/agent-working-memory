@@ -82,7 +82,7 @@ The retract function returns:
 
 ## Code References
 
-- HTTP handler: `src/api/routes.ts:164-180`
-- MCP tool: `src/mcp.ts:204-235`
-- Retraction engine: `src/engine/retraction.ts:12-50`
-- Confidence propagation: `src/engine/retraction.ts:55-80`
+- HTTP handler: `POST /memory/retract` in `src/api/routes.ts`
+- MCP tool: `memory_retract` in `src/mcp.ts`
+- Retraction engine: `RetractionEngine.retract()` in `src/engine/retraction.ts`
+- Confidence propagation: `RetractionEngine.propagateConfidenceReduction()` in `src/engine/retraction.ts`

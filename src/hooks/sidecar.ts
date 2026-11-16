@@ -283,7 +283,7 @@ export function startSidecar(deps: SidecarDeps): SidecarHandle {
       }
     }
 
-    // GET /stats — daily activity counts from the log (no auth required)
+    // GET /stats — daily activity counts from the log (behind the auth check above)
     if (req.url === '/stats' && req.method === 'GET') {
       try {
         const lp = getLogPath();

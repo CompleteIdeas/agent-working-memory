@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * Text rendering for memory_about (0.23). Kept apart from the MCP server so it can be unit
+ * Text rendering for memory_about (0.22.3). Kept apart from the MCP server so it can be unit
  * tested without booting one, like core/format-recall.ts.
  */
 

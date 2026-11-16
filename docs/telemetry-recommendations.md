@@ -2,7 +2,7 @@
 
 > **Purpose:** Recommend additional database columns and tables AWM should track to evaluate system health, diagnose degradation, and tune parameters over time.
 >
-> **Current state:** AWM tracks basic operational data (engrams, edges, activation_events, staging_events, retrieval_feedback, conscious_state). This document identifies gaps where additional telemetry would improve observability.
+> **Current state:** AWM tracks basic operational data (engrams, associations (the edges), activation_events, staging_events, retrieval_feedback, episodes, session_checkpoints, entity_mentions, entity_aliases, conscious_state; as of v0.22.4, `src/storage/sqlite.ts`). This document identifies gaps where additional telemetry would improve observability.
 
 ---
 
@@ -62,7 +62,7 @@ id, agent_id, timestamp, context, results_returned, top_score, latency_ms, engra
 | `min_score` | REAL | NULL | Lowest score in returned results |
 | `mean_score` | REAL | NULL | Average score of returned results |
 | `query_embedding_norm` | REAL | NULL | L2 norm of query embedding — detect degenerate queries |
-| `expansion_applied` | INTEGER | 0 | 1 if Rocchio expansion ran |
+| `expansion_applied` | INTEGER | 0 | 1 if phase-0 query expansion (flan-t5-small; opt-in since 0.22.1) ran. Not the Rocchio pseudo-relevance pass, which would need its own flag |
 | `phase_latencies` | TEXT | '{}' | JSON: `{"bm25_ms": 2, "semantic_ms": 5, "rerank_ms": 15, ...}` |
 
 **Why these matter:**

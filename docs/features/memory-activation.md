@@ -9,34 +9,60 @@ When an agent needs context-aware recall — starting a new task, debugging a fa
 ### Steps (Happy Path)
 
 1. Call `POST /memory/activate` (or MCP `memory_recall`) with a natural language context
-2. The 9-phase activation pipeline scores all candidate memories:
+2. The activation pipeline (`ActivationEngine.activate()` in `src/engine/activation.ts`; the phase
+   numbers below are the code's own, and [architecture.md](../architecture.md#retrieval-pipeline)
+   has the full table) runs:
 
-   **Phase 0 — Query Expansion** (optional): Flan-T5 adds synonyms/related terms to improve BM25 recall
+   **Query shape**: `isNaturalQuery()` (`src/core/query-shape.ts`) classifies the query as a
+   natural-language question or a keyword lookup. The shape routes the questions index, the
+   cross-encoder and the final blend weight.
 
-   **Phase 1 — Embed Query**: MiniLM generates a 384-dim vector for semantic matching
+   **Phase 0 — Query expansion**: flan-t5-small. **Off by default since 0.22.1**
+   (`AWM_DEFAULT_EXPANSION=1` or `use_expansion: true` turns it on).
 
-   **Phase 2 — Parallel Retrieval**: BM25 (FTS5) search + all active engrams merged into candidate pool
+   **Phase 1 — Embed query**: bge-small-en-v1.5, 384 dimensions.
 
-   **Phase 3 — Multi-Signal Scoring** (per memory):
-   - BM25 continuous score (0-1)
-   - Jaccard similarity (stopword-filtered, 60% concept / 40% content)
-   - Concept exact match bonus (up to 0.3)
-   - Vector cosine similarity (mapped to 0-1)
-   - ACT-R temporal decay (log-space, accounts for access frequency and age)
-   - Hebbian association strength (capped at 0.5)
-   - Composite: `(0.6 * textMatch + 0.4 * temporal * relevanceGate) * confidence`
+   **Phase 2 — Candidates**: BM25 (FTS5) and vector top-K, in parallel. A natural-language query
+   also searches the questions each memory carries (0.22, `withQuestions`); keyword lookups never
+   read that index.
 
-   **Phase 4-5 — Graph Walk**: BFS depth 2 from high-scoring memories boosts connected neighbors (cap 0.2)
+   **Phase 3 — Per-candidate scoring**: BM25, Jaccard, raw-cosine floor, ACT-R decay, Hebbian
+   boost and the confidence gate, combined into a cheap `composite`; then the entity-bridge
+   boost (3.7) and a graph walk over Hebbian + temporal edges (4–5).
 
-   **Phase 6 — Filter**: Remove results below `minScore`
+   **Phase 6 — Shortlist and pool**: candidates are shortlisted by reciprocal-rank fusion of their
+   BM25, vector and composite ranks (0.21.1), and the cross-encoder pool is `max(limit*4, 32)`
+   (32 at the MCP default of 3 results).
 
-   **Phase 7 — Reranker** (optional): Cross-encoder rescores top candidates, blended 40/60 with composite
+   **Phase 7 — Cross-encoder**: every pooled candidate is scored by ms-marco-MiniLM (int8, the
+   default since 0.19) for keyword queries, or by Ettin-17m for natural-language questions.
 
-   **Phase 8 — Abstention**: If top reranker score below threshold, return empty (noise rejection)
+   **Phase 8 — Agreement gate**: when BM25, vector and cross-encoder disagree and nothing is
+   semantically close, returns nothing. Superseded memories and memories outside their
+   `valid_from`/`valid_to` window are down-ranked (×0.15).
 
-   **Phase 9 — Results**: Top `limit` memories with per-phase explanations
+   **Phase 9 — Final order**: a blend of the cross-encoder with the fused BM25 + vector rank, with
+   the weight set by query shape (keyword 0.95; natural 0.7 by rank with Ettin, 0.5 when half
+   the pool carries questions, else 0.85). Then the 0.22.4 first-place rule
+   (`src/core/blend-rule.ts`): a sure cross-encoder (top-two logit margin ≥ 1 keyword, ≥ 1.5
+   natural) puts its own #1 first; otherwise a keyword query re-blends first place with the
+   vector rank weighted 0.25, unless both channels rank it in their top two. Places 2+ keep the
+   blend's order.
+
+   **Calibrated gate (opt-in)**: with `AWM_ABSTAIN_GATE=calibrated`, a store-fitted model reads
+   the blend's order and answers, flags `⚠ LOW SIGNAL`, or withholds with `RECALL ABSTAINED`
+   ([abstention.md](../abstention.md)).
+
+   **Results**: the top `limit` memories with per-phase explanations.
 
 3. Side effects: access counts updated, Hebbian weights strengthened, activation event logged
+
+### Session scope (0.20, MCP)
+
+`memory_recall` takes `scope: "session"` to return only memories this session wrote (filtered on
+`writer_session` before the cross-encoder), and `session_first: true` to put this session's own
+memories ahead of older ones without changing membership or scores. The HTTP route does not take
+these options.
 
 ### What Gets Returned
 
@@ -105,10 +131,12 @@ when set. Research grounding: Brill 2018 ACT-R collaboration.
 
 ### Limits
 
-- Default `limit`: 10 results
-- Default `minScore`: 0.01
-- With ML models: ~200-300ms per query
-- Without ML models: ~5-20ms per query
+- Default `limit`: 10 results on HTTP and in the engine; 3 on MCP `memory_recall`
+- Default `minScore`: 0.01 on HTTP and in the engine; 0.05 on MCP
+- Warm recall with every model on: p50 287–304 ms on the 30,000-memory benchmark store
+  ([benchmarks-current.md](../benchmarks-current.md)); smaller stores are faster. The first
+  recall in a session can take seconds while models load. The cross-encoder is ~83% of warm
+  recall time.
 
 ### Error States
 
@@ -126,11 +154,15 @@ when set. Research grounding: Brill 2018 ACT-R collaboration.
 
 ## Code References
 
-- HTTP handler: `src/api/routes.ts:116-134`
-- MCP tool: `src/mcp.ts:126-172`
-- Activation pipeline: `src/engine/activation.ts:80-279`
-- Graph walk: `src/engine/activation.ts:281-311`
-- Explain: `src/engine/activation.ts:330-343`
-- Query expansion: `src/core/query-expander.ts:44`
-- Reranker: `src/core/reranker.ts:47`
-- BM25 search: `src/storage/sqlite.ts:228`
+- HTTP handler: `POST /memory/activate` in `src/api/routes.ts`
+- MCP tool: `memory_recall` in `src/mcp.ts`
+- Activation pipeline: `ActivationEngine.activate()` in `src/engine/activation.ts`
+- Graph walk: `graphWalk()` / `spreadActivation()` in `src/engine/activation.ts`
+- Explain: `explain()` in `src/engine/activation.ts`
+- Query shape: `isNaturalQuery()` in `src/core/query-shape.ts`
+- Rerankers: `rerank()` in `src/core/reranker.ts`
+- Final blend: phase 9b in `src/engine/activation.ts`; first-place rule in `src/core/blend-rule.ts`; rerank2 fallback in `src/core/rerank2.ts`
+- Calibrated gate: `classify()` in `src/engine/abstention-gate.ts`
+- Recall confidence: `computeRecallConfidence()` in `src/engine/confidence.ts`
+- Query expansion: `expandQuery()` in `src/core/query-expander.ts`
+- BM25 search: `searchBM25WithRank()` in `src/storage/sqlite.ts`

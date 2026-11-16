@@ -109,7 +109,7 @@
     harder: <b>what should I say, and should I say anything at all?</b> That is three questions, each
     answered by a different mechanism, over a store that changes with time.</p>
     <p class="herometa">
-      bge-small-en-v1.5 (384d) &middot; ms-marco-MiniLM-L-6-v2 cross-encoder &middot; SQLite + FTS5 &middot; all local, in-process<br>
+      bge-small-en-v1.5 (384d) &middot; ms-marco-MiniLM-L-6-v2 cross-encoder (keyword) &middot; Ettin-17m cross-encoder (natural language) &middot; SQLite + FTS5 &middot; all local, in-process<br>
       Prefer it without the internals?
       <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/walkthrough.md">One memory, followed end to end</a> &middot;
       <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/for-decision-makers.md">The decision-maker brief</a>
@@ -161,13 +161,13 @@
         <text x="553" y="52" text-anchor="middle" font-size="11" font-family="monospace" fill="#5b6472">neighbours vote</text>
 
         <text x="644" y="36" font-size="11" font-family="monospace" fill="#3b52d9">shortlist</text>
-        <text x="644" y="50" font-size="11" font-family="monospace" fill="#3b52d9">of ~40</text>
+        <text x="644" y="50" font-size="11" font-family="monospace" fill="#3b52d9">of ~32</text>
 
         <path d="M626,40 L706,40 L706,96 L377,96 L377,112" fill="none" stroke="#98a2b3" stroke-width="1.5" marker-end="url(#a)"/>
 
         <rect x="231" y="116" width="292" height="56" rx="9" fill="#e9f8f6" stroke="#a7e0d8"/>
         <text x="377" y="138" text-anchor="middle" font-size="12.5" font-weight="650" fill="#101419">cross-encoder reads query + memory together</text>
-        <text x="377" y="156" text-anchor="middle" font-size="11" font-family="monospace" fill="#0b8a80">the only stage that ranks for real</text>
+        <text x="377" y="156" text-anchor="middle" font-size="11" font-family="monospace" fill="#0b8a80">the stage that decides the order</text>
 
         <line x1="377" y1="172" x2="377" y2="198" stroke="#98a2b3" stroke-width="1.5" marker-end="url(#a)"/>
 
@@ -183,7 +183,7 @@
       </svg>
     </div>
     <figcaption>Three questions, answered in order. Q1 may only gather and narrow cheaply; it is never
-    the final word. Q2 is the single decisive ranking. Q3 has two independent ways to return nothing.</figcaption>
+    the final word. Q2 is the decisive ranking: the cross-encoder, blended with the first-stage rank, and given first place outright when it is sure. Q3 has two independent ways to return nothing.</figcaption>
   </figure>
 
   <div class="box rule">
@@ -214,7 +214,7 @@
   Then a beam walk of depth two over the association graph lets shortlisted memories pull in their
   neighbours, under a hard cap, so the graph can nudge an ordering but never invent one.</p>
 
-  <p>The output is a shortlist of about forty for a three-result query. That ratio is the point.</p>
+  <p>The output is a shortlist of 32 for a three-result query. That ratio is the point.</p>
 
   <div class="box note">
     <span class="lbl">Where that ratio came from</span>
@@ -243,9 +243,9 @@
   for the funnel in front of it. Most of warm recall latency is this stage, and that is why the result
   limit is a cost dial as much as a breadth dial.</p>
 
-  <p>Three settings materially improve what the reranker gets to read. All three ship default-off so an
-  existing install never changes behaviour under its owner, and all three are switched on by
-  <code>awm setup</code> from 0.14.6 on a fresh install.</p>
+  <p>Three settings materially improve what the reranker gets to read. All three have been code defaults
+  since 0.18 (<code>AWM_RERANK2=0</code>, <code>AWM_RERANK_WINDOW=prefix</code> and
+  <code>AWM_RERANK_TAGS=0</code> turn them off for experiments).</p>
 
   <div class="tablewrap">
   <table>
@@ -362,7 +362,7 @@ confidence = sharpness<span class="k">^0.4</span> &middot; cliff<span class="k">
   for the top result rather than the shape of the list. A recall is then answered, answered with
   <code>&#9888; LOW SIGNAL</code>, or withheld as <code>RECALL ABSTAINED &mdash; this store most likely does
   not hold this</code>. That last message means what it says: go and read the source. Measured on one real
-  store with keyword-style questions, it withholds 66 of 73 never-stored facts and none of 694 correct
+  store (v0.22.4), it withholds 50 of 73 never-stored facts and 1 of 718 correct keyword-style
   answers. <code>require_confidence: 0</code> opens it. Method:
   <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</p>
 </section>
@@ -468,7 +468,7 @@ B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
 
   <div class="pred">
     <h4>The association graph rarely changes the final answer</h4>
-    <p>It nudges an ordering under a hard cap; the reranker decides. Stated plainly because a model that
+    <p>It nudges an ordering under a hard cap; the cross-encoder and the final blend decide. Stated plainly because a model that
     over-claims its own graph would mislead you about where to spend effort.
     <span class="because"><b>Q1 proposes, Q2 decides</b> &mdash; measured across 300 real queries.</span></p>
   </div>
@@ -490,8 +490,8 @@ B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
   <div class="nums">
     <div><div class="v">95.0%</div><div class="l">Right memory first, identifier queries (300)</div></div>
     <div><div class="v">96.2%</div><div class="l">Right memory first, topic queries (450)</div></div>
-    <div><div class="v">66/73</div><div class="l">Never-stored facts withheld, opt-in calibrated gate</div></div>
-    <div><div class="v">500<span style="font-size:16px;color:var(--mut)">ms</span></div><div class="l">Median warm recall, local</div></div>
+    <div><div class="v">50/73</div><div class="l">Never-stored facts withheld, opt-in calibrated gate</div></div>
+    <div><div class="v">300<span style="font-size:16px;color:var(--mut)">ms</span></div><div class="l">Median warm recall, local</div></div>
   </div>
 
   <p>A baseline belongs next to the first two: plain keyword search (BM25) puts the right memory first
@@ -499,7 +499,7 @@ B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
   store, with superseded and retracted memories still in it, keyword search falls to 87.7% / 79.8% and
   puts a superseded memory first 8&ndash;15% of the time; tracking what is current is what AWM adds. The
   third figure is the opt-in calibrated gate (<code>AWM_ABSTAIN_GATE=calibrated</code>), which also
-  withholds 2 of 706 correct answers (21 of 88 on natural-language questions). It replaces an earlier &ldquo;90.0% correctly silent&rdquo;, measured
+  withholds 1 of 718 correct answers (3 of 103 on natural-language questions once memories carry questions). It replaces an earlier &ldquo;90.0% correctly silent&rdquo;, measured
   with a strict non-default setting on 10 probes; the shipped default withheld 0 of those 10. See
   <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</p>
 
@@ -525,7 +525,7 @@ B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
   <table>
     <tr><th>Variable</th><th class="num">Default</th><th>Effect</th></tr>
     <tr class="group"><td colspan="3">Q1 &mdash; how generous the proposal is</td></tr>
-    <tr><td><code>AWM_RERANK_POOL</code></td><td class="num">max(limit&middot;4, 40)</td><td>How many candidates reach the decider. Recall against latency; the dial the attribution study moved.</td></tr>
+    <tr><td><code>AWM_RERANK_POOL</code></td><td class="num">max(limit&middot;4, 32)</td><td>How many candidates reach the decider. Recall against latency; the dial the attribution study moved.</td></tr>
     <tr><td><code>AWM_TOPN_MULT</code></td><td class="num">8</td><td>Candidate breadth carried into the graph walk and rerank</td></tr>
     <tr><td><code>AWM_SIM_FLOOR_TARGETED</code></td><td class="num">0.50</td><td>Raw cosine floor for vector eligibility on targeted queries; 0.35 in exploratory mode</td></tr>
     <tr class="group"><td colspan="3">Q2 &mdash; what the decider gets to read</td></tr>
@@ -561,8 +561,8 @@ B = ln(n + 1) - <span class="k">d</span> &middot; ln(age / (n + 1))
 
 <footer>
   <div class="wrap">
-    <p><b>AgentWorkingMemory</b> &mdash; local-first cognitive memory for agents. Mechanism and defaults
-    verified against source at v0.14.6:
+    <p><b>AgentWorkingMemory</b> &mdash; local-first cognitive memory for agents. Mechanism verified against
+    source at v0.14.6; figures, the final order and the defaults above updated for v0.22.4:
     <code>src/engine/activation.ts</code> &middot; <code>src/engine/confidence.ts</code> &middot;
     <code>src/core/write-pipeline.ts</code> &middot; <code>src/core/decay.ts</code> &middot;
     <code>src/engine/consolidation.ts</code>. Diagrams are schematic; every number links to its method.</p>

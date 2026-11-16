@@ -13,13 +13,25 @@
 
 ## Quick Start
 
-### 1. Install Dependencies
+**Most people want the npm install, not this section.** For Claude Code (or Codex, Cursor), run:
+
+```bash
+npm install -g agent-working-memory
+awm setup --global
+```
+
+and follow [`quickstart.md`](quickstart.md). The steps below are for working **from a source
+checkout over the HTTP API** — for developing AWM itself, or integrating a non-MCP agent.
+
+### From a source checkout (HTTP API)
+
+#### 1. Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Start the HTTP Server
+#### 2. Start the HTTP Server
 
 ```bash
 npx tsx src/index.ts
@@ -34,14 +46,14 @@ The server starts on port 8400 (configurable via `AWM_PORT` env var). On first r
 | ettin-reranker-17m-v1 | 17 MB | Cross-encoder reranking for natural-language questions (int8) |
 | flan-t5-small | 377 MB | Query expansion, downloaded only when expansion is on (`AWM_DEFAULT_EXPANSION=1`) |
 
-> These are per-model **downloads** at the **fp32** precision AWM actually loads — the ONNX
-> weight files alone are 133 / 91 / 374 MB, the rest being each model's tokenizer and config
-> (verified against
-> the Hugging Face hub's file listing, not just a local cache; there are no
-> `.onnx_data` sidecars). Until 2026-10-09 this table quoted ~33/~22/~80 MB, which
-> tracks each model's *parameter count* — equivalently its int8 file, since int8 is
-> about one byte per parameter — and not the full-precision weights the code
-> requests. That understated the download by about 4.5x.
+> These are per-model **downloads** at the precision AWM actually loads: the embedder (and
+> flan-t5, when expansion is on) at **fp32**, both rerankers at **int8** by default (since
+> 0.19 for MiniLM; Ettin since it shipped in 0.22). The MiniLM reranker's 91 MB ONNX file is
+> downloaded only at `AWM_RERANKER_DTYPE=fp32`. Sizes include each model's tokenizer and
+> config (verified against the Hugging Face hub's file listing, not just a local cache; there
+> are no `.onnx_data` sidecars). Until 2026-10-09 this table quoted ~33/~22/~80 MB, which
+> tracked each model's *parameter count* rather than the fp32 weights the code then requested
+> for all three — an understatement of about 4.5x at the time.
 
 Verify the server is running:
 
@@ -50,7 +62,7 @@ curl http://localhost:8400/health
 # {"status":"ok","timestamp":"...","version":"<your installed version>","coordination":false,"agents_alive":0,...}
 ```
 
-### 3. Write Your First Memory
+#### 3. Write Your First Memory
 
 ```bash
 curl -X POST http://localhost:8400/memory/write \
@@ -78,7 +90,7 @@ The salience filter evaluates the memory and returns its disposition:
 }
 ```
 
-### 4. Recall Memories
+#### 4. Recall Memories
 
 ```bash
 curl -X POST http://localhost:8400/memory/activate \
@@ -103,7 +115,7 @@ Returns ranked results with per-phase scoring explanations:
 }
 ```
 
-### 5. Give Feedback
+#### 5. Give Feedback
 
 ```bash
 curl -X POST http://localhost:8400/memory/feedback \
@@ -123,7 +135,10 @@ AWM integrates directly with Claude Code via the Model Context Protocol.
 
 ### Setup
 
-Run `awm setup claude-code --global` and it writes this for you. The result looks like:
+Run `awm setup claude-code --global` and it writes the config for you — prefer that to
+hand-writing it. For a per-project pool, run `awm setup --agent-id <name>` in the project
+folder instead. The entry it writes has this shape (trimmed — setup also writes the hook port,
+the hook secret it generates, and a few other keys, so treat this as a sketch rather than a copy):
 
 ```json
 {
@@ -143,9 +158,11 @@ Run `awm setup claude-code --global` and it writes this for you. The result look
 Two things matter here. **`AWM_DB_PATH` must point outside the installed package** —
 `~/.awm/memory.db` is the default for exactly that reason, because a store inside
 `node_modules` is deleted by `npm update`. And **`AWM_AGENT_ID` is the memory pool**:
-only `work` and `personal` are valid.
+any name works. Unset, the server falls back to `WORKER_NAME`, then to `work` (or `personal`
+under a `Personal-Projects` path), which may not be the pool you meant — pin it, and check
+with `memory_whoami`.
 
-After restarting Claude Code, check `/mcp` to verify the server is connected with **22 tools** (20 memory + 2 onboarding).
+After restarting Claude Code, check `/mcp` to verify the server is connected with **22 tools** (18 memory, 2 onboarding, 2 output).
 
 ### MCP Tools
 
@@ -153,6 +170,9 @@ After restarting Claude Code, check `/mcp` to verify the server is connected wit
 |------|---------|
 | `memory_write` | Store a memory with salience metadata |
 | `memory_recall` | Retrieve relevant memories by context |
+| `memory_about` | Every memory about one person, organisation or thing, oldest first |
+| `memory_alias` | Record other names for an entity ("Jenna", "Jenna Park") so `memory_about` finds it by any of them |
+| `memory_set_questions` | Attach the natural questions a memory answers, so it is found when someone asks in their own words |
 | `memory_feedback` | Report if a memory was useful |
 | `memory_retract` | Invalidate a wrong memory |
 | `memory_supersede` | Replace outdated memory with a current version |
@@ -190,7 +210,9 @@ Claude Code will automatically use these tools when appropriate. You can also tr
 | `AWM_AGENT_ID` | derived — `work` or `personal` | The agent id **is** the memory pool. Unset, the MCP server falls back to `WORKER_NAME` and then derives from the project directory, which yields only `work` or `personal` (`src/core/agent-id.ts`) — never `claude-code`, which this row claimed until 2026-10-09. Pin it explicitly if you want a specific pool. |
 | `AWM_EMBED_MODEL` | `Xenova/bge-small-en-v1.5` | Embedding model (BAAI retrieval-optimized, default since 0.7) |
 | `AWM_EMBED_DIMS` | `384` | Embedding dimensions |
-| `AWM_RERANKER_MODEL` | `Xenova/ms-marco-MiniLM-L-6-v2` | Cross-encoder reranker model |
+| `AWM_RERANKER_MODEL` | `Xenova/ms-marco-MiniLM-L-6-v2` | Cross-encoder reranker model (keyword-shaped queries) |
+| `AWM_RERANKER_MODEL_NATURAL` | `cross-encoder/ettin-reranker-17m-v1` | Second cross-encoder for natural-language questions (since 0.22); `off` uses the main one for every query |
+| `AWM_RERANKER_DTYPE` | `q8` | Reranker precision (q8 since 0.19); `fp32` restores the pre-0.19 ranker and gives back the ~30% latency saving (process restart needed) |
 
 ## Building for Production
 
@@ -210,7 +232,7 @@ npm run dev                 # Same thing via npm script
 
 ```bash
 # Unit tests (no server required)
-npx vitest run              # 610 tests, ~30-45s
+npx vitest run              # 1232 tests
 
 # MCP protocol test (no server required)
 npm run test:mcp            # 7 checks

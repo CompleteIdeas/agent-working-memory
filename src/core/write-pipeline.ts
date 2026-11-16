@@ -168,18 +168,18 @@ export interface WriteInput {
   /** 0.22: false keeps a deliberate second fact in the same slot instead of superseding. */
   supersedesSlot?: boolean;
   /**
-   * 0.23: other names for the entity this write is about ("Jenna", "Jenna Park"). They are
+   * 0.22.3: other names for the entity this write is about ("Jenna", "Jenna Park"). They are
    * registered as aliases of the write's one person/contact/org/entity/event/horse/member tag,
    * or of `aliasFor` when the write carries several.
    */
   aliases?: string[];
-  /** 0.23: the entity key the `aliases` belong to, when the write has more than one name tag. */
+  /** 0.22.3: the entity key the `aliases` belong to, when the write has more than one name tag. */
   aliasFor?: string;
 }
 
 export interface WriteResult {
   action: WriteAction;
-  /** 0.23: what happened to the `aliases` offered with this write. */
+  /** 0.22.3: what happened to the `aliases` offered with this write. */
   aliases?: { entity: string | null; registered: string[]; replaced: Array<{ alias: string; previous: string }>; error?: string };
   /** 0.22: what happened to the questions offered with this write. */
   questions?: QuestionsOutcome;
@@ -269,7 +269,7 @@ export async function performWrite(
       result.questions = await attachQuestions(engines.store, result.engram.id, fields.questions, result.engram.questions);
     } catch { /* questions are an index aid; a failure must not fail the write */ }
   }
-  // 0.23: a write merged into an existing memory used to leave its entity tags unindexed, so
+  // 0.22.3: a write merged into an existing memory used to leave its entity tags unindexed, so
   // "everything about Jenna" missed the merged fact. Index them onto the memory that now holds
   // it (same agent only; the merge path never crosses agents). Create/supersede index in the
   // create path already; INSERT OR IGNORE makes a repeat harmless.
@@ -283,7 +283,7 @@ export async function performWrite(
   return result;
 }
 
-/** 0.23: register a write's `aliases` against its one name-like entity (or `aliasFor`). */
+/** 0.22.3: register a write's `aliases` against its one name-like entity (or `aliasFor`). */
 async function attachAliases(
   store: EngramStore, agentId: string, entities: string[], aliases: string[], aliasFor?: string,
 ): Promise<NonNullable<WriteResult['aliases']>> {

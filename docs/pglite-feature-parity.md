@@ -1,17 +1,26 @@
 # PGlite ↔ SQLite Feature Parity
 
-> Status as of v0.8.5 — 2026-05-26.
+> Originally audited at v0.8.5 — 2026-05-26.
+> **Last verified v0.22.4 (2026-11-15)** for: backend selection and the env values
+> (`src/storage/factory.ts`), the seven SQLite-only paths below (re-located by symbol), the
+> questions index on each backend, and the `AWM_PGLITE_BM25_M` / `AWM_IVFFLAT_PROBES` tunables.
+> The upgrade Q&A and the "effort to port" estimates were not re-checked.
 > Audit source: `git grep -E "BACKEND === 'sqlite'|getDb\(\)|warmSlimCache|walCheckpoint|backup\(|integrityCheck"` over `src/`.
 
-AWM ships with two storage backends. **SQLite is the current default** for new
-and upgrading users. PGlite is opt-in via `AWM_STORE_BACKEND=pglite` (or
-auto-detected when a `memory-pglite/` directory is present on disk).
+AWM ships three storage backends behind one `IEngramStore` interface. **SQLite is the
+default** for new and upgrading users. PGlite is opt-in via `AWM_STORE_BACKEND=pglite` (or
+auto-detected when a `memory-pglite/` directory is present on disk). A networked **Postgres**
+backend (`AWM_STORE_BACKEND=postgres` + `AWM_DATABASE_URL`, **experimental**) shares PGlite's
+SQL surface and is the only backend that is genuinely shared across processes and machines;
+see [Networked Postgres](#networked-postgres-experimental) below. The table compares the two
+embedded backends.
 
 | Capability | SQLite | PGlite |
 |---|---|---|
 | Cognitive engines (write, recall, consolidation, retraction, eviction) | ✓ | ✓ |
 | Vector search | JS cosine over slim cache | **pgvector** (ivfflat index) |
 | Full-text search | FTS5 (BM25, unicode61) | tsvector + websearch_to_tsquery |
+| Questions index (0.22) | second FTS5 table `engrams_qfts` (concept, content, tags + questions), read only when recall asks `withQuestions` | separate `fts_q` tsvector (GIN-indexed), read only when recall asks `withQuestions` |
 | Hive coordination plugin | ✓ | ✗ (auto-disabled with warning) |
 | Hot backups (every 10 min) | ✓ | ✗ (use OS-level dir snapshots) |
 | WAL checkpoint on shutdown | ✓ | n/a (PGlite has its own WAL) |
@@ -29,17 +38,19 @@ process, just disable the SQLite-only extras with a warning.
 
 ---
 
-## Backend selection (v0.8.5+)
+## Backend selection (v0.8.5+; `postgres` since 0.10)
 
 In precedence order:
 
-1. `AWM_STORE_BACKEND` env var (`sqlite` or `pglite`) — always wins.
+1. `AWM_STORE_BACKEND` env var (`sqlite`, `pglite` or `postgres`) — always wins. An unknown
+   value warns and falls back to SQLite. `postgres` reads its connection string from
+   `AWM_DATABASE_URL` (default `postgres://localhost:5432/awm`).
 2. Auto-detect: `memory-pglite/` directory exists → PGlite.
 3. Auto-detect: `memory.db` file exists → SQLite.
 4. Fresh install fallback → SQLite.
 
-`openStore()` prints a warning to stderr when the configured backend disagrees
-with what's on disk (e.g. env says pglite, but only `memory.db` is present
+`openStore()` prints a warning to stderr when a file/directory backend disagrees
+with what's on disk (Postgres has nothing on disk, so it is never checked) (e.g. env says pglite, but only `memory.db` is present
 with data — the user probably needs to run `awm migrate`). The warning never
 fails or silently switches backends.
 
@@ -49,23 +60,25 @@ Suppress with `AWM_SUPPRESS_BACKEND_WARNINGS=1`.
 
 ## SQLite-only code paths (audit)
 
-All 7 paths below are properly gated on `BACKEND === 'sqlite'` and degrade
-gracefully on PGlite. No path *crashes* — they either skip the operation
+All 7 paths below are gated on `BACKEND === 'sqlite'` (or on `store.getDb` existing) and
+degrade gracefully on PGlite and Postgres alike. No path *crashes* — they either skip the operation
 with a log line or return HTTP 501.
 
 ### 1. Hive coordination plugin — `src/coordination/`
-- **Gated at:** `src/mcp.ts:1108`, `src/index.ts:136`
+- **Gated at:** `coordEnabled` in `src/mcp.ts` (before `registerCoordinationTools`) and
+  `isCoordinationEnabled() && BACKEND === 'sqlite'` in `main()` of `src/index.ts`
 - **What it does:** worker registry, assignment dispatch, channel push,
   circuit breaker, peer-decision propagation. The plugin uses raw
   `better-sqlite3` calls via `store.getDb()` against `coord_*` tables.
-- **PGlite behavior:** auto-disabled. Stderr warning:
+- **PGlite / Postgres behavior:** auto-disabled. Stderr warning:
   *"coordination requested but disabled — coordination plugin requires
-  SQLite backend"*. Cognitive engines work normally.
+  SQLite backend"* (the MCP server prints it on PGlite; on Postgres it prints the generic
+  "coordination tools disabled" line). Cognitive engines work normally.
 - **Effort to port:** ~3-5 days. ~1500 LOC across `src/coordination/`,
   all using sync better-sqlite3 prepared statements. Needs full async
   refactor + adapter layer for prepared-statement caching on PGlite.
 
-### 2. Hot backup timer — `src/index.ts:169-183`
+### 2. Hot backup timer — `backupTimer` in `main()`, `src/index.ts`
 - **What it does:** every 10 minutes, calls `store.backup(targetPath)`
   (SQLite's online backup API) to write a `.db` snapshot into
   `<dbDir>/backups/`. Prunes to last 6 snapshots.
@@ -76,7 +89,7 @@ with a log line or return HTTP 501.
   cross-platform via Node's `fs.cp`. Need to confirm PGlite is checkpointed
   before copy (write-pause or flush API).
 
-### 3. Slim-cache pre-warm — `src/index.ts:190-201`
+### 3. Slim-cache pre-warm — `store.warmSlimCache()` in `src/index.ts` and `src/mcp.ts`
 - **What it does:** on startup, populates an in-memory `Map<id, {id,
   concept, embedding}>` for fast vector search (SQLite has no native
   vector index).
@@ -85,13 +98,13 @@ with a log line or return HTTP 501.
 - **Effort to port:** none required — PGlite already has the equivalent
   via its index.
 
-### 4. WAL checkpoint on shutdown — `src/index.ts:213-215`
+### 4. WAL checkpoint on shutdown — `store.walCheckpoint()` in the shutdown handlers of `src/index.ts` and `src/mcp.ts`
 - **What it does:** before close, runs SQLite's `PRAGMA wal_checkpoint`
   to flush WAL into the main db file.
 - **PGlite behavior:** skipped — PGlite WAL is internal to the WASM engine.
 - **Effort to port:** none required.
 
-### 5. Integrity check on startup — `src/index.ts:71-72`
+### 5. Integrity check on startup — `store.integrityCheck()` in `main()`, `src/index.ts`
 - **What it does:** SQLite `PRAGMA integrity_check`. If it fails, attempts
   to restore the most recent backup before failing the boot.
 - **PGlite behavior:** returns `{ok: true, result: 'pglite: skipped'}`.
@@ -99,7 +112,7 @@ with a log line or return HTTP 501.
 - **Effort to port:** moderate. PG has `pg_amcheck` and `VACUUM ANALYZE`
   for similar checks; would need a wrapper.
 
-### 6. `/memory/export` HTTP endpoint — `src/api/routes.ts:903-906`
+### 6. `/memory/export` HTTP endpoint — `GET /memory/export` in `src/api/routes.ts`
 - **What it does:** stream-exports engrams + associations as JSON for
   backup or migration. Uses raw `SELECT` against the SQLite DB.
 - **PGlite behavior:** returns HTTP 501 *"export endpoint requires the
@@ -107,12 +120,34 @@ with a log line or return HTTP 501.
 - **Effort to port:** small (~50 LOC). Rewrite the export queries against
   the IEngramStore async interface.
 
-### 7. `/health` coordination stats — `src/api/routes.ts:958-967`
+### 7. `/health` coordination stats — the `coordEnabled && typeof store.getDb === 'function'` block of `GET /health` in `src/api/routes.ts`
 - **What it does:** when coordination is enabled, includes counts of
   alive agents, pending tasks, active locks in the health response.
 - **PGlite behavior:** the `if (typeof getDb === 'function')` guard
   silently skips the coord stats block. Base health response still returned.
 - **Effort to port:** depends on coordination plugin port (#1). Same time.
+
+---
+
+## Networked Postgres (experimental)
+
+- **Select:** `AWM_STORE_BACKEND=postgres` and `AWM_DATABASE_URL=postgres://…` (the server needs
+  the `pgvector` extension). Implemented by `PostgresEngramStore` in `src/storage/postgres.ts`.
+- **Same SQL surface as PGlite:** tsvector full-text search (`fts`, plus `fts_q` for questions),
+  pgvector `ivfflat` vector search, the same tunables below.
+- **Same SQLite-only gaps:** the seven paths above are skipped exactly as on PGlite (no
+  coordination plugin, no hot backups, `/memory/export` returns 501).
+- **Open:** a server-DB backup/integrity story and cross-backend recall-quality parity are not
+  done; treat it as experimental.
+
+## Tuning the Postgres-family backends
+
+Both apply to PGlite **and** Postgres; neither touches SQLite.
+
+| Env var | Default | What it does |
+|---|---|---|
+| `AWM_PGLITE_BM25_M` | `1` (no change) | Multiplier on `ts_rank_cd` before it is used as a BM25-like score (`calibrateBm25()`), to bring it closer to the SQLite FTS5 BM25 distribution. Higher M raises scores at the cost of ranking precision. |
+| `AWM_IVFFLAT_PROBES` | `5` | `ivfflat.probes` set at connection start. More probes = better vector recall, slower queries (the index is built with `lists = 100`). |
 
 ---
 
@@ -164,7 +199,12 @@ A fresh empty `memory-pglite/` directory is created, and you start with
 
 ---
 
-## Roadmap
+## Roadmap (history, written at v0.8.5)
+
+> **History, not a plan.** PGlite never became the default: SQLite is still the default in
+> v0.22.4, and the networked Postgres backend shipped (experimental, 0.10) instead of PGlite
+> taking over first. The coordination plugin and `/memory/export` are still SQLite-only, and
+> SQLite has not been deprecated. Kept as a record of the original plan.
 
 - **0.8.x:** SQLite default. PGlite opt-in. Auto-detect + warnings (this release).
 - **0.9.x (target):** PGlite default for new installs. Existing `memory.db`

@@ -39,7 +39,8 @@ agent over a local HTTP interface.
 ## What it demonstrably does
 
 Every number below comes from a measurement that can be re-run from the repository. The
-full record is in [`benchmarks.md`](benchmarks.md); the reasoning behind each is in the
+current numbers are in [`benchmarks-current.md`](benchmarks-current.md), what produced each one in
+[`claims.md`](claims.md); the reasoning behind each is in the
 dated files under [`archive/`](archive/README.md).
 
 **Recall quality — does it return the right memory?**
@@ -85,15 +86,17 @@ on 10 questions; with the default setting AWM stayed quiet on 0 of those 10. Tha
 withdrawn.
 
 An opt-in gate (`AWM_ABSTAIN_GATE=calibrated`) learns from the store itself what "no answer
-here" looks like. Measured on the same real store, with keyword-style questions:
+here" looks like. Measured on the same real store (v0.22.4):
 
 | question | result |
 |---|---|
-| 73 questions about facts that were never stored | **66** withheld |
-| 694 questions whose answer is stored | **0** withheld, 4 answered with a warning |
-| 200 questions about a deleted fact, asked in the vocabulary of its neighbours | 92 withheld, 30 answered with a warning |
+| 73 questions about facts that were never stored | **50** withheld, 3 answered with a warning |
+| 718 keyword-style questions it answers correctly | **1** withheld, 6 answered with a warning |
+| 200 questions about a deleted fact, asked in the vocabulary of its neighbours | 95 withheld, 19 answered with a warning |
+| 103 natural-language questions it answers correctly (memories carry questions) | **3** withheld |
+| 97 natural-language questions about a deleted fact | 9 withheld — it still answers most of them |
 
-It has not yet been measured on other stores or on natural-language questions. Method:
+It has not yet been measured on other stores. Method:
 [`abstention.md`](abstention.md).
 
 **Credentials — what happens to a password the assistant writes down**
@@ -132,7 +135,7 @@ remembered, it is silently re-decided.
   cannot be found by it later. The tooling nudges good writing; it cannot force it.
 - **It is not a chatbot, a hosted service, or a generic vector database.**
 - **Version 0.x.** Actively developed, honest about its limits, and the benchmark itself
-  has been corrected three times this month when the instrument turned out to be wrong.
+  has been corrected several times when the instrument turned out to be wrong (see the CHANGELOG).
   Those corrections are documented in place rather than quietly revised.
 
 ## What saying yes commits you to
@@ -151,8 +154,9 @@ remembered, it is silently re-decided.
 ## The one-sentence version
 
 AWM lets an AI assistant remember what your team decided and why, across months of work,
-on your own machine. It returns the right memory first about 92% of the time on its
-benchmark (plain keyword search manages about the same on those questions); what it adds is
+on your own machine. It returns the right memory first about 95% of the time on its
+benchmark (95.0% identifier, 96.2% topic questions; plain keyword search scores 95.7% / 91.6% on
+the same questions); what it adds is
 knowing which version of a fact is current and, with an opt-in gate, saying when it does not
 have the answer.
 

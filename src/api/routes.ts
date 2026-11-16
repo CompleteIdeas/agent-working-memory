@@ -136,7 +136,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
       /** 0.22: entity + attribute; a newer write to the same slot supersedes the holder. */
       slot?: string;
       supersedesSlot?: boolean; supersedes_slot?: boolean;
-      /** 0.23: other names for the write's one name-like entity tag (or `aliasFor`). */
+      /** 0.22.3: other names for the write's one name-like entity tag (or `aliasFor`). */
       aliases?: string[];
       aliasFor?: string; alias_for?: string;
     };
@@ -588,7 +588,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
    * "latest motif phase per motif", etc.
    */
   /**
-   * 0.23: every memory about one entity, oldest first (see src/engine/entity-about.ts).
+   * 0.22.3: every memory about one entity, oldest first (see src/engine/entity-about.ts).
    * GET /memory/about?agentId=…&entity=…[&workspace=…&limit=…&includeSuperseded=false&includeStaging=true]
    * Returns status found | ambiguous | candidates | not_found; ambiguous and candidates carry
    * `candidates` and no memories.
@@ -637,7 +637,7 @@ export function registerRoutes(app: FastifyInstance, deps: MemoryDeps): void {
   });
 
   /**
-   * 0.23: alternative names. POST adds (or moves) one, DELETE removes one, GET lists.
+   * 0.22.3: alternative names. POST adds (or moves) one, DELETE removes one, GET lists.
    * POST /memory/alias { agentId, alias, entity } → { alias, entity, previous }
    */
   app.post('/memory/alias', async (req, reply) => {

@@ -6,7 +6,7 @@
  * Runs as a stdio-based MCP server that Claude Code connects to directly.
  * Uses the storage and engine layers in-process (no HTTP overhead).
  *
- * Tools exposed (19):
+ * Tools exposed (22 with the onboarding and output tools registered further down):
  *   memory_write       — store a memory (salience filter decides disposition)
  *   memory_recall      — activate memories by context (cognitive retrieval)
  *   memory_feedback    — report whether a recalled memory was useful
@@ -201,7 +201,7 @@ function describeQuestions(q: import('./core/questions.js').QuestionsOutcome | u
     + (q.dropped.some((d) => d.reason === 'invalid') ? '; some dropped as empty, too short or too long' : '');
 }
 
-/** 0.23: one line on what happened to the aliases a write offered. Empty when none were offered. */
+/** 0.22.3: one line on what happened to the aliases a write offered. Empty when none were offered. */
 function describeAliases(a: import('./core/write-pipeline.js').WriteResult['aliases']): string {
   if (!a) return '';
   if (a.error) return `\nAliases: ${a.error}. Use memory_alias to add them.`;
@@ -527,7 +527,7 @@ Returns the most relevant memories ranked by text relevance, temporal recency, a
   {
     query: z.string().optional().describe('What to search for — describe the situation, question, or topic'),
     context: z.string().optional().describe('Alias for query (either works)'),
-    limit: z.number().optional().default(3).describe('Max memories to return (default 3). Measured on 400 real-store probes: k=3 is the only token-POSITIVE setting (+115 tok/recall, against -680 at k=5) and is 41% faster at p50, because `limit` sizes the cross-encoder rerank pool (max(limit*4, 40), so 40 at k=3 and at k=5 before the pool filter trims it, 24 at the median) and rerank is 83% of warm recall time. It costs ~0.5pp success@1 versus k=5 — about 3 queries in 400, inside noise. Raise it explicitly when you want breadth for orientation rather than a specific fact; that is the case this default deliberately does not optimize for.'),
+    limit: z.number().optional().default(3).describe('Max memories to return (default 3). Measured on 400 real-store probes: k=3 is the only token-POSITIVE setting (+115 tok/recall, against -680 at k=5) and is 41% faster at p50, because `limit` sizes the cross-encoder rerank pool (max(limit*4, 32), so 32 at k=3, 32 at k=5 before the pool filter trims it) and rerank is 83% of warm recall time. It costs ~0.5pp success@1 versus k=5 — about 3 queries in 400, inside noise. Raise it explicitly when you want breadth for orientation rather than a specific fact; that is the case this default deliberately does not optimize for.'),
     min_score: z.number().optional().default(0.05).describe('Minimum relevance score (default 0.05)'),
     include_staging: z.boolean().optional().default(false).describe('Include weak/unconfirmed memories?'),
     use_reranker: z.boolean().optional().default(true).describe('Use cross-encoder re-ranking for better relevance (default true)'),

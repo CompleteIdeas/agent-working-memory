@@ -301,7 +301,7 @@
       <tr><th>Part</th><th>Do</th></tr>
       <tr><td><strong>Concept</strong> <span class="flat">(short summary)</span></td><td>3–8 words, and <strong>lead with the rule or fact</strong>, not the backstory. "Period-close BLOCKED check missing server-side" — not "a thing about accounting." This is the label, not the memory.</td></tr>
       <tr><td><strong>Content</strong> <span class="flat">(the detail / description field)</span></td><td><strong>Don't stop at the summary.</strong> The body is what BM25, the embedding model, and concept extraction read most strongly — and what a future query actually matches. Be slightly more verbose at the front than feels natural: include the mechanism, the file/function, and (for guidance) the <em>why</em>. A rule with no reason can't be applied to edge cases.</td></tr>
-      <tr><td><strong>Tags</strong></td><td>Always pass the structured prefix-tags — <code>proj=</code>, <code>topic=</code> (most specific you can), <code>intent=</code>, <code>confidence_level=</code> — and add <strong>2+ retrievable identifiers</strong> present in the content: <code>file=</code>/path, function name, <code>ticket=</code>, <code>date=YYYY-MM-DD</code>, <code>person=</code>. Tags are a hard filter and a BM25/entity-bridge boost at recall time; the difference between a memory found in three months and one lost in a noisy bucket.</td></tr>
+      <tr><td><strong>Tags</strong></td><td>Always pass the structured prefix-tags — <code>proj=</code>, <code>topic=</code> (most specific you can), <code>intent=</code>, <code>confidence_level=</code> — and add <strong>2+ retrievable identifiers</strong> present in the content: <code>file=</code>/path, function name, <code>ticket=</code>, <code>date=YYYY-MM-DD</code>, <code>person=</code>. Tags are a ranking signal, not a filter (<code>memory_recall</code> has no topic parameter): BM25 indexes every tag, the entity bridge uses the identifiers, and the cross-encoder's passage carries only <code>topic=</code>/<code>proj=</code>/<code>project=</code> tags, capped at 80 characters (<code>AWM_RERANK_TAGS</code>, on by default). The embedding never sees tags, so write the words in the content too.</td></tr>
     </table>
     <p style="margin:6px 0 0"><strong>Write in the vocabulary of the future question.</strong> Imagine
     asking this in three months — use those exact nouns (file paths, table columns, error strings),
@@ -321,7 +321,7 @@
     <tr><td><strong>Agent ID</strong></td><td>Hard memory isolation per agent. Default recall is agent-scoped — you only see your own memories.</td></tr>
     <tr><td><strong>Workspace</strong> <span class="tag t-validated">multi-agent</span></td><td>A shared substrate across a fleet. Pass <code>workspace</code> on recall (or set <code>AWM_WORKSPACE</code>) and one agent recalls what another wrote — in real time, distinct agent IDs, one store. This is the capability a per-process notes file or library <em>structurally cannot</em> do.</td></tr>
     <tr><td><strong>Session ID</strong></td><td>Group memories from one conversation. Memories sharing a <code>session_id</code> get an entity-bridge recall boost (things learned together resurface together).</td></tr>
-    <tr><td><strong>Incognito</strong></td><td>A mode where the agent can read the store without writing — for exploratory or read-only tasks.</td></tr>
+    <tr><td><strong>Incognito</strong></td><td><code>AWM_INCOGNITO=1</code> starts the MCP server with <em>no tools at all</em> — no store is opened and nothing is read or recorded — for a session that must leave no trace.</td></tr>
   </table>
 
   <h3>Writing &amp; correcting knowledge</h3>
@@ -333,16 +333,21 @@
     <tr><td><strong>Retract</strong></td><td>Invalidate a wrong memory, attach the correction, and propagate penalties to associated memories (depth 2, decaying).</td></tr>
     <tr><td><strong>Feedback</strong></td><td>Mark a recalled memory useful / not-useful. Tunes confidence and the validation-gated Hebbian edges so useful memories strengthen and surface first next time.</td></tr>
     <tr><td><strong>Reinforce-on-duplicate</strong></td><td>A restated fact merges into the existing memory and re-embeds, instead of creating a near-duplicate.</td></tr>
+    <tr><td><strong>Correction write</strong></td><td><code>memory_write</code> with <code>correction: true</code>, when a fact changed and the agent lacks the old id: AWM supersedes the closest active memory about the same thing and says which. Written as a plain observation, a changed value merges into or ranks below the stale one.</td></tr>
+    <tr><td><strong>Slots</strong></td><td><code>slot</code> on a write names an entity + attribute (<code>rosterkeep.deploy-command</code>). A later write to the same slot (same agent, same class) supersedes the old value automatically; an older fact (earlier <code>valid_from</code>) is kept as history.</td></tr>
+    <tr><td><strong>Questions</strong></td><td><code>questions</code> on a write (up to 5) or <code>memory_set_questions</code> afterwards: the natural questions a memory answers, keyword-indexed so it is found when someone asks in their own words. Natural-language first place 48.5% → 53.1% on the real store.</td></tr>
+    <tr><td><strong>Session notes</strong></td><td><code>scope: "session"</code> on a write keeps a working note for this session only — always kept, never merged, expired after <code>AWM_SESSION_TTL_DAYS</code> (7). Read back with <code>scope: "session"</code> or <code>session_first: true</code> on recall.</td></tr>
     <tr><td><strong>References &amp; resolve</strong> <span class="pill">(0.8)</span></td><td>Typed cross-record links (<code>advances</code>/<code>resolves</code>/…) and a <code>resolve</code> call that computes an engram's effective state (active / resolved / superseded / abandoned).</td></tr>
   </table>
 
   <h3>Recall controls</h3>
   <table>
     <tr><th>Feature</th><th>What it gives the agent</th></tr>
-    <tr><td><strong>Cognitive recall</strong></td><td>Not cosine-only: dual BM25 (keyword + expanded) + vectors + cross-encoder rerank + graph walk + ACT-R decay + coreference expansion. See the <a href="pipeline-walkthrough.html">pipeline walkthrough</a>.</td></tr>
+    <tr><td><strong>Cognitive recall</strong></td><td>Not cosine-only: BM25 + vectors + cross-encoder rerank (MiniLM for keyword queries, Ettin-17m for natural-language questions, blended with the fused rank) + graph walk + ACT-R decay + coreference expansion. Query expansion (a second, expanded BM25 pass) is off by default since 0.22.1. See the <a href="pipeline-walkthrough.html">pipeline walkthrough</a>.</td></tr>
+    <tr><td><strong>Everything about a name</strong></td><td><code>memory_about</code> returns every memory about one person, organisation or thing, oldest first — a timeline, not a ranked search; an ambiguous name comes back as candidates. <code>memory_alias</code> (or <code>aliases</code> on a write) records other names for it.</td></tr>
     <tr><td><strong>Granularity</strong></td><td><code>full</code> (default), <code>compact</code> (a query-aware ~200-char snippet per result — ~70% fewer output tokens when scanning many), <code>auto</code> (confidence-adaptive).</td></tr>
-    <tr><td><strong>Abstention</strong></td><td><code>require_confidence</code> makes recall return nothing rather than best-of-bad noise. It judges the <em>shape</em> of the scores, so the light default (0.05) rarely fires: it withheld 0 of 10 absent-fact probes. A multi-channel agreement gate backs it (2+ channels must agree).</td></tr>
-    <tr><td><strong>Calibrated abstention</strong> <span class="pill">(opt-in)</span></td><td><code>AWM_ABSTAIN_GATE=calibrated</code>: the store learns its own noise floor from queries it generates from itself (<code>awm calibrate</code>, refitted after consolidation), and each recall is answered, answered with <code>⚠ LOW SIGNAL</code>, or withheld as <code>RECALL ABSTAINED — this store most likely does not hold this</code>. Measured on one real store with keyword-style questions: withholds 66 of 73 never-stored facts and 2 of 706 correct answers. On natural-language questions it withholds 21 of 88 correct answers (its calibration probes are keyword-shaped). <code>require_confidence: 0</code> opens it. See <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</td></tr>
+    <tr><td><strong>Abstention</strong></td><td><code>require_confidence</code> makes recall return nothing rather than best-of-bad noise. It judges the <em>shape</em> of the scores, so the light default (0.05) rarely fires: on a real store it withheld 0 of 73 questions about facts never stored. A multi-channel agreement gate backs it (2+ channels must agree).</td></tr>
+    <tr><td><strong>Calibrated abstention</strong> <span class="pill">(opt-in)</span></td><td><code>AWM_ABSTAIN_GATE=calibrated</code>: the store learns its own noise floor from queries it generates from itself (<code>awm calibrate</code>, refitted after consolidation), and each recall is answered, answered with <code>⚠ LOW SIGNAL</code>, or withheld as <code>RECALL ABSTAINED — this store most likely does not hold this</code>. Measured on one real store (v0.22.4) with keyword-style questions: withholds 50 of 73 never-stored facts and 1 of 718 correct answers (flagging 6), and of 200 deleted facts asked in familiar vocabulary withholds 95 and flags 19. On natural-language questions, once memories carry questions, it withholds 3 of 103 correct answers but answers 88 of 97 whose fact was deleted. <code>require_confidence: 0</code> opens it. See <a href="https://github.com/CompleteIdeas/agent-working-memory/blob/master/docs/abstention.md">abstention.md</a>.</td></tr>
     <tr><td><strong>Tag-set search</strong> <span class="pill">(0.8)</span></td><td>AND / OR / NOT tag operators, <code>latest-by-tag</code>, <code>top-by</code> numeric tag sort, race-free <code>sequence</code> allocator — relational-style queries over the memory store.</td></tr>
   </table>
 
@@ -356,9 +361,9 @@
   <h3>Interfaces, hooks &amp; the bearer token</h3>
   <table>
     <tr><th>Feature</th><th>What it gives the agent</th></tr>
-    <tr><td><strong>MCP server</strong></td><td>16 first-class memory tools over stdio — recall / write / supersede / retract / feedback / tasks / checkpoint / restore.</td></tr>
-    <tr><td><strong>HTTP API</strong></td><td>18 routes (write / activate / search / supersede / feedback / tasks / stats / metrics) for any non-Claude-Code agent or service.</td></tr>
-    <tr><td><strong>Lifecycle hooks + bearer token</strong></td><td>A bundled hook sidecar (loopback <code>127.0.0.1</code> only) auto-checkpoints on <code>Stop</code> / <code>PreCompact</code> / <code>SessionEnd</code> so context survives compaction and session close. Hook calls authenticate with an <code>Authorization: Bearer ${AWM_HOOK_SECRET}</code> token — set the env var to any random value and <code>awm setup</code> wires the same secret into the hook config. Wrong token → 401; the local-only bind keeps the surface tight.</td></tr>
+    <tr><td><strong>MCP server</strong></td><td>22 tools over stdio: 18 memory tools (write / recall / about / alias / set_questions / supersede / retract / feedback / whoami / stats / checkpoint / restore / six task tools), 2 onboarding (<code>onboard_scan</code>, <code>onboard_questions</code>) and 2 output (<code>compress_output</code>, <code>retrieve_original</code>).</td></tr>
+    <tr><td><strong>HTTP API</strong></td><td>32 routes under <code>awm serve</code> (write / activate / search / about / alias / supersede / retract / feedback / tasks / stats / metrics / whoami) for any non-Claude-Code agent or service. <code>awm setup</code> does not start it.</td></tr>
+    <tr><td><strong>Lifecycle hooks + bearer token</strong></td><td>A bundled hook sidecar (loopback <code>127.0.0.1</code> only) auto-checkpoints on <code>PreCompact</code> / <code>SessionEnd</code> plus a 15-minute timer, so context survives compaction and session close; <code>Stop</code> runs the implicit-feedback hook (<code>awm-used.cjs</code>), which credits the recalls a reply drew on. Hook calls authenticate with an <code>Authorization: Bearer ${AWM_HOOK_SECRET}</code> token — <code>awm setup</code> generates the secret (stored next to the store) and wires it into the MCP config the hooks read. Wrong token → 401; the local-only bind keeps the surface tight.</td></tr>
     <tr><td><strong>Tasks</strong></td><td>First-class task records (create / update / list / next) with priority and <code>blockedBy</code> dependencies — the agent's working backlog lives in the same store as its knowledge.</td></tr>
     <tr><td><strong>Metrics</strong></td><td><code>/agent/:id/metrics</code> exposes precision@k, recall latency (p50/p95), edge-utility rate, retraction rate — so an operator can see whether memory is actually helping.</td></tr>
   </table>
@@ -630,14 +635,15 @@
   <div class="panel wash">
     <div class="mono-h">Roadmap</div>
     <dl style="margin:4px 0 0">
-      <dt>0.9.x <span class="callout-n">— commercial-grade for agents (this line)</span></dt>
+      <dt style="font-weight:400"><em>History: this roadmap was written for the 0.9.x line and is kept as the record. As of 0.22.4, SQLite is still the default for new installs, and a networked Postgres backend exists as an experimental option (<code>AWM_STORE_BACKEND=postgres</code> + <code>AWM_DATABASE_URL</code>).</em></dt>
+      <dt>0.9.x <span class="callout-n">— commercial-grade for agents (the line current when this was written)</span></dt>
       <dd>The recall-quality + agent-feature improvements described on this page. PGlite default for
         <em>new</em> installs (target); existing <code>memory.db</code> users stay on SQLite via
         auto-detect.</dd>
       <dt>1.0</dt>
       <dd>Coordination plugin ported to async PGlite; <code>/memory/export</code> ported; SQLite still
         supported.</dd>
-      <dt>Post-1.0 / v1 target <span class="tag t-design">in design</span></dt>
+      <dt>Post-1.0 / v1 target <span class="tag t-design">in design at 0.9.x</span></dt>
       <dd><strong>A real networked Postgres backend for scale</strong> — same engine code as PGlite,
         swap the connection layer (<code>AWM_STORE_URL</code>). The honest status: the embedded-Postgres
         surface is built and tested, but the full networked move still needs the cognitive engines made

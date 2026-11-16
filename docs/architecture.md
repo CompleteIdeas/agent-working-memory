@@ -38,15 +38,18 @@ AWM has **two entry points over one SQLite database**, and they are not designed
 src/
   core/             # Cognitive primitives (stateless)
     embeddings.ts     Local vector embeddings (bge-small-en-v1.5, 384d ONNX)
-    reranker.ts       Cross-encoder passage scoring (ms-marco-MiniLM)
-    query-expander.ts Synonym expansion (flan-t5-small)
+    reranker.ts       Cross-encoder passage scoring (ms-marco-MiniLM for keyword queries, Ettin-17m for natural-language questions)
+    query-shape.ts    Keyword vs natural-language query routing
+    blend-rule.ts     Final-order first-place rule (0.22.4)
+    rerank2.ts        Second-stage reorder by cross-encoder score
+    query-expander.ts Synonym expansion (flan-t5-small; off by default since 0.22.1)
     salience.ts       Write-time importance scoring (novelty + salience)
     decay.ts          ACT-R temporal activation decay
     hebbian.ts        Association strengthening/weakening
     logger.ts         Append-only activity log (data/awm.log)
   engine/           # Processing pipelines (stateful)
-    activation.ts     10-phase retrieval pipeline
-    consolidation.ts  7-phase sleep cycle
+    activation.ts     Retrieval pipeline (phases −1 to 9b, below)
+    consolidation.ts  Sleep cycle (12 steps, phases 0–7, below)
     connections.ts    Discover links between memories
     staging.ts        Weak signal buffer (promote or discard)
     retraction.ts     Negative memory / corrections
@@ -57,7 +60,7 @@ src/
     sqlite.ts         SQLite + FTS5 persistence (~2,020 lines)
   api/
     routes.ts         HTTP endpoints (memory + task + system)
-  mcp.ts            MCP server (22 tools: 20 memory + 2 onboarding, incognito support)
+  mcp.ts            MCP server (22 tools: 18 memory_* + 2 onboarding + 2 output compression, incognito support)
   cli.ts            CLI (setup, serve, hook config)
   index.ts          HTTP server entry point
 ```
@@ -73,16 +76,20 @@ the top of that file is the other copy of this list.
 | −1 | Coreference expansion | Conditional: only when the query contains pronouns. |
 | 0 | Query expansion | flan-t5-small adds related terms. **Off on every path since 0.22.1** (MCP `memory_recall` defaulted `use_expansion` to true until then); `AWM_DEFAULT_EXPANSION=1` or a per-call `use_expansion: true` turns it on. Measured 2026-11-02: no change in top-1 on any suite, ~150-220 ms per short query, and the model mostly echoes the query back. |
 | 1 | Vector embedding | Embed the query, bge-small 384d. |
-| 2 | Parallel retrieval | Dual FTS5/BM25 + native vector top-K, concurrently. |
+| 2 | Parallel retrieval | Dual FTS5/BM25 + native vector top-K, concurrently. Only a natural-language query (`isNaturalQuery`) also searches the memories' stored questions (`withQuestions`, 0.22); keyword lookups never read that index. |
 | 3a | Candidate fetch | Hydrate candidates. Entity-index injection splices in here when `AWM_ENTITY_INDEX_FETCH=1` (default off) — *before* scoring, not after it. |
 | 3b | Per-candidate scoring | BM25, Jaccard, raw-cosine floor (`AWM_SIM_FLOOR_*`, 0.50/0.35), ACT-R decay, Hebbian boost and the confidence gate are all computed **together here** — not as separate later passes. |
 | 3.5 | Rocchio expansion | Pseudo-relevance feedback: take the top 3, harvest novel terms, re-search BM25. **Default OFF since 2026-10-09** (`AWM_FEEDBACK_BM25=1`) — it cost 6.7–7.0% of every recall and moved 3 gold ranks in 950 queries, two of them the wrong way. |
 | 3.7 | Entity-bridge boost | Boost candidates sharing entity tags with the top text matches. **Default ON.** |
 | 4–5 | Graph walk | Beam search over Hebbian + temporal edges. |
-| 6 | Rerank pool | Select the wide candidate pool, default `max(limit*4, 40)` (`AWM_RERANK_POOL`), capped by `limit × AWM_TOPN_MULT`. The composite is a deliberately cheap pre-filter; the cross-encoder does the discrimination. |
-| 7 | Cross-encoder rerank | ms-marco-MiniLM scores every pooled candidate and decides final order. ~83% of warm recall latency. |
-| 8 | Abstention gate | Multi-channel OOD agreement judged on the **post-rerank top-K** (`AWM_ABSTAIN_GATE_K`, default 5), so pool width (recall) is decoupled from precision. Returns nothing if the channels disagree. Phase 8c applies supersession. |
-| 9b | rerank2 | Second-pass reorder using feedback/edge-strength/class bonuses. Engine default off (`AWM_RERANK2=1`), but `awm setup`, the plugin and the Desktop bundle all switch it on. |
+| 6 | Shortlist + rerank pool | The shortlist is ordered by **reciprocal-rank fusion of the BM25, vector and composite ranks** (0.21.1; `AWM_PRESELECT=composite` restores the composite-only cut) and cut at `max(limit × AWM_TOPN_MULT, pool)` — the pool size is a floor on the shortlist, not a cap. The cross-encoder pool is `max(limit*4, 32)` (`AWM_RERANK_POOL`), so 32 at the MCP default k=3. The composite is a deliberately cheap pre-filter; the cross-encoder does the discrimination. |
+| 7 | Cross-encoder rerank | Scores every pooled candidate. Two models, routed by query shape (`src/core/query-shape.ts`): ms-marco-MiniLM (int8 since 0.19) for keyword-shaped queries, Ettin-17m for natural-language questions. ~83% of warm recall latency. |
+| 8 | Agreement gate | Multi-channel OOD agreement judged on the **post-rerank top-K** (`AWM_ABSTAIN_GATE_K`, default 5), so pool width (recall) is decoupled from precision. Returns nothing when fewer than 2 of 3 channels agree *and* the best raw cosine is below the mode floor; otherwise a weak agreement only down-weights the pool. Phase 8c down-ranks superseded and out-of-validity memories (×0.15). |
+| 9 | Final sort | Sort, limit, recall confidence, `require_confidence` check. |
+| 9b | Blend (0.21.1) | When rerank2 is on and every candidate has a cross-encoder score, the final order is a blend of the cross-encoder with the fused BM25 + vector rank, weighted by query shape: keyword 0.95; natural with the Ettin model 0.7 (by rank); natural when half the pool carries questions 0.5; otherwise 0.85. `AWM_BLEND=off` falls back to the plain rerank2 sort. |
+| 9b | First-place rule (0.22.4) | `src/core/blend-rule.ts`: when the cross-encoder is sure (top-two logit margin ≥ 1 keyword, ≥ 1.5 natural) its #1 takes first place; otherwise a keyword query re-blends first place with the vector rank weighted 0.25 (full weight when both channels rank it top two). Places 2+ keep the blend's order. `AWM_BLEND_SURE=off` restores 0.22.3. |
+| 9b | rerank2 fallback | Without a blend, re-sorts the top `AWM_RERANK2_K` (10) by `rerankerScore × stalePenalty` (`src/core/rerank2.ts`). **Default on** in code since 0.18 (`AWM_RERANK2=0` disables). |
+| — | Calibrated gate (opt-in) | `AWM_ABSTAIN_GATE=calibrated`: a per-agent model (`src/engine/abstention-gate.ts`, a separate one for natural-language questions) reads the **blend's** order (`gateOrder`), not the first-place rule's, and answers, flags low signal, or withholds. See [abstention.md](abstention.md). |
 
 > **Corrected 2026-10-09.** This table previously listed temporal decay, graph
 > walk, confidence gating and vector scoring as phases 5–8, *after* rerank and
@@ -91,13 +98,14 @@ the top of that file is the other copy of this list.
 > with the gate at 8. Every phase number also disagreed with the code's, so
 > grepping for "phase 4.5" found nothing. Phase 0, 3a, 8c and 9b were missing.
 
-## Consolidation Pipeline (8 phases)
+## Consolidation Pipeline (12 steps)
 
-The sleep cycle in `src/engine/consolidation.ts`:
+The sleep cycle in `src/engine/consolidation.ts` runs twelve steps, numbered as phases 0–7 with
+half-steps 2.5, 5.5, 6.5 and 6.7 (the numbers are the code's own):
 
 | Phase | Name | What it does |
 |-------|------|-------------|
-| 0 | Connection drain | Discover associations for engrams enqueued since the last cycle. Runs first, before any replay — this row was missing until 2026-10-09, which is why the heading said seven phases. |
+| 0 | Connection drain | Discover associations for engrams enqueued since the last cycle. Runs first, before any replay — this row was missing until 2026-10-09, which is why the heading once said seven phases. |
 | 1 | Replay | Identify memory clusters for strengthening |
 | 2 | Strengthen | Boost edges between co-accessed memories |
 | 2.5 | Synthesis | Tag-grouped session summaries + pattern syntheses |
@@ -122,14 +130,17 @@ section below is a high-level orientation.
 Key tables:
 
 **engrams** — Individual memories
-- `id` (UUID), `agent_id`, `concept`, `content`, `event_type`
-- `salience`, `confidence`, `access_count`, `last_access`
+- `id` (UUID), `agent_id`, `concept`, `content`, `memory_type`, `memory_class`
+- `salience`, `confidence`, `access_count`, `last_accessed`, `created_at`
 - `embedding` (384d float array, stored as blob)
 - `task_status`, `task_priority`, `blocked_by` (task management)
 - `stage` (`staging` / `active` / `fading` / `consolidated` / `archived`) — `fading` added in v0.8.5
 - `retracted` (boolean), `retracted_by`, `retracted_at` (soft-delete metadata)
-- `origin_class`, `writer_session`, `recipe_id`, `valid_from`, `valid_to` — memory-spine
-  provenance + bi-temporal validity (2026-07-30, log-only: never used in ranking)
+- `origin_class`, `writer_session`, `recipe_id` — memory-spine provenance (2026-07-30, log-only:
+  never used in ranking; `writer_session` does scope `scope: "session"` recall)
+- `valid_from`, `valid_to` — bi-temporal validity. Since 0.18.0 a memory outside its window is
+  down-ranked (×0.15 in phase 8c, like a superseded one) and labelled in recall output
+- `questions`, `slot` — questions the memory answers (0.22, BM25-indexed) and its slot key (0.22)
 
 **associations** — Edges between memories
 - `from_engram_id`, `to_engram_id`, `weight`, `type` (hebbian / connection / invalidation / temporal / causal)
@@ -139,10 +150,13 @@ Key tables:
 
 **entity_mentions / entity_aliases** — Inverted entity index (D9, 2026-07-30). Normalized
 `key:value` entities (from prefix tags + auto-tagger `entity:` tags) → engram ids, with an
-alias table for alternate names. Write-time bookkeeping on all three backends; retrieval
-reads it only behind `AWM_ENTITY_INDEX_FETCH` (D11 guarded injection).
+alias table for alternate names (per agent since 0.22.3, managed with `memory_alias`). Written on
+all three backends; `memory_about` (0.22.3) reads it directly, and recall ranking reads it only
+behind `AWM_ENTITY_INDEX_FETCH` (D11 guarded injection).
 
 **engrams_fts** — FTS5 virtual table on concept + content + tags. Auto-synced via triggers.
+
+**engrams_qfts** (0.22) — the same plus the memory's questions; only natural-language recall reads it (`withQuestions`).
 
 **conscious_state** — Checkpoint storage
 - `agent_id`, `state` (JSON blob), `updated_at`
@@ -174,7 +188,7 @@ eviction) are identical on both — the difference is operational.
 | Native bindings at install | yes (prebuilds) | no (pure-JS) |
 | Path to a networked Postgres server | ✗ | ✓ (same SQL surface) |
 
-**Backend selection** (precedence): `AWM_STORE_BACKEND` env (`sqlite`/`pglite`)
+**Backend selection** (precedence): `AWM_STORE_BACKEND` env (`sqlite`/`pglite`/`postgres`; `postgres` also needs `AWM_DATABASE_URL`)
 → auto-detect (`memory-pglite/` dir → PGlite, `memory.db` file → SQLite) →
 fresh-install fallback to SQLite. A mismatch between the configured backend and
 what's on disk prints a warning; it never silently switches.

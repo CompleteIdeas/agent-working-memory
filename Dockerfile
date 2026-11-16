@@ -1,5 +1,5 @@
 # Multi-stage build for AgentWorkingMemory
-# Lightweight deployment: ~200MB image, no GPU required.
+# Lightweight deployment, no GPU required. Models (~175 MB) download on first use into /data/models.
 #
 # Build provenance (cache-bust + visibility):
 #   docker build --build-arg BUILD_REF=$(git rev-parse --short HEAD) \
@@ -40,14 +40,15 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 # Create data directory for SQLite and models
-RUN mkdir -p /data /models
+RUN mkdir -p /data /data/models
 
 # Environment
 ENV AWM_PORT=8400
 ENV AWM_DB_PATH=/data/memory.db
 ENV NODE_ENV=production
-# Models cache dir for @huggingface/transformers
-ENV HF_HOME=/models
+# Models cache dir for @huggingface/transformers — on the /data volume, so a recreated
+# container does not download the models again
+ENV HF_HOME=/data/models
 
 # --- Build provenance & cache-bust ---
 # These ARGs are intentionally LAST so they don't invalidate the heavy
@@ -71,7 +72,7 @@ EXPOSE 8400
 # (use Railway's own volume system via service config: mount /data).
 # Other runtimes (docker compose, kubernetes) also handle volumes
 # at the orchestrator layer — declaring VOLUME in the image only
-# adds friction. The /data directory is created by `mkdir -p /data /models`
+# adds friction. The /data directory is created by `mkdir -p /data /data/models`
 # above and is mounted at runtime by whichever orchestrator runs the image.
 
 # Print build provenance at container start, then exec the server.

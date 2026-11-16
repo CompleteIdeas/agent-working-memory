@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /**
- * "Everything about X" (0.23): every memory indexed under one person, organisation or thing,
+ * "Everything about X" (0.22.3): every memory indexed under one person, organisation or thing,
  * in date order. This is a deterministic lookup on the entity index (D9), not ranked recall:
  * recall returns the top k against the question's wording, so the ninth memory about Jenna
  * never shows, and a question that says "the hotel" may not reach memories that say "Harbor

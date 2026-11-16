@@ -14,7 +14,7 @@ npm run build
 ## Development
 
 - **Build:** `npm run build` (TypeScript → dist/)
-- **Tests:** `npx vitest run` (68 unit tests)
+- **Tests:** `npx vitest run` (1,232 tests in 109 files at v0.22.4)
 - **Dev mode:** `npm run dev` (tsx watch)
 - **Evals:** `npm run test:self`, `npm run test:edge`, etc.
 

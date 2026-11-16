@@ -238,7 +238,7 @@ AWM ${VERSION} — install as a Claude Code plugin
     /plugin marketplace add ${pkgRoot}
     /plugin install awm@agent-working-memory
 
-  Then restart Claude Code. You get 19 memory tools, the session hooks, and the
+  Then restart Claude Code. You get 22 memory tools, the session hooks, and the
   usage guidance as a skill.
 
   No GitHub access needed — the marketplace is this npm install, already on disk.

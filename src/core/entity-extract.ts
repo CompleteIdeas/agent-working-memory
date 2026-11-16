@@ -15,7 +15,7 @@
  */
 
 /** Prefix-tag keys whose values denote entities worth indexing.
- *  `contact` (0.23): a third party the agent's user deals with (MWA tags mail senders
+ *  `contact` (0.22.3): a third party the agent's user deals with (MWA tags mail senders
  *  `contact=<email>`), kept apart from `person`, which agents use for the user themself. */
 export const ENTITY_KEYS = new Set([
   'person', 'ticket', 'member', 'horse', 'usef', 'event', 'proj', 'project',
@@ -63,7 +63,7 @@ const GRAM_STOP = new Set([
 
 /**
  * Lowercase 1–3 word phrases from a question, for exact matching against aliases and entity
- * values (0.23, AWM_ENTITY_ALIAS_MATCH). Possessives are dropped ("jenna's" → "jenna"); email
+ * values (0.22.3, AWM_ENTITY_ALIAS_MATCH). Possessives are dropped ("jenna's" → "jenna"); email
  * addresses and dotted names stay whole tokens. A phrase made only of stop words is skipped,
  * but a phrase may contain one ("the gala" is kept beside "gala"), since that is how people
  * register names. Capped so a long question costs one bounded lookup.
@@ -87,7 +87,7 @@ export function entityQueryGrams(text: string, maxGrams = 150): string[] {
 }
 
 /**
- * Choose the entities a question names from exact phrase matches (0.23). Two rules:
+ * Choose the entities a question names from exact phrase matches (0.22.3). Two rules:
  *  - a bare value counts only for name-like keys: `proj=`, `version=`, `file=` ride on
  *    almost every write, so "awm" matching proj:awm would pull in the whole project;
  *  - the longest name wins: a match whose words sit inside a longer matched phrase is

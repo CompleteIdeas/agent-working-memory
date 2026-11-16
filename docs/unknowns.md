@@ -1,11 +1,12 @@
 # Open Questions
 
+Reviewed against v0.22.4 (2026-11-15).
+
 ## Architecture
 
 ### Multi-agent shared memory
-Memories are isolated by `agentId`. No shared knowledge base exists across agents. Questions:
-- Should there be a shared pool accessible by all agents in a project?
-- How would conflicts between agent-specific and shared memories be resolved?
+Memories are scoped by `agentId`. A shared view exists: recall with `workspace` (or `AWM_WORKSPACE`) searches every agent in that workspace (hive mode). Still open:
+- How should conflicts between one agent's memory and another's be resolved when both surface in a workspace recall?
 
 ### Re-embedding on model change
 The embedding model is configurable via `AWM_EMBED_MODEL`, but switching models invalidates existing vectors. Questions:
@@ -20,10 +21,10 @@ The salience filter is tuned for coding assistant memories (decisions, bugs, arc
 - Future: per-agent configurable salience profiles
 
 ### Reranker blend ratio
-The adaptive blend (30-70% based on BM25 signal strength) was tuned on workday/self-test evals. May need adjustment for other domains.
+The adaptive blend (30-70% reranker weight, based on BM25 signal strength) was tuned on workday/self-test evals. It now feeds only the pre-rerank score; the final order comes from the 0.21.1 blend (weight routed by query shape) plus the 0.22.4 first-place rule (`src/core/blend-rule.ts`). Whether those settings carry over to other domains is still open.
 
 ### Abstention threshold
-Currently defaults to 0 (no abstention). The right threshold depends on use case — coding assistants benefit from lower thresholds than conversational agents.
+`require_confidence` defaults to 0.05, a light gate; the store-calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) is opt-in. Whether the calibrated gate should become the default, and how it should treat natural-language questions, is still open (see `docs/claims.md` §2).
 
 ## Deployment
 
@@ -31,4 +32,4 @@ Currently defaults to 0 (no abstention). The right threshold depends on use case
 No rate limiting on endpoints. Fine for single-user MCP, but shared deployments need per-agent limits.
 
 ### Backup/recovery
-No built-in export/import. SQLite file can be copied manually. A proper backup mechanism would be useful for production.
+`awm export` and `awm import` exist (embeddings optional; re-embed after import when models differ), and the SQLite file can be copied. Scheduled or automatic backup is not built in.

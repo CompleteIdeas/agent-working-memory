@@ -8,9 +8,10 @@
 
 **Search** (`/memory/search`) is deterministic SQL-based retrieval — exact text matching, tag filtering, stage filtering. No side effects, no scoring pipeline. Use it for debugging and inspection.
 
-### Why was my memory discarded?
+### Why is my memory not being recalled?
 
-The salience filter scored it below 0.2. This happens when:
+The salience filter may have scored it below 0.2. Such a write is kept, but at low confidence
+(0.25, tagged `low-salience`), so it rarely ranks. This happens when:
 - `eventType` is `"observation"` (no bonus)
 - `surprise`, `causalDepth`, and `resolutionEffort` are all low
 - `decisionMade` is false
@@ -19,7 +20,7 @@ To ensure storage, use `eventType: "decision"` or `"causal"` with higher feature
 
 ### Why is my memory in staging instead of active?
 
-Its salience score was between 0.2 and 0.4. Staging memories are promoted to active if they resonate with existing knowledge (tested every 60 seconds), or discarded after 24 hours if they don't.
+Its salience score was between 0.2 and 0.4. Staging memories are promoted to active if they resonate with existing knowledge (checked on each staging sweep, every 24 hours, and during consolidation), or discarded after 24 hours if they don't.
 
 ### How long do memories last?
 
@@ -41,8 +42,8 @@ questions memories answer (see below); that runs in the host, not in AWM.
 `memory_write` takes up to five `questions`: how someone would ask for this memory later, in their
 own words ("when does the fall fee go up?"). They go into a second keyword index that only
 natural-language recall reads, so they can't disturb identifier or topic lookups. On the real-store
-benchmark, natural-language first place rose from 47.9% to 52.6% when memories carried questions
-(48.5% to 53.1% with the 0.22.4 final order);
+benchmark, natural-language first place rises from 48.5% to 53.1% when memories carry questions
+(0.22.4; 47.9% to 52.6% when the feature shipped in 0.22.0);
 identifier and topic were unchanged.
 
 Older memories have none. A host with a model can fill them in: pass `capabilities: ["questions"]`
@@ -83,7 +84,7 @@ returns a value. See [vault.md](vault.md).
 
 Check the `phaseScores` in the result:
 - High `hebbianBoost` — the memory was frequently co-activated with relevant memories. Hebbian boost is capped at 0.5.
-- High `graphBoost` — the memory is connected to high-scoring neighbors. Graph boost is capped at 0.2 per engram.
+- High `graphBoost` — the memory is connected to high-scoring neighbors. Graph boost is capped at 0.25 per engram.
 - High `rerankerScore` — the cross-encoder thinks it's relevant. This usually indicates genuine semantic overlap.
 
 ### Why did activation return no results?
@@ -111,15 +112,15 @@ itself: about 300 synthetic queries the store generates (answerable ones, and fa
 nonsense), with no labels. Fit it with `awm calibrate`; it is refitted after consolidation when it
 goes stale. Each recall is then answered, answered with a `⚠ LOW SIGNAL` flag, or withheld.
 
-Measured on that one store with keyword-style questions (0.22):
-- it withholds 58 of 73 questions about facts never stored;
-- it withholds 1 of 712 correct answers;
+Measured on that one store with keyword-style questions (0.22.4):
+- it withholds 50 of 73 questions about facts never stored;
+- it withholds 1 of 718 correct answers;
 - of 200 absent questions asked in familiar vocabulary (the answer deleted, its neighbours
   kept), it withholds 95. That is the hard case.
 
 Natural-language questions get a model of their own once at least a quarter of the store's
-memories carry questions, because it practises on them. It withholds 10 of 97 correct natural
-answers (24% in 0.21, 10% now), and in exchange answers about three in four natural questions
+memories carry questions, because it practises on them. It withholds 3 of 103 correct natural
+answers (24% in 0.21, about 3% now), and in exchange answers 88 of 97 natural questions
 whose fact was deleted — a deliberate choice to lose fewer real answers. Below that quarter, one
 keyword-shaped model judges everything, as in 0.21. It has not been measured on other stores. See
 [abstention.md](abstention.md) and
@@ -206,11 +207,11 @@ Yes: `AWM_DB_PATH=/path/to/your/memory.db npx tsx src/index.ts`
 
 ### The MCP server isn't showing up in Claude Code
 
-1. Check that `.mcp.json` exists in the project root
-2. Verify `npx tsx` works: `npx tsx --version`
-3. Test manually: `node <path>/dist/mcp.js` (should wait for stdin). In a source checkout: `npx tsx src/mcp.ts`
-4. Run `npm run test:mcp` to verify the protocol works
-5. Restart Claude Code and check `/mcp`
+1. Run `awm doctor claude-code` — it reports what is wired and what needs a re-run of setup
+2. Check the server entry: `~/.mcp.json` for a global install, `.claude/mcp.json` for a project install
+3. Re-run `awm setup --global`
+4. Restart Claude Code and check `/mcp`
+5. Source checkout only: `npx tsx src/mcp.ts` should wait for stdin, and `npm run test:mcp` checks the protocol
 
 ### Can I use a different agent ID for MCP?
 

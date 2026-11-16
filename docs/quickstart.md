@@ -74,13 +74,28 @@ Open `~/.claude/settings.json` and confirm you see a `hooks` section with all fi
 
 ## Verify it works
 
-Start a new Claude Code conversation and ask:
+First, from a terminal:
+
+```bash
+awm doctor claude-code
+```
+
+It checks the MCP config, the hooks, the CLAUDE.md section and the store, and prints a `Fix:` line for anything missing.
+
+Then start a new Claude Code conversation and ask:
 
 > "What memory tools do you have?"
 
-Claude should list 22 tools including `memory_write`, `memory_recall`, `memory_restore`, `memory_whoami`, etc. (20 memory tools + 2 onboarding tools, `onboard_scan`/`onboard_questions`).
+Claude should list 22 tools including `memory_write`, `memory_recall`, `memory_restore`, `memory_whoami`, etc. (18 memory tools, 2 onboarding tools — `onboard_scan`/`onboard_questions` — and 2 output tools, `compress_output`/`retrieve_original`).
 
-> **First conversation will be slower** — the first call downloads ML models (**~175 MB** total: 134 MB embedder + 23 MB MiniLM reranker + 17 MB Ettin reranker, both int8, nothing bundled) and is also when the in-memory slim cache populates. After that, recall is fast: ~300-700ms typical on a 10K-engram corpus (AWM 0.7.14+).
+Now check a round trip:
+
+1. In that conversation, say: *"Save to memory that our staging database is called `orders-staging`."* Claude should call `memory_write` and report that it was stored.
+2. Start a **new** conversation and ask: *"What do you remember about the staging database?"* Claude should call `memory_recall` and answer `orders-staging`.
+
+If the second step comes back empty, ask Claude to call `memory_whoami` in both sessions: they must show the same agent id and store path.
+
+> **First conversation will be slower** — the first call downloads ML models (**~175 MB** total: 134 MB embedder + 23 MB MiniLM reranker + 17 MB Ettin reranker, both int8, nothing bundled) and is also when the in-memory slim cache populates. After that, recall is fast: p50 ~290–300 ms on an 11k-memory store (v0.22.4).
 
 ---
 
@@ -90,15 +105,15 @@ Open a second terminal to see memory activity in real time:
 
 **PowerShell:**
 ```powershell
-Get-Content (Join-Path (npm root -g) "agent-working-memory\data\awm.log") -Wait
+Get-Content "$HOME\.awm\awm.log" -Wait
 ```
 
 **Git Bash:**
 ```bash
-tail -f "$(npm root -g)/agent-working-memory/data/awm.log"
+tail -f ~/.awm/awm.log
 ```
 
-You'll see every write, recall, and checkpoint as it happens.
+You'll see every write, recall, and checkpoint as it happens. The log sits next to the store, so if you pointed `AWM_DB_PATH` somewhere else, look for `awm.log` in that folder.
 
 ---
 
@@ -116,11 +131,34 @@ You can also explicitly ask:
 - *"Call memory_stats"* — shows how many memories, writes this session, etc.
 - *`/awm-learn`* — reads the whole project you are in into memory, so recall is useful from day one ([awm-learn.md](awm-learn.md))
 
+### What your agent can do beyond write and recall
+
+The instructions `awm setup` writes into `CLAUDE.md` teach these; it helps to know they exist:
+
+- **`memory_about`** — every memory about one person, organisation or thing, oldest first ("everything on ticket 19881"); `memory_alias` records other names for it.
+- **`questions`** on a write — 2–5 natural questions the memory answers, so it is found when someone asks in their own words.
+- **`slot`** on a write — names a value that changes (`rosterkeep.deploy-command`); writing the same slot again replaces the old value.
+- **`correction: true`** on a write — supersedes the closest memory about the same thing when a fact changed and the old id isn't to hand.
+- **Session notes** — `scope: "session"` keeps working notes ("step 3 done") for this session only; they expire after 7 days.
+- **Calibrated abstention** — with `AWM_ABSTAIN_GATE=calibrated` (below), a recall can end in `⚠ LOW SIGNAL` (verify before relying on it) or `RECALL ABSTAINED — this store most likely does not hold this`.
+- **`/awm-learn`** — learns a whole repo or folder into memory, resumably.
+
+See [writing-memories.md](writing-memories.md) for how to write memories recall can find, and [user-guide.md](user-guide.md) for the full tool list.
+
 ---
 
 ## Separate memory pools (optional)
 
-By default, `awm setup --global` creates one shared memory pool across all projects. If you want **isolated memory per folder** (e.g., work projects vs personal projects), place a `.mcp.json` in each parent folder with a different `AWM_AGENT_ID`:
+By default, `awm setup --global` creates one shared memory pool across all projects. If you want **isolated memory per folder** (e.g., work projects vs personal projects), give each folder its own agent id. The easy way is to let setup write the config — run it in the folder, without `--global`:
+
+```powershell
+cd C:\Users\you\work
+awm setup --agent-id work
+```
+
+That writes the server entry for that folder (in `.claude/mcp.json`) with the same store, the agent id you chose, and everything else setup owns — the hook port and the hook secret — plus a `CLAUDE.md` with the AWM instructions. Prefer this to hand-writing config.
+
+If you do write a `.mcp.json` by hand, the minimum looks like this. It is a sketch, not a copy of what setup writes; take the `AWM_HOOK_SECRET` value from `~/.awm/.awm-hook-secret` (setup generates it), or the hooks cannot authenticate.
 
 **`C:\Users\you\work\.mcp.json`** — work memories only:
 ```json
@@ -158,7 +196,7 @@ By default, `awm setup --global` creates one shared memory pool across all proje
 }
 ```
 
-Claude Code uses the closest `.mcp.json` ancestor, so any project under `work/` gets the "work" pool and any under `personal/` gets the "personal" pool. Same database file — isolation is by agent ID. Use different hook ports if you run two sessions simultaneously.
+Claude Code uses the closest `.mcp.json` ancestor, so any project under `work/` gets the "work" pool and any under `personal/` gets the "personal" pool. Same database file — isolation is by agent ID. Any name works as an agent id; `work` and `personal` are only the defaults a session falls back to when none is set. Sessions that run at once each take the next free hook port upward from `AWM_HOOK_PORT`, so the port values above are only starting points.
 
 ---
 

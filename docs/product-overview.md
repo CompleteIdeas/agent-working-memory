@@ -22,8 +22,9 @@ Under the hood, the design borrows from cognitive science rather than from searc
 engineering: memories weaken with disuse the way human recall does (ACT-R decay),
 memories that are used together become linked (Hebbian association), and uncertain
 memories sit in a holding area until they are confirmed or discarded (staging). Three small
-ML models — an embedder, a cross-encoder reranker, and a query expander — run locally with
-no external calls. The rest of this page is the plain-language tour of those pieces;
+ML models — an embedder and two cross-encoder rerankers, one for keyword lookups and one for
+natural-language questions — run locally with no external calls (an optional query expander is
+off by default). The rest of this page is the plain-language tour of those pieces;
 [`cognitive-model.md`](cognitive-model.md) has the theory and citations.
 
 ## Who It's For
@@ -41,7 +42,7 @@ no external calls. The rest of this page is the plain-language tour of those pie
 5. **Stay bounded** — Automatic eviction, edge pruning, and association decay prevent unbounded memory growth
 6. **Keep secrets out of the store** — Write-time redaction (on by default) masks credentials before a write is stored, indexed, embedded or logged. It is shape-based: a bare random string with no label is not caught. See [`redaction.md`](redaction.md)
 7. **Know a secret without telling it** *(opt-in, `AWM_VAULT=on`)* — Secrets are sealed in an encrypted `vault.db` with the key in the OS credential store; the memory keeps a handle, and `awm vault run` injects the value into commands the user allowed. See [`vault.md`](vault.md)
-8. **Say when it doesn't have something** *(opt-in, `AWM_ABSTAIN_GATE=calibrated`)* — A gate fitted per agent from the store itself answers, flags a low signal, or withholds. Measured on one real store with keyword-style questions: it withholds 66 of 73 never-stored facts and 2 of 706 correct answers (on natural-language questions, 21 of 88). The default gate does not do this (it withheld 0 of 10 absent-fact probes). See [`abstention.md`](abstention.md)
+8. **Say when it doesn't have something** *(opt-in, `AWM_ABSTAIN_GATE=calibrated`)* — A gate fitted per agent from the store itself answers, flags a low signal, or withholds. Measured on one real store (v0.22.4): it withholds 50 of 73 never-stored facts and 1 of 718 correct keyword-style answers; on natural-language questions, once memories carry questions, 3 of 103 correct answers, though it still answers most questions whose fact was deleted. The default gate does not do this (it withheld 0 of 10 absent-fact probes). See [`abstention.md`](abstention.md)
 
 ## Glossary
 
@@ -66,14 +67,14 @@ no external calls. The rest of this page is the plain-language tour of those pie
 | Language | TypeScript (ES2022, strict mode) | Type-safe cognitive engine |
 | Database | SQLite via better-sqlite3 + FTS5 | Persistence, BM25 full-text search |
 | HTTP Server | Fastify 5 | REST API for agents |
-| MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (22 tools via stdio: 20 memory + 2 onboarding) |
+| MCP Server | @modelcontextprotocol/sdk | Direct Claude Code integration (22 tools via stdio: 18 memory, 2 onboarding, 2 output compression) |
 | Embeddings | Xenova/bge-small-en-v1.5 (134 MB download at fp32, BAAI retrieval-optimized) | 384-dim semantic vectors |
 | Reranker | Xenova/ms-marco-MiniLM-L-6-v2 (23 MB int8, the default) for keyword queries; cross-encoder/ettin-reranker-17m-v1 (17 MB int8) for natural-language questions | Cross-encoder passage relevance |
 | Query Expander | Xenova/flan-t5-small (377 MB at fp32; off by default and not downloaded unless turned on) | Synonym/related term expansion |
 | ML Runtime | @huggingface/transformers | Local ONNX inference (no API calls) |
 | Vault key store | @napi-rs/keyring (optional dependency) | Holds the vault key in the OS credential store when `AWM_VAULT=on`; a key-file fallback where none exists |
 | Test Framework | Vitest 4 | Unit and integration tests |
-| Runtime | Node.js >= 20, tsx for dev | TypeScript execution |
+| Runtime | Node.js >= 22, tsx for dev | TypeScript execution |
 | Validation | Zod 4 | MCP tool parameter schemas |
 
 ## Evidence

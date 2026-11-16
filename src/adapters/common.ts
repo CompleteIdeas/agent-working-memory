@@ -140,11 +140,12 @@ export function resolveHookSecret(dbPath: string): string {
 /**
  * Retrieval settings `awm setup` turns on for a new install (0.14.6).
  *
- * All three ship default-off in the engine so an existing process never changes
- * behavior on upgrade, but the README has recommended them together since 0.14.0:
- * second-stage rerank by the cross-encoder's own score, a 400-char rerank window
- * on the densest query-term region (25% → 87.5% on long memories), and tags in the
- * rerank passage (+7.4pp). A value the user already has in their config wins.
+ * All three have been engine defaults since 0.18, so writing them is now redundant
+ * but harmless: it pins the measured configuration in the config file where an
+ * operator can see it, and keeps older engines on the same setting. Second-stage
+ * rerank by the cross-encoder, a 400-char rerank window on the densest query-term
+ * region (25% → 87.5% on long memories when it shipped), and tags in the rerank
+ * passage (+7.4pp). A value the user already has in their config wins.
  */
 export const RECOMMENDED_ENV: Readonly<Record<string, string>> = {
   AWM_RERANK2: '1',
@@ -427,22 +428,22 @@ export function upsertAwmSection(
 export const AWM_INSTRUCTION_CONTENT = `
 ## Memory (AWM) — MANDATORY
 
-**AWM is THE memory system.** Use it via the \`agent-working-memory\` MCP server
-(preferred) or HTTP at \`http://127.0.0.1:8400\` (fallback). The file-based
+**AWM is THE memory system.** Use it via the \`agent-working-memory\` MCP server.
+Where an operator also runs \`awm serve\`, the same store answers over HTTP at
+\`http://127.0.0.1:8400\` (\`awm setup\` does not start it). The file-based
 auto-memory at \`~/.claude/projects/.../memory/*.md\` is a LEGACY bootstrap path —
 **do not write new memories to it.** All persistent knowledge goes through AWM.
 
 If MCP tools aren't loaded at session start, use ToolSearch with
 \`select:mcp__agent-working-memory__memory_recall,mcp__agent-working-memory__memory_write\`
-to load them. If the MCP server isn't responsive, restart with \`/mcp\` or use
-the HTTP endpoints (\`POST /memory/write-batch\`, \`POST /memory/activate\`)
-directly — but **DO NOT fall back to markdown files**. Files drift the moment
+to load them. If the MCP server isn't responsive, restart it with \`/mcp\`; if \`awm serve\`
+is running, the HTTP endpoints (\`POST /memory/write-batch\`, \`POST /memory/activate\`)
+work too — but **DO NOT fall back to markdown files**. Files drift the moment
 you write them; AWM stays current because every agent reads + writes the same store.
 
 ### Lifecycle (always do these, in this order)
 1. **Session start**: call \`memory_restore\` to recover previous context. If it reports the
-   store is empty/new (or recall keeps returning nothing), **warm-start first**: recall the
-   \`onboard a new project\` skill and follow it — or call \`onboard_scan\` on the project's
+   store is empty/new (or recall keeps returning nothing), **warm-start first**: call \`onboard_scan\` on the project's
    docs/repo, refine the candidates, run \`onboard_questions\`, and save the good ones with
    \`memory_write\` (canonical). A cold store is nearly useless until it's seeded.
    **To learn a whole repo or folder** (code, a manuscript, a docs tree) — a new project,
@@ -451,7 +452,7 @@ you write them; AWM stays current because every agent reads + writes the same st
    writes map memories first, then a few memories per unit, and tests its own recall.
    Confirm its token estimate with the owner first; \`/awm-learn\` again later refreshes
    only what changed.
-   Pass \`capabilities: ["questions"]\`: when a reply then carries a \`questions@1\` job
+   Pass \`capabilities: ["questions"]\` to \`memory_restore\`: when a reply then carries a \`questions@1\` job
    (memories that have no questions yet), do it as a separate short pass and answer with
    \`memory_set_questions\` — questions are how a memory is found when someone asks in
    their own words.
@@ -489,8 +490,9 @@ extraction all see most strongly.
   "Don't mock the database in integration tests." comes first; the reason
   comes second. Recall scans the head of the body, not the tail.
 - **Pick the most specific topic.** Not \`auth\` — \`auth-magic-link-rate-limit\`.
-  Topic is a hard filter at recall time. Generic topics hide the memory in
-  a noisy bucket where it competes with everything else in the area.
+  Topic is a ranking signal at recall time (keyword search, and the rerank
+  passage), not a filter. A generic topic adds noise where a specific one
+  adds signal, and the memory competes with everything else in the area.
 - **Include 2+ retrievable identifiers.** File paths, function names, table
   columns, ticket IDs, exact error strings, the literal terms a future query
   will use. \`SettlementService.closeRun()\` beats "the accounting code."
@@ -525,8 +527,8 @@ extraction all see most strongly.
   "How do I ship the club app to production?" for a note about
   \`railway up --service rowos-app\`. They are indexed for keyword search only
   (never embedded), so they bridge the gap between how people ask and how
-  notes are written. Measured on a real store: natural-language recall up
-  6 points, no loss on exact lookups. Vary them — what happened or was
+  notes are written. Measured on a real store: natural-language first place
+  48.5% → 53.1%, no loss on exact lookups. Vary them — what happened or was
   decided, why, and a practical "how do I / where is".
 - **Give a \`slot\` to any value that can change.** A slot names the entity
   and attribute: \`robert.flight-time\`, \`rosterkeep.deploy-command\`,
@@ -697,8 +699,9 @@ When it isn't:
   three recalls cost less than one filesystem search.
 - **Use the words a domain expert would use, not generic English.** "Period
   close lock" not "accounting feature"; "magic link rate limit" not "auth issue."
-- **For broad exploration, pass \`mode: "exploratory"\`** — wider candidate
-  pool, lower precision floor. For specific lookups, leave mode unset (auto).
+- **For broad exploration, raise \`limit\`** (say 8) and use \`granularity: 'compact'\`.
+  Recall picks targeted, balanced or exploratory weighting from the query's
+  shape on its own; there is no mode to set.
 - **Don't ensemble more than 3 reformulations.** If three different phrasings
   return nothing, the memory probably isn't there — read the code instead of
   burning more recalls.
@@ -847,7 +850,7 @@ memory_write(
 
 ### Also:
 - To track work items: memory_task_add, memory_task_update, memory_task_list, memory_task_next
-- \`memory_whoami\` (MCP tool) / \`GET /whoami\` — identify the instance you're actually
+- \`memory_whoami\` (MCP tool; \`GET /whoami\` under \`awm serve\`) — identify the instance you're actually
   talking to: agent id, workspace, mode, backend, store path, code provenance, sibling
   agent spaces sharing the store. Call this FIRST whenever you're unsure which store,
   which agent identity, or which running code you're dealing with — before reasoning
@@ -870,9 +873,10 @@ comprehension cost. This is output-only: it never changes the data or your memor
   and falls back to plain JSON if TOON wouldn't reproduce the data exactly.
 
 ### Backend (SQLite vs PGlite)
-AWM ships two storage backends. The installer picks SQLite by default; both
-are functionally equivalent for cognitive workloads, but differ in operational
-guarantees:
+AWM ships two embedded storage backends (plus an experimental networked Postgres,
+\`AWM_STORE_BACKEND=postgres\` + \`AWM_DATABASE_URL\`). The installer picks SQLite by
+default; both embedded ones are functionally equivalent for cognitive workloads, but
+differ in operational guarantees:
 
 - **SQLite** (default) — embedded, **multi-process safe** via WAL mode. Best
   for single-machine setups and MCP scenarios where multiple Claude Code
@@ -892,10 +896,12 @@ multi-process guarantees), see \`docs/pglite-feature-parity.md\`.
 Each optimization is gated by an env var so it can be disabled for A/B testing if a
 regression appears in your workload. \`memory_whoami\` prints the active fingerprint.
 
-Retrieval (set ON by \`awm setup\` since 0.14.6 — the measured-good configuration):
-- \`AWM_RERANK2=1\` — second-stage rerank by the cross-encoder's own score.
+Retrieval (code defaults since 0.18 — the measured-good configuration; \`=0\` /
+\`=prefix\` turns each off):
+- \`AWM_RERANK2=1\` — the cross-encoder re-orders the shortlist (blended with the
+  first-stage rank; since 0.22.4 a sure cross-encoder takes first place outright).
 - \`AWM_RERANK_WINDOW=query\` — 400-char rerank window on the densest query-term
-  region instead of the prefix (25% → 87.5% on long memories).
+  region instead of the prefix (25% → 87.5% on long memories when it shipped; 77.1% on 0.22.4).
 - \`AWM_RERANK_TAGS=1\` — tags fed into the rerank passage (+7.4pp s@1).
 
 Hook sidecar (0.14.2):

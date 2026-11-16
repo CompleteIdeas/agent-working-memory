@@ -5,8 +5,8 @@
 > byproduct of doing its work — which lets a **cheap model perform at a high
 > level** and gets **cheaper and better over time** on the same workload.
 
-This is a design pattern, not a library. The reference implementation is the
-USEA "Gallop Support" agent (`AIAgentBuild/harness/`). This doc captures the
+This is a design pattern, not a library. The reference implementation is a
+private reference harness (a member-support agent, not in this repo). This doc captures the
 pattern so the next agent-shaped project starts from it instead of reinventing
 it.
 
@@ -111,9 +111,17 @@ That is the asset — and it's why a cheap model suffices.
 > client is a shallower option (recall/write/feedback over the wire) for agents
 > that can't embed. **The automatic learning loop requires at least the
 > recall→feedback wiring to be owned by the harness — it cannot be left to the
-> model to invoke.** This is precisely why a generic MCP-tool host (where AWM is
+> model to invoke.** This is why a generic MCP-tool host (where AWM is only
 > a tool the model *chooses* to call) cannot reproduce the pattern: the priming
 > and feedback steps stop being automatic.
+>
+> **Claude Code with `awm setup` (or the plugin) is a partial exception.** Its hooks
+> own two of those steps: a `UserPromptSubmit` hook primes relevant memory into
+> every prompt (0.14.6), and a `Stop` hook credits the recalls each reply actually
+> used as implicit feedback (0.20). What it still does not have is the rest of the
+> post-turn pipeline — schema capture with supersede-on-correction, query-pattern
+> capture, reflection and verify gates — which only a harness that owns the loop
+> can run.
 
 ---
 
@@ -192,9 +200,11 @@ These are the guards that let you *widen* autonomy without widening risk:
 - **Stateless / one-shot tasks** with no recurring domain — there's no substrate
   to accumulate, so the loop is overhead.
 - **You only have a generic MCP-tool host** (e.g. a vendor agent CLI where memory
-  is a tool the model calls). You can get *recall-as-a-tool* there, but **not**
-  the automatic prime+feedback+learn loop — that requires the harness to own the
-  recall and feedback steps. Don't expect the flywheel from tool-calling alone.
+  is a tool the model calls, with no hooks). You can get *recall-as-a-tool* there,
+  but **not** the automatic prime+feedback+learn loop — that requires the harness
+  to own the recall and feedback steps. Don't expect the flywheel from tool-calling
+  alone. (Claude Code with `awm setup` gets automatic priming and implicit feedback
+  from its hooks, but not the full post-turn learning pipeline.)
 - **Premature generalization.** Don't extract this into a shared framework on
   spec. Build it once (done — USEA), then generalize **only when a second
   concrete consumer pulls on it**, and clean the heuristic debt before lifting it
@@ -220,5 +230,5 @@ These are the guards that let you *widen* autonomy without widening risk:
 
 ---
 
-*Reference implementation: USEA "Gallop Support" agent (`AIAgentBuild/harness/`),
+*Reference implementation: a private reference harness (not in this repo),
 running gpt-5.4-mini + EmbeddedAWM, network-isolated on Tailscale.*

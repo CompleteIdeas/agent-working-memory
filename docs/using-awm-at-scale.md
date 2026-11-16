@@ -10,11 +10,15 @@ AWM is a **fast, local, precision-first cognitive memory** with built-in **abste
 *not* an exhaustive, network-backed, LLM-driven search engine.
 
 - **Precision over recall by design.** AWM would rather return *nothing* than return facts you
-  didn't ask for. With the opt-in calibrated gate it withholds 66 of 73 "is this even in memory?" questions
-  on a real store while withholding 2 of 706 correct keyword-shaped answers (21 of 88 natural-language ones) ([abstention.md](abstention.md));
-  the old ~73% figure came from the retired LoCoMo benchmark. On broad open-domain recall it scores lower **on purpose** — surfacing every
+  didn't ask for. With the opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) it withholds 50 of 73
+  "is this even in memory?" questions on a real store while withholding 1 of 718 correct keyword-shaped
+  answers and 3 of 103 correct natural-language ones ([abstention.md](abstention.md)). It is weaker on
+  natural-language questions whose fact was deleted — it still answers 88 of 97 of those. The default
+  `require_confidence` of 0.05 is a light filter that withheld none of the 73. The old ~73% figure came
+  from the retired LoCoMo benchmark. On broad open-domain recall it scores lower **on purpose** — surfacing every
   loosely-related memory would poison the prompt.
-- **Single-machine, in-process, fast.** Recall is tens-to-~150ms locally — no network round-trip.
+- **Single-machine, in-process, fast.** Warm recall p50 is 287–304 ms on a 30k-memory store (p90 under
+  0.4 s) — no network round-trip.
 - **Following a long conversation is the LLM's job, not AWM's.** AWM gives the model the *right
   small slice*; reasoning/chaining over it is the agent's responsibility.
 
@@ -43,8 +47,8 @@ reverting to a known-bad choice and lets you mine "decided X → result → deci
 
 | Goal | Knob |
 |---|---|
-| Faster recall, no accuracy loss in most cases | rerank-only (skip query expansion); expansion ~doubles latency by inflating the rerank pool for little gain on most distributions |
-| Don't act on low-confidence noise | `require_confidence` (opt-in abstention: 0.10 strict … 0.40 aggressive) |
+| Faster recall, no accuracy loss in most cases | already the default: query expansion is off since 0.22.1 (it ~doubled latency by inflating the rerank pool for little gain), and the reranker runs q8 since 0.19 |
+| Don't act on low-confidence noise | `require_confidence` — always on at a light default of 0.05. Raise it only for push-style use where nobody asked (the prime hook uses 0.10): 0.20+ cut net token savings ~25% in tests, because a miss sends the agent to read the code instead. For real abstention use the calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) |
 | Scan fewer tokens across many results | `granularity: 'compact'` (query-aware snippets) |
 | Cross-agent / cross-CLI shared recall | register agents into a shared **workspace** (recall then spans all agents in it) |
 | Keep a flat token budget on long runs | rely on scoped recall + **consolidation**, not a growing transcript |
@@ -94,7 +98,7 @@ regression elsewhere — entirely via follow-up single-hop recalls, AWM unchange
 | `AWM_SIM_CANDIDATE_FLOOR_*` | vector candidate floor (lower = more recall, more noise/cost) |
 | `AWM_REINFORCE_MERGE_CONTENT=0` | disable content merge on reinforce |
 | `AWM_ENTITY_INDEX_FETCH=1` | D11 (2026-07-30): entity-index candidate injection — query-named entities resolve via the inverted index (incl. aliases) and get a guaranteed rerank audition; pair with `AWM_AUTOTAG=1` so free-text writes populate the index |
-| `AWM_RERANKER_DTYPE=q8` | latency-first mode: −26–33% recall p50, and a 23 MB reranker file instead of 91 MB. **Changes ranking outcomes** (one query in 450 on the topic suite); every published number is at `fp32`. Read `docs/deployment.md` → Operating modes first |
+| `AWM_RERANKER_DTYPE` | `q8` is the default since 0.19 (23 MB reranker file; 26–33% lower recall p50 than fp32). `fp32` is the opt-in that restores the 0.18 ranker (91 MB); figures published before 0.19 were measured at fp32. See `docs/deployment.md` → Reranker precision |
 | `AWM_SLOW_WRITE_MS` | slow-write telemetry threshold (default 250 ms; `0` disables) |
 | `AWM_BIND` / `AWM_ALLOW_INSECURE` | HTTP bind (default loopback; non-loopback without an API key fails closed) |
 | diagnostics | leave unset in production; flip only to A/B a suspected regression |

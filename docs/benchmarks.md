@@ -42,21 +42,22 @@ npm run test:realworld  # Production codebase retrieval
 npm run test:sleep      # Consolidation impact
 ```
 
-**Do not run the real-store fixtures bare.** `tsx tests/realstore-eval/runner.ts` defaults to
-the *baseline* arm — no `AWM_RERANK2`, no `AWM_RERANK_WINDOW=query`, no `AWM_RERANK_TAGS`, and
-the full `fixture.json` rather than the 300-query identifier sample. Invoked that way it reports
-roughly 56–64% where the recommended configuration reports low nineties, which reads as a
-regression rather than a different configuration. `bench` sets the flags and the fixture. There
-is deliberately no one-line npm alias, because npm scripts cannot set those env vars portably on
-Windows without another dependency, and an alias that silently measured the baseline is the
-exact defect class listed above.
+**Running the real-store fixtures bare.** Since 2026-10-19 the engine's defaults are the
+recommended arm, so `tsx tests/realstore-eval/runner.ts` with no flags measures the same ranking
+`bench` does. What differs is the fixture size: a bare run scores all 1,316 probes of
+`fixture.json`, while `bench` scores a seeded 300-probe sample (`REALSTORE_LIMIT=300` in
+`scripts/bench-current.mjs`). The two land close but not equal (on 0.22.4, 95.4% on all 1,316
+against 95.0% on the sample; the current page reads mid-nineties), so compare a bare run only
+with another bare run. (Before 2026-10-19 a bare run measured the *baseline* arm and reported
+roughly 56–64% against the recommended configuration's low nineties.)
 
 Each eval creates a fresh SQLite database, seeds it, and runs structured challenges. No external
 services required.
 
 ## Recommended retrieval flags
 
-These three are **default-OFF** and are what `bench` measures with:
+These three are **default-ON** since 2026-10-19 (`AWM_RERANK2=0`, `AWM_RERANK_WINDOW=prefix` and
+`AWM_RERANK_TAGS=0` disable them); `bench` still sets them explicitly, so the page names its arm:
 
 ```bash
 AWM_RERANK2=1 AWM_RERANK_WINDOW=query AWM_RERANK_TAGS=1

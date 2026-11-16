@@ -1,8 +1,9 @@
 # Known Limitations
 
 What AWM does not do well, stated plainly. Each item says how it was established and,
-where one exists, the workaround. Last verified against the live store and current source
-on 2026-09-11 (v0.14.5).
+where one exists, the workaround. Last fully verified against the live store and current source
+on 2026-09-11 (v0.14.5); the accuracy, latency, abstention and feedback figures were updated for
+v0.22.4 on 2026-11-15.
 
 > This page was substantially out of date before that revision — it still cited a retired
 > benchmark, a "~300 memories" test ceiling, and features that had since shipped. Items
@@ -40,50 +41,61 @@ is unreachable by that identifier.
   the body, not only in tags.
 
 ### The remaining misses on the real-store benchmark are genuine
-At 92.7% first-result accuracy and 97.3% in the top five (0.19, q8 reranker; 93.0% / 97.0%
-at fp32), the 8 memories (of 300) that never surface at all are real ranking failures, not
+At 95.0% (identifier) / 96.2% (topic) first-result accuracy and 98.7% in the top five
+(v0.22.4), the memories that never surface in the top five are real ranking failures, not
 fixture noise. The per-stage split was
-probed on 2026-09-11, when there were 10 such misses against a 96.7% top-five baseline: 5
-never entered the candidate pool, and 2 reached it with the identifier outside the
-400-character window the reranker reads. That split has **not** been re-probed since
-defaulting the Rocchio pass off recovered one of the ten, so read the stage attribution as
-describing that run rather than a fresh count of the current 9. Maximum headroom from here
-is about 7 points.
+probed on 2026-09-11, when there were 10 such misses (of 300) against a 96.7% top-five
+baseline: 5 never entered the candidate pool, and 2 reached it with the identifier outside
+the 400-character window the reranker reads. That split has **not** been re-probed since, so
+read the stage attribution as describing that run rather than a count of today's misses.
+Headroom on the keyword fixtures is now about 5 points first-result and about 1 point in the
+top five. Natural-language questions are the larger gap: first-result accuracy is 48.5%
+(53.1% once memories carry questions).
 - **Evidence:** `tests/realstore-eval/miss-stage-probe.ts`, 2026-09-11.
 
 ### On the benchmark's questions, keyword search ranks about as well
 Plain BM25 over the same retrievable pool puts the right memory first for 95.7% of identifier
-queries and 91.6% of topic queries, against AWM's 92.7% / 92.7%. The fixtures are
-keyword-friendly by construction (each question is built around an identifier unique to one
-memory), so they cannot show a ranking advantage over keyword search, and AWM does not claim
-one. What they do show is the lifecycle: over the raw store, with superseded and retracted
+queries and 91.6% of topic queries, against AWM's 95.0% / 96.2% (v0.22.4) — ahead of AWM on
+identifier lookups, behind it on topic questions. The fixtures are keyword-friendly by
+construction (each question is built around an identifier unique to one memory), so they
+cannot show a large ranking advantage over keyword search, and AWM does not claim one. On
+194 natural-language questions AWM puts the right memory first for 48.5%, against 42.8% for
+plain BM25. What they do show is the lifecycle: over the raw store, with superseded and retracted
 memories still present, BM25 falls to 87.7% / 79.8% and returns a superseded memory first
 8–15% of the time.
 - **Evidence:** `tests/realstore-eval/baselines.ts` (`BASELINE_RAW=1` for the raw-store arm).
 
 ### Saying "I don't know" is opt-in, and measured on one store
 The default `require_confidence` gate (0.05) judges the shape of one query's scores and cannot
-separate absent facts from stored ones: it withheld 0 of 10 absent-fact probes. The opt-in
-calibrated gate (`AWM_ABSTAIN_GATE=calibrated`) withholds 66 of 73 never-stored facts and 0 of
-694 correct answers, but:
+separate absent facts from stored ones: on a real store it withheld 0 of 73 questions about
+never-stored facts. The opt-in calibrated gate (`AWM_ABSTAIN_GATE=calibrated`, v0.22.4)
+withholds 50 of 73 never-stored facts and 1 of 718 correct keyword-shaped answers, but:
 - it has been measured on **one** real store (29,853 memories);
-- the question set is **keyword-style**, with no natural-language questions;
-- the hard case is weaker: of 200 absent facts asked in familiar vocabulary it withholds 92,
-  flags 30 and answers 78 (pessimistic, since a deleted fact may be repeated elsewhere);
+- on **natural-language** questions it is much weaker: once memories carry questions it
+  withholds only 3 of 103 correct answers, but it still answers 88 of 97 questions whose fact
+  was deleted;
+- the keyword hard case is weaker too: of 200 questions whose fact was deleted (asked in
+  familiar vocabulary) it withholds 95 and flags 19 (pessimistic, since a deleted fact may be
+  repeated elsewhere);
 - it needs the cross-encoder; with the reranker disabled the gate stands aside.
 - **Evidence:** `tests/realstore-eval/gate-eval.ts`, [`abstention.md`](abstention.md).
 - **Workaround:** `npm run bench:public` is the reproducible check on other data.
 
 ## Learning
 
-### The feedback loop has almost no signal yet
+### Explicit feedback is rare; implicit feedback is recent
 `memory_feedback` is the mechanism by which recall results teach the system. In practice
-agents call it about once per 170 recalls, and until v0.14.3 every feedback row was
-unlinked from the recall it judged (872 of 872). The join is fixed; the volume is not.
-Hebbian edge strengthening is validation-gated — it waits for feedback — so it has been
-mostly idle.
-- **Evidence:** live-store audit, 2026-09-11. A harness-side transfer detector that would
-  supply feedback automatically is designed but not yet deployed.
+agents call it about once per 170 recalls (live-store audit, 2026-09-11), and until v0.14.3
+every feedback row was unlinked from the recall it judged (872 of 872). Hebbian edge
+strengthening is validation-gated — it waits for feedback — so it was mostly idle.
+Since 0.20, feedback is mostly implicit: the `awm-used.cjs` Stop hook (installed by
+`awm setup`) posts each turn to the sidecar's `/hooks/used`, and when a write, a supersede, a
+task summary or the agent's reply carries a recalled memory's identifiers, that recall is
+credited as useful without a call. It only credits recalls that were used; saying a recall was
+**not** useful still needs an explicit `memory_feedback`. How much signal this adds on a live
+store has not been re-audited yet.
+- **Evidence:** live-store audit, 2026-09-11 (explicit-feedback rate); implicit credit shipped
+  in 0.20.
 
 ### Consolidation summaries are concatenations
 The maintenance pass clusters similar memories and can create summary nodes, but the
@@ -105,7 +117,7 @@ either the model choosing to, or a hook that primes each prompt. Measured on rea
 before the prime hook was enabled, the model recalled *before* searching the filesystem in
 only 2–15% of turns unless the user mentioned memory explicitly. The hook exists and is
 now on; its effect is being measured.
-- **Evidence:** `C:\Users\robert\project\testing\awm-influence\FINDINGS.md`, section 11.
+- **Evidence:** a private session-influence study (not in this repo), section 11.
 
 ### A running MCP connection never reloads code
 The AWM process a Claude Code session spawns keeps whatever code it loaded at start.
@@ -115,12 +127,14 @@ process restart) picks up the new version. `memory_whoami` reports the *running*
 ### Cold start is a few seconds — and the first ever run downloads ~175 MB
 The first recall in a fresh process pays for loading the embedding and reranker models
 (~1.2 s) and warming an in-memory index over the store (~0.5 s at 30k memories). After
-that, warm recall is ~0.5 s median. Concurrent sessions each pay their own cold start.
+that, warm recall p50 is 287–304 ms on the 30k store (p90 under 0.4 s). Concurrent sessions
+each pay their own cold start (unless they share the opt-in model daemon, `AWM_MODEL_DAEMON=1`).
 
 On a genuinely fresh install the *first* run also has to fetch the models, because **no
 ONNX is bundled** in the npm tarball or the MCPB bundle — that is ~175 MB (~550 MB with query
 expansion on). It is paid once per cache, not once per process.
-- **Evidence:** `AWM-ColdLoad-Measurements-2026-08-21.md`; benchmark p50 474–500 ms.
+- **Evidence:** `AWM-ColdLoad-Measurements-2026-08-21.md` (cold load); warm p50 from
+  [benchmarks-current.md](benchmarks-current.md) (v0.22.4).
 
 ### One writer at a time on SQLite, but that is handled
 SQLite allows one writer; AWM uses WAL mode so multiple Claude Code sessions can read and
@@ -199,7 +213,7 @@ These appeared in earlier versions and were still being quoted. Each is now fals
 |---|---|
 | "No cross-agent memory" | `workspace` recall exists (`AWM_WORKSPACE`; `getWorkspaceAgentIds`). |
 | "Tested with up to ~300 memories" | Live store 31,470 engrams; eval snapshot 29,809; benchmarks run against the latter. |
-| "First query 3–10 s, then 200–300 ms" | Cold ~3.3 s spawn-to-first-recall; warm p50 474–500 ms (rerank flags on, 2026-10-10 bench). |
+| "First query 3–10 s, then 200–300 ms" | Cold ~3.3 s spawn-to-first-recall; warm p50 287–304 ms on the 30k store (v0.22.4; it was 474–500 ms in the 2026-10-10 bench, before the q8 reranker default). |
 | "Multi-hop 15.4% on LOCOMO" | LoCoMo retired in 0.13.x; see gauntlet `multihop` above. |
 | "No export/import API" | `awm export` / `awm import` CLI, with `--dedupe`. |
 | "No authentication" | Sidecar bearer auth; HTTP API refuses non-loopback bind without `AWM_API_KEY`. |

@@ -116,8 +116,8 @@ run('deriving ground truth (same hold-out as the private snapshot)',
 run('scoring (same runner as the private snapshot)',
   'npx', ['tsx', 'tests/realstore-eval/runner.ts'], { ...FLAGS, ...PUBLIC });
 
-console.log('\nSeed noise on this corpus is about 4pp of s@1 (measured: 56.3% on seed 20261008,');
-console.log('52.0% on seed 99). A 2pp move is NOT a result — confirm it on a second seed,');
+console.log('\nSeed noise on this corpus is about 4-5pp of s@1 (measured on 0.22.4: 52.8% on seed');
+console.log('20261008, 47.5% on seed 99). A 2pp move is NOT a result — confirm it on a second seed,');
 console.log('built into its own snapshot so the committed one survives:');
 console.log('  npm run bench:public:build -- --seed 99');
 console.log('  npm run bench:public -- --seed 99');

@@ -13,8 +13,8 @@
     quarter, unless both BM25 and vector rank the candidate in their top two (on near-template
     corpora the blend's wrong first places were mostly the vector channel's #1: 72 of 107);
   - otherwise the blend's #1, as before.
-- **Measured, same pools, 0.22.3 → 0.22.4 (success@1):** identifier 93.8 → **95.4** (bench page
-  95.0, 300 probes), topic 96.0 → **96.2**, natural-language 47.9 → **48.5** (52.6 → **53.1**
+- **Measured, same pools, 0.22.3 → 0.22.4 (success@1):** identifier 93.8 → **95.4** (all 1,316
+  queries; the 300-probe bench page: 93.3 → 95.0), topic 96.0 → **96.2**, natural-language 47.9 → **48.5** (52.6 → **53.1**
   with questions), public synthetic benchmark 38.8 → **52.8** (seed 99: 35.3 → **47.5**), long
   memories 72.9 → **77.1**; the temporal suite equal or up. No suite's success@1, @3 or @5
   dropped. The offline study that chose the rule is `tests/realstore-eval/blend-study.ts`

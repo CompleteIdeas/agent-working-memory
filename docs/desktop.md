@@ -1,7 +1,7 @@
 # AWM in Claude Desktop
 
 Claude Desktop runs local MCP servers over stdio, so AWM works there natively — same engine,
-same store, same nineteen tools you get in Claude Code.
+same store, same 22 tools you get in Claude Code.
 
 ## Install
 
@@ -25,7 +25,7 @@ Desktop will show you two settings before it finishes:
 | **Memory database** | `${HOME}/.awm/memory.db` | Leave it to share one store with Claude Code |
 | **Memory pool** | `work` | Which pool this reads and writes |
 
-**3. Restart Desktop** and ask Claude what memory tools it has. You should get nineteen.
+**3. Restart Desktop** and ask Claude what memory tools it has. You should get 22.
 
 ### Building the bundle yourself
 
@@ -36,6 +36,20 @@ npm install -g @anthropic-ai/mcpb   # once
 npm run build && npm run build:mcpb
 npm run pack:mcpb                   # -> dist-mcpb/agent-working-memory-<version>.mcpb
 ```
+
+### Upgrading
+
+```bash
+npm install -g agent-working-memory@latest
+```
+
+Then quit and restart Claude Desktop. The extension's launcher loads whichever copy of the
+package it finds — an `AWM_PACKAGE_ROOT` override, an AWM checkout, a local `node_modules`, then
+the global npm root — so the new global install is what runs after the restart; the `.mcpb`
+itself does not need reinstalling. Rebuild and reinstall the bundle only when a release changes
+the launcher or the manifest (its settings). One exception: the last-resort `npx` fallback is
+pinned to the bundle's own version, so if you rely on it rather than a global install, you get a
+new AWM only by installing a new bundle. `memory_whoami` reports the version actually running.
 
 ---
 
@@ -50,10 +64,12 @@ legitimate choice — a personal store kept apart from work — but it is a choi
 
 ## The memory pool
 
-Claude Code derives the pool from the project directory: anything under `Personal-Projects/`
-is `personal`, everything else is `work`. **Desktop has no project directory**, so there is
-nothing to derive from, and the manifest exposes the pool as a setting instead. It defaults to
-`work`.
+When `AWM_AGENT_ID` is unset, Claude Code derives the pool from the project directory with a
+fixed rule (`src/core/agent-id.ts`): a path containing a folder literally named
+`Personal-Projects` is `personal`, everything else is `work`. (An `awm setup --global` install
+pins `AWM_AGENT_ID=work`, so it does not derive at all.) **Desktop has no project directory**, so
+there is nothing to derive from, and the manifest exposes the pool as a setting instead. It
+defaults to `work`.
 
 Clearing the field is safe — the launcher drops empty settings rather than pinning an empty
 agent, and the server falls back to its own default.

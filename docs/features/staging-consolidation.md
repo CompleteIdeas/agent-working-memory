@@ -90,6 +90,6 @@ Check staging metrics: `GET /agent/:id/metrics` (promoted, discarded counts)
 ## Code References
 
 - Staging buffer: `src/engine/staging.ts`
-- Sweep logic: `src/engine/staging.ts:15-40`
+- Sweep logic: `StagingBuffer.sweep()` in `src/engine/staging.ts`
 - Staging threshold: `src/core/salience.ts` (0.2-0.4 range)
 - Start/stop: called from `src/index.ts` and `src/mcp.ts`

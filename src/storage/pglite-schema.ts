@@ -217,7 +217,7 @@ export const PGLITE_SCHEMA_DDL = `
     entity TEXT NOT NULL
   );
 
-  -- 0.23 entity lookup: aliases become per-agent, primary key (agent_id, alias). Rows written
+  -- 0.22.3 entity lookup: aliases become per-agent, primary key (agent_id, alias). Rows written
   -- before this keep agent_id '' and stay a shared fallback. Idempotent.
   DO $$
   BEGIN

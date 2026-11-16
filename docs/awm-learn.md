@@ -23,7 +23,8 @@ price, and starts once you agree.
 - The installed agent guidance tells the agent when to reach for it: a new project, or one
   whose recall keeps missing.
 
-It needs the AWM tools and Node.js 18 or newer. Nothing else: the planning is done by a
+It needs the AWM tools — which means Node.js 22 or newer, since AWM itself requires 22 (the
+skill's own ledger script would run on Node 18+). Nothing else: the planning is done by a
 model-free script, and the reading is done by the agent you already run. AWM itself still
 calls no hosted model.
 

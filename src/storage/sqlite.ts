@@ -375,7 +375,7 @@ export class EngramStore {
       );
     `);
 
-    // Migration (0.23 entity lookup): aliases become per-agent. The D9 table keyed aliases
+    // Migration (0.22.3 entity lookup): aliases become per-agent. The D9 table keyed aliases
     // globally, so one agent's "jenna" would redirect another agent's lookup in a shared
     // store. New primary key (agent_id, alias); rows written before this get agent_id ''
     // and stay a shared fallback, so existing stores resolve exactly as before.
@@ -1939,7 +1939,7 @@ export class EngramStore {
   searchEntities(term: string, limit: number = 8, agentIds?: string[]): string[] {
     const t = term.toLowerCase().replace(/[%_]/g, '');
     if (!t) return [];
-    // 0.23: scoped to the given agents when supplied — their mentions, and their own aliases
+    // 0.22.3: scoped to the given agents when supplied — their mentions, and their own aliases
     // plus the shared ('') ones. Unscoped callers see everything, as before.
     if (agentIds && agentIds.length > 0) {
       const ph = agentIds.map(() => '?').join(',');
@@ -1972,7 +1972,7 @@ export class EngramStore {
     return (rows as Array<{ engram_id: string }>).map(r => r.engram_id);
   }
 
-  /** 0.23: register `alias → entity` for one agent. Returns the entity it pointed at before
+  /** 0.22.3: register `alias → entity` for one agent. Returns the entity it pointed at before
    *  (null when new), so a caller can say what was replaced. */
   setEntityAlias(agentId: string, alias: string, entity: string): { previous: string | null } {
     const prev = this.db.prepare('SELECT entity FROM entity_aliases WHERE agent_id = ? AND alias = ?')
@@ -1982,12 +1982,12 @@ export class EngramStore {
     return { previous: prev && prev.entity !== entity ? prev.entity : null };
   }
 
-  /** 0.23: remove one agent's alias. True when a row was deleted. */
+  /** 0.22.3: remove one agent's alias. True when a row was deleted. */
   removeEntityAlias(agentId: string, alias: string): boolean {
     return this.db.prepare('DELETE FROM entity_aliases WHERE agent_id = ? AND alias = ?').run(agentId, alias).changes > 0;
   }
 
-  /** 0.23: aliases visible to these agents (their own plus shared ''), optionally for one entity. */
+  /** 0.22.3: aliases visible to these agents (their own plus shared ''), optionally for one entity. */
   listEntityAliases(agentIds: string[], entity?: string): Array<{ agentId: string; alias: string; entity: string }> {
     if (agentIds.length === 0) return [];
     const ph = agentIds.map(() => '?').join(',');
@@ -1998,7 +1998,7 @@ export class EngramStore {
   }
 
   /**
-   * 0.23: exact matches for already-normalised terms, scoped to these agents. Three routes:
+   * 0.22.3: exact matches for already-normalised terms, scoped to these agents. Three routes:
    *  - `key`: the term IS an indexed entity key (`person:jenna park`);
    *  - `alias`: a registered alias (the agent's own, or a shared '' one);
    *  - `value`: the part of an indexed key after `key:` ("jenna park").

@@ -80,7 +80,7 @@ written.push(write('manifest.json', JSON.stringify({
   long_description: [
     'Gives Claude a memory that survives the conversation — and knows when to stay quiet.',
     '',
-    'Nineteen memory tools: write what you learn, recall it later, correct it when reality',
+    'Twenty-two memory tools: write what you learn, recall it later, correct it when reality',
     'changes. Selective by design — it filters what is worth keeping and returns nothing when',
     'nothing fits, rather than the best of a bad set.',
     '',
