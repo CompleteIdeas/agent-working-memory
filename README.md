@@ -72,7 +72,7 @@ including the ones we think are weakest.
 | **Lets a cheap model punch up** | Small model + AWM beat a frontier model on a 15-task domain workload: **14/15 vs 7/15**, at ~1/40th the cost |
 
 Two independently built fixtures agree within a point. A warm recall takes under half a second
-on the 30k-memory store (p50 378–391 ms, [benchmarks](docs/benchmarks-current.md)); smaller stores
+on the 30k-memory store (p50 287–304 ms, [benchmarks](docs/benchmarks-current.md)); smaller stores
 are faster. Those figures are for memories written the way
 [`docs/writing-memories.md`](docs/writing-memories.md) says to — the rules hold for any model
 that writes to the store, and the write is where recall quality is decided.

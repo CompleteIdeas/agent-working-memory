@@ -163,8 +163,8 @@ Example: `composite=0.820 | text=0.75 | vector=0.68 | decay=1.20 | hebbian=0.15 
 
 ### How fast is activation?
 
-On the 30,000-memory benchmark store, with every model on, a warm recall takes 378–391 ms at the
-median and under 0.5 s at p90 ([benchmarks-current.md](benchmarks-current.md)). Smaller stores
+On the 30,000-memory benchmark store, with every model on, a warm recall takes 287–304 ms at the
+median and under 0.4 s at p90 ([benchmarks-current.md](benchmarks-current.md)). Smaller stores
 are faster. With ML disabled (`useReranker: false, useExpansion: false`): ~5-20 ms per query.
 
 The first query after server start is slower while models load, and the very first
